@@ -1,14 +1,16 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "test.h"
 
-void print_test_res(char * test_name, int passed)
+void print_test_res(char * title, int passed)
 {
-    int len = strlen(test_name);
-    if (len > 63) {
-        printf("Test name too long: %s\n", test_name);
-    }
-    int dots_len = 64-len;
+    int len = strlen(title);
+    if (len > 55) {
+        printf("Test name too long: %s\n", title);
+    } 
+    int dots_len = 56-len;
     char dots[dots_len+1];
     for(int i = 0; i < dots_len; i++) {
         dots[i] = '.';
@@ -16,16 +18,24 @@ void print_test_res(char * test_name, int passed)
     dots[dots_len] = 0; //0-terminated
 
     char * passed_txt = (passed == 1) ? "PASSED" : "FAILED";
-    printf("  %s %s %s\n", test_name, dots, passed_txt);
+    printf("  %s %s %s\n", title, dots, passed_txt);
 }
 
-bool run_tests(int iterations)
+int main()
 {
+    // === TODO: Improve how randomness is generated ===
+
+    time_t t;
+	srand((unsigned) time(&t));
+
+    // =================================================
+
+    int n_tests = 1000;
     bool passed;
-    passed = test_fp(iterations);
+
+    passed = test_fp(n_tests);
     if(!passed) {
-        printf("test_fp FAILED\n");
-        return false;
+        return 0;
     }
-    return true;
+    return 0;
 }

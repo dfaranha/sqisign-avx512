@@ -1,8 +1,12 @@
 CC=gcc
-FLAGS = -O2 -march=native -IC
-OUTPUT = theta_simd
-SRC = *.c test/*.c
+FLAGS = -O2 -march=native
 
-all:
-	$(CC) $(FLAGS) -o $(OUTPUT) $(SRC) -I include -I test
-	./$(OUTPUT)
+.PHONY: test bench
+
+test:
+	$(CC) $(FLAGS) common/*.c test/*.c -o build/test -I include -I test
+	./build/test
+
+bench:
+	$(CC) $(FLAGS) common/*.c bench/*.c -o build/bench -I include -I bench
+	./build/bench

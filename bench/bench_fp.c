@@ -1,0 +1,29 @@
+#include <stdio.h>
+#include "bench.h"
+#include "fp_lvl3.h"
+#include "utils.h"
+
+#define N_RUNS 10
+
+void bench_fp(int iterations) 
+{
+    uint64_t cycles[N_RUNS];
+    uint64_t start, end, tmp;
+    __m512i a[8], b[8];
+    rand_fp_8x1(a);
+    rand_fp_8x1(b);
+
+    // Addition
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            fp_add_8x1(b, a, b);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp_is_equal_8x1(a, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("Fp lvl3 8x1 - addition", cycles[(N_RUNS/2) -1], tmp);
+
+}
