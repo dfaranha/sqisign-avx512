@@ -1,0 +1,19 @@
+/**
+* The randomness used is not cryptographically secure.
+* These functions should be used for testing purposes only.
+*/
+
+#ifndef _UTILS_H
+#define _UTILS_H
+
+#include <stdint.h>
+#include "fp_lvl3.h"
+#include "intrinsics_avx512.h"
+
+uint64_t rand_uint64();
+__m512i rand_512i();
+void print_512i(__m512i a);
+
+void rand_fp_8x1(__m512i* res);
+
+#endif

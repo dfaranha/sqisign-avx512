@@ -1,15 +1,25 @@
 #include <stdio.h>
-#include <fp_lvl3.h>
-//#include "intrinsics_avx512.h"
+#include <time.h>
+
+#include "fp_lvl3.h"
+#include "utils.h"
+#include "test.h"
 
 int main()
 {
-    printf("Hello world\n");
-    __m512i a, b, c;
-    a = _mm512_setzero_si512();
-    b = _mm512_setzero_si512();
-    c = _mm512_setzero_si512();
+    // === TODO: Improve how randomness is generated ===
 
-    fp_add_1x8(a, b, c);
+    time_t t;
+	srand((unsigned) time(&t));
+
+    // =================================================
+
+    __m512i a[8], b[8], c[8];
+    rand_uint64();
+
+    fp_add_8x1(a, b, c);
+
+    int iterations = 1;
+    run_tests(iterations);
     return 0;
 }

@@ -1,9 +1,8 @@
 CC=gcc
 FLAGS = -O2 -march=native -IC
 OUTPUT = theta_simd
-SRC = main.c fp_lvl3.c
-HEADERS = include
+SRC = *.c test/*.c
 
 all:
-	$(CC) $(FLAGS) -o $(OUTPUT) $(SRC) -I $(HEADERS)
+	$(CC) $(FLAGS) -o $(OUTPUT) $(SRC) -I include -I test
 	./$(OUTPUT)
