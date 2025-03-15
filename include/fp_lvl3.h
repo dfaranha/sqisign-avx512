@@ -44,6 +44,11 @@ void fp_sub_8x1(__m512i* res, __m512i* a, __m512i* b);
 /**
  *  res = -a (mod p)
  */
- void fp_neg_8x1(__m512i* res, __m512i* a);
+void fp_neg_8x1(__m512i* res, __m512i* a);
+
+ /**
+ *  res = a * b (mod p)
+ */
+void fp_mul_8x1(__m512i* res, __m512i* a, __m512i b);
 
 #endif

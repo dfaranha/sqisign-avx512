@@ -7,8 +7,11 @@
 
 // Arithmetic
 #define VADD(A,B) _mm512_add_epi64(A, B) // DST = A + B
+#define VADDMASK(SRC, mask, A, B) _mm512_mask_add_epi64(SRC, mask, A, B) // If mask[i] = 1, DST[i] = A[i] + B[i]. Else, DST[i] = SRC[i]
 #define VSUB(A,B) _mm512_sub_epi64(A, B) // DST = A - B
-#define VMULADDL(A, B, C) _mm512_madd52lo_epu64(A, B, C) // DST = A + LOW(B*C)
+#define VSUBMASK(SRC, mask, A, B) _mm512_mask_sub_epi64(SRC, mask, A, B) // If mask[i] = 1, DST[i] = A[i] - B[i]. Else, DST[i] = SRC[i]
+#define VMULADDL(A, B, C) _mm512_madd52lo_epu64(A, B, C) // DST = A + LOW(B * C)
+#define VMULADDH(A, B, C) _mm512_madd52hi_epu64(A, B, C) // DST = A + HIGH(B * C)
 
 // Logical operators
 #define VAND(A, B) _mm512_and_epi64(A, B) // DST = A AND B
@@ -18,6 +21,7 @@
 
 // Comparison
 #define VCMPEQ(A, B) _mm512_cmpeq_epi64_mask(A, B) // DST is an 8-bit mask, where the i-th bit is 1 if the i-th limbs are equal
+#define VSIGN(A) _mm512_movepi64_mask(A) // DST is an 8-bit mask, where the i-th bit is 1 if the i-th limb has top bit 1
 
 // Assignment
 #define VSET(A, B, C, D, E, F, G, H) _mm512_set_epi64(H, G, F, E, D, C, B, A) // DST = { A, B, C, D, E, F, G, H}
