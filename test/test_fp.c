@@ -116,6 +116,112 @@ bool test_fp(int iterations)
     if (passed == 0) {
         return false;
     }
+
+    // Subtraction test
+
+    for(int i = 0; i < iterations; i++) {
+        rand_fp_8x1(a);
+        rand_fp_8x1(b);
+        rand_fp_8x1(c);
+
+        // a - 0 == a
+        fp_sub_8x1(d, a, zero);
+        if(fp_is_equal_8x1(a, d) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // a - 1 != a
+        fp_setzero_8x1(d);
+        d[0] = VSETALL(1);
+        fp_sub_8x1(e, a, d);
+        if (fp_is_equal_8x1(a, e) != 0) {
+            passed = 0;
+            break;
+        }
+
+        // a - a == 0
+        fp_sub_8x1(d, a, a);
+        if (fp_is_equal_8x1(d, zero) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // (a - b) - c = a - (b + c)
+        fp_sub_8x1(d, a, b);
+        fp_sub_8x1(d, d, c);
+        fp_add_8x1(e, b, c);
+        fp_sub_8x1(e, a, e);
+        if (fp_is_equal_8x1(d, e) != 0xff) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("Fp lvl3 8x1 - subtraction tests", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Negation tests
+    for(int i = 0; i < iterations; i++) {
+        rand_fp_8x1(a);
+        rand_fp_8x1(b);
+        rand_fp_8x1(c);
+
+        // (-a) == 0 - a
+        fp_neg_8x1(d, a);
+        fp_sub_8x1(e, zero, a);
+        if (fp_is_equal_8x1(d, e) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // -(-a) == a
+        fp_neg_8x1(d, a);
+        fp_neg_8x1(e, d);
+        if (fp_is_equal_8x1(e, a) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // a + (-a) == 0
+        fp_neg_8x1(d, a);
+        fp_add_8x1(e, a, d);
+        if (fp_is_equal_8x1(e, zero) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // a - b == (-b) + a
+        fp_sub_8x1(d, a, b);
+        fp_neg_8x1(e, b);
+        fp_add_8x1(f, e, a);
+        if (fp_is_equal_8x1(d, f) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // a-b == -(b-a)
+        fp_sub_8x1(d, a, b);
+        fp_sub_8x1(e, b, a);
+        fp_neg_8x1(f, e);
+        if (fp_is_equal_8x1(d, f) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // -0 == 0
+        fp_neg_8x1(d, zero);
+        if (fp_is_equal_8x1(d, zero) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+    }
+    print_test_res("Fp lvl3 8x1 - negation tests", passed);
+    if (passed == 0) {
+        return false;
+    }
     
     return true;
 }
