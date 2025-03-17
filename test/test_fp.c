@@ -6,8 +6,10 @@
 
 bool test_fp(int iterations)
 {
-    __m512i a[8], b[8], c[8], d[8], e[8], f[8], zero[8], t;
+    __m512i a[8], b[8], c[8], d[8], e[8], f[8], zero[8], one[8], t;
     fp_setzero_8x1(zero);
+    fp_setzero_8x1(one);
+    one[0] = VSETALL(1);
     int passed = 1;
 
     // Equality test
@@ -86,9 +88,7 @@ bool test_fp(int iterations)
         }
 
         // a + 1 != a
-        fp_setzero_8x1(d);
-        d[0] = VSETALL(1);
-        fp_add_8x1(e, a, d);
+        fp_add_8x1(e, a, one);
         if (fp_is_equal_8x1(a, e) != 0) {
             passed = 0;
             break;
@@ -132,9 +132,7 @@ bool test_fp(int iterations)
         }
 
         // a - 1 != a
-        fp_setzero_8x1(d);
-        d[0] = VSETALL(1);
-        fp_sub_8x1(e, a, d);
+        fp_sub_8x1(e, a, one);
         if (fp_is_equal_8x1(a, e) != 0) {
             passed = 0;
             break;
@@ -219,6 +217,57 @@ bool test_fp(int iterations)
 
     }
     print_test_res("Fp lvl3 8x1 - negation tests", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Multiplication tests
+    // Using Montgomery constant
+    uint64_t R[8] = { 0x3f03f03, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1e80000 };
+    __m512i vR[8], vR2[8];
+    fp_duplicate_8x1(vR, R);
+    fp_duplicate_8x1(vR2, R2);
+
+    // Montgomery representation of 1 is R mod p
+    fp_tomont_8x1(d, one);
+    if (fp_is_equal_8x1(d, vR) != 0xff) {
+        passed = 0;
+    }
+
+    // Montgomery representation of R is R2 mod p
+    fp_tomont_8x1(d, vR);
+    print_fp_8x1_index(d, 0);
+    if (fp_is_equal_8x1(d, vR2) != 0xff) {
+        passed = 0;
+    }
+
+    for(int i = 0; i < iterations && passed != 0; i++) {
+        rand_fp_8x1(a);
+        rand_fp_8x1(b);
+        rand_fp_8x1(c);
+
+        //  (a * 0)/R  == 0
+        fp_mul_8x1(d, a, zero);
+        if (fp_is_equal_8x1(d, zero) != 0xff) {
+            passed = 0;
+            break;
+        }
+        // (a * R)/R == a
+        // fp_mul_8x1(d, a, vR);
+        // if (fp_is_equal_8x1(d, a) != 0xff) {
+        //     passed = 0;
+        //     break;
+        // }
+
+        // fp_tomont_8x1(d, a);
+        // fp_frommont_8x1(e, d);
+        // if (fp_is_equal_8x1(a, e) != 0xff) {
+        //     passed = 0;
+        //     break;
+        // }
+
+    }
+    print_test_res("Fp lvl3 8x1 - multiplication tests", passed);
     if (passed == 0) {
         return false;
     }

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "fp_lvl3.h"
+#include "utils.h"
 
 void fp_setzero_8x1(__m512i* res)
 {
@@ -23,6 +24,13 @@ void fp_copy_8x1(__m512i* res, __m512i* a)
     res[5] = a[5];
     res[6] = a[6];
     res[7] = a[7];
+}
+
+void fp_duplicate_8x1(__m512i* res, const uint64_t* a)
+{
+    for(int i = 0; i < 8; i++) {
+        res[i] = VSETALL(a[i]);
+    }
 }
 
 // Assumes that elements are fully reduced mod p, so there is only one representative.
@@ -250,12 +258,14 @@ void fp_neg_8x1(__m512i* res, __m512i* a)
     res[7] = t7;
 }
 
-void fp_mul_8x1(__m512i* res, __m512i a, __m512i b)
+void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14;
-    __m512i r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14;
-    __m512i s7, hi, cnst;
+    //Likely not needed to use t15, but for now we keep things simple:
+    __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15; 
+    __m512i r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15;
+    __m512i s7, hi, cnst, quo, rem;
     __m512i zero = VZERO();
+    __m512i limb_mask = VSETALL(LIMB_MASK);
 
     // Part 1: Schoolbook multiplication
     // We have 51 bit inputs. For each ti, we can potentially add one term for each a[i]
@@ -278,6 +288,7 @@ void fp_mul_8x1(__m512i* res, __m512i a, __m512i b)
     t12 = VMULADDL(zero, a[6], b[6]);
     t13 = VMULADDH(zero, a[6], b[6]);
     t14 = VMULADDL(zero, a[7], b[7]);
+    t15 = VZERO();
 
     // i + j = 1
     t1 = VMULADDL(t1, a[0], b[1]);
@@ -418,6 +429,7 @@ void fp_mul_8x1(__m512i* res, __m512i a, __m512i b)
     t14 = VMULADDH(t14, a[7], b[6]);
 
     // Propogate the carry TODO: Can we delay further?
+    // Result is 766 = 15 * 51 + 1 bits, so t15 just holds one bit
     t1 = VADD(t1, VSRA(t0, LIMB_LEN));
     t2 = VADD(t2, VSRA(t1, LIMB_LEN));
     t3 = VADD(t3, VSRA(t2, LIMB_LEN));
@@ -432,6 +444,7 @@ void fp_mul_8x1(__m512i* res, __m512i a, __m512i b)
     t12 = VADD(t12, VSRA(t11, LIMB_LEN));
     t13 = VADD(t13, VSRA(t12, LIMB_LEN));
     t14 = VADD(t14, VSRA(t13, LIMB_LEN));
+    t15 = VADD(t15, VSRA(t14, LIMB_LEN));
     t0 = VAND(t0, limb_mask);
     t1 = VAND(t1, limb_mask);
     t2 = VAND(t2, limb_mask);
@@ -446,7 +459,7 @@ void fp_mul_8x1(__m512i* res, __m512i a, __m512i b)
     t11 = VAND(t11, limb_mask);
     t12 = VAND(t12, limb_mask);
     t13 = VAND(t13, limb_mask);
-
+    t14 = VAND(t14, limb_mask);
 
     // Part 2: Montgomery reduction
     // low(t) = (t0, t1, ..., t7) is 8*51 = 408 bits
@@ -460,28 +473,35 @@ void fp_mul_8x1(__m512i* res, __m512i a, __m512i b)
     // s0 = t0, s1 = t1, ..., s6 = t6
     cnst = VSETALL((uint64_t) 65 << 19);
     s7 = VMULADDL(t7, t0, cnst);
+    s7 = VAND(s7, limb_mask);
 
     // r = s*p
     // We exploit the special shape of p, computing r = s * (p+1) - s = s * (65 * 2^376) - s
-    // The high result of the last VMULADD should be 0. 15*51 = 765. Result is 766 bits, so top limb will potentially be 52 bits.
-    // NOOO THIS IS WRONG, WE WILL HAVE ONE MORE R IT SEEMS LIKE, WHICH IS ANNOYING BECAUSE THEN DIVIDING
-    // OR WAIT I'M GOING TO REMOVE t0 TO t7, that is 8, so then adding a 16th limb is fine! BUT DOUBLE CHECK TOMORROW
+    // s is 408 bits, (p+1) is 7 + 376 = 383 bits, so r will be 791 = 15 * 51 + 26 bits
     r7 = VMULADDL(zero, t0, cnst);
     hi = VMULADDH(zero, t0, cnst);
+    hi = VSL(hi, 1);
     r8 = VMULADDL(hi, t1, cnst);
-    hi = VMULADDH(hi, t1, cnst);
+    hi = VMULADDH(zero, t1, cnst);
+    hi = VSL(hi, 1);
     r9 = VMULADDL(hi, t2, cnst);
-    hi = VMULADDH(hi, t2, cnst);
+    hi = VMULADDH(zero, t2, cnst);
+    hi = VSL(hi, 1);
     r10 = VMULADDL(hi, t3, cnst);
-    hi = VMULADDH(hi, t3, cnst);
+    hi = VMULADDH(zero, t3, cnst);
+    hi = VSL(hi, 1);
     r11 = VMULADDL(hi, t4, cnst);
-    hi = VMULADDH(hi, t4, cnst);
+    hi = VMULADDH(zero, t4, cnst);
+    hi = VSL(hi, 1);
     r12 = VMULADDL(hi, t5, cnst);
-    hi = VMULADDH(hi, t5, cnst);
+    hi = VMULADDH(zero, t5, cnst);
+    hi = VSL(hi, 1);
     r13 = VMULADDL(hi, t6, cnst);
-    hi = VMULADDH(hi, t6, cnst);
-    r14 = VMULADDL(hi, t7, cnst); 
-    
+    hi = VMULADDH(zero, t6, cnst);
+    hi = VSL(hi, 1);
+    r14 = VMULADDL(hi, s7, cnst);
+    r15 = VMULADDH(zero, s7, cnst);
+    r15 = VSL(r15, 1);
 
     r0 = VSUB(zero, t0);
     r1 = VSUB(zero, t1);
@@ -490,7 +510,7 @@ void fp_mul_8x1(__m512i* res, __m512i a, __m512i b)
     r4 = VSUB(zero, t4);
     r5 = VSUB(zero, t5);
     r6 = VSUB(zero, t6);
-    r7 = VSUB(r7, t7);
+    r7 = VSUB(r7, s7);
 
     // TODO: Pretty sure we can delay this one:
     // Propogate the carry
@@ -508,6 +528,7 @@ void fp_mul_8x1(__m512i* res, __m512i a, __m512i b)
     r12 = VADD(r12, VSRA(r11, LIMB_LEN));
     r13 = VADD(r13, VSRA(r12, LIMB_LEN));
     r14 = VADD(r14, VSRA(r13, LIMB_LEN));
+    r15 = VADD(r15, VSRA(r14, LIMB_LEN));
     r0 = VAND(r0, limb_mask);
     r1 = VAND(r1, limb_mask);
     r2 = VAND(r2, limb_mask);
@@ -522,9 +543,11 @@ void fp_mul_8x1(__m512i* res, __m512i a, __m512i b)
     r11 = VAND(r11, limb_mask);
     r12 = VAND(r12, limb_mask);
     r13 = VAND(r13, limb_mask);
+    r14 = VAND(r14, limb_mask);
 
     // t = t + r
-    // Before the addition, we have t < 2^766 and r < 2^408 * 65 * 2^376 < 2^790, so t + r < 2^791
+    // Before the addition, we have t < 2^766 and r < 2^791, so t+r < 2^792
+    // 792 = 15 * 51 + 27
     t0 = VADD(t0, r0);
     t1 = VADD(t1, r1);
     t2 = VADD(t2, r2);
@@ -540,6 +563,7 @@ void fp_mul_8x1(__m512i* res, __m512i a, __m512i b)
     t12 = VADD(t12, r12);
     t13 = VADD(t13, r13);
     t14 = VADD(t14, r14);
+    t15 = VADD(t15, r15);
 
     // Propogate the carry
     t1 = VADD(t1, VSRA(t0, LIMB_LEN));
@@ -556,6 +580,7 @@ void fp_mul_8x1(__m512i* res, __m512i a, __m512i b)
     t12 = VADD(t12, VSRA(t11, LIMB_LEN));
     t13 = VADD(t13, VSRA(t12, LIMB_LEN));
     t14 = VADD(t14, VSRA(t13, LIMB_LEN));
+    t15 = VADD(t15, VSRA(t14, LIMB_LEN));
     t0 = VAND(t0, limb_mask);
     t1 = VAND(t1, limb_mask);
     t2 = VAND(t2, limb_mask);
@@ -570,4 +595,70 @@ void fp_mul_8x1(__m512i* res, __m512i a, __m512i b)
     t11 = VAND(t11, limb_mask);
     t12 = VAND(t12, limb_mask);
     t13 = VAND(t13, limb_mask);
+    t14 = VAND(t14, limb_mask);
+
+    // We divide by R = 2^408 by dropping t0-t7.
+    // The result is in t8 - t15, and it is 7 * 51 + 27 = 384 bits
+    // We do a final reduction step, to get the result down to 383 bits
+
+    // Split into an 8-bit top part and 376-bit bottom part
+    hi = VSRA(t15, 19); 
+    cnst = VSETALL(0x7ffff);
+    t15 = VAND(t15, cnst);
+
+    // 65 * 2^376 = 1 mod p, hence hi mod p = floor(h/65) + (h mod 65)*2^376
+    cnst = VSETALL(0xfc1);
+    quo = VMULADDL(zero, hi, cnst);
+    quo = VSRA(quo, 18);
+    cnst = VSETALL(65); // again suboptimal, not doing -65
+    rem = VMULADDL(zero, quo, cnst);
+    rem = VSUB(hi, rem);
+
+    // Adding hi mod p to 376-bit bottom part
+    // quo < floor(2^8 / 65) <= 3 and rem <= 64
+    // Hence quo + rem * 2^376 <= 3 + 2^382.
+    // Adding this to 376-bit bottom part, we get a result that is at most 383 bits.
+    t8 = VADD(t8, quo);
+    t15 = VADD(t15, VSL(rem, 19));
+
+    // Propogate carry
+    t9 = VADD(t9, VSRA(t8, LIMB_LEN));
+    t10 = VADD(t10, VSRA(t9, LIMB_LEN));
+    t11 = VADD(t11, VSRA(t10, LIMB_LEN));
+    t12 = VADD(t12, VSRA(t11, LIMB_LEN));
+    t13 = VADD(t13, VSRA(t12, LIMB_LEN));
+    t14 = VADD(t14, VSRA(t13, LIMB_LEN));
+    t15 = VADD(t15, VSRA(t14, LIMB_LEN));
+    t8 = VAND(t8, limb_mask);
+    t9 = VAND(t9, limb_mask);
+    t10 = VAND(t10, limb_mask);
+    t11 = VAND(t11, limb_mask);
+    t12 = VAND(t12, limb_mask);
+    t13 = VAND(t13, limb_mask);
+    t14 = VAND(t14, limb_mask);
+
+    // Output result
+    res[0] = t8;
+    res[1] = t9;
+    res[2] = t10;
+    res[3] = t11;
+    res[4] = t12;
+    res[5] = t13;
+    res[6] = t14;
+    res[7] = t15;
+}
+
+void fp_tomont_8x1(__m512i* res, __m512i* a)
+{
+    __m512i vR2[8];
+    fp_duplicate_8x1(vR2, R2);
+    fp_mul_8x1(res, a, vR2);
+}
+
+void fp_frommont_8x1(__m512i*res, __m512i* a)
+{
+    __m512i one[8];
+    fp_setzero_8x1(one);
+    one[0] = VSETALL(1);
+    fp_mul_8x1(res, a, one);
 }

@@ -21,10 +21,19 @@ static const uint64_t p_plus_1_top = 0x2080000;
 // 2*p in radix 2^51
 static const uint64_t p2[8] = { 0x7fffffffffffe, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x40fffff };
 
+// We use the Montgomery representation with R = 2^408
+// R2 is R^2 mod p, which is needed to convert to the representation.
+static const uint64_t R2[8] = { 0x3732f52771f91, 0x7e07e07e07e2, 0x40fc0fc0fc0fc, 0x781f81f81f81f, 0x3f03f03f03f03, 0x7e07e07e07e0, 0x40fc0fc0fc0fc, 0xf9f81f };
 
 void fp_setzero_8x1(__m512i* res);
 
 void fp_copy_8x1(__m512i* res, __m512i* a);
+
+/**
+ * @param a - Fp element stored in 51-bit limbs
+ * @result 8 copies of a, stored in res
+ */
+void fp_duplicate_8x1(__m512i* res, const uint64_t* a);
 
 /**
  *   returns an 8-bit mask which is 1 iff the i-th Fp element is 1
@@ -49,6 +58,16 @@ void fp_neg_8x1(__m512i* res, __m512i* a);
  /**
  *  res = a * b (mod p)
  */
-void fp_mul_8x1(__m512i* res, __m512i* a, __m512i b);
+void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b);
+
+/**
+ * res = a * R (mod p)
+ */
+void fp_tomont_8x1(__m512i* res, __m512i* a);
+
+/**
+ * res = a * R^(-1) (mod p)
+ */
+void fp_frommont_8x1(__m512i*res, __m512i* a);
 
 #endif

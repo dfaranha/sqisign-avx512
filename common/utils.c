@@ -26,6 +26,16 @@ void print_512i(__m512i a)
     printf("\n");
 }
 
+void print_fp_8x1_index(__m512i* a, int index)
+{
+    uint64_t vals[8];
+    for(int i = 0; i < 8; i++) {
+        memcpy(vals, &a[i], sizeof(vals));
+        printf("%d: %lx   ", i, vals[index]);
+    }
+    printf("\n");
+}
+
 void rand_fp_8x1(__m512i* res)
 {
     __m512i mask, zero[8];

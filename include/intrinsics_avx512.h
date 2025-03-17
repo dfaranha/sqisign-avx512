@@ -18,6 +18,7 @@
 #define VOR(A, B) _mm512_or_epi64(A, B) // DST = A OR B
 #define VXOR(A, B) _mm512_xor_epi64(A, B) // DST = A XOR B
 #define VSRA(A, n) _mm512_srai_epi64(A, n) // DST = A >> n (arithmetic right shift)
+#define VSL(A, n) _mm512_slli_epi64(A, n) // DST = AA << n
 
 // Comparison
 #define VCMPEQ(A, B) _mm512_cmpeq_epi64_mask(A, B) // DST is an 8-bit mask, where the i-th bit is 1 if the i-th limbs are equal
