@@ -245,7 +245,7 @@ bool test_fp(int iterations)
         rand_fp_8x1(b);
         rand_fp_8x1(c);
 
-        //  (a * 0)/R  == 0
+        //  a * 0  == 0
         fp_mul_8x1(d, a, zero);
         if (fp_is_equal_8x1(d, zero) != 0xff) {
             passed = 0;
@@ -305,6 +305,56 @@ bool test_fp(int iterations)
 
     }
     print_test_res("Fp lvl3 8x1 - multiplication tests", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    for(int i = 0; i < iterations && passed != 0; i++) {
+
+    }
+
+    // Squaring tests
+    fp_sqr_8x1(d, vR);
+    if (fp_is_equal_8x1(d, vR) != 0xff) {
+        passed = 0;
+    }
+
+    for(int i = 0; i < iterations && passed != 0; i++) {
+        rand_fp_8x1(a);
+        rand_fp_8x1(b);
+        rand_fp_8x1(c);
+
+        // 0^2 == 0
+        fp_sqr_8x1(d, zero);
+        if (fp_is_equal_8x1(d, zero) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // a^2 = a * a
+        fp_sqr_8x1(d, a);
+        fp_mul_8x1(e, a, a);
+        if (fp_is_equal_8x1(d, e) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // (a+b)^2 = a^2 + 2ab + b^2
+        fp_add_8x1(d, a, b);
+        fp_sqr_8x1(d, d);
+        fp_sqr_8x1(e, a);
+        fp_sqr_8x1(f, b);
+        fp_add_8x1(e, e, f);
+        fp_mul_8x1(f, a, b);
+        fp_add_8x1(f, f, f);
+        fp_add_8x1(e, e, f);
+        if (fp_is_equal_8x1(d, e) != 0xff) {
+            passed = 0;
+            break;
+        }
+    }
+
+    print_test_res("Fp lvl3 8x1 - squaring tests", passed);
     if (passed == 0) {
         return false;
     }

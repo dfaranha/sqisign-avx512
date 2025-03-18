@@ -61,6 +61,11 @@ void fp_neg_8x1(__m512i* res, __m512i* a);
 void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b);
 
 /**
+ * res = a^2 (mod p)
+ */
+void fp_sqr_8x1(__m512i* res, __m512i* a);
+
+/**
  * res = a * R (mod p)
  */
 void fp_tomont_8x1(__m512i* res, __m512i* a);

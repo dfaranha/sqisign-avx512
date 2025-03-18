@@ -272,9 +272,6 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
     // 8=2^3, so we get that the ti will grow to 54 bits, well within what we can fit.
     // In conclusion, we don't need to handle intermediate carries.
 
-    // Diagonal i = j
-    // TODO Merging these with rest can reduce the number of shifts
-
     // i + j = 0
     t0 = VMULADDL(zero, a[0], b[0]);
     t1 = VMULADDH(zero, a[0], b[0]);
@@ -480,8 +477,6 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
     t13 = VAND(t13, limb_mask);
     t14 = VAND(t14, limb_mask);
 
-
-
     // Part 2: Montgomery reduction
     // low(t) = (t0, t1, ..., t7) is 8*51 = 408 bits
     // We will do Montgomery reduction with R = 2^408.
@@ -532,39 +527,6 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
     r5 = VSUB(zero, t5);
     r6 = VSUB(zero, t6);
     r7 = VSUB(r7, s7);
-
-    // TODO: Pretty sure we can delay this one:
-    // Propogate the carry
-    r1 = VADD(r1, VSRA(r0, LIMB_LEN));
-    r2 = VADD(r2, VSRA(r1, LIMB_LEN));
-    r3 = VADD(r3, VSRA(r2, LIMB_LEN));
-    r4 = VADD(r4, VSRA(r3, LIMB_LEN));
-    r5 = VADD(r5, VSRA(r4, LIMB_LEN));
-    r6 = VADD(r6, VSRA(r5, LIMB_LEN));
-    r7 = VADD(r7, VSRA(r6, LIMB_LEN));
-    r8 = VADD(r8, VSRA(r7, LIMB_LEN));
-    r9 = VADD(r9, VSRA(r8, LIMB_LEN));
-    r10 = VADD(r10, VSRA(r9, LIMB_LEN));
-    r11 = VADD(r11, VSRA(r10, LIMB_LEN));
-    r12 = VADD(r12, VSRA(r11, LIMB_LEN));
-    r13 = VADD(r13, VSRA(r12, LIMB_LEN));
-    r14 = VADD(r14, VSRA(r13, LIMB_LEN));
-    r15 = VADD(r15, VSRA(r14, LIMB_LEN));
-    r0 = VAND(r0, limb_mask);
-    r1 = VAND(r1, limb_mask);
-    r2 = VAND(r2, limb_mask);
-    r3 = VAND(r3, limb_mask);
-    r4 = VAND(r4, limb_mask);
-    r5 = VAND(r5, limb_mask);
-    r6 = VAND(r6, limb_mask);
-    r7 = VAND(r7, limb_mask);
-    r8 = VAND(r8, limb_mask);
-    r9 = VAND(r9, limb_mask);
-    r10 = VAND(r10, limb_mask);
-    r11 = VAND(r11, limb_mask);
-    r12 = VAND(r12, limb_mask);
-    r13 = VAND(r13, limb_mask);
-    r14 = VAND(r14, limb_mask);
 
     // t = t + r
     // Before the addition, we have t < 2^766 and r < 2^791, so t+r < 2^792
@@ -667,6 +629,11 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
     res[5] = t13;
     res[6] = t14;
     res[7] = t15;
+}
+
+void fp_sqr_8x1(__m512i* res, __m512i* a)
+{
+    fp_mul_8x1(res, a, a);
 }
 
 void fp_tomont_8x1(__m512i* res, __m512i* a)
