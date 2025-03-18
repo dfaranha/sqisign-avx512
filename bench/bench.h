@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 void bench_fp(int iterations);
+void bench_fp2(int iterations);
 
 // Comparison of uint64 for qsort
 int cmp_uint64(const void *v1, const void *v2);

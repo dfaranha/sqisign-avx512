@@ -31,7 +31,7 @@ void print_bench_res(char * title, uint64_t cycles, uint64_t tmp)
     }
     dots[dots_len] = 0; //0-terminated
 
-    printf("  %s runs in %s %" PRIu64 " cycles, (ignore: %lu)\n", title, dots, cycles, tmp);
+    printf("   %s runs in %s %" PRIu64 " cycles, (ignore: %lu)\n", title, dots, cycles, tmp);
 }
 
 int main()
@@ -44,6 +44,7 @@ int main()
     int n_bench = 1000;
 
     bench_fp(n_bench);
+    bench_fp2(n_bench);
 
     return 0;
 }

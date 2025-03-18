@@ -7,10 +7,10 @@
 void print_test_res(char * title, int passed)
 {
     int len = strlen(title);
-    if (len > 55) {
+    if (len > 54) {
         printf("Test name too long: %s\n", title);
     } 
-    int dots_len = 56-len;
+    int dots_len = 55-len;
     char dots[dots_len+1];
     for(int i = 0; i < dots_len; i++) {
         dots[i] = '.';
@@ -18,7 +18,7 @@ void print_test_res(char * title, int passed)
     dots[dots_len] = 0; //0-terminated
 
     char * passed_txt = (passed == 1) ? "PASSED" : "FAILED";
-    printf("  %s %s %s\n", title, dots, passed_txt);
+    printf("   %s %s %s\n", title, dots, passed_txt);
 }
 
 int main()
@@ -35,6 +35,11 @@ int main()
 
     passed = test_fp(n_tests);
     if(!passed) {
+        return 0;
+    }
+    passed = test_fp2(n_tests);
+    if(!passed)
+    {
         return 0;
     }
     return 0;

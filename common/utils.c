@@ -51,3 +51,9 @@ void rand_fp_8x1(__m512i* res)
     //Reduction
     fp_add_8x1(res, res, zero);
 }
+
+void rand_fp2_8x1x1(__m512i* res)
+{
+    rand_fp_8x1(res);
+    rand_fp_8x1(res+8);
+}

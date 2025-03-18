@@ -14,6 +14,8 @@ void bench_fp(int iterations)
     rand_fp_8x1(b);
     rand_fp_8x1(c);
 
+    printf("Fp lvl3 8x1 benchmarks:\n");
+
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
@@ -25,7 +27,7 @@ void bench_fp(int iterations)
     }
     tmp = fp_is_equal_8x1(a, b);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("Fp lvl3 8x1 - addition", cycles[(N_RUNS/2) -1], tmp);
+    print_bench_res("addition", cycles[(N_RUNS/2) -1], tmp);
 
     // Subtraction
     for(int i = 0; i < N_RUNS; i++) {
@@ -38,7 +40,7 @@ void bench_fp(int iterations)
     }
     tmp = fp_is_equal_8x1(a, b);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("Fp lvl3 8x1 - subtraction", cycles[(N_RUNS/2) -1], tmp);
+    print_bench_res("subtraction", cycles[(N_RUNS/2) -1], tmp);
 
     // Negation
     for(int i = 0; i < N_RUNS; i++) {
@@ -51,7 +53,7 @@ void bench_fp(int iterations)
     }
     tmp = fp_is_equal_8x1(a, b);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("Fp lvl3 8x1 - negation", cycles[(N_RUNS/2) -1], tmp);
+    print_bench_res("negation", cycles[(N_RUNS/2) -1], tmp);
 
     // Multiplication
     for(int i = 0; i < N_RUNS; i++) {
@@ -64,7 +66,7 @@ void bench_fp(int iterations)
     }
     tmp = fp_is_equal_8x1(c, b);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("Fp lvl3 8x1 - multiplication", cycles[(N_RUNS/2) -1], tmp);
+    print_bench_res("multiplication", cycles[(N_RUNS/2) -1], tmp);
 
     // Squaring
     for(int i = 0; i < N_RUNS; i++) {
@@ -77,6 +79,6 @@ void bench_fp(int iterations)
     }
     tmp = fp_is_equal_8x1(c, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("Fp lvl3 8x1 - squaring", cycles[(N_RUNS/2) -1], tmp);
+    print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
 
 }

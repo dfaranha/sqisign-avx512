@@ -12,6 +12,8 @@ bool test_fp(int iterations)
     one[0] = VSETALL(1);
     int passed = 1;
 
+    printf("Fp lvl3 8x1 tests:\n");
+
     // Equality test
     for(int i = 0; i < iterations; i++){
         rand_fp_8x1(a);
@@ -20,7 +22,6 @@ bool test_fp(int iterations)
             break;
         }
         fp_copy_8x1(b, a);
-        fp_copy_8x1(c, a);
         if (fp_is_equal_8x1(a, b) != 0xff) {
             passed = 0;
             break;
@@ -30,7 +31,7 @@ bool test_fp(int iterations)
         // b will be a copy of a, except that one limb of a is different
         // c will start out as a, but gradually be changed limb by limb.
         // d is the collection of vectors that we use to change each limb
-
+        fp_copy_8x1(c, a);
         d[0] = VSET(0x1, 0, 0, 0, 0, 0, 0, 0);
         d[1] = VSET(0, 0x10, 0, 0, 0, 0, 0, 0);
         d[2] = VSET(0, 0, 0x100, 0, 0, 0, 0, 0);
@@ -69,7 +70,7 @@ bool test_fp(int iterations)
             break;
         }
     }
-    print_test_res("Fp lvl3 8x1 - equality tests", passed);
+    print_test_res("equality", passed);
     if (passed == 0) {
         return false;
     }
@@ -112,13 +113,12 @@ bool test_fp(int iterations)
             break;
         }
     }
-    print_test_res("Fp lvl3 8x1 - addition tests", passed);
+    print_test_res("addition", passed);
     if (passed == 0) {
         return false;
     }
 
     // Subtraction test
-
     for(int i = 0; i < iterations; i++) {
         rand_fp_8x1(a);
         rand_fp_8x1(b);
@@ -155,7 +155,7 @@ bool test_fp(int iterations)
             break;
         }
     }
-    print_test_res("Fp lvl3 8x1 - subtraction tests", passed);
+    print_test_res("subtraction", passed);
     if (passed == 0) {
         return false;
     }
@@ -216,7 +216,7 @@ bool test_fp(int iterations)
         }
 
     }
-    print_test_res("Fp lvl3 8x1 - negation tests", passed);
+    print_test_res("negation", passed);
     if (passed == 0) {
         return false;
     }
@@ -304,13 +304,9 @@ bool test_fp(int iterations)
         }
 
     }
-    print_test_res("Fp lvl3 8x1 - multiplication tests", passed);
+    print_test_res("multiplication", passed);
     if (passed == 0) {
         return false;
-    }
-
-    for(int i = 0; i < iterations && passed != 0; i++) {
-
     }
 
     // Squaring tests
@@ -354,7 +350,7 @@ bool test_fp(int iterations)
         }
     }
 
-    print_test_res("Fp lvl3 8x1 - squaring tests", passed);
+    print_test_res("squaring", passed);
     if (passed == 0) {
         return false;
     }

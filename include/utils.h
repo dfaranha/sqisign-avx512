@@ -16,5 +16,6 @@ void print_512i(__m512i a);
 void print_fp_8x1_index(__m512i* a, int index);
 
 void rand_fp_8x1(__m512i* res);
+void rand_fp2_8x1x1(__m512i* res);
 
 #endif

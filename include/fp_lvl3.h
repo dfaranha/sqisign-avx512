@@ -36,7 +36,7 @@ void fp_copy_8x1(__m512i* res, __m512i* a);
 void fp_duplicate_8x1(__m512i* res, const uint64_t* a);
 
 /**
- *   returns an 8-bit mask which is 1 iff the i-th Fp element is 1
+ *   Returns an 8-bit mask which is 1 iff the i-th Fp elements are equal
  */
 int fp_is_equal_8x1(__m512i* a, __m512i* b);
 
@@ -55,7 +55,7 @@ void fp_sub_8x1(__m512i* res, __m512i* a, __m512i* b);
  */
 void fp_neg_8x1(__m512i* res, __m512i* a);
 
- /**
+/**
  *  res = a * b (mod p)
  */
 void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b);
