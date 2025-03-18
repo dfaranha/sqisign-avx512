@@ -66,4 +66,17 @@ void bench_fp(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("Fp lvl3 8x1 - multiplication", cycles[(N_RUNS/2) -1], tmp);
 
+    // Squaring
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            fp_sqr_8x1(c, a);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp_is_equal_8x1(c, a);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("Fp lvl3 8x1 - squaring", cycles[(N_RUNS/2) -1], tmp);
+
 }
