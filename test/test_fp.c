@@ -236,7 +236,6 @@ bool test_fp(int iterations)
 
     // Montgomery representation of R is R2 mod p
     fp_tomont_8x1(d, vR);
-    print_fp_8x1_index(d, 0);
     if (fp_is_equal_8x1(d, vR2) != 0xff) {
         passed = 0;
     }
@@ -252,19 +251,57 @@ bool test_fp(int iterations)
             passed = 0;
             break;
         }
-        // (a * R)/R == a
-        // fp_mul_8x1(d, a, vR);
-        // if (fp_is_equal_8x1(d, a) != 0xff) {
-        //     passed = 0;
-        //     break;
-        // }
 
-        // fp_tomont_8x1(d, a);
-        // fp_frommont_8x1(e, d);
-        // if (fp_is_equal_8x1(a, e) != 0xff) {
-        //     passed = 0;
-        //     break;
-        // }
+        // (a * R)/R == a
+        fp_mul_8x1(d, a, vR);
+        if (fp_is_equal_8x1(d, a) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // Transforms cancel
+        fp_tomont_8x1(d, a);
+        fp_frommont_8x1(e, d);
+        if (fp_is_equal_8x1(a, e) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        fp_frommont_8x1(d, a);
+        fp_tomont_8x1(e, d);
+        if (fp_is_equal_8x1(a, e) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // a * b == b * a
+        fp_mul_8x1(d, a, b);
+        fp_mul_8x1(e, b, a);
+        if (fp_is_equal_8x1(d, e) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // a * (b * c) == (a * b) * c
+        fp_mul_8x1(d, b, c);
+        fp_mul_8x1(d, d, a);
+        fp_mul_8x1(e, a, b);
+        fp_mul_8x1(e, e, c);
+        if (fp_is_equal_8x1(d, e) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // a * (b+c) == a*b + a*c
+        fp_add_8x1(d, b, c);
+        fp_mul_8x1(d, d, a);
+        fp_mul_8x1(e, a, b),
+        fp_mul_8x1(f, a, c);
+        fp_add_8x1(e, e, f);
+        if (fp_is_equal_8x1(d, e) != 0xff) {
+            passed = 0;
+            break;
+        }
 
     }
     print_test_res("Fp lvl3 8x1 - multiplication tests", passed);

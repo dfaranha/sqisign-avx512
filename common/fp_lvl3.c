@@ -273,58 +273,56 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
     // In conclusion, we don't need to handle intermediate carries.
 
     // Diagonal i = j
+    // TODO Merging these with rest can reduce the number of shifts
+
+    // i + j = 0
     t0 = VMULADDL(zero, a[0], b[0]);
     t1 = VMULADDH(zero, a[0], b[0]);
-    t2 = VMULADDL(zero, a[1], b[1]);
-    t3 = VMULADDH(zero, a[1], b[1]);
-    t4 = VMULADDL(zero, a[2], b[2]);
-    t5 = VMULADDH(zero, a[2], b[2]);
-    t6 = VMULADDL(zero, a[3], b[3]);
-    t7 = VMULADDH(zero, a[3], b[3]);
-    t8 = VMULADDL(zero, a[4], b[4]);
-    t9 = VMULADDH(zero, a[4], b[4]);
-    t10 = VMULADDL(zero, a[5], b[5]);
-    t11 = VMULADDH(zero, a[5], b[5]);
-    t12 = VMULADDL(zero, a[6], b[6]);
-    t13 = VMULADDH(zero, a[6], b[6]);
-    t14 = VMULADDL(zero, a[7], b[7]);
-    t15 = VZERO();
+    t1 = VSL(t1, 1);
 
     // i + j = 1
     t1 = VMULADDL(t1, a[0], b[1]);
-    t2 = VMULADDH(t2, a[0], b[1]);
+    t2 = VMULADDH(zero, a[0], b[1]);
     t1 = VMULADDL(t1, a[1], b[0]);
     t2 = VMULADDH(t2, a[1], b[0]);
+    t2 = VSL(t2, 1);
 
     // 2
     t2 = VMULADDL(t2, a[0], b[2]);
-    t3 = VMULADDH(t3, a[0], b[2]);
+    t3 = VMULADDH(zero, a[0], b[2]);
+    t2 = VMULADDL(t2, a[1], b[1]);
+    t3 = VMULADDH(t3, a[1], b[1]);
     t2 = VMULADDL(t2, a[2], b[0]);
-    t3 = VMULADDH(t3, a[2], b[2]);
+    t3 = VMULADDH(t3, a[2], b[0]);
+    t3 = VSL(t3, 1);
 
     // 3
     t3 = VMULADDL(t3, a[0], b[3]);
-    t4 = VMULADDH(t4, a[0], b[3]);
+    t4 = VMULADDH(zero, a[0], b[3]);
     t3 = VMULADDL(t3, a[1], b[2]);
     t4 = VMULADDH(t4, a[1], b[2]);
     t3 = VMULADDL(t3, a[2], b[1]);
     t4 = VMULADDH(t4, a[2], b[1]);
     t3 = VMULADDL(t3, a[3], b[0]);
     t4 = VMULADDH(t4, a[3], b[0]);
+    t4 = VSL(t4, 1);
 
     // 4
     t4 = VMULADDL(t4, a[0], b[4]);
-    t5 = VMULADDH(t5, a[0], b[4]);
+    t5 = VMULADDH(zero, a[0], b[4]);
     t4 = VMULADDL(t4, a[1], b[3]);
     t5 = VMULADDH(t5, a[1], b[3]);
+    t4 = VMULADDL(t4, a[2], b[2]);
+    t5 = VMULADDH(t5, a[2], b[2]);
     t4 = VMULADDL(t4, a[3], b[1]);
     t5 = VMULADDH(t5, a[3], b[1]);
     t4 = VMULADDL(t4, a[4], b[0]);
     t5 = VMULADDH(t5, a[4], b[0]);
+    t5 = VSL(t5, 1);
 
     // 5
     t5 = VMULADDL(t5, a[0], b[5]);
-    t6 = VMULADDH(t6, a[0], b[5]);
+    t6 = VMULADDH(zero, a[0], b[5]);
     t5 = VMULADDL(t5, a[1], b[4]);
     t6 = VMULADDH(t6, a[1], b[4]);
     t5 = VMULADDL(t5, a[2], b[3]);
@@ -335,24 +333,28 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
     t6 = VMULADDH(t6, a[4], b[1]);
     t5 = VMULADDL(t5, a[5], b[0]);
     t6 = VMULADDH(t6, a[5], b[0]);
+    t6 = VSL(t6, 1);
 
     // 6
     t6 = VMULADDL(t6, a[0], b[6]);
-    t7 = VMULADDH(t7, a[0], b[6]);
+    t7 = VMULADDH(zero, a[0], b[6]);
     t6 = VMULADDL(t6, a[1], b[5]);
     t7 = VMULADDH(t7, a[1], b[5]);
     t6 = VMULADDL(t6, a[2], b[4]);
     t7 = VMULADDH(t7, a[2], b[4]);
+    t6 = VMULADDL(t6, a[3], b[3]);
+    t7 = VMULADDH(t7, a[3], b[3]);
     t6 = VMULADDL(t6, a[4], b[2]);
     t7 = VMULADDH(t7, a[4], b[2]);
     t6 = VMULADDL(t6, a[5], b[1]);
     t7 = VMULADDH(t7, a[5], b[1]);
     t6 = VMULADDL(t6, a[6], b[0]);
     t7 = VMULADDH(t7, a[6], b[0]);
+    t7 = VSL(t7, 1);
 
     // 7
     t7 = VMULADDL(t7, a[0], b[7]);
-    t8 = VMULADDH(t8, a[0], b[7]);
+    t8 = VMULADDH(zero, a[0], b[7]);
     t7 = VMULADDL(t7, a[1], b[6]);
     t8 = VMULADDH(t8, a[1], b[6]);
     t7 = VMULADDL(t7, a[2], b[5]);
@@ -367,24 +369,28 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
     t8 = VMULADDH(t8, a[6], b[1]);
     t7 = VMULADDL(t7, a[7], b[0]);
     t8 = VMULADDH(t8, a[7], b[0]);
+    t8 = VSL(t8, 1);
 
     // 8
     t8 = VMULADDL(t8, a[1], b[7]);
-    t9 = VMULADDH(t9, a[1], b[7]);
+    t9 = VMULADDH(zero, a[1], b[7]);
     t8 = VMULADDL(t8, a[2], b[6]);
     t9 = VMULADDH(t9, a[2], b[6]);
     t8 = VMULADDL(t8, a[3], b[5]);
     t9 = VMULADDH(t9, a[3], b[5]);
+    t8 = VMULADDL(t8, a[4], b[4]);
+    t9 = VMULADDH(t9, a[4], b[4]);
     t8 = VMULADDL(t8, a[5], b[3]);
     t9 = VMULADDH(t9, a[5], b[3]);
     t8 = VMULADDL(t8, a[6], b[2]);
     t9 = VMULADDH(t9, a[6], b[2]);
     t8 = VMULADDL(t8, a[7], b[1]);
     t9 = VMULADDH(t9, a[7], b[1]);
+    t9 = VSL(t9, 1);
 
     // 9
     t9 = VMULADDL(t9, a[2], b[7]);
-    t10 = VMULADDH(t10, a[2], b[7]);
+    t10 = VMULADDH(zero, a[2], b[7]);
     t9 = VMULADDL(t9, a[3], b[6]);
     t10 = VMULADDH(t10, a[3], b[6]);
     t9 = VMULADDL(t9, a[4], b[5]);
@@ -395,38 +401,51 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
     t10 = VMULADDH(t10, a[6], b[3]);
     t9 = VMULADDL(t9, a[7], b[2]);
     t10 = VMULADDH(t10, a[7], b[2]);
+    t10 = VSL(t10, 1);
 
     // 10
     t10 = VMULADDL(t10, a[3], b[7]);
-    t11 = VMULADDH(t11, a[3], b[7]);
+    t11 = VMULADDH(zero, a[3], b[7]);
     t10 = VMULADDL(t10, a[4], b[6]);
     t11 = VMULADDH(t11, a[4], b[6]);
+    t10 = VMULADDL(t10, a[5], b[5]);
+    t11 = VMULADDH(t11, a[5], b[5]);
     t10 = VMULADDL(t10, a[6], b[4]);
     t11 = VMULADDH(t11, a[6], b[4]);
     t10 = VMULADDL(t10, a[7], b[3]);
     t11 = VMULADDH(t11, a[7], b[3]);
+    t11 = VSL(t11, 1);
 
     // 11
     t11 = VMULADDL(t11, a[4], b[7]);
-    t12 = VMULADDH(t12, a[4], b[7]);
+    t12 = VMULADDH(zero, a[4], b[7]);
     t11 = VMULADDL(t11, a[5], b[6]);
     t12 = VMULADDH(t12, a[5], b[6]);
     t11 = VMULADDL(t11, a[6], b[5]);
     t12 = VMULADDH(t12, a[6], b[5]);
     t11 = VMULADDL(t11, a[7], b[4]);
     t12 = VMULADDH(t12, a[7], b[4]);
+    t12 = VSL(t12, 1);
 
     // 12
     t12 = VMULADDL(t12, a[5], b[7]);
-    t13 = VMULADDH(t13, a[5], b[7]);
+    t13 = VMULADDH(zero, a[5], b[7]);
+    t12 = VMULADDL(t12, a[6], b[6]);
+    t13 = VMULADDH(t13, a[6], b[6]);
     t12 = VMULADDL(t12, a[7], b[5]);
     t13 = VMULADDH(t13, a[7], b[5]);
+    t13 = VSL(t13, 1);
 
     // 13
     t13 = VMULADDL(t13, a[6], b[7]);
-    t14 = VMULADDH(t14, a[6], b[7]);
+    t14 = VMULADDH(zero, a[6], b[7]);
     t13 = VMULADDL(t13, a[7], b[6]);
     t14 = VMULADDH(t14, a[7], b[6]);
+    t14 = VSL(t14, 1);
+
+    // 14
+    t14 = VMULADDL(t14, a[7], b[7]); // Will be 52 bits
+    t15 = VZERO();
 
     // Propogate the carry TODO: Can we delay further?
     // Result is 766 = 15 * 51 + 1 bits, so t15 just holds one bit
@@ -460,6 +479,8 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
     t12 = VAND(t12, limb_mask);
     t13 = VAND(t13, limb_mask);
     t14 = VAND(t14, limb_mask);
+
+
 
     // Part 2: Montgomery reduction
     // low(t) = (t0, t1, ..., t7) is 8*51 = 408 bits
