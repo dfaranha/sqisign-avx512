@@ -354,6 +354,9 @@ bool test_fp(int iterations)
     if (passed == 0) {
         return false;
     }
+
+
+    printf("Fp lvl3 4x2 tests:\n");
     
     return true;
 }

@@ -2,6 +2,10 @@
 #include "fp_lvl3.h"
 #include "utils.h"
 
+// ======================================================================================================
+//                                                 8x1
+// ======================================================================================================
+
 void fp_setzero_8x1(__m512i* res)
 {
     res[0] = VZERO();
@@ -36,7 +40,7 @@ void fp_duplicate_8x1(__m512i* res, const uint64_t* a)
 // Assumes that elements are fully reduced mod p, so there is only one representative.
 int fp_is_equal_8x1(__m512i* a, __m512i* b)
 {
-    __mmask8 mask, acc, res;
+    __mmask8 mask, acc;
     acc = 0xFF;
     for(int i = 0; i < 8; i++){
         mask = VCMPEQ(a[i], b[i]);
@@ -650,3 +654,55 @@ void fp_frommont_8x1(__m512i*res, __m512i* a)
     one[0] = VSETALL(1);
     fp_mul_8x1(res, a, one);
 }
+
+// ======================================================================================================
+//                                                 4x2
+// ======================================================================================================
+
+void fp_setzero_4x2(__m512i* res)
+{
+    res[0] = VZERO();
+    res[1] = VZERO();
+    res[2] = VZERO();
+    res[3] = VZERO();
+}
+
+void fp_copy_4x2(__m512i* res, __m512i* a)
+{
+    res[0] = a[0];
+    res[1] = a[1];
+    res[2] = a[2];
+    res[3] = a[3];
+}
+
+void fp_duplicate_4x2(__m512i* res, const uint64_t* a)
+{
+    for(int i = 0; i < 4; i++) {
+        res[i] = VSET(a[i], a[i+4], a[i], a[i+4], a[i], a[i+4], a[i], a[i+4]);
+    }
+}
+
+// Assumes that elements are fully reduced mod p, so there is only one representative.
+int fp_is_equal_4x2(__m512i* a, __m512i* b)
+{
+    __mmask8 mask, acc, res;
+    acc = 0xFF;
+    for(int i = 0; i < 8; i++){
+        mask = VCMPEQ(a[i], b[i]);
+        acc = acc & mask;
+    }
+    // a = b iff both halfs are equal
+    res = (mask & (mask >> 1) & 0x1) 
+        | ((mask >> 1) & (mask >> 2) & 0x2) 
+        | ((mask >> 2) & (mask >> 3) & 0x4) 
+        | ((mask >> 3) & (mask >> 4) & 0x8);
+    return res;
+}
+
+void fp_add_4x2(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t0, t1, t2, t3;
+    
+    //TODO
+}
+
