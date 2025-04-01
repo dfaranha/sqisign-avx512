@@ -51,8 +51,7 @@ int fp_is_equal_8x1(__m512i* a, __m512i* b)
 
 // Following AVX512 SIKE paper
 // Currently the arithmetic is mod p, 
-// I think they do mod 2p to not have to do the final step of the Montgomery reduction,
-// but we have a special prime, so this is probably not needed?
+// I think they do mod 2p to not have to do the final step of the Montgomery reduction
 void fp_add_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t0, t1, t2, t3, t4, t5, t6, t7, sign_mask;
@@ -686,23 +685,318 @@ void fp_duplicate_4x2(__m512i* res, const uint64_t* a)
 int fp_is_equal_4x2(__m512i* a, __m512i* b)
 {
     __mmask8 mask, acc, res;
-    acc = 0xFF;
-    for(int i = 0; i < 8; i++){
+    acc = 0xff;
+    for(int i = 0; i < 4; i++){
         mask = VCMPEQ(a[i], b[i]);
         acc = acc & mask;
     }
     // a = b iff both halfs are equal
-    res = (mask & (mask >> 1) & 0x1) 
-        | ((mask >> 1) & (mask >> 2) & 0x2) 
-        | ((mask >> 2) & (mask >> 3) & 0x4) 
-        | ((mask >> 3) & (mask >> 4) & 0x8);
+    res = (acc & (acc >> 1) & 0x1) 
+        | ((acc >> 1) & (acc >> 2) & 0x2) 
+        | ((acc >> 2) & (acc >> 3) & 0x4) 
+        | ((acc >> 3) & (acc >> 4) & 0x8);
     return res;
 }
 
 void fp_add_4x2(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i t0, t1, t2, t3;
+    __m512i t0, t1, t2, t3, carry, sign_mask;
+    __m512i limb_mask = VSETALL(LIMB_MASK);
+    __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);
+    __m512i p_top = VSET(0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top);
     
-    //TODO
+    // Add 51-bit limbs
+    t0 = VADD(a[0], b[0]);
+    t1 = VADD(a[1], b[1]);
+    t2 = VADD(a[2], b[2]);
+    t3 = VADD(a[3], b[3]);
+
+    // Subtract p, using special shape of p
+    t0 = VADD(t0, p_bot);
+    t3 = VSUB(t3, p_top);
+
+    // TODO: Carry propagation could be suboptimal, recomputing shifts
+    t1 = VADDMASK(t1, 0x55, t1, VSRA(t0, LIMB_LEN));
+    t2 = VADDMASK(t2, 0x55, t2, VSRA(t1, LIMB_LEN));
+    t3 = VADDMASK(t3, 0x55, t3, VSRA(t2, LIMB_LEN));
+    //Need to move carry to second word. Shifting is faster than permuting (1 cycle vs 3)
+    carry = VSRA(t3, LIMB_LEN);
+    carry = VSHUFFLEMASK(0xcccc, carry, 0x4e);
+    t0 = VADDMASK(t0, 0xAA, t0, carry); 
+    t1 = VADDMASK(t1, 0xAA, t1, VSRA(t0, LIMB_LEN)); 
+    t2 = VADDMASK(t2, 0xAA, t2, VSRA(t1, LIMB_LEN)); 
+    t3 = VADDMASK(t3, 0xAA, t3, VSRA(t2, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VANDMASK(t3, 0x55, t3, limb_mask);
+
+    // If result is negative, we undo the subtraction by p
+    sign_mask = VSRA(t3, 63); // sign_mask = {0, sign_mask1, 0, sign_mask2, ...}
+    t3 = VADD(t3, VAND(p_top, sign_mask));
+    sign_mask = VSHUFFLEMASK(0xffff, sign_mask, 0x4e);
+    t0 = VSUB(t0, VAND(p_bot, sign_mask));
+    
+    // TODO: Carry propagation could be suboptimal, recomputing shifts
+    t1 = VADDMASK(t1, 0x55, t1, VSRA(t0, LIMB_LEN));
+    t2 = VADDMASK(t2, 0x55, t2, VSRA(t1, LIMB_LEN));
+    t3 = VADDMASK(t3, 0x55, t3, VSRA(t2, LIMB_LEN));
+    //Need to move carry to second word. Shifting is faster than permuting (1 cycle vs 3)
+    carry = VSRA(t3, LIMB_LEN);
+    carry = VSHUFFLEMASK(0xcccc, carry, 0x4e);
+    t0 = VADDMASK(t0, 0xAA, t0, carry); 
+    t1 = VADDMASK(t1, 0xAA, t1, VSRA(t0, LIMB_LEN)); 
+    t2 = VADDMASK(t2, 0xAA, t2, VSRA(t1, LIMB_LEN)); 
+    t3 = VADDMASK(t3, 0xAA, t3, VSRA(t2, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VANDMASK(t3, 0x55, t3, limb_mask);
+
+    // Output result
+    res[0] = t0;
+    res[1] = t1;
+    res[2] = t2;
+    res[3] = t3;
 }
 
+void fp_sub_4x2(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t0, t1, t2, t3, carry, sign_mask;
+    __m512i limb_mask = VSETALL(LIMB_MASK);
+    __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);
+    __m512i p_top = VSET(0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top);
+
+    // Subtract 51-bit limbs
+    t0 = VSUB(a[0], b[0]);
+    t1 = VSUB(a[1], b[1]);
+    t2 = VSUB(a[2], b[2]);
+    t3 = VSUB(a[3], b[3]);
+
+    // TODO: Carry propagation could be suboptimal, recomputing shifts
+    t1 = VADDMASK(t1, 0x55, t1, VSRA(t0, LIMB_LEN));
+    t2 = VADDMASK(t2, 0x55, t2, VSRA(t1, LIMB_LEN));
+    t3 = VADDMASK(t3, 0x55, t3, VSRA(t2, LIMB_LEN));
+    //Need to move carry to second word. Shifting is faster than permuting (1 cycle vs 3)
+    carry = VSRA(t3, LIMB_LEN);
+    carry = VSHUFFLEMASK(0xcccc, carry, 0x4e);
+    t0 = VADDMASK(t0, 0xAA, t0, carry); 
+    t1 = VADDMASK(t1, 0xAA, t1, VSRA(t0, LIMB_LEN)); 
+    t2 = VADDMASK(t2, 0xAA, t2, VSRA(t1, LIMB_LEN)); 
+    t3 = VADDMASK(t3, 0xAA, t3, VSRA(t2, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VANDMASK(t3, 0x55, t3, limb_mask);
+
+    // If result is negative, we add p
+    sign_mask = VSRA(t3, 63); // sign_mask = {0, sign_mask1, 0, sign_mask2, ...}
+    t3 = VADD(t3, VAND(p_top, sign_mask));
+    sign_mask = VSHUFFLEMASK(0xffff, sign_mask, 0x4e);
+    t0 = VSUB(t0, VAND(p_bot, sign_mask));
+    
+    // TODO: Carry propagation could be suboptimal, recomputing shifts
+    t1 = VADDMASK(t1, 0x55, t1, VSRA(t0, LIMB_LEN));
+    t2 = VADDMASK(t2, 0x55, t2, VSRA(t1, LIMB_LEN));
+    t3 = VADDMASK(t3, 0x55, t3, VSRA(t2, LIMB_LEN));
+    //Need to move carry to second word. Shifting is faster than permuting (1 cycle vs 3)
+    carry = VSRA(t3, LIMB_LEN);
+    carry = VSHUFFLEMASK(0xcccc, carry, 0x4e);
+    t0 = VADDMASK(t0, 0xAA, t0, carry); 
+    t1 = VADDMASK(t1, 0xAA, t1, VSRA(t0, LIMB_LEN)); 
+    t2 = VADDMASK(t2, 0xAA, t2, VSRA(t1, LIMB_LEN)); 
+    t3 = VADDMASK(t3, 0xAA, t3, VSRA(t2, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VANDMASK(t3, 0x55, t3, limb_mask);
+
+    // Output result
+    res[0] = t0;
+    res[1] = t1;
+    res[2] = t2;
+    res[3] = t3;
+}
+
+void fp_neg_4x2(__m512i* res, __m512i* a)
+{
+    __m512i t0, t1, t2, t3, carry, sign_mask;
+    __m512i limb_mask = VSETALL(LIMB_MASK);
+    __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);
+    __m512i p_top = VSET(0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top);
+    __m512i zero = VZERO();
+
+    // Subtract 51-bit limbs
+    t0 = VSUB(zero, a[0]);
+    t1 = VSUB(zero, a[1]);
+    t2 = VSUB(zero, a[2]);
+    t3 = VSUB(zero, a[3]);
+
+    // TODO: Carry propagation could be suboptimal, recomputing shifts
+    t1 = VADDMASK(t1, 0x55, t1, VSRA(t0, LIMB_LEN));
+    t2 = VADDMASK(t2, 0x55, t2, VSRA(t1, LIMB_LEN));
+    t3 = VADDMASK(t3, 0x55, t3, VSRA(t2, LIMB_LEN));
+    //Need to move carry to second word. Shifting is faster than permuting (1 cycle vs 3)
+    carry = VSRA(t3, LIMB_LEN);
+    carry = VSHUFFLEMASK(0xcccc, carry, 0x4e);
+    t0 = VADDMASK(t0, 0xAA, t0, carry); 
+    t1 = VADDMASK(t1, 0xAA, t1, VSRA(t0, LIMB_LEN)); 
+    t2 = VADDMASK(t2, 0xAA, t2, VSRA(t1, LIMB_LEN)); 
+    t3 = VADDMASK(t3, 0xAA, t3, VSRA(t2, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VANDMASK(t3, 0x55, t3, limb_mask);
+
+    // If result is negative, we add p
+    sign_mask = VSRA(t3, 63); // sign_mask = {0, sign_mask1, 0, sign_mask2, ...}
+    t3 = VADD(t3, VAND(p_top, sign_mask));
+    sign_mask = VSHUFFLEMASK(0xffff, sign_mask, 0x4e);
+    t0 = VSUB(t0, VAND(p_bot, sign_mask));
+    
+    // TODO: Carry propagation could be suboptimal, recomputing shifts
+    t1 = VADDMASK(t1, 0x55, t1, VSRA(t0, LIMB_LEN));
+    t2 = VADDMASK(t2, 0x55, t2, VSRA(t1, LIMB_LEN));
+    t3 = VADDMASK(t3, 0x55, t3, VSRA(t2, LIMB_LEN));
+    //Need to move carry to second word. Shifting is faster than permuting (1 cycle vs 3)
+    carry = VSRA(t3, LIMB_LEN);
+    carry = VSHUFFLEMASK(0xcccc, carry, 0x4e);
+    t0 = VADDMASK(t0, 0xAA, t0, carry); 
+    t1 = VADDMASK(t1, 0xAA, t1, VSRA(t0, LIMB_LEN)); 
+    t2 = VADDMASK(t2, 0xAA, t2, VSRA(t1, LIMB_LEN)); 
+    t3 = VADDMASK(t3, 0xAA, t3, VSRA(t2, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VANDMASK(t3, 0x55, t3, limb_mask);
+
+    // Output result
+    res[0] = t0;
+    res[1] = t1;
+    res[2] = t2;
+    res[3] = t3;
+}
+
+void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11;
+    __m512i sl0, sl1, sl2, sl3, sh0, sh1, sh2, sh3;
+    __m512i zero = VZERO();
+    __m512i limb_mask = VSETALL(LIMB_MASK);
+
+
+    // Part 1: Integer multiplication
+    // Algorithm 2 from "Finite Field Arithmetic Using AVX-512 For Isogeny-Based Cryptography" by Orisaka, Aranha and López
+
+    // Duplicating limbs of b with shuffles:
+    // If b[0] = {a_0, a_4, b_0, b_4, ...} then sl0 = {a_0, a_0, b_0, b_0, ...}
+    sl0 = VSHUFFLE(b[0], 0x44);
+    sl1 = VSHUFFLE(b[1], 0x44);
+    sl2 = VSHUFFLE(b[2], 0x44);
+    sl3 = VSHUFFLE(b[3], 0x44);
+    //// If b[0] = {a_0, a_4, b_0, b_4, ...} then sh0 = {a_4, a_4, b_4, b_4, ...}
+    sh0 = VSHUFFLE(b[0], 0xEE);
+    sh1 = VSHUFFLE(b[1], 0xEE);
+    sh2 = VSHUFFLE(b[2], 0xEE);
+    sh3 = VSHUFFLE(b[3], 0xEE);
+
+    // left i+j = 0 right i+j = 4
+    t0 = VMULADDL(zero, a[0], sl0);
+    t1 = VMULADDH(zero, a[0], sl0);
+    t1 = VSL(t1, 1);
+
+    // left i+j = 1 
+    t1 = VMULADDL(t1, a[0], sl1);
+    t2 = VMULADDH(zero, a[0], sl1);
+    t1 = VMULADDL(t1, a[1], sl0);
+    t2 = VMULADDH(t2, a[1], sl0);
+    t2 = VSL(t2, 1);
+
+    // left i+j = 2
+    t2 = VMULADDL(t2, a[0], sl2);
+    t3 = VMULADDH(zero, a[0], sl2);
+    t2 = VMULADDL(t2, a[1], sl1);
+    t3 = VMULADDH(t3, a[1], sl1);
+    t2 = VMULADDL(t2, a[2], sl0);
+    t3 = VMULADDH(t3, a[2], sl0);
+    t3 = VSL(t3, 1);
+
+    // left i+j = 3
+    t3 = VMULADDL(t3, a[0], sl3);
+    t4 = VMULADDH(zero, a[0], sl3);
+    t3 = VMULADDL(t3, a[1], sl2);
+    t4 = VMULADDH(t4, a[1], sl2);
+    t3 = VMULADDL(t3, a[2], sl1);
+    t4 = VMULADDH(t4, a[2], sl1);
+    t3 = VMULADDL(t3, a[3], sl0);
+    t4 = VMULADDH(t4, a[3], sl0);
+    t4 = VSL(t4, 1);
+
+    // left i+j = 4
+    t4 = VMULADDL(t4, a[0], sh0);
+    t5 = VMULADDH(zero, a[0], sh0);
+    t4 = VMULADDL(t4, a[1], sl3);
+    t5 = VMULADDH(t5, a[1], sl3);
+    t4 = VMULADDL(t4, a[2], sl2);
+    t5 = VMULADDH(t5, a[2], sl2);
+    t4 = VMULADDL(t4, a[3], sl1);
+    t5 = VMULADDH(t5, a[3], sl1);
+    t5 = VSL(t5, 1);
+
+    // left i+j = 5
+    t5 = VMULADDL(t5, a[0], sh1);
+    t6 = VMULADDH(zero, a[0], sh1);
+    t5 = VMULADDL(t5, a[1], sh0);
+    t6 = VMULADDH(t6, a[1], sh0);
+    t5 = VMULADDL(t5, a[2], sl3);
+    t6 = VMULADDH(t6, a[2], sl3);
+    t5 = VMULADDL(t5, a[3], sl2);
+    t6 = VMULADDH(t6, a[3], sl2);
+    t6 = VSL(t6, 1);
+
+    // left i+j = 6
+    t6 = VMULADDL(t6, a[0], sh2);
+    t7 = VMULADDH(zero, a[0], sh2);
+    t6 = VMULADDL(t6, a[1], sh1);
+    t7 = VMULADDH(t7, a[1], sh1);
+    t6 = VMULADDL(t6, a[2], sh0);
+    t7 = VMULADDH(t7, a[2], sh0);
+    t6 = VMULADDL(t6, a[3], sl3);
+    t7 = VMULADDH(t7, a[3], sl3);
+    t7 = VSL(t7, 1);
+
+    // left i+j = 7
+    t7 = VMULADDL(t7, a[0], sh3);
+    t8 = VMULADDH(zero, a[0], sh3);
+    t7 = VMULADDL(t7, a[1], sh2);
+    t8 = VMULADDH(t8, a[1], sh2);
+    t7 = VMULADDL(t7, a[2], sh1);
+    t8 = VMULADDH(t8, a[2], sh1);
+    t7 = VMULADDL(t7, a[3], sh0);
+    t8 = VMULADDH(t8, a[3], sh0);
+    t8 = VSL(t8, 1);
+
+    // left i+j = 8
+    t8 = VMULADDL(t8, a[1], sh3);
+    t9 = VMULADDH(zero, a[1], sh3);
+    t8 = VMULADDL(t8, a[2], sh2);
+    t9 = VMULADDH(t9, a[2], sh2);
+    t8 = VMULADDL(t8, a[3], sh1);
+    t9 = VMULADDH(t9, a[3], sh1);
+    t9 = VSL(t9, 1);
+    
+    // left i+j = 9
+    t9 = VMULADDL(t9, a[2], sh3);
+    t10 = VMULADDH(zero, a[2], sh3);
+    t9 = VMULADDL(t9, a[3], sh2);
+    t10 = VMULADDH(t10, a[3], sh2);
+    t10 = VSL(t10, 1);
+
+    // left i+j = 10
+    t10 = VMULADDL(t10, a[3], sh3);
+    t11 = VMULADDH(zero, a[3], sh3);
+
+    // Part 2: Montgomery reduction
+
+    // TODO
+}

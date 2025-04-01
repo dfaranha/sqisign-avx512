@@ -15,6 +15,7 @@
 
 // Logical operators
 #define VAND(A, B) _mm512_and_epi64(A, B) // DST = A AND B
+#define VANDMASK(SRC, mask, A, B) _mm512_mask_and_epi64(SRC, mask, A, B) // If mask[i] = 1, DST[i] = A[i] AND B[i]. Else, DST[i] = SRC[i]
 #define VOR(A, B) _mm512_or_epi64(A, B) // DST = A OR B
 #define VXOR(A, B) _mm512_xor_epi64(A, B) // DST = A XOR B
 #define VSRA(A, n) _mm512_srai_epi64(A, n) // DST = A >> n (arithmetic right shift)
@@ -28,5 +29,10 @@
 #define VSET(A, B, C, D, E, F, G, H) _mm512_set_epi64(H, G, F, E, D, C, B, A) // DST = { A, B, C, D, E, F, G, H}
 #define VSETALL(a) _mm512_set1_epi64(a) // DST is filled with 8 copies of a
 #define VZERO() _mm512_setzero_si512() // DST = 0
+
+// Permutations & Shuffles
+#define VSHUFFLE(A, pattern) _mm512_shuffle_epi32(A, pattern) // Shuffles 32-bit limbs within each 128-bit lane, according to pattern. The first two bits of pattern specify where the first limb goes, etc.
+#define VSHUFFLEMASK(mask, A, pattern) _mm512_maskz_shuffle_epi32(mask, A, pattern) // If mask[i] = 1, the i-th 32 bit limb of the output is the result, else it is 0.
+
 
 #endif

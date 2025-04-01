@@ -45,7 +45,7 @@ bool test_fp(int iterations)
         int mask_c = 0xfe;
         int multiplier = 1;
         int i_fp = 0, j_limb = 0;
-        while(i_fp < 8 && j_limb < 8) {
+        while(i_fp < 8) {
             b[j_limb] = VXOR(b[j_limb], d[i_fp]);
             c[j_limb] = VXOR(c[j_limb], d[i_fp]);
             int valid = (fp_is_equal_8x1(a, b) == mask_b) & (fp_is_equal_8x1(a,c) == mask_c);
@@ -164,7 +164,6 @@ bool test_fp(int iterations)
     for(int i = 0; i < iterations; i++) {
         rand_fp_8x1(a);
         rand_fp_8x1(b);
-        rand_fp_8x1(c);
 
         // (-a) == 0 - a
         fp_neg_8x1(d, a);
@@ -357,6 +356,216 @@ bool test_fp(int iterations)
 
 
     printf("Fp lvl3 4x2 tests:\n");
+
+    // Equality test
+    for(int i = 0; i < iterations; i++){
+        rand_fp_4x2(a);
+        if (fp_is_equal_4x2(a, a) != 0xf) {
+            passed = 0;
+            break;
+        }
+        fp_copy_4x2(b, a);
+        if (fp_is_equal_4x2(a, b) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // We check that making one change in each limb has the intended effect
+        // b will be a copy of a, except that one limb of a is different
+        // c will start out as a, but gradually be changed limb by limb.
+        // d is the collection of vectors that we use to change each limb
+        fp_copy_4x2(c, a);
+        d[0] = VSET(0x1, 0, 0, 0, 0, 0, 0, 0);
+        d[1] = VSET(0, 0x10, 0, 0, 0, 0, 0, 0);
+        d[2] = VSET(0, 0, 0x100, 0, 0, 0, 0, 0);
+        d[3] = VSET(0, 0, 0, 0x1000, 0, 0, 0, 0);
+        d[4] = VSET(0, 0, 0, 0, 0x100000, 0, 0, 0);
+        d[5] = VSET(0, 0, 0, 0, 0, 0x1000000, 0, 0);
+        d[6] = VSET(0, 0, 0, 0, 0, 0, 0x100000000, 0);
+        d[7] = VSET(0, 0, 0, 0, 0, 0, 0, 0x4000000000000);
+
+        int mask_b = 0xe;
+        int mask_c = 0xe;
+        int multiplier = 1;
+        int i_vec = 0, j_limb = 0;
+        while(i_vec < 8) {
+            b[j_limb] = VXOR(b[j_limb], d[i_vec]);
+            c[j_limb] = VXOR(c[j_limb], d[i_vec]);
+
+            int valid = (fp_is_equal_4x2(a, b) == mask_b) & (fp_is_equal_4x2(a,c) == mask_c);
+            if (valid == 0) {
+                passed = 0;
+                break;
+            }
+
+            b[j_limb] = a[j_limb];
+            if(j_limb == 3) {
+                j_limb = 0;
+                i_vec += 1;
+                if(i_vec % 2 == 0)
+                {
+                    multiplier *= 2;
+                    mask_b = 0xf - multiplier; // b should be equal to a, except at index i_vec
+                    mask_c -= multiplier; // c should only be equal to a at the fp elements we haven't touched yet.
+                }
+            }
+            else {
+                j_limb += 1;
+            }
+        }
+        if (passed == 0) {
+            break;
+        }
+    }
+    print_test_res("equality", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Addition test
+    for(int i = 0; i < iterations; i++) {
+        rand_fp_4x2(a);
+        rand_fp_4x2(b);
+        rand_fp_4x2(c);
+
+        // a + 0 == a
+        fp_add_4x2(d, a, zero);
+        if(fp_is_equal_4x2(a, d) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a + 1 != a
+        fp_add_4x2(e, a, one);
+        if (fp_is_equal_4x2(a, e) != 0) {
+            passed = 0;
+            break;
+        }
+
+        // a + b == b + a
+        fp_add_4x2(d, a, b);
+        fp_add_4x2(e, b, a);
+        if (fp_is_equal_4x2(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // (a + b) + c = a + (b + c)
+        fp_add_4x2(d, a, b);
+        fp_add_4x2(d, d, c);
+        fp_add_4x2(e, b, c);
+        fp_add_4x2(e, e, a);
+        if (fp_is_equal_4x2(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("addition", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Subtraction test
+    for(int i = 0; i < iterations; i++) {
+        rand_fp_4x2(a);
+        rand_fp_4x2(b);
+        rand_fp_4x2(c);
+
+        // a - 0 == a
+        fp_sub_4x2(d, a, zero);
+        if(fp_is_equal_4x2(a, d) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a - 1 != a
+        fp_sub_4x2(e, a, one);
+        if (fp_is_equal_4x2(a, e) != 0) {
+            passed = 0;
+            break;
+        }
+
+        // a - a == 0
+        fp_sub_4x2(d, a, a);
+        if (fp_is_equal_4x2(d, zero) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // (a - b) - c = a - (b + c)
+        fp_sub_4x2(d, a, b);
+        fp_sub_4x2(d, d, c);
+        fp_add_4x2(e, b, c);
+        fp_sub_4x2(e, a, e);
+        if (fp_is_equal_4x2(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("subtraction", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Negation tests
+    for(int i = 0; i < iterations; i++) {
+        rand_fp_4x2(a);
+        rand_fp_4x2(b);
+
+        // (-a) == 0 - a
+        fp_neg_4x2(d, a);
+        fp_sub_4x2(e, zero, a);
+        if (fp_is_equal_4x2(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // -(-a) == a
+        fp_neg_4x2(d, a);
+        fp_neg_4x2(e, d);
+        if (fp_is_equal_4x2(e, a) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a + (-a) == 0
+        fp_neg_4x2(d, a);
+        fp_add_4x2(e, a, d);
+        if (fp_is_equal_4x2(e, zero) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a - b == (-b) + a
+        fp_sub_4x2(d, a, b);
+        fp_neg_4x2(e, b);
+        fp_add_4x2(f, e, a);
+        if (fp_is_equal_4x2(d, f) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a-b == -(b-a)
+        fp_sub_4x2(d, a, b);
+        fp_sub_4x2(e, b, a);
+        fp_neg_4x2(f, e);
+        if (fp_is_equal_4x2(d, f) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // -0 == 0
+        fp_neg_4x2(d, zero);
+        if (fp_is_equal_4x2(d, zero) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+    }
+    print_test_res("negation", passed);
+    if (passed == 0) {
+        return false;
+    }
     
     return true;
 }

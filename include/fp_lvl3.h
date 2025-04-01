@@ -93,7 +93,7 @@ void fp_frommont_8x1(__m512i*res, __m512i* a);
  */
 
 void fp_setzero_4x2(__m512i* res);
-void fp_copy_4x2(__m512i* res);
+void fp_copy_4x2(__m512i* res, __m512i* a);
 
 
 /**
@@ -109,5 +109,8 @@ void fp_duplicate_4x2(__m512i* res, const uint64_t* a);
 
  void fp_add_4x2(__m512i* res, __m512i* a, __m512i* b);
 
+ void fp_sub_4x2(__m512i* res, __m512i* a, __m512i* b);
+
+ void fp_neg_4x2(__m512i* res, __m512i* a);
 
 #endif
