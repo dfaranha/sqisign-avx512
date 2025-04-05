@@ -81,4 +81,71 @@ void bench_fp(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
 
+    printf("Fp lvl3 4x2 benchmarks:\n");
+
+    // Addition
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            fp_add_4x2(b, a, b);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp_is_equal_4x2(a, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("addition", cycles[(N_RUNS/2) -1], tmp);
+
+    // Subtraction
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            fp_sub_4x2(b, a, b);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp_is_equal_4x2(a, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("subtraction", cycles[(N_RUNS/2) -1], tmp);
+
+    // Negation
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            fp_neg_4x2(b, a);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp_is_equal_4x2(a, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("negation", cycles[(N_RUNS/2) -1], tmp);
+
+    // Multiplication
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            fp_mul_4x2(c, b, a);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp_is_equal_4x2(c, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("multiplication", cycles[(N_RUNS/2) -1], tmp);
+
+    // Squaring
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            fp_sqr_4x2(c, a);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp_is_equal_4x2(c, a);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
+
 }

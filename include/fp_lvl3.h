@@ -105,12 +105,20 @@ void fp_duplicate_4x2(__m512i* res, const uint64_t* a);
 /**
  *   Returns a 4-bit mask which is 1 iff the i-th Fp elements are equal
  */
- int fp_is_equal_4x2(__m512i* a, __m512i* b);
+int fp_is_equal_4x2(__m512i* a, __m512i* b);
 
- void fp_add_4x2(__m512i* res, __m512i* a, __m512i* b);
+void fp_add_4x2(__m512i* res, __m512i* a, __m512i* b);
 
- void fp_sub_4x2(__m512i* res, __m512i* a, __m512i* b);
+void fp_sub_4x2(__m512i* res, __m512i* a, __m512i* b);
 
- void fp_neg_4x2(__m512i* res, __m512i* a);
+void fp_neg_4x2(__m512i* res, __m512i* a);
+
+void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b);
+
+void fp_sqr_4x2(__m512i* res, __m512i* a);
+
+void fp_tomont_4x2(__m512i* res, __m512i* a);
+
+void fp_frommont_4x2(__m512i*res, __m512i* a);
 
 #endif

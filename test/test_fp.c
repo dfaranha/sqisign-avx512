@@ -356,6 +356,7 @@ bool test_fp(int iterations)
 
 
     printf("Fp lvl3 4x2 tests:\n");
+    one[0] = VSET(1, 0, 1, 0, 1, 0, 1, 0);
 
     // Equality test
     for(int i = 0; i < iterations; i++){
@@ -563,6 +564,138 @@ bool test_fp(int iterations)
 
     }
     print_test_res("negation", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Multiplication tests
+    // Using Montgomery constant
+    fp_duplicate_4x2(vR, R);
+    fp_duplicate_4x2(vR2, R2);
+
+    // Montgomery representation of 1 is R mod p
+    fp_tomont_4x2(d, one);
+    if (fp_is_equal_4x2(d, vR) != 0xf) {
+        passed = 0;
+    }
+
+    // Montgomery representation of R is R2 mod p
+    fp_tomont_4x2(d, vR);
+    if (fp_is_equal_4x2(d, vR2) != 0xf) {
+        passed = 0;
+    }
+
+    for(int i = 0; i < iterations && passed != 0; i++) {
+        rand_fp_4x2(a);
+        rand_fp_4x2(b);
+        rand_fp_4x2(c);
+
+        //  a * 0  == 0
+        fp_mul_4x2(d, a, zero);
+        if (fp_is_equal_4x2(d, zero) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // (a * R)/R == a
+        fp_mul_4x2(d, a, vR);
+        if (fp_is_equal_4x2(d, a) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // Transforms cancel
+        fp_tomont_4x2(d, a);
+        fp_frommont_4x2(e, d);
+        if (fp_is_equal_4x2(a, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        fp_frommont_4x2(d, a);
+        fp_tomont_4x2(e, d);
+        if (fp_is_equal_4x2(a, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a * b == b * a
+        fp_mul_4x2(d, a, b);
+        fp_mul_4x2(e, b, a);
+        if (fp_is_equal_4x2(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a * (b * c) == (a * b) * c
+        fp_mul_4x2(d, b, c);
+        fp_mul_4x2(d, d, a);
+        fp_mul_4x2(e, a, b);
+        fp_mul_4x2(e, e, c);
+        if (fp_is_equal_4x2(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a * (b+c) == a*b + a*c
+        fp_add_4x2(d, b, c);
+        fp_mul_4x2(d, d, a);
+        fp_mul_4x2(e, a, b),
+        fp_mul_4x2(f, a, c);
+        fp_add_4x2(e, e, f);
+        if (fp_is_equal_4x2(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+    }
+    print_test_res("multiplication", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Squaring tests
+    fp_sqr_4x2(d, vR);
+    if (fp_is_equal_4x2(d, vR) != 0xf) {
+        passed = 0;
+    }
+
+    for(int i = 0; i < iterations && passed != 0; i++) {
+        rand_fp_4x2(a);
+        rand_fp_4x2(b);
+        rand_fp_4x2(c);
+
+        // 0^2 == 0
+        fp_sqr_4x2(d, zero);
+        if (fp_is_equal_4x2(d, zero) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a^2 = a * a
+        fp_sqr_4x2(d, a);
+        fp_mul_4x2(e, a, a);
+        if (fp_is_equal_4x2(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // (a+b)^2 = a^2 + 2ab + b^2
+        fp_add_4x2(d, a, b);
+        fp_sqr_4x2(d, d);
+        fp_sqr_4x2(e, a);
+        fp_sqr_4x2(f, b);
+        fp_add_4x2(e, e, f);
+        fp_mul_4x2(f, a, b);
+        fp_add_4x2(f, f, f);
+        fp_add_4x2(e, e, f);
+        if (fp_is_equal_4x2(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+
+    print_test_res("squaring", passed);
     if (passed == 0) {
         return false;
     }

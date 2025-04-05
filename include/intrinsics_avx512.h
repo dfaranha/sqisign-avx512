@@ -19,6 +19,7 @@
 #define VOR(A, B) _mm512_or_epi64(A, B) // DST = A OR B
 #define VXOR(A, B) _mm512_xor_epi64(A, B) // DST = A XOR B
 #define VSRA(A, n) _mm512_srai_epi64(A, n) // DST = A >> n (arithmetic right shift)
+#define VSRAMASKZ(mask, A, n) _mm512_maskz_srai_epi64(mask, A, n) // If mask[i] = 1, DST[i] = A[i] >> n, else DST[i] = 0
 #define VSL(A, n) _mm512_slli_epi64(A, n) // DST = AA << n
 
 // Comparison
@@ -32,7 +33,7 @@
 
 // Permutations & Shuffles
 #define VSHUFFLE(A, pattern) _mm512_shuffle_epi32(A, pattern) // Shuffles 32-bit limbs within each 128-bit lane, according to pattern. The first two bits of pattern specify where the first limb goes, etc.
-#define VSHUFFLEMASK(mask, A, pattern) _mm512_maskz_shuffle_epi32(mask, A, pattern) // If mask[i] = 1, the i-th 32 bit limb of the output is the result, else it is 0.
+#define VSHUFFLEMASKZ(mask, A, pattern) _mm512_maskz_shuffle_epi32(mask, A, pattern) // If mask[i] = 1, the i-th 32 bit limb of the output is the result, else it is 0.
 
 
 #endif
