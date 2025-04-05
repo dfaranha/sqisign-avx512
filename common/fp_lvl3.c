@@ -999,17 +999,6 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[11] = VMULADDH(zero, a[3], sh3);
     t[11] = VSL(t[11], 1);
 
-    // printf("a:\n");
-    // print_fp_4x2_index(a, 0);
-    // printf("b:\n");
-    // print_fp_4x2_index(b, 0);
-    // printf("prod:\n");
-    // print_fp_4x2_index(t, 0);
-    // print_fp_4x2_index(t+4, 0);
-    // print_fp_4x2_index(t+8, 0);
-
-    // printf("In the end, is only t3 wrong? Is it correct mod p? Check in python. Since we haven't propogated carries yet.\n");
-
     // Part 2: Montgomery reduction
     // For now, I follow Algorithm 3 from the same paper.
     // TODO: Try to implement "one-shot" Montgomery reduction as for 8x1.

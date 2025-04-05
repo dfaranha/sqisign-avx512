@@ -1,6 +1,10 @@
 #include "fp_lvl3.h"
 #include "fp2_lvl3.h"
 
+// ======================================================================================================
+//                                                 8x1x1
+// ======================================================================================================
+
 void fp2_setzero_8x1x1(__m512i* res)
 {
     fp_setzero_8x1(res);
@@ -49,7 +53,6 @@ void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)
     fp_sub_8x1(t3, t3, t1);
     fp_sub_8x1(res+8, t3, t2);
     fp_sub_8x1(res, t1, t2);
-
 }
 
 void fp2_sqr_8x1x1(__m512i* res, __m512i* a)
@@ -67,4 +70,75 @@ void fp2_frommont_8x1x1(__m512i*res, __m512i* a)
 {
     fp_frommont_8x1(res, a);
     fp_frommont_8x1(res+8, a+8);
+}
+
+// ======================================================================================================
+//                                                 4x1x2
+// ======================================================================================================
+
+void fp2_setzero_4x1x2(__m512i* res)
+{
+    fp_setzero_4x2(res);
+    fp_setzero_4x2(res+4);
+}
+
+void fp2_copy_4x1x2(__m512i* res, __m512i* a)
+{
+    fp_copy_4x2(res, a);
+    fp_copy_4x2(res+4, a+4);
+}
+
+int fp2_is_equal_4x1x2(__m512i* a, __m512i* b)
+{
+    int lo = fp_is_equal_4x2(a, b);
+    int hi = fp_is_equal_4x2(a+4, b+4);
+    return lo & hi;
+}
+
+void fp2_add_4x1x2(__m512i* res, __m512i* a, __m512i* b)
+{
+    fp_add_4x2(res, a, b);
+    fp_add_4x2(res+4, a+4, b+4);
+}
+
+void fp2_sub_4x1x2(__m512i* res, __m512i* a, __m512i* b)
+{
+    fp_sub_4x2(res, a, b);
+    fp_sub_4x2(res+4, a+4, b+4);
+}
+
+void fp2_neg_4x1x2(__m512i* res, __m512i* a)
+{
+    fp_neg_4x2(res, a);
+    fp_neg_4x2(res+4, a+4);
+}
+
+void fp2_mul_4x1x2(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i s1[4], s2[4], t1[4], t2[4], t3[4];
+    fp_add_4x2(s1, a, a+4);
+    fp_add_4x2(s2, b, b+4);
+    fp_mul_4x2(t1, a, b);
+    fp_mul_4x2(t2, a+4, b+4);
+    fp_mul_4x2(t3, s1, s2);
+    fp_sub_4x2(t3, t3, t1);
+    fp_sub_4x2(res+4, t3, t2);
+    fp_sub_4x2(res, t1, t2);
+}
+
+void fp2_sqr_4x1x2(__m512i* res, __m512i* a)
+{
+    fp2_mul_4x1x2(res, a, a);
+}
+ 
+void fp2_tomont_4x1x2(__m512i* res, __m512i* a)
+{
+    fp_tomont_4x2(res, a);
+    fp_tomont_4x2(res+4, a+4);
+}
+
+void fp2_frommont_4x1x2(__m512i*res, __m512i* a)
+{
+    fp_frommont_4x2(res, a);
+    fp_frommont_4x2(res+4, a+4);
 }
