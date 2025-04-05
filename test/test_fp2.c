@@ -592,4 +592,295 @@ bool test_fp2(int iterations)
     if (passed == 0) {
         return false;
     }
+
+    printf("Fp2 lvl3 4x2x1 tests:\n");
+
+    // Equality test
+    for(int i = 0; i < iterations; i++){
+        rand_fp2_4x2x1(a);
+        if (fp2_is_equal_4x2x1(a, a) != 0xf) {
+            passed = 0;
+            break;
+        }
+        fp2_copy_4x2x1(b, a);
+        if (fp2_is_equal_4x2x1(a, b) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        fp2_copy_4x2x1(c, a);
+        t = VSET(0, 0, 1, 0, 0, 0, 0, 0);
+        c[5] = VADD(c[5], t);
+        if (fp2_is_equal_4x2x1(a,c) != 0xd) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("equality", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Addition test
+    for(int i = 0; i < iterations; i++) {
+        rand_fp2_4x2x1(a);
+        rand_fp2_4x2x1(b);
+        rand_fp2_4x2x1(c);
+
+        // a + 0 == a
+        fp2_add_4x2x1(d, a, zero);
+        if(fp2_is_equal_4x2x1(a, d) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a + 1 != a
+        fp2_add_4x2x1(e, a, one);
+        if (fp2_is_equal_4x2x1(a, e) != 0) {
+            passed = 0;
+            break;
+        }
+
+        // a + b == b + a
+        fp2_add_4x2x1(d, a, b);
+        fp2_add_4x2x1(e, b, a);
+        if (fp2_is_equal_4x2x1(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // (a + b) + c = a + (b + c)
+        fp2_add_4x2x1(d, a, b);
+        fp2_add_4x2x1(d, d, c);
+        fp2_add_4x2x1(e, b, c);
+        fp2_add_4x2x1(e, e, a);
+        if (fp2_is_equal_4x2x1(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("addition", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Subtraction test
+    for(int i = 0; i < iterations; i++) {
+        rand_fp2_4x2x1(a);
+        rand_fp2_4x2x1(b);
+        rand_fp2_4x2x1(c);
+
+        // a - 0 == a
+        fp2_sub_4x2x1(d, a, zero);
+        if(fp2_is_equal_4x2x1(a, d) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a - 1 != a
+        fp2_sub_4x2x1(e, a, one);
+        if (fp2_is_equal_4x2x1(a, e) != 0) {
+            passed = 0;
+            break;
+        }
+
+        // a - a == 0
+        fp2_sub_4x2x1(d, a, a);
+        if (fp2_is_equal_4x2x1(d, zero) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // (a - b) - c = a - (b + c)
+        fp2_sub_4x2x1(d, a, b);
+        fp2_sub_4x2x1(d, d, c);
+        fp2_add_4x2x1(e, b, c);
+        fp2_sub_4x2x1(e, a, e);
+        if (fp2_is_equal_4x2x1(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("subtraction", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Negation tests
+    for(int i = 0; i < iterations; i++) {
+        rand_fp2_4x2x1(a);
+        rand_fp2_4x2x1(b);
+        rand_fp2_4x2x1(c);
+
+        // (-a) == 0 - a
+        fp2_neg_4x2x1(d, a);
+        fp2_sub_4x2x1(e, zero, a);
+        if (fp2_is_equal_4x2x1(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // -(-a) == a
+        fp2_neg_4x2x1(d, a);
+        fp2_neg_4x2x1(e, d);
+        if (fp2_is_equal_4x2x1(e, a) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a + (-a) == 0
+        fp2_neg_4x2x1(d, a);
+        fp2_add_4x2x1(e, a, d);
+        if (fp2_is_equal_4x2x1(e, zero) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a - b == (-b) + a
+        fp2_sub_4x2x1(d, a, b);
+        fp2_neg_4x2x1(e, b);
+        fp2_add_4x2x1(f, e, a);
+        if (fp2_is_equal_4x2x1(d, f) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a-b == -(b-a)
+        fp2_sub_4x2x1(d, a, b);
+        fp2_sub_4x2x1(e, b, a);
+        fp2_neg_4x2x1(f, e);
+        if (fp2_is_equal_4x2x1(d, f) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // -0 == 0
+        fp2_neg_4x2x1(d, zero);
+        if (fp2_is_equal_4x2x1(d, zero) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+    }
+    print_test_res("negation", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Multiplication tests
+    // Using Montgomery constant
+    fp2_setzero_4x2x1(vR);
+    for(int i = 0; i < 8; i++) {
+        vR[i] = VSET(R[i], 0, R[i], 0, R[i], 0, R[i], 0);
+    }
+
+    for(int i = 0; i < iterations && passed != 0; i++) {
+        rand_fp2_4x2x1(a);
+        rand_fp2_4x2x1(b);
+        rand_fp2_4x2x1(c);
+
+        //  a * 0  == 0
+        fp2_mul_4x2x1(d, a, zero);
+        if (fp2_is_equal_4x2x1(d, zero) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // (a * R)/R == a
+        fp2_mul_4x2x1(d, a, vR);
+        if (fp2_is_equal_4x2x1(d, a) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // Transforms cancel
+        fp2_tomont_4x2x1(d, a);
+        fp2_frommont_4x2x1(e, d);
+        if (fp2_is_equal_4x2x1(a, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        fp2_frommont_4x2x1(d, a);
+        fp2_tomont_4x2x1(e, d);
+        if (fp2_is_equal_4x2x1(a, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a * b == b * a
+        fp2_mul_4x2x1(d, a, b);
+        fp2_mul_4x2x1(e, b, a);
+        if (fp2_is_equal_4x2x1(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a * (b * c) == (a * b) * c
+        fp2_mul_4x2x1(d, b, c);
+        fp2_mul_4x2x1(d, d, a);
+        fp2_mul_4x2x1(e, a, b);
+        fp2_mul_4x2x1(e, e, c);
+        if (fp2_is_equal_4x2x1(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a * (b+c) == a*b + a*c
+        fp2_add_4x2x1(d, b, c);
+        fp2_mul_4x2x1(d, d, a);
+        fp2_mul_4x2x1(e, a, b),
+        fp2_mul_4x2x1(f, a, c);
+        fp2_add_4x2x1(e, e, f);
+        if (fp2_is_equal_4x2x1(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+    }
+    print_test_res("multiplication", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Squaring tests
+    for(int i = 0; i < iterations && passed != 0; i++) {
+        rand_fp2_4x2x1(a);
+        rand_fp2_4x2x1(b);
+        rand_fp2_4x2x1(c);
+
+        // 0^2 == 0
+        fp2_sqr_4x2x1(d, zero);
+        if (fp2_is_equal_4x2x1(d, zero) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // a^2 = a * a
+        fp2_sqr_4x2x1(d, a);
+        fp2_mul_4x2x1(e, a, a);
+        if (fp2_is_equal_4x2x1(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // (a+b)^2 = a^2 + 2ab + b^2
+        fp2_add_4x2x1(d, a, b);
+        fp2_sqr_4x2x1(d, d);
+        fp2_sqr_4x2x1(e, a);
+        fp2_sqr_4x2x1(f, b);
+        fp2_add_4x2x1(e, e, f);
+        fp2_mul_4x2x1(f, a, b);
+        fp2_add_4x2x1(f, f, f);
+        fp2_add_4x2x1(e, e, f);
+        if (fp2_is_equal_4x2x1(d, e) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+
+    print_test_res("squaring", passed);
+    if (passed == 0) {
+        return false;
+    }
 }

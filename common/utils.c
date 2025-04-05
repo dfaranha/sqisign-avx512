@@ -93,3 +93,8 @@ void rand_fp2_4x1x2(__m512i* res)
     rand_fp_4x2(res);
     rand_fp_4x2(res+4);
 }
+
+void rand_fp2_4x2x1(__m512i* res)
+{
+    rand_fp2_8x1x1(res);
+}

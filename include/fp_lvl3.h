@@ -62,6 +62,12 @@ void fp_sub_8x1(__m512i* res, __m512i* a, __m512i* b);
 void fp_neg_8x1(__m512i* res, __m512i* a);
 
 /**
+ * Denote the 8 Fp elements stored in a by a0, a1, ..., a7, and in b by b0, b1, ..., b7.
+ * Computes a0 - b0, a1 + b1, a2 - b2, a3 + b3, ....
+ */
+void fp_mixsubadd_8x1(__m512i* res, __m512i* a, __m512i* b);
+
+/**
  *  res = a * b (mod p)
  */
 void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b);

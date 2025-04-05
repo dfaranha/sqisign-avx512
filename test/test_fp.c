@@ -220,6 +220,24 @@ bool test_fp(int iterations)
         return false;
     }
 
+    // Mixed subtraction & addition
+    for(int i = 0; i < iterations && passed != 0; i++) {
+        rand_fp_8x1(a);
+        rand_fp_8x1(b);
+
+        fp_mixsubadd_8x1(d, a, b);
+        fp_sub_8x1(e, a, b);
+        fp_add_8x1(f, a, b);
+        if(fp_is_equal_8x1(d, e) != 0x55 || fp_is_equal_8x1(d, f) != 0xaa) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("mixed sub add", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     // Multiplication tests
     // Using Montgomery constant
     uint64_t R[8] = { 0x3f03f03, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1e80000 };

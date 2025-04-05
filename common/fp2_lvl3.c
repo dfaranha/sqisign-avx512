@@ -142,3 +142,81 @@ void fp2_frommont_4x1x2(__m512i*res, __m512i* a)
     fp_frommont_4x2(res, a);
     fp_frommont_4x2(res+4, a+4);
 }
+
+// ======================================================================================================
+//                                                 4x2x1
+// ======================================================================================================
+
+void fp2_setzero_4x2x1(__m512i* res)
+{
+    fp_setzero_8x1(res);
+}
+
+void fp2_copy_4x2x1(__m512i* res, __m512i* a)
+{
+    fp_copy_8x1(res, a);
+}
+
+int fp2_is_equal_4x2x1(__m512i* a, __m512i* b)
+{
+    int lo = fp_is_equal_4x2(a, b);
+    int hi = fp_is_equal_4x2(a+4, b+4);
+    return lo & hi;
+}
+
+void fp2_add_4x2x1(__m512i* res, __m512i* a, __m512i* b)
+{
+    fp_add_8x1(res, a, b);
+}
+
+void fp2_sub_4x2x1(__m512i* res, __m512i* a, __m512i* b)
+{
+    fp_sub_8x1(res, a, b);
+}
+
+void fp2_neg_4x2x1(__m512i* res, __m512i* a)
+{
+    fp_neg_8x1(res, a);
+}
+
+void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i s1[8], s2[8], s3[8], t1[8], t2[8];
+    for(int i = 0; i < 8; i++) {
+        s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0
+        s2[i] = VSHUFFLE(a[i], 0xee); // a1, a1
+        s3[i] = VSHUFFLE(b[i], 0x4e); // b1, b0
+    }
+    fp_mul_8x1(t1, s1, b);
+    fp_mul_8x1(t2, s2, s3);
+    fp_mixsubadd_8x1(res, t1, t2);
+}
+
+void fp2_sqr_4x2x1(__m512i* res, __m512i* a)
+{
+    fp2_mul_4x2x1(res, a, a);
+}
+ 
+void fp2_tomont_4x2x1(__m512i* res, __m512i* a)
+{
+    fp_tomont_8x1(res, a);
+}
+
+void fp2_frommont_4x2x1(__m512i*res, __m512i* a)
+{
+    fp_frommont_8x1(res, a);
+}
+
+// ======================================================================================================
+//                                                 2x2x2
+// ======================================================================================================
+
+void fp2_setzero_2x2x2(__m512i* res)
+{
+    fp_setzero_4x2(res);
+}
+
+void fp2_copy_2x2x2(__m512i* res, __m512i* a)
+{
+    fp_copy_4x2(res, a);
+}
