@@ -232,6 +232,14 @@ bool test_fp(int iterations)
             passed = 0;
             break;
         }
+
+        fp_mixsubsubaddadd_8x1(d, a, b);
+        fp_sub_8x1(e, a, b);
+        fp_add_8x1(f, a, b);
+        if(fp_is_equal_8x1(d, e) != 0x33 || fp_is_equal_8x1(d, f) != 0xcc) {
+            passed = 0;
+            break;
+        }
     }
     print_test_res("mixed sub add", passed);
     if (passed == 0) {
@@ -582,6 +590,24 @@ bool test_fp(int iterations)
 
     }
     print_test_res("negation", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Mixed subtraction & addition
+    for(int i = 0; i < iterations && passed != 0; i++) {
+        rand_fp_4x2(a);
+        rand_fp_4x2(b);
+
+        fp_mixsubadd_4x2(d, a, b);
+        fp_sub_4x2(e, a, b);
+        fp_add_4x2(f, a, b);
+        if(fp_is_equal_4x2(d, e) != 0x5 || fp_is_equal_4x2(d, f) != 0xa) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("mixed sub add", passed);
     if (passed == 0) {
         return false;
     }

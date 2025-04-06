@@ -34,6 +34,8 @@
 // Permutations & Shuffles
 #define VSHUFFLE(A, pattern) _mm512_shuffle_epi32(A, pattern) // Shuffles 32-bit limbs within each 128-bit lane, according to pattern. The first two bits of pattern specify where the first limb goes, etc.
 #define VSHUFFLEMASKZ(mask, A, pattern) _mm512_maskz_shuffle_epi32(mask, A, pattern) // If mask[i] = 1, the i-th 32 bit limb of the output is the result, else it is 0.
-
+#define VPERM(A, pattern) _mm512_permutex_epi64(A, pattern) // Shuffles 64-bit limbs within each 256-bit lane. Latency is 3 VS 1 for shuffles, but throughput is 1 for both.
+#define VPERMMASKZ(mask, A, pattern) _mm512_maskz_permutex_epi64(mask, A, pattern) // If mask[i] = 1, the i-th 64 bit limb of the output is the result, else it is 0.
+#define VBLEND(mask, A, B) _mm512_mask_blend_epi64(mask, A, B) // If mask[i] = 1, DST[i] = B[i]. Else, DST[i] = A[i].
 
 #endif

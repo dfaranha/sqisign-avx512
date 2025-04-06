@@ -68,6 +68,12 @@ void fp_neg_8x1(__m512i* res, __m512i* a);
 void fp_mixsubadd_8x1(__m512i* res, __m512i* a, __m512i* b);
 
 /**
+ * Denote the 8 Fp elements stored in a by a0, a1, ..., a7, and in b by b0, b1, ..., b7.
+ * Computes a0 - b0, a1 - b1, a2 + b2, a3 + b3, a4 - b4, a5 - b5, ...
+ */
+void fp_mixsubsubaddadd_8x1(__m512i* res, __m512i* a, __m512i* b);
+
+/**
  *  res = a * b (mod p)
  */
 void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b);
@@ -118,6 +124,12 @@ void fp_add_4x2(__m512i* res, __m512i* a, __m512i* b);
 void fp_sub_4x2(__m512i* res, __m512i* a, __m512i* b);
 
 void fp_neg_4x2(__m512i* res, __m512i* a);
+
+/**
+ *  Denote the 4 Fp elements stored in a by a0, a1, a2, a3, and in b by b0, b1, b2, b3.
+ *  Computes a0 - b0, a1 + b1, a2 - b2, a3 + b3.
+ */
+ void fp_mixsubadd_4x2(__m512i* res, __m512i* a, __m512i* b);
 
 void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b);
 

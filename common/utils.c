@@ -98,3 +98,17 @@ void rand_fp2_4x2x1(__m512i* res)
 {
     rand_fp2_8x1x1(res);
 }
+
+void rand_fp2_2x2x2(__m512i* res)
+{
+    rand_fp_4x2(res);
+}
+
+void rand_fp2_2x4x1(__m512i* res)
+{
+    rand_fp_8x1(res);
+    __m512i zero = VZERO();
+    for(int i = 0; i < 8; i++) {
+        res[i] = VBLEND(0x55, zero, res[i]);
+    }
+}
