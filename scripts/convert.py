@@ -30,7 +30,7 @@ def fp2_to_le(x, w, n=None):
     im_limbs = int_to_le(im, w, n)
     return re_limbs, im_limbs
 
-def theta_to_avx512_8_1_1(P):
+def theta_to_avx512_4_2_1(P):
     """
     Given a theta point (a : b : c : d) as four elements in Fp2 convert this
     to a data blob suitible for the AVX512 operations
@@ -56,7 +56,7 @@ def theta_to_avx512_8_1_1(P):
 
     return avx512_blobs
 
-def avx512_blobs_8_1_1_to_theta(F, avx_blobs):
+def avx512_blobs_4_2_1_to_theta(F, avx_blobs):
     a_re, a_im = 0, 0
     b_re, b_im = 0, 0
     c_re, c_im = 0, 0

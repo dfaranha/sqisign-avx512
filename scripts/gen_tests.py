@@ -1,4 +1,4 @@
-from convert import theta_to_avx512_8_1_1, print_avx512_blobs, avx512_blobs_8_1_1_to_theta
+from convert import theta_to_avx512_4_2_1, print_avx512_blobs, avx512_blobs_4_2_1_to_theta
 from theta_structrure import hadamard_transform, squaring_transform, pairwise_multiplication
 from sage.all import GF, proof, set_random_seed
 
@@ -34,18 +34,19 @@ P_had = hadamard_transform(P)
 P_sqr = squaring_transform(P)
 PQ = pairwise_multiplication(P, Q)
 
-P_avx512 = theta_to_avx512_8_1_1(P)
-Q_avx512 = theta_to_avx512_8_1_1(Q)
-P_had_avx512 = theta_to_avx512_8_1_1(P_had)
-P_sqr_avx512 = theta_to_avx512_8_1_1(P_sqr)
-PQ_avx512 = theta_to_avx512_8_1_1(PQ)
+# Package four coordinates into n AVX blobs, where n is ceil(p.nbits() / 51)
+P_avx512 = theta_to_avx512_4_2_1(P)
+Q_avx512 = theta_to_avx512_4_2_1(Q)
+P_had_avx512 = theta_to_avx512_4_2_1(P_had)
+P_sqr_avx512 = theta_to_avx512_4_2_1(P_sqr)
+PQ_avx512 = theta_to_avx512_4_2_1(PQ)
 
 # Finally reverse decoding to make sure things match...
-assert P == avx512_blobs_8_1_1_to_theta(F, P_avx512)
-assert Q == avx512_blobs_8_1_1_to_theta(F, Q_avx512)
-assert P_had == avx512_blobs_8_1_1_to_theta(F, P_had_avx512)
-assert P_sqr == avx512_blobs_8_1_1_to_theta(F, P_sqr_avx512)
-assert PQ == avx512_blobs_8_1_1_to_theta(F, PQ_avx512)
+assert P == avx512_blobs_4_2_1_to_theta(F, P_avx512)
+assert Q == avx512_blobs_4_2_1_to_theta(F, Q_avx512)
+assert P_had == avx512_blobs_4_2_1_to_theta(F, P_had_avx512)
+assert P_sqr == avx512_blobs_4_2_1_to_theta(F, P_sqr_avx512)
+assert PQ == avx512_blobs_4_2_1_to_theta(F, PQ_avx512)
 
 # Print output for C code
 print_avx512_blobs(P_avx512, "P")
