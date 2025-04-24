@@ -9,12 +9,28 @@ def hadamard(P):
     d = x - y - z + w
     return (a, b, c, d)
 
+
+def hadamard_pair(P, Q):
+    """
+    The Hadamard transform on a pair of points
+    """
+    return hadamard(P), hadamard(Q)
+
+
 def squaring(P):
     """
     The squaring transform.
     """
     x, y, z, w = P
-    return (x*x, y*y, z*z, w*w)
+    return (x * x, y * y, z * z, w * w)
+
+
+def squaring_pair(P, Q):
+    """
+    The squaring transform on a pair of points
+    """
+    return squaring(P), squaring(Q)
+
 
 def pairwise_multiplication(P, Q):
     """
@@ -22,7 +38,15 @@ def pairwise_multiplication(P, Q):
     """
     xP, yP, zP, wP = P
     xQ, yQ, zQ, wQ = Q
-    return (xP*xQ, yP*yQ, zP*zQ, wP*wQ)
+    return (xP * xQ, yP * yQ, zP * zQ, wP * wQ)
+
+
+def pairwise_pair(P, Q, R, S):
+    """
+    Pairwise multiplication of two pairs of points
+    """
+    return pairwise_multiplication(P, R), pairwise_multiplication(Q, S)
+
 
 def theta_precompute(OA):
     """
@@ -30,9 +54,9 @@ def theta_precompute(OA):
     """
     # Memory management for 4x2x1 computations
     a, b, c, d = OA
-    ccaa = (c, c, a, a) # memory management in C needed
-    ddbb = (d, d, b, b) # memory management in C needed
-    badc = (b, a, d, c) # memory management in C needed
+    ccaa = (c, c, a, a)  # memory management in C needed
+    ddbb = (d, d, b, b)  # memory management in C needed
+    badc = (b, a, d, c)  # memory management in C needed
 
     # C2 = (bcd, acd, abd, abc)
     C2 = pairwise_multiplication(ccaa, ddbb)
@@ -42,9 +66,9 @@ def theta_precompute(OA):
     AA, BB, CC, DD = hadamard(squaring(OA))
 
     # Memory management for 4x2x1 computations
-    CCAA = (CC, CC, AA, AA) # memory management in C needed
-    DDBB = (DD, DD, BB, BB) # memory management in C needed
-    BADC = (BB, AA, DD, CC) # memory management in C needed
+    CCAA = (CC, CC, AA, AA)  # memory management in C needed
+    DDBB = (DD, DD, BB, BB)  # memory management in C needed
+    BADC = (BB, AA, DD, CC)  # memory management in C needed
 
     # C1 = (BCD, ACD, ABD, ABC)
     C1 = pairwise_multiplication(CCAA, DDBB)
@@ -64,6 +88,20 @@ def theta_double(P, C1, C2):
     P2 = hadamard(P2)
     P2 = pairwise_multiplication(P2, C2)
     return P2
+
+
+def theta_double_pair(P, Q, C1, C2):
+    """
+    Double a point provided certain precomputed constants
+    """
+    P2, Q2 = squaring_pair(P, Q)
+    P2, Q2 = hadamard_pair(P2, Q2)
+    P2, Q2 = squaring_pair(P2, Q2)
+    P2, Q2 = pairwise_pair(P2, Q2, C1, C1)
+    P2, Q2 = hadamard_pair(P2, Q2)
+    P2, Q2 = pairwise_pair(P2, Q2, C2, C2)
+    return P2, Q2
+
 
 def theta_codomain(P, Q, h1, h2):
     if h1:
@@ -135,6 +173,7 @@ def theta_codomain(P, Q, h1, h2):
 
     return OB, inv
 
+
 def theta_eval(P, inv, h1, h2):
     """
     Evaluate a theta point through an isogeny given precomputed constants
@@ -153,9 +192,29 @@ def theta_eval(P, inv, h1, h2):
 
     return im_P
 
-def theta_isogeny_chain(domain, kernel, n):
+
+def theta_eval_pair(P, Q, inv, h1, h2):
     """
-    Naive (2^n, 2^n) isogeny chain with no strategy
+    Evaluate a theta point through an isogeny given precomputed constants
+    """
+    if h1:
+        im_P, im_Q = hadamard_pair(P, Q)
+    else:
+        im_P, im_Q = P, Q
+
+    im_P, im_Q = squaring_pair(im_P, im_Q)
+    im_P, im_Q = hadamard_pair(im_P, im_Q)
+    im_P, im_Q = pairwise_pair(im_P, im_Q, inv, inv)
+
+    if h2:
+        im_P, im_Q = hadamard_pair(im_P, im_Q)
+
+    return im_P, im_Q
+
+
+def theta_isogeny_chain_421(domain, kernel, n):
+    """
+    Naive (2^n, 2^n) isogeny chain with no strategy using everything as 4x2x1 blocks
     """
     OA = domain
     P, Q = kernel
@@ -184,5 +243,38 @@ def theta_isogeny_chain(domain, kernel, n):
         # Push the kernel through the images
         P = theta_eval(P, inv, h1, h2)
         Q = theta_eval(Q, inv, h1, h2)
+
+    return OA
+
+
+def theta_isogeny_chain_811(domain, kernel, n):
+    """
+    Naive (2^n, 2^n) isogeny chain with no strategy using 8x1x1 blocks when possible
+    """
+    OA = domain
+    P, Q = kernel
+    for i in range(n):
+        # Precompute constants for doubling
+        C1, C2 = theta_precompute(OA)
+
+        # Double the kernel points of order 2^(n+2) to get points of order 2^(1 + 2) = 8
+        ker_P, ker_Q = P, Q
+        for _ in range(n - i - 1):
+            ker_P, ker_Q = theta_double_pair(ker_P, ker_Q, C1, C2)
+
+        # For the ultimate and penultimate steps we do extra / less Hadamards
+        # to avoid zeros from the product structure
+        if i == n - 1:
+            h1, h2 = True, False
+        elif i == n - 2:
+            h1, h2 = False, False
+        else:
+            h1, h2 = False, True
+
+        # Compute the codomain from the kernel
+        OA, inv = theta_codomain(ker_P, ker_Q, h1, h2)
+
+        # Push the kernel through the images
+        P, Q = theta_eval_pair(P, Q, inv, h1, h2)
 
     return OA

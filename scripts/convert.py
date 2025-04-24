@@ -1,5 +1,6 @@
 from math import ceil
 
+
 def int_to_le(x, w, n=None):
     """
     Convert an integer into an array of w-bit words if n is not none,
@@ -14,12 +15,13 @@ def int_to_le(x, w, n=None):
         x >>= w
 
     # Optionally pad limbs to length n
-    if not n is None:
+    if n is not None:
         assert len(limbs) <= n
         pad = [0] * (n - len(limbs))
         limbs += pad
 
     return limbs
+
 
 def fp2_to_le(x, w, n=None):
     """
@@ -29,6 +31,7 @@ def fp2_to_le(x, w, n=None):
     re_limbs = int_to_le(re, w, n)
     im_limbs = int_to_le(im, w, n)
     return re_limbs, im_limbs
+
 
 def theta_to_avx512_4_2_1(P):
     """
@@ -52,9 +55,12 @@ def theta_to_avx512_4_2_1(P):
     # Now we create a blob of data where the first 8 51 bit values are the first word
     # of the real and imaginary parts of a, b, c, d and so on
     for i in range(n):
-        avx512_blobs.append([a_re[i], a_im[i], b_re[i], b_im[i], c_re[i], c_im[i], d_re[i], d_im[i]])
+        avx512_blobs.append(
+            [a_re[i], a_im[i], b_re[i], b_im[i], c_re[i], c_im[i], d_re[i], d_im[i]]
+        )
 
     return avx512_blobs
+
 
 def theta_to_avx512_8_1_1(P, Q):
     """
@@ -82,18 +88,23 @@ def theta_to_avx512_8_1_1(P, Q):
     avx512_blobs = []
     # Now we create a blob of data for the 8 real values then the 8 imaginary values
     for i in range(n):
-        avx512_blobs.append([a_re[i], b_re[i], c_re[i], d_re[i], x_re[i], y_re[i], z_re[i], w_re[i]])
+        avx512_blobs.append(
+            [a_re[i], b_re[i], c_re[i], d_re[i], x_re[i], y_re[i], z_re[i], w_re[i]]
+        )
     for i in range(n):
-        avx512_blobs.append([a_im[i], b_im[i], c_im[i], d_im[i], x_im[i], y_im[i], z_im[i], w_im[i]])
+        avx512_blobs.append(
+            [a_im[i], b_im[i], c_im[i], d_im[i], x_im[i], y_im[i], z_im[i], w_im[i]]
+        )
 
     return avx512_blobs
+
 
 def avx512_blobs_4_2_1_to_theta(F, avx_blobs):
     a_re, a_im = 0, 0
     b_re, b_im = 0, 0
     c_re, c_im = 0, 0
     d_re, d_im = 0, 0
-    for (i, avx) in enumerate(avx_blobs):
+    for i, avx in enumerate(avx_blobs):
         a_re += avx[0] * (1 << (51 * i))
         a_im += avx[1] * (1 << (51 * i))
         b_re += avx[2] * (1 << (51 * i))
@@ -107,6 +118,7 @@ def avx512_blobs_4_2_1_to_theta(F, avx_blobs):
     c = F([c_re, c_im])
     d = F([d_re, d_im])
     return (a, b, c, d)
+
 
 def avx512_blobs_8_1_1_to_theta(F, avx_blobs):
     a_re, b_re, c_re, d_re, x_re, y_re, z_re, w_re = 0, 0, 0, 0, 0, 0, 0, 0
@@ -126,7 +138,7 @@ def avx512_blobs_8_1_1_to_theta(F, avx_blobs):
 
     # Parse the imaginary values
     for i in range(8):
-        avx = avx_blobs[i+8]
+        avx = avx_blobs[i + 8]
         a_im += avx[0] * (1 << (51 * i))
         b_im += avx[1] * (1 << (51 * i))
         c_im += avx[2] * (1 << (51 * i))
@@ -148,12 +160,14 @@ def avx512_blobs_8_1_1_to_theta(F, avx_blobs):
 
     return (a, b, c, d), (x, y, z, w)
 
+
 def print_avx512(avx512, indent=True):
     output = ", ".join(f"0x{num:013X}" for num in avx512)
     output = "{ " + output + " },"
     if indent:
         output = "    " + output
     print(output)
+
 
 def print_avx512_blobs(avx_blobs, name):
     print(f"{name} = {{")

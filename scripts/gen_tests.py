@@ -1,12 +1,22 @@
-from convert import theta_to_avx512_4_2_1, print_avx512_blobs, avx512_blobs_4_2_1_to_theta, theta_to_avx512_8_1_1, avx512_blobs_8_1_1_to_theta
-from theta_structrure import hadamard_transform, squaring_transform, pairwise_multiplication
+from convert import (
+    theta_to_avx512_4_2_1,
+    print_avx512_blobs,
+    avx512_blobs_4_2_1_to_theta,
+    theta_to_avx512_8_1_1,
+    avx512_blobs_8_1_1_to_theta,
+)
+from theta_structrure import (
+    hadamard_transform,
+    squaring_transform,
+    pairwise_multiplication,
+)
 from sage.all import GF, proof, set_random_seed
 
 proof.all(False)
 set_random_seed(0)
 
-p = 65*2**376 - 1
-F = GF(p**2, names="i", modulus=[1,0,1])
+p = 65 * 2**376 - 1
+F = GF(p**2, names="i", modulus=[1, 0, 1])
 
 # For now, use totally random points, later we'll do an isogeny chain
 P = tuple(F.random_element() for _ in range(4))
@@ -16,17 +26,17 @@ C = tuple(F.random_element() for _ in range(4))
 # First let's us check the python functions do what we expect
 # H(H(P)) should be projectively equal (up to a factor of 4)
 P4 = hadamard_transform(hadamard_transform(P))
-for (ai, bi) in zip(P, P4):
-    assert 4*ai == bi
+for ai, bi in zip(P, P4):
+    assert 4 * ai == bi
 
 # P * P should be the same as S(P)
 PP = pairwise_multiplication(P, P)
 PS = squaring_transform(P)
-for (ai, bi) in zip(PP, PS):
+for ai, bi in zip(PP, PS):
     assert ai == bi
 
 # Squaring should be done at the coordinate level
-for (ai, bi) in zip(P, PS):
+for ai, bi in zip(P, PS):
     assert ai**2 == bi
 
 
