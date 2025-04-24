@@ -27,23 +27,28 @@ def pairwise_multiplication(P, Q):
 def theta_precompute(OA):
     """
     Precompute constants given a theta null point
-
-    TODO: how best to do this for AVX like instructions
     """
+    # Memory management for 4x2x1 computations
     a, b, c, d = OA
+    ccaa = (c, c, a, a) # memory management in C needed
+    ddbb = (d, d, b, b) # memory management in C needed
+    badc = (b, a, d, c) # memory management in C needed
+
+    # C2 = (bcd, acd, abd, abc)
+    C2 = pairwise_multiplication(ccaa, ddbb)
+    C2 = pairwise_multiplication(C2, badc)
+
+    # compute H(S(OA))
     AA, BB, CC, DD = hadamard(squaring(OA))
 
-    ABC = AA * BB * CC
-    ABD = AA * BB * DD
-    ACD = AA * CC * DD
-    BCD = BB * CC * DD
-    C1 = (BCD, ACD, ABD, ABC)
+    # Memory management for 4x2x1 computations
+    CCAA = (CC, CC, AA, AA) # memory management in C needed
+    DDBB = (DD, DD, BB, BB) # memory management in C needed
+    BADC = (BB, AA, DD, CC) # memory management in C needed
 
-    abc = a * b * c
-    abd = a * b * d
-    acd = a * c * d
-    bcd = b * c * d
-    C2 = (bcd, acd, abd, abc)
+    # C1 = (BCD, ACD, ABD, ABC)
+    C1 = pairwise_multiplication(CCAA, DDBB)
+    C1 = pairwise_multiplication(C1, BADC)
 
     return C1, C2
 
@@ -76,26 +81,54 @@ def theta_codomain(P, Q, h1, h2):
 
     # =================================================================
     # TODO: what's the most AVX512 friendly way of this middle part...
-    xA, xB, yC, yD = ker_P
-    zA, wB, zC, wD = ker_Q
-    xAwB = xA * wB
-    zAxB = zA * xB
-    A = zA * xAwB
-    B = wB * zAxB
-    C = zC * xAwB
-    D = wD * zAxB
+    # xA, xB, yC, yD = ker_P
+    # zA, wB, zC, wD = ker_Q
+    # xAwB = xA * wB
+    # zAxB = zA * xB
+    # A = zA * xAwB
+    # B = wB * zAxB
+    # C = zC * xAwB
+    # D = wD * zAxB
 
     # Compute projectively 1/A, 1/B, 1/C, 1/D by computing ABCDxzw / A
-    #  ABCDxzw / B, etc.
-    zCwD = zC * wD
-    A_inv = xB * zCwD
-    B_inv = xA * zCwD
-    C_inv = D
-    D_inv = C
+    # ABCDxzw / B, etc.
+    # zCwD = zC * wD
+    # A_inv = xB * zCwD
+    # B_inv = xA * zCwD
+    # C_inv = D
+    # D_inv = C
 
-    OB = (A, B, C, D)
-    inv = (A_inv, B_inv, C_inv, D_inv)
+    # OB = (A, B, C, D)
+    # inv = (A_inv, B_inv, C_inv, D_inv)
     # =================================================================
+
+    # =================================================================
+    # First attempt at parallel codomain, could be improved(?)
+    # =================================================================
+    # Memory management of kernel data to make two temp blobs
+    xA, xB, yC, yD = ker_P
+    zA, wB, zC, wD = ker_Q
+    t1 = (xA, zA, xA, zA)
+    t2 = (wB, xB, wB, xB)
+
+    # 2 calls to 4x2x1 multiplication instead of 6 Fp2 mul
+    OB = pairwise_multiplication(t1, t2)
+    OB = pairwise_multiplication(OB, ker_Q)
+
+    # Now we need to compute the inv precomputation
+    # Memory management of kernel data
+    A, B, C, D = OB
+    t1 = (zC, zC, 1, 1)
+    t2 = (wD, wD, 1, 1)
+    inv = (xB, xA, D, C)
+
+    # 2 calls to 4x2x1 multiplication instead of 3 Fp2 mul
+    # This seems bad and there must be something smarter we can do!!
+    # We really need:
+    # t1 = zC * wD
+    # inv = (t1 * xB, t1 * xA, D, C)
+    inv = pairwise_multiplication(inv, t1)
+    inv = pairwise_multiplication(inv, t2)
 
     if h2:
         OB = hadamard(OB)
