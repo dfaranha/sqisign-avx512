@@ -1,0 +1,4 @@
+__pycache__
+*.sage.py
+*.DS_store
+*.cProfile

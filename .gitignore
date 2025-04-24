@@ -1,1 +1,4 @@
 build/
+
+*.sage.py
+*.DS_Store
