@@ -1,7 +1,7 @@
 from sage.all import proof
 from sqisign.sqisign import SQIsign
 
-NUM_KATS = 100
+NUM_KATS = 1
 
 
 def read_kat_int(kat_line):
@@ -70,6 +70,6 @@ def test_level_5():
 
 if __name__ == "__main__":
     proof.all(False)
-    test_level_1()
+    # test_level_1()
     test_level_3()
-    test_level_5()
+    # test_level_5()

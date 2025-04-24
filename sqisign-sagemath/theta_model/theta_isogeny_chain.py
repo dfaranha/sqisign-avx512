@@ -200,6 +200,8 @@ def two_two_isogeny_chain_with_torsion(
     # Extract out the bases on E_chl and E_aux
     chl_basis, aux_basis = kernel
 
+    print(f"{length = }")
+
     # Montgomery coefficients of E_chl and E_aux needed for
     # Jacobian arithmetic
     E1 = chl_basis[0].parent()
@@ -263,6 +265,15 @@ def two_two_isogeny_chain_with_torsion(
         strat_points[i] = (P_im, Q_im)
         orders[i] = orders[i] - 1
 
+    print("domain after gluing:")
+    print(f"{OA = }")
+    print()
+
+    print("kernel after gluing:")
+    print(f"{strat_points[0][0] = }")
+    print(f"{strat_points[0][1] = }")
+    print()
+
     #
     # Main loop: compute (2,2) isogenies in the theta model with balanced strategy
     #
@@ -311,6 +322,10 @@ def two_two_isogeny_chain_with_torsion(
             strat_points[i] = (T1, T2)
             orders[i] = orders[i] - 1
         k = k - 1
+
+    print("codomain before isomorphism")
+    print(f"{OA = }")
+    print()
 
     # Compute the splitting isomorphism
     M = splitting_isomorphism_matrix(OA, randomize)
