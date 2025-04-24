@@ -56,6 +56,26 @@ def theta_to_avx512_8_1_1(P):
 
     return avx512_blobs
 
+def avx512_blobs_8_1_1_to_theta(F, avx_blobs):
+    a_re, a_im = 0, 0
+    b_re, b_im = 0, 0
+    c_re, c_im = 0, 0
+    d_re, d_im = 0, 0
+    for (i, avx) in enumerate(avx_blobs):
+        a_re += avx[0] * (1 << (51 * i))
+        a_im += avx[1] * (1 << (51 * i))
+        b_re += avx[2] * (1 << (51 * i))
+        b_im += avx[3] * (1 << (51 * i))
+        c_re += avx[4] * (1 << (51 * i))
+        c_im += avx[5] * (1 << (51 * i))
+        d_re += avx[6] * (1 << (51 * i))
+        d_im += avx[7] * (1 << (51 * i))
+    a = F([a_re, a_im])
+    b = F([b_re, b_im])
+    c = F([c_re, c_im])
+    d = F([d_re, d_im])
+    return (a, b, c, d)
+
 def print_avx512(avx512, indent=True):
     output = ", ".join(f"0x{num:013X}" for num in avx512)
     output = "{ " + output + " },"
