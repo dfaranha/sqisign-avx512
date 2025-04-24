@@ -56,6 +56,38 @@ def theta_to_avx512_4_2_1(P):
 
     return avx512_blobs
 
+def theta_to_avx512_8_1_1(P, Q):
+    """
+    Given two theta points (a : b : c : d) and (a' : b' : c' : d') convert this
+    to a data blob suitible for the AVX512 operations
+    """
+    # Extract out the coordinates from the point
+    a, b, c, d = P
+    x, y, z, w = Q
+
+    # For ease, we want all arrays to have the same number of words
+    p = a.parent().characteristic()
+    n = ceil(p.nbits() / 51)
+
+    # First we convert each coordinate to le_limbs
+    a_re, a_im = fp2_to_le(a, 51, n)
+    b_re, b_im = fp2_to_le(b, 51, n)
+    c_re, c_im = fp2_to_le(c, 51, n)
+    d_re, d_im = fp2_to_le(d, 51, n)
+    x_re, x_im = fp2_to_le(x, 51, n)
+    y_re, y_im = fp2_to_le(y, 51, n)
+    z_re, z_im = fp2_to_le(z, 51, n)
+    w_re, w_im = fp2_to_le(w, 51, n)
+
+    avx512_blobs = []
+    # Now we create a blob of data for the 8 real values then the 8 imaginary values
+    for i in range(n):
+        avx512_blobs.append([a_re[i], b_re[i], c_re[i], d_re[i], x_re[i], y_re[i], z_re[i], w_re[i]])
+    for i in range(n):
+        avx512_blobs.append([a_im[i], b_im[i], c_im[i], d_im[i], x_im[i], y_im[i], z_im[i], w_im[i]])
+
+    return avx512_blobs
+
 def avx512_blobs_4_2_1_to_theta(F, avx_blobs):
     a_re, a_im = 0, 0
     b_re, b_im = 0, 0
@@ -75,6 +107,46 @@ def avx512_blobs_4_2_1_to_theta(F, avx_blobs):
     c = F([c_re, c_im])
     d = F([d_re, d_im])
     return (a, b, c, d)
+
+def avx512_blobs_8_1_1_to_theta(F, avx_blobs):
+    a_re, b_re, c_re, d_re, x_re, y_re, z_re, w_re = 0, 0, 0, 0, 0, 0, 0, 0
+    a_im, b_im, c_im, d_im, x_im, y_im, z_im, w_im = 0, 0, 0, 0, 0, 0, 0, 0
+
+    # Parse the real values
+    for i in range(8):
+        avx = avx_blobs[i]
+        a_re += avx[0] * (1 << (51 * i))
+        b_re += avx[1] * (1 << (51 * i))
+        c_re += avx[2] * (1 << (51 * i))
+        d_re += avx[3] * (1 << (51 * i))
+        x_re += avx[4] * (1 << (51 * i))
+        y_re += avx[5] * (1 << (51 * i))
+        z_re += avx[6] * (1 << (51 * i))
+        w_re += avx[7] * (1 << (51 * i))
+
+    # Parse the imaginary values
+    for i in range(8):
+        avx = avx_blobs[i+8]
+        a_im += avx[0] * (1 << (51 * i))
+        b_im += avx[1] * (1 << (51 * i))
+        c_im += avx[2] * (1 << (51 * i))
+        d_im += avx[3] * (1 << (51 * i))
+        x_im += avx[4] * (1 << (51 * i))
+        y_im += avx[5] * (1 << (51 * i))
+        z_im += avx[6] * (1 << (51 * i))
+        w_im += avx[7] * (1 << (51 * i))
+
+    # Convert to Fp2 elements
+    a = F([a_re, a_im])
+    b = F([b_re, b_im])
+    c = F([c_re, c_im])
+    d = F([d_re, d_im])
+    x = F([x_re, x_im])
+    y = F([y_re, y_im])
+    z = F([z_re, z_im])
+    w = F([w_re, w_im])
+
+    return (a, b, c, d), (x, y, z, w)
 
 def print_avx512(avx512, indent=True):
     output = ", ".join(f"0x{num:013X}" for num in avx512)
