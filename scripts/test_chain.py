@@ -1,4 +1,9 @@
-from theta_isogeny_chain import theta_isogeny_chain_421, theta_isogeny_chain_811
+from theta_isogeny_chain import (
+    AVX_8x1x1,
+    AVX_4x2x1,
+    theta_isogeny_chain_4x2x1,
+    theta_isogeny_chain_8x1x1,
+)
 from sage.all import GF, proof
 
 proof.all(False)
@@ -10,6 +15,7 @@ i = F.gen()
 # We reduce by one as we have done the gluing step
 n = 188 - 1
 
+# Data copy-pasted from SQIsign KAT tests
 a = (
     4299271555782086129832204648262373329362023665055858142515033647199016599349068670223742576960084181602015075259304
     * i
@@ -30,7 +36,6 @@ d = (
     * i
     + 7542182305750594284996738857429218882265336797996558053997883626841548260666935231269330525923152077235193743113971
 )
-OA = (a, b, c, d)
 
 xP = (
     4801792635635725103790761661839040137412214249117741331494660265887347420371849584447537362471687934390959221360149
@@ -52,7 +57,6 @@ wP = (
     * i
     + 6267548912716507514034031884759096365417712760063988780643349008730915113741925417646875527138177447427514799405932
 )
-P = (xP, yP, zP, wP)
 
 xQ = (
     5914209079190776661432724873133961166630615221883687391796301615104752799614941563091161661989454835911309677895480
@@ -74,7 +78,6 @@ wQ = (
     * i
     + 5704903080117929478352845589751508935794472162047650335762839378856074081999233685059959454292913240414929145093455
 )
-Q = (xQ, yQ, zQ, wQ)
 
 A = (
     2380990626653372330576252455732813388860839495418233546967514042429035763779255112493913483113466595885199101381731
@@ -96,19 +99,29 @@ D = (
     * i
     + 3545709277442058063977847922306339560557081008473062023393050715576737199487868962879845709160132690609658644273436
 )
-OB = (A, B, C, D)
 
-OC = theta_isogeny_chain_421(OA, (P, Q), n)
+# Domain for isogeny
+OA = AVX_4x2x1(a, b, c, d)
+
+# Kernel for the 4x2x1 chain
+P = AVX_4x2x1(xP, yP, zP, wP)
+Q = AVX_4x2x1(xQ, yQ, zQ, wQ)
+
+# Kernel for the 8x1x1 chain
+ker = AVX_8x1x1(xP, yP, zP, wP, xQ, yQ, zQ, wQ)
+
+# Know codomain to compared against
+OB = AVX_4x2x1(A, B, C, D)
 
 # Ensure OB and OC are projectively equal
+OC = theta_isogeny_chain_4x2x1(OA, P, Q, n)
 lam_B = OB[3]
 lam_C = OC[3]
 for a, b in zip(OB, OC):
     assert lam_C * a == lam_B * b
 
-OC = theta_isogeny_chain_811(OA, (P, Q), n)
-
 # Ensure OB and OC are projectively equal
+OC = theta_isogeny_chain_8x1x1(OA, ker, n)
 lam_B = OB[3]
 lam_C = OC[3]
 for a, b in zip(OB, OC):

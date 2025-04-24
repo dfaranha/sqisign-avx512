@@ -1,62 +1,78 @@
-def hadamard(P):
+from typing import Tuple
+from collections import namedtuple
+
+AVX_8x1x1 = namedtuple("AVX_8x1x1", ["x1", "y1", "z1", "w1", "x2", "y2", "z2", "w2"])
+AVX_4x2x1 = namedtuple("AVX_4x2x1", ["x", "y", "z", "w"])
+
+
+def hadamard(P: AVX_4x2x1) -> AVX_4x2x1:
     """
     The Hadamard transform
     """
-    x, y, z, w = P
-    a = x + y + z + w
-    b = x - y + z - w
-    c = x + y - z - w
-    d = x - y - z + w
-    return (a, b, c, d)
+    a = P.x + P.y + P.z + P.w
+    b = P.x - P.y + P.z - P.w
+    c = P.x + P.y - P.z - P.w
+    d = P.x - P.y - P.z + P.w
+    return AVX_4x2x1(a, b, c, d)
 
 
-def hadamard_pair(P, Q):
+def hadamard_pair(P_Q: AVX_8x1x1) -> AVX_8x1x1:
     """
     The Hadamard transform on a pair of points
     """
-    return hadamard(P), hadamard(Q)
+    a1 = P_Q.x1 + P_Q.y1 + P_Q.z1 + P_Q.w1
+    b1 = P_Q.x1 - P_Q.y1 + P_Q.z1 - P_Q.w1
+    c1 = P_Q.x1 + P_Q.y1 - P_Q.z1 - P_Q.w1
+    d1 = P_Q.x1 - P_Q.y1 - P_Q.z1 + P_Q.w1
+
+    a2 = P_Q.x2 + P_Q.y2 + P_Q.z2 + P_Q.w2
+    b2 = P_Q.x2 - P_Q.y2 + P_Q.z2 - P_Q.w2
+    c2 = P_Q.x2 + P_Q.y2 - P_Q.z2 - P_Q.w2
+    d2 = P_Q.x2 - P_Q.y2 - P_Q.z2 + P_Q.w2
+
+    return AVX_8x1x1(a1, b1, c1, d1, a2, b2, c2, d2)
 
 
-def squaring(P):
+def squaring(P: AVX_4x2x1) -> AVX_4x2x1:
     """
     The squaring transform.
     """
-    x, y, z, w = P
-    return (x * x, y * y, z * z, w * w)
+    return AVX_4x2x1(*[x * x for x in P])
 
 
-def squaring_pair(P, Q):
+def squaring_pair(P_Q: AVX_8x1x1) -> AVX_8x1x1:
     """
     The squaring transform on a pair of points
     """
-    return squaring(P), squaring(Q)
+    return AVX_8x1x1(*[x * x for x in P_Q])
 
 
-def pairwise_multiplication(P, Q):
+def pairwise_multiplication(P: AVX_4x2x1, Q: AVX_4x2x1) -> AVX_4x2x1:
     """
     Pairwise multiplication of two points
     """
-    xP, yP, zP, wP = P
-    xQ, yQ, zQ, wQ = Q
-    return (xP * xQ, yP * yQ, zP * zQ, wP * wQ)
+    return AVX_4x2x1(P.x * Q.x, P.y * Q.y, P.z * Q.z, P.w * Q.w)
 
 
-def pairwise_pair(P, Q, R, S):
+def pairwise_pair(P_Q: AVX_8x1x1, C: AVX_4x2x1) -> AVX_8x1x1:
     """
     Pairwise multiplication of two pairs of points
     """
-    return pairwise_multiplication(P, R), pairwise_multiplication(Q, S)
+    a1, b1, c1, d1 = P_Q.x1 * C.x, P_Q.y1 * C.y, P_Q.z1 * C.z, P_Q.w1 * C.w
+    a2, b2, c2, d2 = P_Q.x2 * C.x, P_Q.y2 * C.y, P_Q.z2 * C.z, P_Q.w2 * C.w
+
+    return AVX_8x1x1(a1, b1, c1, d1, a2, b2, c2, d2)
 
 
-def theta_precompute(OA):
+def theta_precompute(OA: AVX_4x2x1) -> Tuple[AVX_4x2x1, AVX_4x2x1]:
     """
     Precompute constants given a theta null point
     """
     # Memory management for 4x2x1 computations
     a, b, c, d = OA
-    ccaa = (c, c, a, a)  # memory management in C needed
-    ddbb = (d, d, b, b)  # memory management in C needed
-    badc = (b, a, d, c)  # memory management in C needed
+    ccaa = AVX_4x2x1(c, c, a, a)  # memory management in C needed
+    ddbb = AVX_4x2x1(d, d, b, b)  # memory management in C needed
+    badc = AVX_4x2x1(b, a, d, c)  # memory management in C needed
 
     # C2 = (bcd, acd, abd, abc)
     C2 = pairwise_multiplication(ccaa, ddbb)
@@ -66,9 +82,9 @@ def theta_precompute(OA):
     AA, BB, CC, DD = hadamard(squaring(OA))
 
     # Memory management for 4x2x1 computations
-    CCAA = (CC, CC, AA, AA)  # memory management in C needed
-    DDBB = (DD, DD, BB, BB)  # memory management in C needed
-    BADC = (BB, AA, DD, CC)  # memory management in C needed
+    CCAA = AVX_4x2x1(CC, CC, AA, AA)  # memory management in C needed
+    DDBB = AVX_4x2x1(DD, DD, BB, BB)  # memory management in C needed
+    BADC = AVX_4x2x1(BB, AA, DD, CC)  # memory management in C needed
 
     # C1 = (BCD, ACD, ABD, ABC)
     C1 = pairwise_multiplication(CCAA, DDBB)
@@ -77,7 +93,7 @@ def theta_precompute(OA):
     return C1, C2
 
 
-def theta_double(P, C1, C2):
+def theta_double(P: AVX_4x2x1, C1: AVX_4x2x1, C2: AVX_4x2x1) -> AVX_4x2x1:
     """
     Double a point provided certain precomputed constants
     """
@@ -90,32 +106,31 @@ def theta_double(P, C1, C2):
     return P2
 
 
-def theta_double_pair(P, Q, C1, C2):
+def theta_double_pair(P_Q: AVX_8x1x1, C1: AVX_4x2x1, C2: AVX_4x2x1) -> AVX_8x1x1:
     """
     Double a point provided certain precomputed constants
     """
-    P2, Q2 = squaring_pair(P, Q)
-    P2, Q2 = hadamard_pair(P2, Q2)
-    P2, Q2 = squaring_pair(P2, Q2)
-    P2, Q2 = pairwise_pair(P2, Q2, C1, C1)
-    P2, Q2 = hadamard_pair(P2, Q2)
-    P2, Q2 = pairwise_pair(P2, Q2, C2, C2)
-    return P2, Q2
+    P2_Q2 = squaring_pair(P_Q)
+    P2_Q2 = hadamard_pair(P2_Q2)
+    P2_Q2 = squaring_pair(P2_Q2)
+    P2_Q2 = pairwise_pair(P2_Q2, C1)
+    P2_Q2 = hadamard_pair(P2_Q2)
+    P2_Q2 = pairwise_pair(P2_Q2, C2)
+    return P2_Q2
 
 
-def theta_codomain(P, Q, h1, h2):
+def theta_codomain_4x2x1(
+    P: AVX_4x2x1, Q: AVX_4x2x1, h1: bool, h2: bool
+) -> Tuple[AVX_4x2x1, AVX_4x2x1]:
     if h1:
-        ker_P = hadamard(P)
-        ker_Q = hadamard(Q)
-    else:
-        ker_P = P
-        ker_Q = Q
+        P = hadamard(P)
+        Q = hadamard(Q)
 
-    ker_P = squaring(ker_P)
-    ker_P = hadamard(ker_P)
+    P = squaring(P)
+    P = hadamard(P)
 
-    ker_Q = squaring(ker_Q)
-    ker_Q = hadamard(ker_Q)
+    Q = squaring(Q)
+    Q = hadamard(Q)
 
     # =================================================================
     # TODO: what's the most AVX512 friendly way of this middle part...
@@ -144,21 +159,22 @@ def theta_codomain(P, Q, h1, h2):
     # First attempt at parallel codomain, could be improved(?)
     # =================================================================
     # Memory management of kernel data to make two temp blobs
-    xA, xB, yC, yD = ker_P
-    zA, wB, zC, wD = ker_Q
-    t1 = (xA, zA, xA, zA)
-    t2 = (wB, xB, wB, xB)
+    xA, xB, yC, yD = P
+    zA, wB, zC, wD = Q
+    t1 = AVX_4x2x1(xA, zA, xA, zA)
+    t2 = AVX_4x2x1(wB, xB, wB, xB)
 
     # 2 calls to 4x2x1 multiplication instead of 6 Fp2 mul
-    OB = pairwise_multiplication(t1, t2)
-    OB = pairwise_multiplication(OB, ker_Q)
+    OB = Q
+    OB = pairwise_multiplication(t1, OB)
+    OB = pairwise_multiplication(t2, OB)
 
     # Now we need to compute the inv precomputation
     # Memory management of kernel data
     A, B, C, D = OB
-    t1 = (zC, zC, 1, 1)
-    t2 = (wD, wD, 1, 1)
-    inv = (xB, xA, D, C)
+    inv = AVX_4x2x1(xB, xA, D, C)
+    t1 = AVX_4x2x1(zC, zC, 1, 1)
+    t2 = AVX_4x2x1(wD, wD, 1, 1)
 
     # 2 calls to 4x2x1 multiplication instead of 3 Fp2 mul
     # This seems bad and there must be something smarter we can do!!
@@ -174,50 +190,88 @@ def theta_codomain(P, Q, h1, h2):
     return OB, inv
 
 
-def theta_eval(P, inv, h1, h2):
+def theta_codomain_8x1x1(
+    ker: AVX_8x1x1, h1: bool, h2: bool
+) -> Tuple[AVX_4x2x1, AVX_4x2x1]:
+    if h1:
+        ker = hadamard_pair(ker)
+    ker = squaring_pair(ker)
+    ker = hadamard_pair(ker)
+
+    # =================================================================
+    # First attempt at parallel codomain, could be improved(?)
+    # =================================================================
+    # Memory management of kernel data to make two temp blobs
+    xA, xB, yC, yD, zA, wB, zC, wD = ker
+    OB = AVX_4x2x1(zA, wB, zC, wD)
+    t1 = AVX_4x2x1(xA, zA, xA, zA)
+    t2 = AVX_4x2x1(wB, xB, wB, xB)
+
+    # 2 calls to 4x2x1 multiplication instead of 6 Fp2 mul
+    OB = pairwise_multiplication(OB, t1)
+    OB = pairwise_multiplication(OB, t2)
+
+    # Now we need to compute the inv precomputation
+    # Memory management of kernel data
+    A, B, C, D = OB
+    inv = AVX_4x2x1(xB, xA, D, C)
+    t1 = AVX_4x2x1(zC, zC, 1, 1)
+    t2 = AVX_4x2x1(wD, wD, 1, 1)
+
+    # 2 calls to 4x2x1 multiplication instead of 3 Fp2 mul
+    # This seems bad and there must be something smarter we can do!!
+    # We really need:
+    # t1 = zC * wD
+    # inv = (t1 * xB, t1 * xA, D, C)
+    inv = pairwise_multiplication(inv, t1)
+    inv = pairwise_multiplication(inv, t2)
+
+    if h2:
+        OB = hadamard(OB)
+
+    return OB, inv
+
+
+def theta_eval(P: AVX_4x2x1, inv: AVX_4x2x1, h1: bool, h2: bool) -> AVX_4x2x1:
     """
     Evaluate a theta point through an isogeny given precomputed constants
     """
     if h1:
-        im_P = hadamard(P)
-    else:
-        im_P = P
+        P = hadamard(P)
 
-    im_P = squaring(im_P)
-    im_P = hadamard(im_P)
-    im_P = pairwise_multiplication(im_P, inv)
+    P = squaring(P)
+    P = hadamard(P)
+    P = pairwise_multiplication(P, inv)
 
     if h2:
-        im_P = hadamard(im_P)
+        P = hadamard(P)
 
-    return im_P
+    return P
 
 
-def theta_eval_pair(P, Q, inv, h1, h2):
+def theta_eval_pair(P_Q: AVX_8x1x1, inv: AVX_4x2x1, h1: bool, h2: bool):
     """
     Evaluate a theta point through an isogeny given precomputed constants
     """
     if h1:
-        im_P, im_Q = hadamard_pair(P, Q)
-    else:
-        im_P, im_Q = P, Q
+        P_Q = hadamard_pair(P_Q)
 
-    im_P, im_Q = squaring_pair(im_P, im_Q)
-    im_P, im_Q = hadamard_pair(im_P, im_Q)
-    im_P, im_Q = pairwise_pair(im_P, im_Q, inv, inv)
+    P_Q = squaring_pair(P_Q)
+    P_Q = hadamard_pair(P_Q)
+    P_Q = pairwise_pair(P_Q, inv)
 
     if h2:
-        im_P, im_Q = hadamard_pair(im_P, im_Q)
+        P_Q = hadamard_pair(P_Q)
 
-    return im_P, im_Q
+    return P_Q
 
 
-def theta_isogeny_chain_421(domain, kernel, n):
+def theta_isogeny_chain_4x2x1(
+    OA: AVX_4x2x1, P: AVX_4x2x1, Q: AVX_4x2x1, n: int
+) -> AVX_4x2x1:
     """
     Naive (2^n, 2^n) isogeny chain with no strategy using everything as 4x2x1 blocks
     """
-    OA = domain
-    P, Q = kernel
     for i in range(n):
         # Precompute constants for doubling
         C1, C2 = theta_precompute(OA)
@@ -238,7 +292,7 @@ def theta_isogeny_chain_421(domain, kernel, n):
             h1, h2 = False, True
 
         # Compute the codomain from the kernel
-        OA, inv = theta_codomain(ker_P, ker_Q, h1, h2)
+        OA, inv = theta_codomain_4x2x1(ker_P, ker_Q, h1, h2)
 
         # Push the kernel through the images
         P = theta_eval(P, inv, h1, h2)
@@ -247,20 +301,18 @@ def theta_isogeny_chain_421(domain, kernel, n):
     return OA
 
 
-def theta_isogeny_chain_811(domain, kernel, n):
+def theta_isogeny_chain_8x1x1(OA: AVX_4x2x1, kernel: AVX_8x1x1, n: int) -> AVX_4x2x1:
     """
     Naive (2^n, 2^n) isogeny chain with no strategy using 8x1x1 blocks when possible
     """
-    OA = domain
-    P, Q = kernel
     for i in range(n):
         # Precompute constants for doubling
         C1, C2 = theta_precompute(OA)
 
         # Double the kernel points of order 2^(n+2) to get points of order 2^(1 + 2) = 8
-        ker_P, ker_Q = P, Q
+        ker_step = kernel
         for _ in range(n - i - 1):
-            ker_P, ker_Q = theta_double_pair(ker_P, ker_Q, C1, C2)
+            ker_step = theta_double_pair(ker_step, C1, C2)
 
         # For the ultimate and penultimate steps we do extra / less Hadamards
         # to avoid zeros from the product structure
@@ -272,9 +324,9 @@ def theta_isogeny_chain_811(domain, kernel, n):
             h1, h2 = False, True
 
         # Compute the codomain from the kernel
-        OA, inv = theta_codomain(ker_P, ker_Q, h1, h2)
+        OA, inv = theta_codomain_8x1x1(ker_step, h1, h2)
 
         # Push the kernel through the images
-        P, Q = theta_eval_pair(P, Q, inv, h1, h2)
+        kernel = theta_eval_pair(kernel, inv, h1, h2)
 
     return OA
