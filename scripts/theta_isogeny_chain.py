@@ -161,34 +161,29 @@ def theta_codomain_4x2x1(
     # inv = (A_inv, B_inv, C_inv, D_inv)
     # =================================================================
 
-    # =================================================================
-    # First attempt at parallel codomain, could be improved(?)
-    # =================================================================
     # Memory management of kernel data to make two temp blobs
     xA, xB, yC, yD = P
     zA, wB, zC, wD = Q
-    t1 = AVX_4x2x1(xA, zA, xA, zA)
-    t2 = AVX_4x2x1(wB, xB, wB, xB)
+    t1 = AVX_4x2x1(xA, zA, zC, 1)
+    t2 = AVX_4x2x1(wB, xB, wD, 1)
 
-    # 2 calls to 4x2x1 multiplication instead of 6 Fp2 mul
-    OB = Q
-    OB = pairwise_multiplication(t1, OB)
-    OB = pairwise_multiplication(t2, OB)
+    # Here we only need three multiplications, we could make a special function
+    t2 = pairwise_multiplication(t1 , t2)
 
-    # Now we need to compute the inv precomputation
-    # Memory management of kernel data
+    # Memory management to get the precomputations we need
+    xAwB, zAxB, zCwD, _ = t2
+    t1 = AVX_4x2x1(xAwB, zAxB, xAwB, zAxB)
+
+    # Compute the codomain
+    OB = pairwise_multiplication(t1, Q)
+
+    # Memory management to get the values needed for inverse
     A, B, C, D = OB
     inv = AVX_4x2x1(xB, xA, D, C)
-    t1 = AVX_4x2x1(zC, zC, 1, 1)
-    t2 = AVX_4x2x1(wD, wD, 1, 1)
+    t1 = AVX_4x2x1(zCwD, zCwD, 1, 1)
 
-    # 2 calls to 4x2x1 multiplication instead of 3 Fp2 mul
-    # This seems bad and there must be something smarter we can do!!
-    # We really need:
-    # t1 = zC * wD
-    # inv = (t1 * xB, t1 * xA, D, C)
+    # Here we only need two multiplications, we could make a special function
     inv = pairwise_multiplication(inv, t1)
-    inv = pairwise_multiplication(inv, t2)
 
     if h2:
         OB = hadamard(OB)
@@ -210,27 +205,26 @@ def theta_codomain_8x1x1(
     # Memory management of kernel data to make two temp blobs
     xA, xB, yC, yD, zA, wB, zC, wD = ker
     OB = AVX_4x2x1(zA, wB, zC, wD)
-    t1 = AVX_4x2x1(xA, zA, xA, zA)
-    t2 = AVX_4x2x1(wB, xB, wB, xB)
+    t1 = AVX_4x2x1(xA, zA, zC, 1)
+    t2 = AVX_4x2x1(wB, xB, wD, 1)
 
-    # 2 calls to 4x2x1 multiplication instead of 6 Fp2 mul
-    OB = pairwise_multiplication(OB, t1)
-    OB = pairwise_multiplication(OB, t2)
+    # Here we only need three multiplications, we could make a special function
+    t2 = pairwise_multiplication(t1 , t2)
 
-    # Now we need to compute the inv precomputation
-    # Memory management of kernel data
+    # Memory management to get the precomputations we need
+    xAwB, zAxB, zCwD, _ = t2
+    t1 = AVX_4x2x1(xAwB, zAxB, xAwB, zAxB)
+
+    # Compute the codomain
+    OB = pairwise_multiplication(t1, OB)
+
+    # Memory management to get the values needed for inverse
     A, B, C, D = OB
     inv = AVX_4x2x1(xB, xA, D, C)
-    t1 = AVX_4x2x1(zC, zC, 1, 1)
-    t2 = AVX_4x2x1(wD, wD, 1, 1)
+    t1 = AVX_4x2x1(zCwD, zCwD, 1, 1)
 
-    # 2 calls to 4x2x1 multiplication instead of 3 Fp2 mul
-    # This seems bad and there must be something smarter we can do!!
-    # We really need:
-    # t1 = zC * wD
-    # inv = (t1 * xB, t1 * xA, D, C)
+    # Here we only need two multiplications, we could make a special function
     inv = pairwise_multiplication(inv, t1)
-    inv = pairwise_multiplication(inv, t2)
 
     if h2:
         OB = hadamard(OB)
