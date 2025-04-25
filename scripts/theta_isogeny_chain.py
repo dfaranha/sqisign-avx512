@@ -67,28 +67,34 @@ def pairwise_pair(P_Q: AVX_8x1x1, C: AVX_4x2x1) -> AVX_8x1x1:
 def theta_precompute(OA: AVX_4x2x1) -> Tuple[AVX_4x2x1, AVX_4x2x1]:
     """
     Precompute constants given a theta null point
+
+    Cost: uses 3 4x2x1 multiplications instead of 12 Fp2 multiplications
+          but requires additional memory management to form different AVX512
+          blobs along the way
     """
+    # Compute H . S(OA)
+    OA_prime = squaring(OA)
+    OA_prime = hadamard(OA_prime)
+
     # Memory management for 4x2x1 computations
     a, b, c, d = OA
-    ccaa = AVX_4x2x1(c, c, a, a)  # memory management in C needed
-    ddbb = AVX_4x2x1(d, d, b, b)  # memory management in C needed
-    badc = AVX_4x2x1(b, a, d, c)  # memory management in C needed
+    AA, BB, CC, DD = OA_prime
+    t1 = AVX_4x2x1(AA, CC, a, c)
+    t2 = AVX_4x2x1(BB, DD, b, d)
+    C1 = AVX_4x2x1(BB, AA, DD, CC)
+    C2 = AVX_4x2x1(b, a, d, c)
 
-    # C2 = (bcd, acd, abd, abc)
-    C2 = pairwise_multiplication(ccaa, ddbb)
-    C2 = pairwise_multiplication(C2, badc)
+    # Precompute four multiplications AABB, CCDD, ab and cd
+    t2 = pairwise_multiplication(t1, t2)
 
-    # compute H(S(OA))
-    AA, BB, CC, DD = hadamard(squaring(OA))
+    # More memory management to repackage the first multiplication
+    AABB, CCDD, ab, cd = t2
+    t1 = AVX_4x2x1(CCDD, CCDD, AABB, AABB)
+    t2 = AVX_4x2x1(cd, cd, ab, ab)
 
-    # Memory management for 4x2x1 computations
-    CCAA = AVX_4x2x1(CC, CC, AA, AA)  # memory management in C needed
-    DDBB = AVX_4x2x1(DD, DD, BB, BB)  # memory management in C needed
-    BADC = AVX_4x2x1(BB, AA, DD, CC)  # memory management in C needed
-
-    # C1 = (BCD, ACD, ABD, ABC)
-    C1 = pairwise_multiplication(CCAA, DDBB)
-    C1 = pairwise_multiplication(C1, BADC)
+    # Compute the arithmetic constants more memory management and two more muls
+    C1 = pairwise_multiplication(C1, t1)
+    C2 = pairwise_multiplication(C2, t2)
 
     return C1, C2
 
