@@ -1,7 +1,9 @@
 #ifndef _FP2_LVL3_H
 #define _FP2_LVL3_H
 
+#include <stdint.h>
 
+#include "intrinsics_avx512.h"
 
 
 /**
@@ -164,8 +166,31 @@ void fp2_sqr_2x4x1(__m512i* res, __m512i* a);
 
 void fp2_tomont_2x4x1(__m512i* res, __m512i* a);
 
-void fp2_frommont_2x4x1(__m512i*res, __m512i* a);
+void fp2_frommont_2x4x1(__m512i* res, __m512i* a);
 
+// ======================================================================================================
+//                                      Conversions between representations
+// ======================================================================================================
 
+/**
+ * Converts between the array representation and the vectorized representations.
+ * In the array representation, we store the Fp2 elements one after the other, in one big array.
+ * Each Fp2 element is stored in twelve 64-bit integers, with the first six storing the real coefficient.
+ */
+void fp2_array_to_8x1x1(__m512i* res, uint64_t* src);
+void fp2_array_to_4x2x1(__m512i* res, uint64_t* src);
+
+void fp2_8x1x1_to_array(uint64_t* res, __m512i* src);
+void fp2_4x2x1_to_array(uint64_t* res, __m512i* src);
+
+/**
+ * Converts an Fp2 8x1x1 to two 4x2x1's.
+ */
+void fp2_8x1x1_to_4x2x1(__m512i* res, __m512i* src);
+
+/**
+ * Converts two Fp2 4x2x1's to an 8x1x1.
+ */
+void fp2_4x2x1_to_8x1x1(__m512i* res, __m512i* src);
 
 #endif
