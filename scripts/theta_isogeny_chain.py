@@ -1,67 +1,19 @@
 from typing import Tuple
-from collections import namedtuple
 
-AVX_8x1x1 = namedtuple("AVX_8x1x1", ["x1", "y1", "z1", "w1", "x2", "y2", "z2", "w2"])
-AVX_4x2x1 = namedtuple("AVX_4x2x1", ["x", "y", "z", "w"])
-
-
-def hadamard(P: AVX_4x2x1) -> AVX_4x2x1:
-    """
-    The Hadamard transform
-    """
-    a = P.x + P.y + P.z + P.w
-    b = P.x - P.y + P.z - P.w
-    c = P.x + P.y - P.z - P.w
-    d = P.x - P.y - P.z + P.w
-    return AVX_4x2x1(a, b, c, d)
-
-
-def hadamard_pair(P_Q: AVX_8x1x1) -> AVX_8x1x1:
-    """
-    The Hadamard transform on a pair of points
-    """
-    a1 = P_Q.x1 + P_Q.y1 + P_Q.z1 + P_Q.w1
-    b1 = P_Q.x1 - P_Q.y1 + P_Q.z1 - P_Q.w1
-    c1 = P_Q.x1 + P_Q.y1 - P_Q.z1 - P_Q.w1
-    d1 = P_Q.x1 - P_Q.y1 - P_Q.z1 + P_Q.w1
-
-    a2 = P_Q.x2 + P_Q.y2 + P_Q.z2 + P_Q.w2
-    b2 = P_Q.x2 - P_Q.y2 + P_Q.z2 - P_Q.w2
-    c2 = P_Q.x2 + P_Q.y2 - P_Q.z2 - P_Q.w2
-    d2 = P_Q.x2 - P_Q.y2 - P_Q.z2 + P_Q.w2
-
-    return AVX_8x1x1(a1, b1, c1, d1, a2, b2, c2, d2)
-
-
-def squaring(P: AVX_4x2x1) -> AVX_4x2x1:
-    """
-    The squaring transform.
-    """
-    return AVX_4x2x1(*[x * x for x in P])
-
-
-def squaring_pair(P_Q: AVX_8x1x1) -> AVX_8x1x1:
-    """
-    The squaring transform on a pair of points
-    """
-    return AVX_8x1x1(*[x * x for x in P_Q])
-
-
-def pairwise_multiplication(P: AVX_4x2x1, Q: AVX_4x2x1) -> AVX_4x2x1:
-    """
-    Pairwise multiplication of two points
-    """
-    return AVX_4x2x1(P.x * Q.x, P.y * Q.y, P.z * Q.z, P.w * Q.w)
-
-
-def pairwise_pair(P_Q: AVX_8x1x1, C: AVX_4x2x1) -> AVX_8x1x1:
-    """
-    Pairwise multiplication of two pairs of points
-    """
-    a1, b1, c1, d1 = P_Q.x1 * C.x, P_Q.y1 * C.y, P_Q.z1 * C.z, P_Q.w1 * C.w
-    a2, b2, c2, d2 = P_Q.x2 * C.x, P_Q.y2 * C.y, P_Q.z2 * C.z, P_Q.w2 * C.w
-
-    return AVX_8x1x1(a1, b1, c1, d1, a2, b2, c2, d2)
+from theta_types import AVX_8x1x1, AVX_4x2x1
+from theta_structure import (
+    hadamard,
+    hadamard_pair,
+    squaring,
+    squaring_pair,
+    pairwise_multiplication,
+    pairwise_pair,
+)
+from theta_splitting import (
+    splitting_isomorphism_matrix,
+    apply_isomorphism,
+    theta_to_product,
+)
 
 
 def theta_precompute(OA: AVX_4x2x1) -> Tuple[AVX_4x2x1, AVX_4x2x1]:
@@ -168,7 +120,7 @@ def theta_codomain_4x2x1(
     t2 = AVX_4x2x1(wB, xB, wD, 1)
 
     # Here we only need three multiplications, we could make a special function
-    t2 = pairwise_multiplication(t1 , t2)
+    t2 = pairwise_multiplication(t1, t2)
 
     # Memory management to get the precomputations we need
     xAwB, zAxB, zCwD, _ = t2
@@ -199,9 +151,6 @@ def theta_codomain_8x1x1(
     ker = squaring_pair(ker)
     ker = hadamard_pair(ker)
 
-    # =================================================================
-    # First attempt at parallel codomain, could be improved(?)
-    # =================================================================
     # Memory management of kernel data to make two temp blobs
     xA, xB, yC, yD, zA, wB, zC, wD = ker
     OB = AVX_4x2x1(zA, wB, zC, wD)
@@ -209,7 +158,7 @@ def theta_codomain_8x1x1(
     t2 = AVX_4x2x1(wB, xB, wD, 1)
 
     # Here we only need three multiplications, we could make a special function
-    t2 = pairwise_multiplication(t1 , t2)
+    t2 = pairwise_multiplication(t1, t2)
 
     # Memory management to get the precomputations we need
     xAwB, zAxB, zCwD, _ = t2
@@ -266,9 +215,7 @@ def theta_eval_pair(P_Q: AVX_8x1x1, inv: AVX_4x2x1, h1: bool, h2: bool):
     return P_Q
 
 
-def theta_isogeny_chain_4x2x1(
-    OA: AVX_4x2x1, P: AVX_4x2x1, Q: AVX_4x2x1, n: int
-) -> AVX_4x2x1:
+def theta_isogeny_chain_4x2x1(OA: AVX_4x2x1, P: AVX_4x2x1, Q: AVX_4x2x1, n: int):
     """
     Naive (2^n, 2^n) isogeny chain with no strategy using everything as 4x2x1 blocks
     """
@@ -298,10 +245,19 @@ def theta_isogeny_chain_4x2x1(
         P = theta_eval(P, inv, h1, h2)
         Q = theta_eval(Q, inv, h1, h2)
 
-    return OA
+    # Compute the splitting isomorphism
+    M = splitting_isomorphism_matrix(OA)
+
+    # Apply the splitting isomorphism
+    OA = apply_isomorphism(OA, M)
+
+    # Split the null point to the Montgomery coefficients
+    (A1, C1), (A2, C2) = theta_to_product(OA)
+
+    return (A1, C1), (A2, C2)
 
 
-def theta_isogeny_chain_8x1x1(OA: AVX_4x2x1, kernel: AVX_8x1x1, n: int) -> AVX_4x2x1:
+def theta_isogeny_chain_8x1x1(OA: AVX_4x2x1, kernel: AVX_8x1x1, n: int):
     """
     Naive (2^n, 2^n) isogeny chain with no strategy using 8x1x1 blocks when possible
     """
@@ -329,4 +285,13 @@ def theta_isogeny_chain_8x1x1(OA: AVX_4x2x1, kernel: AVX_8x1x1, n: int) -> AVX_4
         # Push the kernel through the images
         kernel = theta_eval_pair(kernel, inv, h1, h2)
 
-    return OA
+    # Compute the splitting isomorphism
+    M = splitting_isomorphism_matrix(OA)
+
+    # Apply the splitting isomorphism
+    OA = apply_isomorphism(OA, M)
+
+    # Split the null point to the Montgomery coefficients
+    (A1, C1), (A2, C2) = theta_to_product(OA)
+
+    return (A1, C1), (A2, C2)
