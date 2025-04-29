@@ -323,10 +323,6 @@ def two_two_isogeny_chain_with_torsion(
             orders[i] = orders[i] - 1
         k = k - 1
 
-    print("codomain before isomorphism")
-    print(f"{OA = }")
-    print()
-
     # Compute the splitting isomorphism
     M = splitting_isomorphism_matrix(OA, randomize)
 
@@ -339,6 +335,11 @@ def two_two_isogeny_chain_with_torsion(
     Fq = E1.base_ring()
     E3 = KummerLine(Fq, [A1, C1])
     E4 = KummerLine(Fq, [A2, C2])
+
+    print("codomain after splitting: E3 x E4")
+    print(f"{E3.a() = }")
+    print(f"{E4.a() = }")
+    print()
 
     # Compute the point coordinates on the KummerLines
     image_points = []
