@@ -1481,4 +1481,176 @@ bool test_fp2(int iterations)
     if (passed == 0) {
         return false;
     }
+
+    printf("Fp2 lvl3 conversion tests:\n");
+
+    uint64_t arr1[8*12], arr2[8*12];
+    for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < 8*12; j++) {
+            arr1[j] = rand_uint64();
+        }
+        rand_fp2_8x1x1(a);
+
+        // Converting back and forth does nothin
+        fp2_array_to_8x1x1(d, arr1);
+        fp2_8x1x1_to_array(arr2, d);
+
+        for(int j = 0; j < 8*12; j++) {
+            if (arr1[j] != arr2[j]) { passed = 0; }
+        }
+        if (passed == 0) {
+            break;
+        }
+
+        fp2_8x1x1_to_array(arr2, a);
+        fp2_array_to_8x1x1(d, arr2);
+        if(fp2_is_equal_8x1x1(a, d) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // Top 13 bits of each AVX limb is 0
+        t = VSETALL(0xfff8000000000000);
+        fp2_array_to_8x1x1(d, arr1);
+        for(int j = 0; j < 16; j++) {
+            e[j] = VAND(d[j], t);
+        }
+        if(fp2_is_equal_8x1x1(e, zero) != 0xff) {
+            passed = 0;
+            break;
+        }
+        
+    }
+    print_test_res("array <-> 8x1x1", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < 4*12; j++) {
+            arr1[j] = rand_uint64();
+        }
+        rand_fp2_4x2x1(a);
+
+        // Converting back and forth is identity
+        fp2_array_to_4x2x1(d, arr1);
+        fp2_4x2x1_to_array(arr2, d);
+
+        for(int j = 0; j < 4*12; j++) {
+            if (arr1[j] != arr2[j]) { passed = 0; }
+        }
+        if (passed == 0) {
+            break;
+        }
+
+        fp2_4x2x1_to_array(arr2, a);
+        fp2_array_to_4x2x1(d, arr2);
+        if(fp2_is_equal_4x2x1(a, d) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // Top 13 bits of each AVX limb is 0
+        t = VSETALL(0xfff8000000000000);
+        fp2_array_to_4x2x1(d, arr1);
+        for(int j = 0; j < 8; j++) {
+            e[j] = VAND(d[j], t);
+        }
+        if(fp2_is_equal_4x2x1(e, zero) != 0xf) {
+            passed = 0;
+            break;
+        }
+        
+    }
+    print_test_res("array <-> 4x2x1", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    for(int i = 0; i < iterations; i++) {
+        rand_fp2_8x1x1(a);
+        rand_fp2_4x2x1(b);
+        rand_fp2_4x2x1(b+8);
+
+        // Converion back and forth is identity
+        fp2_8x1x1_to_4x2x1(d, a);
+        fp2_4x2x1_to_8x1x1(e, d);
+        if (fp2_is_equal_8x1x1(e, a) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        fp2_4x2x1_to_8x1x1(f, b);
+        fp2_8x1x1_to_4x2x1(e, f);
+        if (fp2_is_equal_4x2x1(e, b) != 0xf || fp2_is_equal_4x2x1(e+8, b+8) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // Top 13 bits of each limb is 0
+        t = VSETALL(0xfff8000000000000);
+        for(int j = 0; j < 16; j++) {
+            d[j] = VAND(d[j], t);
+            f[j] = VAND(f[j], t);
+        }
+        if (fp2_is_equal_8x1x1(d, zero) != 0xff || fp2_is_equal_8x1x1(f, zero) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // In place conversion back and forth is identity
+        rand_fp2_8x1x1(c);
+        fp2_copy_8x1x1(d, c);
+        fp2_8x1x1_to_4x2x1(c, c);
+        fp2_4x2x1_to_8x1x1(c, c);
+        if (fp2_is_equal_8x1x1(c, d) != 0xff) {
+            passed = 0;
+            break;
+        }
+        rand_fp2_4x2x1(c);
+        rand_fp2_4x2x1(c+8);
+        fp2_copy_4x2x1(d, c);
+        fp2_copy_4x2x1(d+8, c+8);
+        fp2_4x2x1_to_8x1x1(c, c);
+        fp2_8x1x1_to_4x2x1(c, c);
+        if (fp2_is_equal_4x2x1(c, d) != 0xf || fp2_is_equal_4x2x1(c+8, d+8) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // Convertion commutes with arithmetic
+        rand_fp2_8x1x1(a);
+        rand_fp2_8x1x1(b);
+        fp2_mul_8x1x1(c, a, b);
+
+        fp2_8x1x1_to_4x2x1(d, a);
+        fp2_8x1x1_to_4x2x1(e, b);
+        fp2_mul_4x2x1(f, d, e);
+        fp2_mul_4x2x1(f+8, d+8, e+8);
+        fp2_4x2x1_to_8x1x1(f, f);
+
+        if (fp2_is_equal_8x1x1(c, f) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        rand_fp2_4x2x1(a); rand_fp2_4x2x1(a+8);
+        rand_fp2_4x2x1(b); rand_fp2_4x2x1(b+8);
+        fp2_mul_4x2x1(c, a, b);
+        fp2_mul_4x2x1(c+8, a+8, b+8);
+
+        fp2_4x2x1_to_8x1x1(d, a);
+        fp2_4x2x1_to_8x1x1(e, b);
+        fp2_mul_8x1x1(f, d, e);
+        fp2_8x1x1_to_4x2x1(f, f);
+
+        if (fp2_is_equal_4x2x1(c, f) != 0xf || fp2_is_equal_4x2x1(c+8, f+8) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("8x1x1 <-> 4x2x1", passed);
+    if (passed == 0) {
+        return false;
+    }
 }
