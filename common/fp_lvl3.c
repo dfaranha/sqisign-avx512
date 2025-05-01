@@ -263,112 +263,35 @@ void fp_neg_8x1(__m512i* res, __m512i* a)
 
 // TODO: Possible to only do final reduction at the end of Fp2 mul, not here?
 // Used in Fp2 4x2x1
-void fp_mixsubadd_8x1(__m512i* res, __m512i* a, __m512i* b)
+void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)
 {
     __m512i t[8], sign_mask;
     __m512i limb_mask = VSETALL(LIMB_MASK);
     __m512i p_bot = VSETALL(1);
     __m512i p_top = VSETALL(p_plus_1_top);
+    const __mmask8 sub_mask = ~add_mask;
 
-    t[0] = VSUBMASK(a[0], 0x55, a[0], b[0]);
-    t[1] = VSUBMASK(a[1], 0x55, a[1], b[1]);
-    t[2] = VSUBMASK(a[2], 0x55, a[2], b[2]);
-    t[3] = VSUBMASK(a[3], 0x55, a[3], b[3]);
-    t[4] = VSUBMASK(a[4], 0x55, a[4], b[4]);
-    t[5] = VSUBMASK(a[5], 0x55, a[5], b[5]);
-    t[6] = VSUBMASK(a[6], 0x55, a[6], b[6]);
-    t[7] = VSUBMASK(a[7], 0x55, a[7], b[7]);
+    t[0] = VSUBMASK(a[0], sub_mask, a[0], b[0]);
+    t[1] = VSUBMASK(a[1], sub_mask, a[1], b[1]);
+    t[2] = VSUBMASK(a[2], sub_mask, a[2], b[2]);
+    t[3] = VSUBMASK(a[3], sub_mask, a[3], b[3]);
+    t[4] = VSUBMASK(a[4], sub_mask, a[4], b[4]);
+    t[5] = VSUBMASK(a[5], sub_mask, a[5], b[5]);
+    t[6] = VSUBMASK(a[6], sub_mask, a[6], b[6]);
+    t[7] = VSUBMASK(a[7], sub_mask, a[7], b[7]);
 
-    t[0] = VADDMASK(t[0], 0xaa, a[0], b[0]);
-    t[1] = VADDMASK(t[1], 0xaa, a[1], b[1]);
-    t[2] = VADDMASK(t[2], 0xaa, a[2], b[2]);
-    t[3] = VADDMASK(t[3], 0xaa, a[3], b[3]);
-    t[4] = VADDMASK(t[4], 0xaa, a[4], b[4]);
-    t[5] = VADDMASK(t[5], 0xaa, a[5], b[5]);
-    t[6] = VADDMASK(t[6], 0xaa, a[6], b[6]);
-    t[7] = VADDMASK(t[7], 0xaa, a[7], b[7]);
-
-    // a + b - p
-    t[0] = VADDMASK(t[0], 0xaa, t[0], p_bot);
-    t[7] = VSUBMASK(t[7], 0xaa, t[7], p_top);
-
-    // Propogate the carry
-    t[1] = VADD(t[1], VSRA(t[0], LIMB_LEN));
-    t[2] = VADD(t[2], VSRA(t[1], LIMB_LEN));
-    t[3] = VADD(t[3], VSRA(t[2], LIMB_LEN));
-    t[4] = VADD(t[4], VSRA(t[3], LIMB_LEN));
-    t[5] = VADD(t[5], VSRA(t[4], LIMB_LEN));
-    t[6] = VADD(t[6], VSRA(t[5], LIMB_LEN));
-    t[7] = VADD(t[7], VSRA(t[6], LIMB_LEN));
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VAND(t[2], limb_mask);
-    t[3] = VAND(t[3], limb_mask);
-    t[4] = VAND(t[4], limb_mask);
-    t[5] = VAND(t[5], limb_mask);
-    t[6] = VAND(t[6], limb_mask);
-
-    // If result is negative, we undo the subtraction by p
-    sign_mask = VSRA(t[7], 63);
-    
-    t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
-    t[7] = VADD(t[7], VAND(p_top, sign_mask));
-
-    // Propogate the carry
-    t[1] = VADD(t[1], VSRA(t[0], LIMB_LEN));
-    t[2] = VADD(t[2], VSRA(t[1], LIMB_LEN));
-    t[3] = VADD(t[3], VSRA(t[2], LIMB_LEN));
-    t[4] = VADD(t[4], VSRA(t[3], LIMB_LEN));
-    t[5] = VADD(t[5], VSRA(t[4], LIMB_LEN));
-    t[6] = VADD(t[6], VSRA(t[5], LIMB_LEN));
-    t[7] = VADD(t[7], VSRA(t[6], LIMB_LEN));
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VAND(t[2], limb_mask);
-    t[3] = VAND(t[3], limb_mask);
-    t[4] = VAND(t[4], limb_mask);
-    t[5] = VAND(t[5], limb_mask);
-    t[6] = VAND(t[6], limb_mask);
-
-    // Output result
-    res[0] = t[0];
-    res[1] = t[1];
-    res[2] = t[2];
-    res[3] = t[3];
-    res[4] = t[4];
-    res[5] = t[5];
-    res[6] = t[6];
-    res[7] = t[7];
-}
-
-void fp_mixsubsubaddadd_8x1(__m512i* res, __m512i* a, __m512i* b)
-{
-    __m512i t[8], sign_mask;
-    __m512i limb_mask = VSETALL(LIMB_MASK);
-    __m512i p_bot = VSETALL(1);
-    __m512i p_top = VSETALL(p_plus_1_top);
-
-    t[0] = VSUBMASK(a[0], 0x33, a[0], b[0]);
-    t[1] = VSUBMASK(a[1], 0x33, a[1], b[1]);
-    t[2] = VSUBMASK(a[2], 0x33, a[2], b[2]);
-    t[3] = VSUBMASK(a[3], 0x33, a[3], b[3]);
-    t[4] = VSUBMASK(a[4], 0x33, a[4], b[4]);
-    t[5] = VSUBMASK(a[5], 0x33, a[5], b[5]);
-    t[6] = VSUBMASK(a[6], 0x33, a[6], b[6]);
-    t[7] = VSUBMASK(a[7], 0x33, a[7], b[7]);
-
-    t[0] = VADDMASK(t[0], 0xcc, a[0], b[0]);
-    t[1] = VADDMASK(t[1], 0xcc, a[1], b[1]);
-    t[2] = VADDMASK(t[2], 0xcc, a[2], b[2]);
-    t[3] = VADDMASK(t[3], 0xcc, a[3], b[3]);
-    t[4] = VADDMASK(t[4], 0xcc, a[4], b[4]);
-    t[5] = VADDMASK(t[5], 0xcc, a[5], b[5]);
-    t[6] = VADDMASK(t[6], 0xcc, a[6], b[6]);
-    t[7] = VADDMASK(t[7], 0xcc, a[7], b[7]);
+    t[0] = VADDMASK(t[0], add_mask, a[0], b[0]);
+    t[1] = VADDMASK(t[1], add_mask, a[1], b[1]);
+    t[2] = VADDMASK(t[2], add_mask, a[2], b[2]);
+    t[3] = VADDMASK(t[3], add_mask, a[3], b[3]);
+    t[4] = VADDMASK(t[4], add_mask, a[4], b[4]);
+    t[5] = VADDMASK(t[5], add_mask, a[5], b[5]);
+    t[6] = VADDMASK(t[6], add_mask, a[6], b[6]);
+    t[7] = VADDMASK(t[7], add_mask, a[7], b[7]);
 
     // a + b - p
-    t[0] = VADDMASK(t[0], 0xcc, t[0], p_bot);
-    t[7] = VSUBMASK(t[7], 0xcc, t[7], p_top);
+    t[0] = VADDMASK(t[0], add_mask, t[0], p_bot);
+    t[7] = VSUBMASK(t[7], add_mask, t[7], p_top);
 
     // Propogate the carry
     t[1] = VADD(t[1], VSRA(t[0], LIMB_LEN));

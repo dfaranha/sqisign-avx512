@@ -42,5 +42,10 @@ int main()
     {
         return 0;
     }
+    passed = test_theta(n_tests);
+    if(!passed)
+    {
+        return 0;
+    }
     return 0;
 }

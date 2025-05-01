@@ -189,7 +189,7 @@ void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b)
     }
     fp_mul_8x1(t1, s1, b);
     fp_mul_8x1(t2, s2, s3);
-    fp_mixsubadd_8x1(res, t1, t2);
+    fp_mixaddsub_8x1(res, t1, t2, 0xaa);
 }
 
 void fp2_sqr_4x2x1(__m512i* res, __m512i* a)
@@ -331,7 +331,7 @@ void fp2_mul_2x4x1(__m512i* res, __m512i* a, __m512i* b)
         t2[i] = VPERM256MASKZ(0x55, t1[i], 0x32);
         t1[i] = VPERM256MASKZ(0x55, t1[i], 0x10);
     }
-    fp_mixsubsubaddadd_8x1(res, t1, t2);
+    fp_mixaddsub_8x1(res, t1, t2, 0xcc);
 }
 
 void fp2_sqr_2x4x1(__m512i* res, __m512i* a)

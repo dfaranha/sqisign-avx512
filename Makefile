@@ -1,5 +1,5 @@
 CC=gcc
-FLAGS = -O2 -march=native
+FLAGS = -O3 -march=native
 
 .PHONY: test bench
 

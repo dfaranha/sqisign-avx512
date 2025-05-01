@@ -1653,4 +1653,6 @@ bool test_fp2(int iterations)
     if (passed == 0) {
         return false;
     }
+
+    return true;
 }

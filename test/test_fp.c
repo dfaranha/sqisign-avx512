@@ -225,7 +225,7 @@ bool test_fp(int iterations)
         rand_fp_8x1(a);
         rand_fp_8x1(b);
 
-        fp_mixsubadd_8x1(d, a, b);
+        fp_mixaddsub_8x1(d, a, b, 0xaa);
         fp_sub_8x1(e, a, b);
         fp_add_8x1(f, a, b);
         if(fp_is_equal_8x1(d, e) != 0x55 || fp_is_equal_8x1(d, f) != 0xaa) {
@@ -233,7 +233,7 @@ bool test_fp(int iterations)
             break;
         }
 
-        fp_mixsubsubaddadd_8x1(d, a, b);
+        fp_mixaddsub_8x1(d, a, b, 0xcc);
         fp_sub_8x1(e, a, b);
         fp_add_8x1(f, a, b);
         if(fp_is_equal_8x1(d, e) != 0x33 || fp_is_equal_8x1(d, f) != 0xcc) {
@@ -241,7 +241,7 @@ bool test_fp(int iterations)
             break;
         }
     }
-    print_test_res("mixed sub add", passed);
+    print_test_res("mixed add sub", passed);
     if (passed == 0) {
         return false;
     }
