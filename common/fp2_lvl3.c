@@ -529,14 +529,59 @@ void fp2_8x1x1_to_4x2x1(__m512i* res, __m512i* src)
     }
 }
 
-void fp2_4x2x1_to_8x1x1(__m512i* res, __m512i* src)
+void fp2_4x2x1_to_8x1x1(__m512i* res, __m512i* src1, __m512i* src2)
 {
     __m512i t1, t2;
 
     for (int i = 0; i < 8; i++) {
-        t1 = VSHUFFLE(src[i], 0x4e); // a, b, c, d, ... -> b, a, d, c, ...
-        t2 = VSHUFFLE(src[i+8], 0x4e);
-        res[i] = VBLEND(0xaa, src[i], t2); 
-        res[i+8] = VBLEND(0xaa, t1, src[i+8]);
+        t1 = VSHUFFLE(src1[i], 0x4e); // a, b, c, d, ... -> b, a, d, c, ...
+        t2 = VSHUFFLE(src2[i], 0x4e);
+        res[i] = VBLEND(0xaa, src1[i], t2); 
+        res[i+8] = VBLEND(0xaa, t1, src2[i]);
     }
 }
+
+// Assumes that the input and output arrays do not overlap.
+// Maps (a,b,c,d) in 4x2x1 to (a,b) and (c,d) in 2x4x1
+void fp2_4x2x1_to_2x4x1(__m512i* res, __m512i* src)
+{
+    __m512i idx1, idx2;
+    idx1 = VSET(0, 0, 1, 1, 2, 2, 3, 3);
+    idx2 = VSET(4, 4, 5, 5, 6, 6, 7, 7);
+    for (int i = 0; i < 8; i++) {
+        res[i] = VPERM512MASKZ(0x55, src[i], idx1);
+        res[i+8] = VPERM512MASKZ(0x55, src[i], idx2);
+    }
+}
+
+void fp2_2x4x1_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2)
+{
+    __m512i idx = VSET(
+            0x0000000100000000, 0x0000000500000004, 0x0000000900000008, 0x0000000d0000000c,
+            0x0000001100000010, 0x0000001500000014, 0x0000001900000018, 0x0000001d0000001c
+        );
+    for (int i = 0; i < 8; i++) {
+        res[i] = VBLENDPERM(0xffff, src1[i], src2[i], idx);
+    }
+}
+
+
+// Alternate implementation, mapping (a,b,c,d) in 4x2x1 to (a,c) and (b,d) in 2x4x1
+// void fp2_4x2x1_to_2x4x1(__m512i* res, __m512i* src)
+// {
+//     for (int i = 0; i < 8; i++) {
+//         res[i] = VPERM256MASKZ(0x55, src[i], 0x50); // a, b, c, d -> a, 0, b, 0
+//         res[i+8] = VPERM256MASKZ(0x55, src[i], 0xfa); // a, b, c, d -> c, 0, d, 0
+//     }
+// }
+
+// void fp2_2x4x1_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2)
+// {
+//     __m512i indices = VSET(
+//             0x0000000100000000, 0x0000000500000004, 0x0000001100000010, 0x0000001500000014,
+//             0x0000000900000008, 0x0000000d0000000c, 0x0000001900000018, 0x0000001d0000001c
+//         );
+//     for (int i = 0; i < 8; i++) {
+//         res[i] = VBLENDPERM(0xffff, src1[i], src2[i], indices);
+//     }
+// }

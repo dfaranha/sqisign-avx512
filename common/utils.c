@@ -20,11 +20,32 @@ void print_512i(__m512i a)
 {
     uint64_t vals[8];
     memcpy(vals, &a, sizeof(vals));
-    for(int i = 0; i < 8; i++) {
-        printf("%d: %lx   ", i, vals[i]);
+    printf("{ ");
+    for (int i = 0; i < 8; i++) {
+        printf("%lx", vals[i]);
+        if(i < 7) {
+            printf(", ");
+        }
     }
-    printf("\n");
+    printf(" }\n");
 }
+
+void print_512i_array(__m512i* a, int n, char* name) {
+    uint64_t vals[8];
+    printf("%s = {\n", name);
+    for (int i = 0; i < n; i++) {
+        memcpy(vals, a+i, sizeof(vals));
+        printf("    { ");
+        for (int j = 0; j < 8; j++) {
+            printf("0x%013lX", vals[j]);
+            if(j < 7) {
+                printf(", ");
+            }
+        }
+        printf(" },\n");
+    }
+    printf("}\n");
+} 
 
 void print_fp_8x1_index(__m512i* a, int index)
 {

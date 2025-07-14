@@ -191,6 +191,9 @@ void fp2_8x1x1_to_4x2x1(__m512i* res, __m512i* src);
 /**
  * Converts two Fp2 4x2x1's to an 8x1x1.
  */
-void fp2_4x2x1_to_8x1x1(__m512i* res, __m512i* src);
+void fp2_4x2x1_to_8x1x1(__m512i* res, __m512i* src1, __m512i* src2);
+
+void fp2_4x2x1_to_2x4x1(__m512i* res, __m512i* src);
+void fp2_2x4x1_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2);
 
 #endif

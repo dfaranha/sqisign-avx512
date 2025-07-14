@@ -21,6 +21,7 @@ void rand_fp2_2x2x2(__m512i* res);
 void rand_fp2_2x4x1(__m512i* res);
 
 void print_512i(__m512i a);
+void print_512i_array(__m512i* a, int n, char* name);
 void print_fp_8x1_index(__m512i* a, int index);
 void print_fp_4x2_index(__m512i* a, int index);
 

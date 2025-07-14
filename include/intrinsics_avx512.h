@@ -38,6 +38,12 @@
 #define VPERM256(A, pattern) _mm512_permutex_epi64(A, pattern) // Shuffles 64-bit limbs within each 256-bit lane. Latency is 3 VS 1 for shuffles, but throughput is 1 for both.
 #define VPERM256MASKZ(mask, A, pattern) _mm512_maskz_permutex_epi64(mask, A, pattern) // If mask[i] = 1, the i-th 64-bit limb of the output is the result, else it is 0.
 #define VPERM512(indices, A) _mm512_permutexvar_epi64(indices, A)  // Shuffles 64-bit limbs within the entire 512-bit vector. DST[i] = A[indices[i]]
+#define VPERM512MASKZ(mask, A, indices) _mm512_maskz_permutexvar_epi64(mask, indices, A)
 #define VBLEND(mask, A, B) _mm512_mask_blend_epi64(mask, A, B) // If mask[i] = 1, DST[i] = B[i]. Else, DST[i] = A[i].
 
+/**
+ * Operates on 32-bit limbs. If mask[i] = 0, DST[i] = A[i]. Else, it parses the i-th 32-bit limb of indices. 
+ * The 4 least significant bits determine the index of the 32-bit limb from the src. The 5th bit determines if the src is A (0) or B (1).
+ */
+#define VBLENDPERM(mask, A, B, indices) _mm512_mask_permutex2var_epi32(A, mask, indices, B)   
 #endif

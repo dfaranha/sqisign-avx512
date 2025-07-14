@@ -425,7 +425,7 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int i = 0; i < iterations; i++) {
-            fp2_4x2x1_to_8x1x1(a, c);
+            fp2_4x2x1_to_8x1x1(a, b, c);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
@@ -433,4 +433,30 @@ void bench_fp2(int iterations)
     tmp = fp2_is_equal_8x1x1(c, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("8x1x1 <- 4x2x1", cycles[(N_RUNS/2) -1], tmp);
+
+    // 4x2x1 to 2x4x1
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            fp2_4x2x1_to_2x4x1(c, a);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp2_is_equal_4x2x1(c, a);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("4x2x1 -> 2x4x1", cycles[(N_RUNS/2) -1], tmp);
+
+    // 2x4x1 to 4x2x1
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            fp2_2x4x1_to_4x2x1(a, b, c);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp2_is_equal_4x2x1(c, a);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("4x2x1 <- 2x4x1", cycles[(N_RUNS/2) -1], tmp);
 }

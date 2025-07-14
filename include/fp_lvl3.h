@@ -9,6 +9,7 @@
 #define _FP_LVL3_H
 
 #include <stdint.h>
+
 #include "intrinsics_avx512.h"
 
 static const uint64_t LIMB_LEN = 51;
