@@ -69,7 +69,7 @@ void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i*
 void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2);
 
 /**
- * Compute the (2^n, 2^n)-isogeny chain defined by the theta points k1 and k2, and outputs the codomain.
+ * Compute the (2^n, 2^n)-isogeny chain defined by the theta points a and b, and outputs the codomain.
  * There is no gluing step, we assume the points are already in theta-coordinates.
  * @param null The theta null point of the domain.
  * @param a, b The points of order 2^(n+2) defining the isogeny.
@@ -82,7 +82,7 @@ void theta_isogeny_chain_single(__m512i* prod, __m512i* null, __m512i* a, __m512
 // ======================================================================================================
 
 /**
- * Here we store two theta points (a, b, c, d) and (e, f, g, h) simultaneously in the 8x1x1 Fp2 format.
+ * Here we (sometimes) store two theta points (a, b, c, d) and (e, f, g, h) simultaneously in the 8x1x1 Fp2 format.
  * There are 16 vectors, the first 8 contain the real coefficients, the latter the imaginary coefficients.
  * In each vector the pattern is a, e, b, f, c, g, d, h.
  */
@@ -112,6 +112,16 @@ void theta_had_pair_alt(__m512i* res, __m512i* a);
 void theta_double_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2);
 
 /**
+ * Compute the dual theta null point of the codomain of the (2,2)-isogeny, as well as its inverse.
+ * @param res Output. The dual theta null point of the codomain, (1 : beta : gamma : delta).
+ * @param res_inv Output. The coordinate-wise inverse of the dual theta null point, (1 : beta^-1 : gamma^-1 : delta^-1).
+ * @param k The theta points defining the kernel of the (2,2)-isogeny in the 8x1x1 format.
+ * @param h1 Flag for initally applying Hadamard to k1 and k2.
+ * @param h2 Flag for applying Hadamard to the result at the end.
+ */
+void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, bool h1, bool h2);
+
+/**
  * Evaluate a pair of theta points through a (2,2)-isogeny given the precomputed constants.
  * @param a The pair of theta points to be evaluated.
  * @param inv The inverse of the dual theta null point, (1 : alpha^-1 : beta^-1 : delta^-1), stored in the 4x2x1 format.
@@ -119,5 +129,14 @@ void theta_double_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2);
  * @param h2 Flag for applying Hadamard to the result at the end.
  */
 void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2);
+
+/**
+ * Compute the (2^n, 2^n)-isogeny chain defined by the theta points a and b, and outputs the codomain.
+ * There is no gluing step, we assume the points are already in theta-coordinates.
+ * @param null The theta null point of the domain.
+ * @param ab The points of order 2^(n+2) defining the isogeny, stored in the 8x1x1 format.
+ * @param n The length of the isogeny chain.
+ */
+void theta_isogeny_chain_pair(__m512i* prod, __m512i* null, __m512i* ab, const int n);
 
 #endif

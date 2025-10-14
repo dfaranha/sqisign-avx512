@@ -253,5 +253,28 @@ bool test_theta(int iterations)
         return false;
     }
 
+    // Isogeny chain KAT
+    __m512i PQ[16];
+    fp2_4x2x1_to_8x1x1(PQ, P, Q);
+
+    theta_isogeny_chain_pair(res, OA, PQ, n);
+
+    fp2_4x2x1_to_unvectorized(res_unvec, res);
+    fp2_copy(&E3_actual, res_unvec+1);
+    fp2_copy(&E4_actual, res_unvec+3);
+    fp2_inv(&E3_actual);
+    fp2_inv(&E4_actual);
+    fp2_mul(&E3_actual, &E3_actual, res_unvec);
+    fp2_mul(&E4_actual, &E4_actual, res_unvec+2);
+
+
+    passed = (fp2_is_equal(&E3_expected, &E3_actual)) 
+        & (fp2_is_equal(&E4_expected, &E4_actual))
+        & 0x1;
+    print_test_res("Chain KAT", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     return true;
 }

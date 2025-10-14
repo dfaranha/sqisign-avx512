@@ -286,6 +286,62 @@ void theta_double_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2)
     theta_mul_pair(res, res, c2);
 }
 
+void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, bool h1, bool h2)
+{
+    __m512i k_split[16], t1[16], t2[16], idx, idx2;
+
+    //TODO: Would it be more efficient to use the pair operations here?
+    if (h1) {
+        theta_had_pair(k, k);
+    }
+
+    theta_sqr_pair(k, k);
+    theta_had_pair(k, k);
+
+    // Input: k = (k1, k2) = (xi, yi, zi, wi)_{i=1,2}
+    // TODO: Is this necessary?
+    fp2_8x1x1_to_4x2x1(k_split, k);
+
+    // t1 = (x1, y1, z2, w2)
+    // t2 = (y2, x2, w2, z2)
+    idx = VSET(
+        0x0000000100000000, 0x0000000300000002, 0x0000000500000004, 0x0000000700000006,
+        0x0000001900000018, 0x0000001b0000001a, 0x0000001d0000001c, 0x0000001f0000001e
+    );
+    for (int i = 0; i < 8; i++) {
+        t2[i] = VPERM256(k_split[i+8], 0x4e);
+        t1[i] = VBLENDPERM(0xffff, k_split[i], k_split[i+8], idx);
+    }
+
+    // t1 = (x1 * y2, y1 * x2, z2 * w2, w2 * z2) = (s1, s2, s3, s3)
+    // TODO: Maybe better to put s3 first?
+    fp2_mul_4x2x1(t1, t1, t2);
+
+    // t2 = (s1, s2, s1, s2)
+    idx = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    for (int i = 0; i < 8; i++) {
+        t2[i] = VPERM512(idx, t1[i]);
+    }
+
+    // res
+    fp2_mul_4x2x1(res, k_split+8, t2);
+
+    // res_inv
+    fp2_4x2x1_to_2x4x1(t2, t1); // t2[8:15] = (s3, s3)
+    idx = VSET(2, 2, 3, 3, 0, 0, 1, 1);
+    idx2 = VSET(6, 6, 7, 7, 4, 4, 5, 5);
+    for (int i = 0; i < 8; i++) { // t1[0:7] = (y1, x1), t1[8:15] = (w_res, z_res)
+        t1[i] = VPERM512MASKZ(0x55, k_split[i], idx);
+        t1[i+8] = VPERM512MASKZ(0x55, res[i], idx2);
+    }
+    fp2_mul_2x4x1(t1, t1, t2+8);
+    fp2_2x4x1_to_4x2x1(res_inv, t1, t1+8);
+
+    if (h2) {
+        theta_had_single(res, res);
+    }
+}
+
 void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
 {
     if (h1) {
@@ -297,4 +353,47 @@ void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
     if (h2) {
         theta_had_pair(res, res);
     }
+}
+
+void theta_isogeny_chain_pair(__m512i* prod, __m512i* null, __m512i* ab, const int n)
+{
+    bool h1, h2;
+    int isom_matrix[16];
+    __m512i c1[8], c2[8], p[16], k[16], codom_null[8], inv[8];
+    fp2_copy_8x1x1(p, ab);
+    fp2_copy_4x2x1(codom_null, null);
+
+    for (int i = 0; i < n; i++) {
+        // Precompute constants for doubling
+        theta_precomp(c1, c2, codom_null);
+
+        // Double the kernel points of order 2^(n+2) to get points of order 2^(1 + 2) = 8
+        // TODO: Can get rid of this copy
+        fp2_copy_8x1x1(k, p);
+
+        for (int j = 0; j < n - i - 1; j++) {
+            theta_double_pair(k, k, c1, c2);
+        }
+
+        // For the ultimate and penultimate steps we do extra / less Hadamards
+        // to avoid zeros from the product structure.
+        if (i == n-1) {
+            h1 = true; h2 = false;
+        } else if (i == n-2) {
+            h1 = false; h2 = false;
+        } else {
+            h1 = false; h2 = true;
+        }
+        
+        // Compute the codomain of the kernel
+        theta_codomain_pair(codom_null, inv, k, h1, h2);
+
+        // Push the kernel through the images
+        theta_eval_pair(p, p, inv, h1, h2);
+    }
+
+    // Splitting
+    splitting_isom_matrix(isom_matrix, codom_null);
+    splitting_apply_isomorphism(codom_null, isom_matrix, codom_null);
+    splitting_theta_to_product(prod, codom_null);
 }
