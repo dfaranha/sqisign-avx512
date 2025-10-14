@@ -95,6 +95,7 @@ def splitting_isomorphism_matrix(OA: AVX_4x2x1):
     }
     splitting_index = get_index_splitting(OA)
     M = SPLITTING_MAPS[splitting_index]
+    print("index", splitting_index)
 
     return M
 

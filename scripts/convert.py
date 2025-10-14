@@ -27,9 +27,13 @@ def fp2_to_le(x, w, n=None):
     """
     Convert an element of Fp2 into two arrays of w-bit words
     """
-    re, im = x
-    re_limbs = int_to_le(re, w, n)
-    im_limbs = int_to_le(im, w, n)
+    #re, im = x
+    if type(x) == int:
+        coeffs = [x, 0]
+    else:
+        coeffs = x.polynomial().coefficients(sparse=False)
+    re_limbs = int_to_le(coeffs[0], w, n)
+    im_limbs = int_to_le(coeffs[1], w, n)
     return re_limbs, im_limbs
 
 

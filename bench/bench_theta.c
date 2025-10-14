@@ -97,6 +97,18 @@ void bench_theta(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("eval (h1, h2 = 0, 1)", cycles[(N_RUNS/2) -1], tmp);
 
+    // chain
+    int n = 188 - 1;
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        theta_isogeny_chain_single(a, b, c, d, n);
+        end = cpucycles();
+        cycles[i] = (end - start);
+    }
+    tmp = fp2_is_equal_4x2x1(a, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("chain n = 187, 10 runs", cycles[(N_RUNS/2)-1], tmp);
+
     printf("Theta pair benchmarks:\n");
 
     // Hadamard

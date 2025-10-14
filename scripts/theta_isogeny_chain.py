@@ -1,5 +1,7 @@
 from typing import Tuple
 
+from convert import * #TODO: Remove
+
 from theta_types import AVX_8x1x1, AVX_4x2x1
 from theta_structure import (
     hadamard,
@@ -250,6 +252,9 @@ def theta_isogeny_chain_4x2x1(OA: AVX_4x2x1, P: AVX_4x2x1, Q: AVX_4x2x1, n: int)
 
     # Apply the splitting isomorphism
     OA = apply_isomorphism(OA, M)
+    #TODO: Remove
+    OA_avx = theta_to_avx512_4_2_1(OA)
+    print_avx512_blobs(OA_avx, "apply_isom")
 
     # Split the null point to the Montgomery coefficients
     (A1, C1), (A2, C2) = theta_to_product(OA)

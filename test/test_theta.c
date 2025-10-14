@@ -60,8 +60,7 @@ bool test_theta(int iterations)
     }
 
     // Isogeny chain KAT
-
-    __m512i OA[8], P[8], Q[8];
+    __m512i OA[8], P[8], Q[8], res[8];
     OA[0] = VSET(0x1B4711C9AD8C7, 0x7BA3443DE53A8, 0x6BB933FCE3592, 0x19A1C146791C0, 0x6246447442228, 0x590A2945EDCBC, 0x32B866A777EF3, 0x7708A64E81AD5);
     OA[1] = VSET(0x1A869DBC2E8FA, 0x4BD047070B32D, 0x5919409BD7452, 0x64BA66D7E00CA, 0x52B32A6633E7D, 0x0F22E02B91FF3, 0x1145CD45DC9D6, 0x280CFFFC66D8F);
     OA[2] = VSET(0x7478DA2EE534D, 0x2E408A7894D8A, 0x190AA9853FA2A, 0x337C03EC1C3F1, 0x75E6B768FF4B2, 0x267299E21625C, 0x1A7886BF59B90, 0x2BAE13559D8C3);
@@ -93,10 +92,41 @@ bool test_theta(int iterations)
     fp2_tomont_4x2x1(P, P);
     fp2_tomont_4x2x1(Q, Q);
 
+    fp2_t res_unvec[4], E3_expected, E3_actual, E4_expected, E4_actual, A3, C3, A4, C4;
+    fp_decode(&E3_expected.re, (const void *) ((uint64_t[6])
+        {10867719576459308538U, 14426381232393286251U, 5948554069610288516U, 1853058860160698092U, 9225241635731980790U, 4588529309365208364U}
+    ));
+    fp_decode(&E3_expected.im, (const void *) ((uint64_t[6])
+        {7630066809077324413U, 4807934117134237764U, 8466143812571798057U, 10358304445779752856U, 10545750972660984674U, 3604475042088292201U}
+    ));
+    fp_decode(&E4_expected.re, (const void *) ((uint64_t[6])
+        {7297374626918444366U, 16063160519669627060U, 8936618591153282620U, 8542284924237654948U, 7528997634339566035U, 1037111423354581024U}
+    ));
+    fp_decode(&E4_expected.im, (const void *) ((uint64_t[6])
+        {1492077505230043599U, 2736745017500914223U, 13160692708435571952U, 527388762590340581U, 17004613965867689856U, 3325318217617652149U}
+    ));
+
     //We reduce by one as we have done the gluing step
     int n = 188 - 1;
 
-    theta_isogeny_chain_single(OA, P, Q, n);
+    theta_isogeny_chain_single(res, OA, P, Q, n);
+
+    fp2_4x2x1_to_unvectorized(res_unvec, res);
+    fp2_copy(&E3_actual, res_unvec+1);
+    fp2_copy(&E4_actual, res_unvec+3);
+    fp2_inv(&E3_actual);
+    fp2_inv(&E4_actual);
+    fp2_mul(&E3_actual, &E3_actual, res_unvec);
+    fp2_mul(&E4_actual, &E4_actual, res_unvec+2);
+
+
+    passed = (fp2_is_equal(&E3_expected, &E3_actual)) 
+        & (fp2_is_equal(&E4_expected, &E4_actual))
+        & 0x1;
+    print_test_res("Chain KAT", passed);
+    if (passed == 0) {
+        return false;
+    }
 
     printf("Theta pair tests:\n");
 

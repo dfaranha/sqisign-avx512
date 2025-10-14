@@ -1,3 +1,5 @@
+from convert import *
+
 from theta_isogeny_chain import (
     AVX_8x1x1,
     AVX_4x2x1,
@@ -100,12 +102,29 @@ Q = AVX_4x2x1(xQ, yQ, zQ, wQ)
 # Kernel for the 8x1x1 chain
 ker = AVX_8x1x1(xP, yP, zP, wP, xQ, yQ, zQ, wQ)
 
+# Print output for C code
+OA_avx = theta_to_avx512_4_2_1(OA)
+P_avx = theta_to_avx512_4_2_1(P)
+Q_avx = theta_to_avx512_4_2_1(Q)
+print("4x2x1 KAT:")
+print_avx512_blobs(OA_avx, "OA")
+print_avx512_blobs(P_avx, "P")
+print_avx512_blobs(Q_avx, "Q")
+print()
+print("E3", fp2_to_le(E3, 64))
+print("E4", fp2_to_le(E4, 64))
+
 # Ensure the output from the chain matches
 (A3, C3), (A4, C4) = theta_isogeny_chain_4x2x1(OA, P, Q, n)
 assert E3 == A3 / C3
 assert E4 == A4 / C4
+print("A3", fp2_to_le(A3, 64))
+print("C3", fp2_to_le(C3, 64))
+print("A4", fp2_to_le(A4, 64))
+print("C4", fp2_to_le(C4, 64))
 
 # Ensure the output from the chain matches
 (A3, C3), (A4, C4) = theta_isogeny_chain_8x1x1(OA, ker, n)
 assert E3 == A3 / C3
 assert E4 == A4 / C4
+

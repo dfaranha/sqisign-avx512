@@ -3,6 +3,7 @@
 #include "fp_lvl3.h"
 #include "fp2_lvl3.h"
 #include "theta.h"
+#include "theta_splitting.h"
 
 // ======================================================================================================
 //                                               Single
@@ -160,9 +161,10 @@ void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
     }
 }
 
-void theta_isogeny_chain_single(__m512i* null, __m512i* a, __m512i* b, const int n)
+void theta_isogeny_chain_single(__m512i* prod, __m512i* null, __m512i* a, __m512i* b, const int n)
 {
     bool h1, h2;
+    int isom_matrix[16];
     __m512i c1[8], c2[8], p1[8], p2[8], k1[8], k2[8], codom_null[8], inv[8];
     fp2_copy_4x2x1(p1, a);
     fp2_copy_4x2x1(p2, b);
@@ -197,11 +199,12 @@ void theta_isogeny_chain_single(__m512i* null, __m512i* a, __m512i* b, const int
         // Push the kernel through the images
         theta_eval_single(p1, p1, inv, h1, h2);
         theta_eval_single(p2, p2, inv, h1, h2);
-
-        //printf("i = %d\n", i);
     }
-    fp2_frommont_4x2x1(codom_null, codom_null);
-    print_512i_array(codom_null, 8, "codomain");
+
+    // Splitting
+    splitting_isom_matrix(isom_matrix, codom_null);
+    splitting_apply_isomorphism(codom_null, isom_matrix, codom_null);
+    splitting_theta_to_product(prod, codom_null);
 }
 
 // ======================================================================================================

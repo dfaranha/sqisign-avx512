@@ -75,7 +75,7 @@ void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
  * @param a, b The points of order 2^(n+2) defining the isogeny.
  * @param n The length of the isogeny chain.
  */
-void theta_isogeny_chain_single(__m512i* null, __m512i* a, __m512i* b, const int n);
+void theta_isogeny_chain_single(__m512i* prod, __m512i* null, __m512i* a, __m512i* b, const int n);
 
 // ======================================================================================================
 //                                                 Pair
