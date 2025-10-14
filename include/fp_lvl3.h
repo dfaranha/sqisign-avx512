@@ -12,6 +12,9 @@
 
 #include "intrinsics_avx512.h"
 
+#define FP_NUM_64LIMBS 6
+#define FP_NUM_AVXLIMBS 8
+
 static const uint64_t LIMB_LEN = 51;
 static const uint64_t LIMB_MASK = 0x7ffffffffffff;
 static const uint64_t LAST_LIMB_MASK = 0x3ffffff;

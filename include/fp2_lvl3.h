@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "intrinsics_avx512.h"
+#include "sqi_fp2.h"
 
 
 /**
@@ -36,6 +37,11 @@ void fp2_neg_8x1x1(__m512i* res, __m512i* a);
 void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b);
 
 void fp2_sqr_8x1x1(__m512i* res, __m512i* a);
+
+/**
+ * Multipication by i.
+ */
+void fp2_muli_8x1x1(__m512i* res, __m512i* a);
 
 void fp2_tomont_8x1x1(__m512i* res, __m512i* a);
 
@@ -96,6 +102,8 @@ void fp2_sub_4x2x1(__m512i* res, __m512i* a, __m512i* b);
 void fp2_neg_4x2x1(__m512i* res, __m512i* a);
 
 void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b);
+
+void fp2_muli_4x2x1(__m512i* res, __m512i* a);
 
 void fp2_sqr_4x2x1(__m512i* res, __m512i* a);
 
@@ -182,6 +190,11 @@ void fp2_array_to_4x2x1(__m512i* res, uint64_t* src);
 
 void fp2_8x1x1_to_array(uint64_t* res, __m512i* src);
 void fp2_4x2x1_to_array(uint64_t* res, __m512i* src);
+
+void fp2_unvectorized_to_8x1x1(__m512i* res, fp2_t* src);
+void fp2_unvectorized_to_4x2x1(__m512i* res, fp2_t* src);
+void fp2_8x1x1_to_unvectorized(fp2_t* res, __m512i* src);
+void fp2_4x2x1_to_unvectorized(fp2_t* res, __m512i* src);
 
 /**
  * Converts an Fp2 8x1x1 to two 4x2x1's.
