@@ -258,6 +258,8 @@ def theta_isogeny_chain_4x2x1(
 
     # Apply the splitting isomorphism
     OA = apply_isomorphism(OA, M)
+    eval_points = [apply_isomorphism(P, M) for P in eval_points]
+
     # TODO: Remove
     OA_avx = theta_to_avx512_4_2_1(OA)
     print_avx512_blobs(OA_avx, "apply_isom")
@@ -308,6 +310,7 @@ def theta_isogeny_chain_8x1x1(
 
     # Apply the splitting isomorphism
     OA = apply_isomorphism(OA, M)
+    eval_points = [apply_isomorphism(P, M) for P in eval_points]
 
     # Split the null point to the Montgomery coefficients
     (A1, C1), (A2, C2) = theta_to_product(OA)
