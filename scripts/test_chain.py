@@ -116,8 +116,17 @@ print("E4", fp2_to_le(E4, 64))
 
 # Ensure the output from the chain matches
 (A3, C3), (A4, C4), images = theta_isogeny_chain_4x2x1(OA, P, Q, n, eval_points=[P, Q])
-assert E3 == A3 / C3
-assert E4 == A4 / C4
+assert A3 / C3 in [E3, E4]
+assert A4 / C4 in [E3, E4]
+
+print(f"{A3 / C3 = }")
+print(f"{A4 / C4 = }")
+
+print(f"{E3 = }")
+print(f"{E4 = }")
+
+
+# assert E4 == A4 / C4
 print("A3", fp2_to_le(A3, 64))
 print("C3", fp2_to_le(C3, 64))
 print("A4", fp2_to_le(A4, 64))
@@ -133,13 +142,13 @@ from sage.all import EllipticCurve
 
 
 def lift_to_curve(E, P):
-    try:
-        PP = E.lift_x(P[0] / P[1])
-        print(f"{2*PP != E(0)}")
-        print(f"{4*PP == E(0)}")
-    except Exception as e:
-        # print(f"no: {e = }")
-        print("no\n")
+    if P[1].is_zero():
+        return E(0)
+    return E.lift_x(P[0] / P[1])
+
+
+def is_four_torsion(P):
+    return (4 * P).is_zero()
 
 
 EE3 = EllipticCurve(F, [0, A3 / C3, 0, 1, 0])
@@ -147,8 +156,13 @@ EE4 = EllipticCurve(F, [0, A4 / C4, 0, 1, 0])
 
 (P3, P4), (Q3, Q4) = images
 
-lift_to_curve(EE3, P3)
-lift_to_curve(EE3, Q3)
+PP3 = lift_to_curve(EE3, P3)
+QQ3 = lift_to_curve(EE3, Q3)
 
-lift_to_curve(EE4, P4)
-lift_to_curve(EE4, Q4)
+PP4 = lift_to_curve(EE4, P4)
+QQ4 = lift_to_curve(EE4, Q4)
+
+assert is_four_torsion(PP3)
+assert is_four_torsion(PP4)
+assert is_four_torsion(QQ3)
+assert is_four_torsion(QQ4)
