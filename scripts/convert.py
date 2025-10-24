@@ -27,8 +27,7 @@ def fp2_to_le(x, w, n=None):
     """
     Convert an element of Fp2 into two arrays of w-bit words
     """
-    #re, im = x
-    if type(x) == int:
+    if isinstance(x, int):
         coeffs = [x, 0]
     else:
         coeffs = x.polynomial().coefficients(sparse=False)

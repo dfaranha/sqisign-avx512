@@ -1,11 +1,19 @@
-from convert import *
-
 from elliptic_types import Curve, BasisX
 from theta_gluing import lift_basis_to_jacobian
-from theta_isogeny_chain import (
-    theta_isogeny_chain_4x2x1,
-)
+from theta_isogeny_chain import theta_isogeny_chain_4x2x1, theta_isogeny_chain_8x1x1
 from sage.all import GF, proof, EllipticCurve
+
+
+def lift_to_curve(A, P):
+    E = EllipticCurve(A.parent(), [0, A, 0, 1, 0])
+    if P[1].is_zero():
+        return E(0)
+    return E.lift_x(P[0] / P[1])
+
+
+def is_four_torsion(P):
+    return (4 * P).is_zero()
+
 
 proof.all(False)
 
@@ -41,7 +49,6 @@ A3_check = 769911196120106887584905707573503063826504938366316790405418400816604
 A4_check = 7102836603142932653148826753844949958196416261810681428739598437629750431518654746535245934059526424912893545183695*i + 2215256555090867642327107655771932802458346873251863327744315389546767808956358139976578364706094247219284838985038
 # fmt: on
 
-
 # Create the Curve types (Has A and A24)
 E1 = Curve(A1, F.one(), A1 + 2, F(4))
 E2 = Curve(A2, F.one(), A2 + 2, F(4))
@@ -57,97 +64,27 @@ P2, Q2 = lift_basis_to_jacobian(E2, B2)
 # Ensure the output from the chain matches
 domain = (E1, E2)
 kernel = (B1, B2)
-(A3, C3), (A4, C4), images = theta_isogeny_chain_4x2x1(
-    domain, kernel, length, [(P1, P2), (Q1, Q2)]
-)
-assert A3 / C3 == A3_check
-assert A4 / C4 == A4_check
 
+for isogeny_algorithm in [theta_isogeny_chain_4x2x1, theta_isogeny_chain_8x1x1]:
 
-def lift_to_curve(A, P):
-    E = EllipticCurve(A.parent(), [0, A, 0, 1, 0])
-    if P[1].is_zero():
-        return E(0)
-    return E.lift_x(P[0] / P[1])
+    (A3, C3), (A4, C4), images = isogeny_algorithm(
+        domain, kernel, length, [(P1, P2), (Q1, Q2)]
+    )
+    assert A3 / C3 == A3_check
+    assert A4 / C4 == A4_check
 
+    (xP3, xP4), (xQ3, xQ4) = images
 
-def is_four_torsion(P):
-    return (4 * P).is_zero()
+    P3 = lift_to_curve(A3_check, xP3)
+    Q3 = lift_to_curve(A3_check, xQ3)
+    P4 = lift_to_curve(A4_check, xP4)
+    Q4 = lift_to_curve(A4_check, xQ4)
 
+    assert is_four_torsion(P3)
+    assert is_four_torsion(P4)
+    assert is_four_torsion(Q3)
+    assert is_four_torsion(Q4)
 
-(xP3, xP4), (xQ3, xQ4) = images
+    print(f"test {isogeny_algorithm.__name__} passed")
 
-P3 = lift_to_curve(A3_check, xP3)
-Q3 = lift_to_curve(A3_check, xQ3)
-P4 = lift_to_curve(A4_check, xP4)
-Q4 = lift_to_curve(A4_check, xQ4)
-
-assert is_four_torsion(P3)
-assert is_four_torsion(P4)
-assert is_four_torsion(Q3)
-assert is_four_torsion(Q4)
-
-
-# # Domain for isogeny
-# OA = AVX_4x2x1(a, b, c, d)
-
-# # Kernel for the 4x2x1 chain
-# P = AVX_4x2x1(xP, yP, zP, wP)
-# Q = AVX_4x2x1(xQ, yQ, zQ, wQ)
-
-# # Kernel for the 8x1x1 chain
-# ker = AVX_8x1x1(xP, yP, zP, wP, xQ, yQ, zQ, wQ)
-
-# # Print output for C code
-# OA_avx = theta_to_avx512_4_2_1(OA)
-# P_avx = theta_to_avx512_4_2_1(P)
-# Q_avx = theta_to_avx512_4_2_1(Q)
-# print("4x2x1 KAT:")
-# print_avx512_blobs(OA_avx, "OA")
-# print_avx512_blobs(P_avx, "P")
-# print_avx512_blobs(Q_avx, "Q")
-# print()
-# print("E3", fp2_to_le(E3, 64))
-# print("E4", fp2_to_le(E4, 64))
-
-
-# assert E4 == A4 / C4
-# print("A3", fp2_to_le(A3, 64))
-# print("C3", fp2_to_le(C3, 64))
-# print("A4", fp2_to_le(A4, 64))
-# print("C4", fp2_to_le(C4, 64))
-
-# # Ensure the output from the chain matches
-# (A3, C3), (A4, C4), images = theta_isogeny_chain_8x1x1(OA, ker, n, eval_points=[P, Q])
-# assert E3 == A3 / C3
-# assert E4 == A4 / C4
-
-# # Hack for printing the images
-# from sage.all import EllipticCurve
-
-
-# def lift_to_curve(E, P):
-#     if P[1].is_zero():
-#         return E(0)
-#     return E.lift_x(P[0] / P[1])
-
-
-# def is_four_torsion(P):
-#     return (4 * P).is_zero()
-
-
-# EE3 = EllipticCurve(F, [0, A3 / C3, 0, 1, 0])
-# EE4 = EllipticCurve(F, [0, A4 / C4, 0, 1, 0])
-
-# (P3, P4), (Q3, Q4) = images
-
-# PP3 = lift_to_curve(EE3, P3)
-# QQ3 = lift_to_curve(EE3, Q3)
-
-# PP4 = lift_to_curve(EE4, P4)
-# QQ4 = lift_to_curve(EE4, Q4)
-
-# assert is_four_torsion(PP3)
-# assert is_four_torsion(PP4)
-# assert is_four_torsion(QQ3)
-# assert is_four_torsion(QQ4)
+print("All tests passed")

@@ -1,6 +1,11 @@
 from elliptic_types import Curve, PointX, BasisX, PointJ
 from theta_types import AVX_4x2x1, AVX_8x1x1
-from theta_structure import squaring, hadamard, pairwise_multiplication
+from theta_structure import (
+    squaring,
+    hadamard,
+    pairwise_multiplication,
+    pairwise_multiplication_3,
+)
 from utilities import apply_isomorphism
 
 from elliptic_arithmetic import double_x, add_components
@@ -249,17 +254,37 @@ def gluing_codomain(
     if any(x.is_zero() for x in [X1, X2, Y1, Z2]):
         raise ValueError("projective factors are zero")
 
-    A = X1 * X2
-    B = Y1 * X2
-    C = X1 * Z2
+    # ============================================================
+    # Just like in the generic codomain there's a bit of ugliness
+    # here and the below is my best effort to compute:
+    #
+    # A = X1 * X2
+    # B = Y1 * X2
+    # C = X1 * Z2
 
-    A_inv = Y1 * Z2
+    # A_inv = Y1 * Z2
+    # B_inv = C
+    # C_inv = B
+
+    # x = X1 * A_inv
+    # y = Z1 * C_inv
+    #
+    # Which requires 6 multiplications and we can do it by doing
+    # two calls to pairwise_multiplication with the last element
+    # of t1 and t2 being 1 (so we only need 3/4 multiplications
+    # from this function)
+    # ============================================================
+
+    t1 = AVX_4x2x1(X1, Y1, X1, 1)
+    t2 = AVX_4x2x1(X2, X2, Z2, 1)
+
+    A, B, C, _ = pairwise_multiplication_3(t1, t2)
+
+    t1 = AVX_4x2x1(Y1, C, B, 1)
+    t2 = AVX_4x2x1(Z2, Y1, Z1, 1)
+    A_inv, x, y, _ = pairwise_multiplication_3(t1, t2)
     B_inv = C
     C_inv = B
-
-    x = X1 * A_inv
-    y = Z1 * C_inv
-    # TODO: do parallel things above
 
     if (Y1 * B_inv != x) or (X2 * A_inv != Z2 * C_inv):
         raise ValueError("input kernel is not isotropic")
@@ -295,6 +320,27 @@ def gluing_eval(
     u2, v2, w2 = add_components(E2, P2, T2_8)
 
     # Perform S(N * U) and S(N * V)
+    # We need the following 9 products which
+    #
+    # u1 * u2
+    # u1 * v2
+    # u1 * w2
+    #
+    # v1 * u2
+    # v1 * v2
+    # v1 * w2
+    #
+    # w1 * u2
+    # w1 * v2
+    # w1 * w2
+    #
+    # We also need to do two additions:
+    # u1 * u2 + v1 * v2
+    # v1 * u2 + u1 * v2
+    #
+    # If we use the normal AVX stuff this means 3 calls to
+    # pairwise_multiplication and then addition as well.
+
     U = AVX_4x2x1(u1 * u2 + v1 * v2, u1 * w2, w1 * u2, w1 * w2)
     V = AVX_4x2x1(v1 * u2 + u1 * v2, v1 * w2, w1 * v2, 0)
 

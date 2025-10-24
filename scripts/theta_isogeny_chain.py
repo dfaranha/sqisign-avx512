@@ -11,6 +11,8 @@ from theta_structure import (
     squaring,
     squaring_pair,
     pairwise_multiplication,
+    pairwise_multiplication_3,
+    pairwise_multiplication_2,
     pairwise_pair,
 )
 from theta_splitting import (
@@ -125,7 +127,7 @@ def theta_codomain_4x2x1(
     t2 = AVX_4x2x1(wB, xB, wD, 1)
 
     # Here we only need three multiplications, we could make a special function
-    t2 = pairwise_multiplication(t1, t2)
+    t2 = pairwise_multiplication_3(t1, t2)
 
     # Memory management to get the precomputations we need
     xAwB, zAxB, zCwD, _ = t2
@@ -135,12 +137,12 @@ def theta_codomain_4x2x1(
     OB = pairwise_multiplication(t1, Q)
 
     # Memory management to get the values needed for inverse
-    A, B, C, D = OB
+    _, _, C, D = OB
     inv = AVX_4x2x1(xB, xA, D, C)
     t1 = AVX_4x2x1(zCwD, zCwD, 1, 1)
 
     # Here we only need two multiplications, we could make a special function
-    inv = pairwise_multiplication(inv, t1)
+    inv = pairwise_multiplication_2(inv, t1)
 
     if h2:
         OB = hadamard(OB)
@@ -157,13 +159,13 @@ def theta_codomain_8x1x1(
     ker = hadamard_pair(ker)
 
     # Memory management of kernel data to make two temp blobs
-    xA, xB, yC, yD, zA, wB, zC, wD = ker
+    xA, xB, _, _, zA, wB, zC, wD = ker
     OB = AVX_4x2x1(zA, wB, zC, wD)
     t1 = AVX_4x2x1(xA, zA, zC, 1)
     t2 = AVX_4x2x1(wB, xB, wD, 1)
 
     # Here we only need three multiplications, we could make a special function
-    t2 = pairwise_multiplication(t1, t2)
+    t2 = pairwise_multiplication_3(t1, t2)
 
     # Memory management to get the precomputations we need
     xAwB, zAxB, zCwD, _ = t2
@@ -178,7 +180,7 @@ def theta_codomain_8x1x1(
     t1 = AVX_4x2x1(zCwD, zCwD, 1, 1)
 
     # Here we only need two multiplications, we could make a special function
-    inv = pairwise_multiplication(inv, t1)
+    inv = pairwise_multiplication_2(inv, t1)
 
     if h2:
         OB = hadamard(OB)
@@ -304,49 +306,85 @@ def theta_isogeny_chain_4x2x1(
     return (A1, C1), (A2, C2), images
 
 
-# def theta_isogeny_chain_8x1x1(
-#     OA: AVX_4x2x1, kernel: AVX_8x1x1, n: int, eval_points: list[AVX_4x2x1] = []
-# ):
-#     """
-#     Naive (2^n, 2^n) isogeny chain with no strategy using 8x1x1 blocks when possible
-#     """
-#     for i in range(n):
-#         # Precompute constants for doubling
-#         C1, C2 = theta_precompute(OA)
+def theta_isogeny_chain_8x1x1(
+    domain: tuple[Curve],
+    kernel: tuple[BasisX, BasisX],
+    n: int,
+    eval_points: list[tuple[PointJ, PointJ]] = [],
+):
+    """
+    Naive (2^n, 2^n) isogeny chain with no strategy using 8x1x1 blocks when possible
+    """
+    E1, E2 = domain
+    B1, B2 = kernel
 
-#         # Double the kernel points of order 2^(n+2) to get points of order 2^(1 + 2) = 8
-#         ker_step = kernel
-#         for _ in range(n - i - 1):
-#             ker_step = theta_double_pair(ker_step, C1, C2)
+    # Lift the x-only basis to the Jacobian points
+    P1, Q1 = lift_basis_to_jacobian(E1, B1)
+    P2, Q2 = lift_basis_to_jacobian(E2, B2)
 
-#         # For the ultimate and penultimate steps we do extra / less Hadamards
-#         # to avoid zeros from the product structure
-#         if i == n - 1:
-#             h1, h2 = True, False
-#         elif i == n - 2:
-#             h1, h2 = False, False
-#         else:
-#             h1, h2 = False, True
+    # Obtain kernel points for gluing
+    P1_8 = P1
+    P2_8 = P2
+    Q1_8 = Q1
+    Q2_8 = Q2
+    for _ in range(n - 1):
+        P1_8 = double_jac(E1, P1_8)
+        P2_8 = double_jac(E2, P2_8)
+        Q1_8 = double_jac(E1, Q1_8)
+        Q2_8 = double_jac(E2, Q2_8)
 
-#         # Compute the codomain from the kernel
-#         OA, inv = theta_codomain_8x1x1(ker_step, h1, h2)
+    # Compute the gluing codomain
+    OA, _, J, N = gluing_codomain(E1, E2, P1_8, P2_8, Q1_8, Q2_8)
 
-#         # Push the kernel through the images
-#         kernel = theta_eval_pair(kernel, inv, h1, h2)
+    # Push kernel though the gluing isogeny
+    P = gluing_eval(E1, E2, P1, P2, P1_8, P2_8, J, N)
+    Q = gluing_eval(E1, E2, Q1, Q2, P1_8, P2_8, J, N)
 
-#         # Push the images through the kernel
-#         eval_points = [theta_eval(P, inv, h1, h2) for P in eval_points]
+    # TODO: look at using 8x1x1 within gluing_eval
+    kernel = AVX_8x1x1(*P, *Q)
 
-#     # Compute the splitting isomorphism
-#     M = splitting_isomorphism_matrix(OA)
+    # Push other points through gluing isogeny
+    eval_points = [
+        gluing_eval(E1, E2, R1, R2, P1_8, P2_8, J, N) for (R1, R2) in eval_points
+    ]
 
-#     # Apply the splitting isomorphism
-#     OA = apply_isomorphism(OA, M)
-#     eval_points = [apply_isomorphism(P, M) for P in eval_points]
+    for i in range(1, n):
+        # Precompute constants for doubling
+        C1, C2 = theta_precompute(OA)
 
-#     # Split the null point to the Montgomery coefficients
-#     (A1, C1), (A2, C2) = theta_to_product(OA)
+        # Double the kernel points of order 2^(n+2) to get points of order 2^(1 + 2) = 8
+        ker_step = kernel
+        for _ in range(n - i - 1):
+            ker_step = theta_double_pair(ker_step, C1, C2)
 
-#     images = [theta_product_point_to_montgomery(P, OA) for P in eval_points]
+        # For the ultimate and penultimate steps we do extra / less Hadamards
+        # to avoid zeros from the product structure
+        if i == n - 1:
+            h1, h2 = True, False
+        elif i == n - 2:
+            h1, h2 = False, False
+        else:
+            h1, h2 = False, True
 
-#     return (A1, C1), (A2, C2), images
+        # Compute the codomain from the kernel
+        OA, inv = theta_codomain_8x1x1(ker_step, h1, h2)
+
+        # Push the kernel through the images
+        kernel = theta_eval_pair(kernel, inv, h1, h2)
+
+        # Push the images through the kernel
+        eval_points = [theta_eval(P, inv, h1, h2) for P in eval_points]
+
+    # Compute the splitting isomorphism
+    M = splitting_isomorphism_matrix(OA)
+
+    # Apply the splitting isomorphism
+    OA = apply_isomorphism(OA, M)
+    eval_points = [apply_isomorphism(P, M) for P in eval_points]
+
+    # Split the null point to the Montgomery coefficients
+    (A1, C1), (A2, C2) = theta_to_product(OA)
+
+    images = [theta_product_point_to_montgomery(P, OA) for P in eval_points]
+
+    return (A1, C1), (A2, C2), images
