@@ -1,11 +1,11 @@
 from convert import *
 
 from elliptic_types import Curve, BasisX
-
+from theta_gluing import lift_basis_to_jacobian
 from theta_isogeny_chain import (
     theta_isogeny_chain_4x2x1,
 )
-from sage.all import GF, proof
+from sage.all import GF, proof, EllipticCurve
 
 proof.all(False)
 
@@ -50,12 +50,42 @@ E2 = Curve(A2, F.one(), A2 + 2, F(4))
 B1 = BasisX(PX1, PZ1, QX1, QZ1, PmQX1, PmQZ1)
 B2 = BasisX(PX2, PZ2, QX2, QZ2, PmQX2, PmQZ2)
 
+# Get the kernel as Jacobian points to test image
+P1, Q1 = lift_basis_to_jacobian(E1, B1)
+P2, Q2 = lift_basis_to_jacobian(E2, B2)
+
 # Ensure the output from the chain matches
 domain = (E1, E2)
 kernel = (B1, B2)
-(A3, C3), (A4, C4), _ = theta_isogeny_chain_4x2x1(domain, kernel, length, [])
-assert A3 / C3 in [A3_check, A4_check]
-assert A4 / C4 in [A3_check, A4_check]
+(A3, C3), (A4, C4), images = theta_isogeny_chain_4x2x1(
+    domain, kernel, length, [(P1, P2), (Q1, Q2)]
+)
+assert A3 / C3 == A3_check
+assert A4 / C4 == A4_check
+
+
+def lift_to_curve(A, P):
+    E = EllipticCurve(A.parent(), [0, A, 0, 1, 0])
+    if P[1].is_zero():
+        return E(0)
+    return E.lift_x(P[0] / P[1])
+
+
+def is_four_torsion(P):
+    return (4 * P).is_zero()
+
+
+(xP3, xP4), (xQ3, xQ4) = images
+
+P3 = lift_to_curve(A3_check, xP3)
+Q3 = lift_to_curve(A3_check, xQ3)
+P4 = lift_to_curve(A4_check, xP4)
+Q4 = lift_to_curve(A4_check, xQ4)
+
+assert is_four_torsion(P3)
+assert is_four_torsion(P4)
+assert is_four_torsion(Q3)
+assert is_four_torsion(Q4)
 
 
 # # Domain for isogeny

@@ -256,7 +256,7 @@ def theta_isogeny_chain_4x2x1(
 
     # Push other points through gluing isogeny
     eval_points = [
-        gluing_eval(E1, E2, P1, P2, P1_8, P2_8, J, N) for P1, P2 in eval_points
+        gluing_eval(E1, E2, R1, R2, P1_8, P2_8, J, N) for (R1, R2) in eval_points
     ]
 
     # Do n - 1 steps of the theta (2, 2)-isogeny

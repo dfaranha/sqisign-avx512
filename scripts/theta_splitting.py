@@ -148,7 +148,7 @@ def theta_product_point_to_montgomery(P: AVX_4x2x1, OA: AVX_4x2x1):
 
     x, y, z, w = P
     if x * w != y * z:
-        raise ValueError("OA does not come from a product theta structure")
+        raise ValueError("P does not come from a product theta structure")
 
     if all([c.is_zero() for x in P]):
         raise ValueError("all coordinates are zero")
