@@ -320,6 +320,7 @@ def gluing_eval(
     u2, v2, w2 = add_components(E2, P2, T2_8)
 
     # Perform S(N * U) and S(N * V)
+    # ============================================================
     # We need the following 9 products which
     #
     # u1 * u2
@@ -340,6 +341,7 @@ def gluing_eval(
     #
     # If we use the normal AVX stuff this means 3 calls to
     # pairwise_multiplication and then addition as well.
+    # ============================================================
 
     U = AVX_4x2x1(u1 * u2 + v1 * v2, u1 * w2, w1 * u2, w1 * w2)
     V = AVX_4x2x1(v1 * u2 + u1 * v2, v1 * w2, w1 * v2, 0)

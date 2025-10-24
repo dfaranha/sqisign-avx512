@@ -1,4 +1,4 @@
-from elliptic_types import Curve, PointX, PointJ
+from elliptic_types import Curve, PointX, PointJ, PointW
 
 
 def double_x(E: Curve, P: PointX) -> PointX:
@@ -69,6 +69,86 @@ def double_jac(E: Curve, P: PointJ) -> PointJ:
     Y2P = Y2P - t1
 
     return PointJ(X2P, Y2P, Z2P)
+
+
+def jac_to_ws(E: Curve, P: PointJ) -> PointW:
+    """
+    Conversion from  Jacobian coordinates on a Montgomery curve
+    to Modified Jacobian coordinates on a Weierstrass curve
+    """
+    assert E.C.is_one()
+
+    A_over_3 = E.A / 3
+    a = 1 - E.A * A_over_3
+
+    Z2 = P.Z**2
+    Z4 = Z2**2
+
+    X = P.X + Z2 * A_over_3
+    Y = P.Y
+    Z = P.Z
+    T = a * Z4
+
+    return PointW(X, Y, Z, T), A_over_3
+
+
+def ws_to_jac(P: PointW, A_over_3) -> PointJ:
+    """
+    Conversion from modified Jacobian coordinates on a Weierstrass curve
+    to Jacobian coordinates on a Montgomery curve
+    """
+    X = P.X - P.Z**2 * A_over_3
+    Y = P.Y
+    Z = P.Z
+    return PointJ(X, Y, Z)
+
+
+def double_ws(P: PointW) -> PointW:
+    """
+    Point doubling on a short weierstrass curve with modified Jacobian coordinates
+    """
+    XX = P.X**2
+    t0 = P.Y**2
+    A = t0 + t0
+    AA = A**2
+    U = AA + AA
+    t1 = P.X + A
+    t2 = t1**2
+    t3 = t2 - XX
+    S = t3 - AA
+    t4 = XX + XX
+    t4 = t4 + XX
+    M = t4 + P.T
+    t5 = M**2
+    t6 = S + S
+    X3 = t5 - t6
+    t7 = S - X3
+    t8 = M * t7
+    Y3 = t8 - U
+    t9 = P.Y * P.Z
+    Z3 = t9 + t9
+    t10 = U * P.T
+    T3 = t10 + t10
+
+    return PointW(X3, Y3, Z3, T3)
+
+
+def double_jac_n(E: Curve, P: PointJ, n: int):
+    """
+    Repeated Doubling of a Jacobian point
+    """
+    if n == 1:
+        return double_jac(E, P)
+
+    # Convert from Montgomery to Weierstrass
+    # TODO: we compute a = 1 - A^2/3 twice as we do
+    #       two points on the same curve, we could
+    #       do better by doubling two points at the
+    #       same time.
+    Q, A_over_3 = jac_to_ws(E, P)  # 3M 2S
+    for _ in range(n):
+        Q = double_ws(Q)  # 3M 5S
+    return ws_to_jac(Q, A_over_3)
 
 
 def add_components(E: Curve, P: PointJ, Q: PointJ):

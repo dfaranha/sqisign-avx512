@@ -6,4 +6,4 @@ PointX = namedtuple("PointX", ["X", "Z"])
 BasisX = namedtuple("BasisX", ["PX", "PZ", "QX", "QZ", "PmQX", "PmQZ"])
 
 PointJ = namedtuple("PointJ", ["X", "Y", "Z"])
-PointW = namedtuple("PointW", ["X", "Y", "Z"])
+PointW = namedtuple("PointW", ["X", "Y", "Z", "T"])
