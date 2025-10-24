@@ -200,13 +200,24 @@ def two_two_isogeny_chain_with_torsion(
     # Extract out the bases on E_chl and E_aux
     chl_basis, aux_basis = kernel
 
-    print(f"{length = }")
+    print(f"\n\n{length = }")
 
     # Montgomery coefficients of E_chl and E_aux needed for
     # Jacobian arithmetic
     E1 = chl_basis[0].parent()
     E2 = aux_basis[0].parent()
     (A1, A2) = (E1.a(), E2.a())
+
+    print(f"A1 = {A1}")
+    print(f"A2 = {A2}\n")
+
+    print("PX1 = {0}\nPZ1 = {1}\n".format(*chl_basis[0].XZ()))
+    print("QX1 = {0}\nQZ1 = {1}\n".format(*chl_basis[1].XZ()))
+    print("PmQX1 = {0}\nPmQZ1 = {1}\n".format(*chl_basis[2].XZ()))
+
+    print("PX2 = {0}\nPZ2 = {1}\n".format(*aux_basis[0].XZ()))
+    print("QX2 = {0}\nQZ2 = {1}\n".format(*aux_basis[1].XZ()))
+    print("PmQX2 = {0}\nPmQZ2 = {1}\n".format(*aux_basis[2].XZ()))
 
     # Lift xP, xQ, xPQ to points on the Jacobian for evaluation
     P_chl, Q_chl = lift_basis_to_jacobian(chl_basis, A1)
@@ -264,15 +275,6 @@ def two_two_isogeny_chain_with_torsion(
         Q_im = gluing_eval((A1, A2), Q, T1_8, J, N)
         strat_points[i] = (P_im, Q_im)
         orders[i] = orders[i] - 1
-
-    print("domain after gluing:")
-    print(f"{OA = }")
-    print()
-
-    print("kernel after gluing:")
-    print(f"{strat_points[0][0] = }")
-    print(f"{strat_points[0][1] = }")
-    print()
 
     #
     # Main loop: compute (2,2) isogenies in the theta model with balanced strategy
@@ -336,10 +338,8 @@ def two_two_isogeny_chain_with_torsion(
     E3 = KummerLine(Fq, [A1, C1])
     E4 = KummerLine(Fq, [A2, C2])
 
-    print("codomain after splitting: E3 x E4")
-    print(f"{E3.a() = }")
-    print(f"{E4.a() = }")
-    print()
+    print(f"A3_check = {E3.a()}")
+    print(f"A4_check = {E4.a()}\n")
 
     # Compute the point coordinates on the KummerLines
     image_points = []
