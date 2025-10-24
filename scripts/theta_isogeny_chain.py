@@ -1,6 +1,6 @@
 from typing import Tuple
 
-from convert import * #TODO: Remove
+from convert import *  # TODO: Remove
 
 from theta_types import AVX_8x1x1, AVX_4x2x1
 from theta_structure import (
@@ -15,6 +15,7 @@ from theta_splitting import (
     splitting_isomorphism_matrix,
     apply_isomorphism,
     theta_to_product,
+    theta_product_point_to_montgomery,
 )
 
 
@@ -217,7 +218,9 @@ def theta_eval_pair(P_Q: AVX_8x1x1, inv: AVX_4x2x1, h1: bool, h2: bool):
     return P_Q
 
 
-def theta_isogeny_chain_4x2x1(OA: AVX_4x2x1, P: AVX_4x2x1, Q: AVX_4x2x1, n: int):
+def theta_isogeny_chain_4x2x1(
+    OA: AVX_4x2x1, P: AVX_4x2x1, Q: AVX_4x2x1, n: int, eval_points: list[AVX_4x2x1] = []
+):
     """
     Naive (2^n, 2^n) isogeny chain with no strategy using everything as 4x2x1 blocks
     """
@@ -247,22 +250,31 @@ def theta_isogeny_chain_4x2x1(OA: AVX_4x2x1, P: AVX_4x2x1, Q: AVX_4x2x1, n: int)
         P = theta_eval(P, inv, h1, h2)
         Q = theta_eval(Q, inv, h1, h2)
 
+        # Push the images through the kernel
+        eval_points = [theta_eval(P, inv, h1, h2) for P in eval_points]
+
     # Compute the splitting isomorphism
     M = splitting_isomorphism_matrix(OA)
 
     # Apply the splitting isomorphism
     OA = apply_isomorphism(OA, M)
-    #TODO: Remove
+    eval_points = [apply_isomorphism(P, M) for P in eval_points]
+
+    # TODO: Remove
     OA_avx = theta_to_avx512_4_2_1(OA)
     print_avx512_blobs(OA_avx, "apply_isom")
 
     # Split the null point to the Montgomery coefficients
     (A1, C1), (A2, C2) = theta_to_product(OA)
 
-    return (A1, C1), (A2, C2)
+    images = [theta_product_point_to_montgomery(P, OA) for P in eval_points]
+
+    return (A1, C1), (A2, C2), images
 
 
-def theta_isogeny_chain_8x1x1(OA: AVX_4x2x1, kernel: AVX_8x1x1, n: int):
+def theta_isogeny_chain_8x1x1(
+    OA: AVX_4x2x1, kernel: AVX_8x1x1, n: int, eval_points: list[AVX_4x2x1] = []
+):
     """
     Naive (2^n, 2^n) isogeny chain with no strategy using 8x1x1 blocks when possible
     """
@@ -290,13 +302,19 @@ def theta_isogeny_chain_8x1x1(OA: AVX_4x2x1, kernel: AVX_8x1x1, n: int):
         # Push the kernel through the images
         kernel = theta_eval_pair(kernel, inv, h1, h2)
 
+        # Push the images through the kernel
+        eval_points = [theta_eval(P, inv, h1, h2) for P in eval_points]
+
     # Compute the splitting isomorphism
     M = splitting_isomorphism_matrix(OA)
 
     # Apply the splitting isomorphism
     OA = apply_isomorphism(OA, M)
+    eval_points = [apply_isomorphism(P, M) for P in eval_points]
 
     # Split the null point to the Montgomery coefficients
     (A1, C1), (A2, C2) = theta_to_product(OA)
 
-    return (A1, C1), (A2, C2)
+    images = [theta_product_point_to_montgomery(P, OA) for P in eval_points]
+
+    return (A1, C1), (A2, C2), images

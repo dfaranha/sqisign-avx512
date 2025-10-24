@@ -2,3 +2,5 @@ build/
 
 *.sage.py
 *.DS_Store
+
+__pycache__

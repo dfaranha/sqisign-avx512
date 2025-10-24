@@ -175,13 +175,29 @@ def theta_product_point_to_montgomery(P: AVX_4x2x1, OA: AVX_4x2x1):
 
     TODO: can we use parallelism here?
     """
-    a, b, c, _ = OA
-    x, y, z, _ = P
+    a, b, c, d = OA
+    if a * d != b * c:
+        raise ValueError("OA does not come from a product theta structure")
 
-    X1 = a * z + c * x
-    Z1 = a * z - c * x
+    x, y, z, w = P
+    if x * w != y * z:
+        raise ValueError("OA does not come from a product theta structure")
 
-    X2 = a * y + b * x
-    Z2 = a * z - b * x
+    if all([c.is_zero() for x in P]):
+        raise ValueError("all coordinates are zero")
+
+    if x.is_zero() and z.is_zero():
+        X1 = a * w + c * y
+        Z1 = a * w - c * y
+    else:
+        X1 = a * z + c * x
+        Z1 = a * z - c * x
+
+    if x.is_zero() and y.is_zero():
+        X2 = a * w + b * z
+        Z2 = a * w - b * z
+    else:
+        X2 = a * y + b * x
+        Z2 = a * y - b * x
 
     return (X1, Z1), (X2, Z2)

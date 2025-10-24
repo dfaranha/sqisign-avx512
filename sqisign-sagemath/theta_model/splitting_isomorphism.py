@@ -152,6 +152,6 @@ def theta_product_point_to_montgomery(P: ThetaPoint, OA: ThetaNullPoint):
     Z1 = a * z - c * x
 
     X2 = a * y + b * x
-    Z2 = a * z - b * x
+    Z2 = a * y - b * x
 
     return (X1, Z1), (X2, Z2)
