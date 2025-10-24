@@ -1,5 +1,3 @@
-from typing import Tuple
-from theta_structure import pairwise_pair
 from theta_types import AVX_8x1x1, AVX_4x2x1
 
 EVEN_INDICES = [
@@ -95,40 +93,8 @@ def splitting_isomorphism_matrix(OA: AVX_4x2x1):
     }
     splitting_index = get_index_splitting(OA)
     M = SPLITTING_MAPS[splitting_index]
-    print("index", splitting_index)
 
     return M
-
-
-def internal_sum(A: AVX_8x1x1, B: AVX_8x1x1) -> AVX_4x2x1:
-    """
-    An internal helper function which should help with parallel
-    matrix multiplication?
-    """
-    a0, b0, c0, d0, a1, b1, c1, d1 = A
-    a2, b2, c2, d2, a3, b3, c3, d3 = B
-
-    # Compute the sum of the first and last four elements
-    # for each of the 8x1x1 blobs
-    a = a0 + b0 + c0 + d0
-    b = a1 + b1 + c1 + d1
-    c = a2 + b2 + c2 + d2
-    d = a3 + b3 + c3 + d3
-
-    return AVX_4x2x1(a, b, c, d)
-
-
-def apply_isomorphism(OA: AVX_4x2x1, M: Tuple[AVX_8x1x1, AVX_8x1x1]) -> AVX_4x2x1:
-    """
-    Compute M * v = x for a 4x4 matrix M and vector x in a parallel way
-    """
-    # First two and last two rows of the 4x4 matrixs
-    M01, M23 = M
-
-    M01 = pairwise_pair(M01, OA)
-    M23 = pairwise_pair(M23, OA)
-
-    return internal_sum(M01, M23)
 
 
 def theta_to_product(OA: AVX_4x2x1):
@@ -181,7 +147,7 @@ def theta_product_point_to_montgomery(P: AVX_4x2x1, OA: AVX_4x2x1):
 
     x, y, z, w = P
     if x * w != y * z:
-        raise ValueError("OA does not come from a product theta structure")
+        raise ValueError("P does not come from a product theta structure")
 
     if all([c.is_zero() for x in P]):
         raise ValueError("all coordinates are zero")

@@ -50,6 +50,22 @@ def pairwise_multiplication(P: AVX_4x2x1, Q: AVX_4x2x1) -> AVX_4x2x1:
     return AVX_4x2x1(P.x * Q.x, P.y * Q.y, P.z * Q.z, P.w * Q.w)
 
 
+def pairwise_multiplication_3(P: AVX_4x2x1, Q: AVX_4x2x1) -> AVX_4x2x1:
+    """
+    Pairwise multiplication of two points assuming the last coordinate
+    of Q is 1. Used in codomain computations
+    """
+    return AVX_4x2x1(P.x * Q.x, P.y * Q.y, P.z * Q.z, P.w)
+
+
+def pairwise_multiplication_2(P: AVX_4x2x1, Q: AVX_4x2x1) -> AVX_4x2x1:
+    """
+    Pairwise multiplication of two points assuming the last two coordinates
+    of Q are 1. Used in codomain computations
+    """
+    return AVX_4x2x1(P.x * Q.x, P.y * Q.y, P.z, P.w)
+
+
 def pairwise_pair(P_Q: AVX_8x1x1, C: AVX_4x2x1) -> AVX_8x1x1:
     """
     Pairwise multiplication of two pairs of points

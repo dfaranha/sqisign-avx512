@@ -1,22 +1,26 @@
 from typing import Tuple
 
-from convert import *  # TODO: Remove
-
 from theta_types import AVX_8x1x1, AVX_4x2x1
+from elliptic_types import Curve, PointJ, BasisX
+
+from elliptic_arithmetic import double_jac_n
+from theta_gluing import lift_basis_to_jacobian, gluing_codomain, gluing_eval
 from theta_structure import (
     hadamard,
     hadamard_pair,
     squaring,
     squaring_pair,
     pairwise_multiplication,
+    pairwise_multiplication_3,
+    pairwise_multiplication_2,
     pairwise_pair,
 )
 from theta_splitting import (
     splitting_isomorphism_matrix,
-    apply_isomorphism,
     theta_to_product,
     theta_product_point_to_montgomery,
 )
+from utilities import apply_isomorphism
 
 
 def theta_precompute(OA: AVX_4x2x1) -> Tuple[AVX_4x2x1, AVX_4x2x1]:
@@ -123,7 +127,7 @@ def theta_codomain_4x2x1(
     t2 = AVX_4x2x1(wB, xB, wD, 1)
 
     # Here we only need three multiplications, we could make a special function
-    t2 = pairwise_multiplication(t1, t2)
+    t2 = pairwise_multiplication_3(t1, t2)
 
     # Memory management to get the precomputations we need
     xAwB, zAxB, zCwD, _ = t2
@@ -133,12 +137,12 @@ def theta_codomain_4x2x1(
     OB = pairwise_multiplication(t1, Q)
 
     # Memory management to get the values needed for inverse
-    A, B, C, D = OB
+    _, _, C, D = OB
     inv = AVX_4x2x1(xB, xA, D, C)
     t1 = AVX_4x2x1(zCwD, zCwD, 1, 1)
 
     # Here we only need two multiplications, we could make a special function
-    inv = pairwise_multiplication(inv, t1)
+    inv = pairwise_multiplication_2(inv, t1)
 
     if h2:
         OB = hadamard(OB)
@@ -155,13 +159,13 @@ def theta_codomain_8x1x1(
     ker = hadamard_pair(ker)
 
     # Memory management of kernel data to make two temp blobs
-    xA, xB, yC, yD, zA, wB, zC, wD = ker
+    xA, xB, _, _, zA, wB, zC, wD = ker
     OB = AVX_4x2x1(zA, wB, zC, wD)
     t1 = AVX_4x2x1(xA, zA, zC, 1)
     t2 = AVX_4x2x1(wB, xB, wD, 1)
 
     # Here we only need three multiplications, we could make a special function
-    t2 = pairwise_multiplication(t1, t2)
+    t2 = pairwise_multiplication_3(t1, t2)
 
     # Memory management to get the precomputations we need
     xAwB, zAxB, zCwD, _ = t2
@@ -176,7 +180,7 @@ def theta_codomain_8x1x1(
     t1 = AVX_4x2x1(zCwD, zCwD, 1, 1)
 
     # Here we only need two multiplications, we could make a special function
-    inv = pairwise_multiplication(inv, t1)
+    inv = pairwise_multiplication_2(inv, t1)
 
     if h2:
         OB = hadamard(OB)
@@ -219,12 +223,41 @@ def theta_eval_pair(P_Q: AVX_8x1x1, inv: AVX_4x2x1, h1: bool, h2: bool):
 
 
 def theta_isogeny_chain_4x2x1(
-    OA: AVX_4x2x1, P: AVX_4x2x1, Q: AVX_4x2x1, n: int, eval_points: list[AVX_4x2x1] = []
+    domain: tuple[Curve],
+    kernel: tuple[BasisX, BasisX],
+    n: int,
+    eval_points: list[tuple[PointJ, PointJ]] = [],
 ):
     """
     Naive (2^n, 2^n) isogeny chain with no strategy using everything as 4x2x1 blocks
     """
-    for i in range(n):
+    E1, E2 = domain
+    B1, B2 = kernel
+
+    # Lift the x-only basis to the Jacobian points
+    P1, Q1 = lift_basis_to_jacobian(E1, B1)
+    P2, Q2 = lift_basis_to_jacobian(E2, B2)
+
+    # Obtain kernel points for gluing
+    P1_8 = double_jac_n(E1, P1, n - 1)
+    P2_8 = double_jac_n(E2, P2, n - 1)
+    Q1_8 = double_jac_n(E1, Q1, n - 1)
+    Q2_8 = double_jac_n(E2, Q2, n - 1)
+
+    # Compute the gluing codomain
+    OA, _, J, N = gluing_codomain(E1, E2, P1_8, P2_8, Q1_8, Q2_8)
+
+    # Push kernel though the gluing isogeny
+    P = gluing_eval(E1, E2, P1, P2, P1_8, P2_8, J, N)
+    Q = gluing_eval(E1, E2, Q1, Q2, P1_8, P2_8, J, N)
+
+    # Push other points through gluing isogeny
+    eval_points = [
+        gluing_eval(E1, E2, R1, R2, P1_8, P2_8, J, N) for (R1, R2) in eval_points
+    ]
+
+    # Do n - 1 steps of the theta (2, 2)-isogeny
+    for i in range(1, n):
         # Precompute constants for doubling
         C1, C2 = theta_precompute(OA)
 
@@ -260,10 +293,6 @@ def theta_isogeny_chain_4x2x1(
     OA = apply_isomorphism(OA, M)
     eval_points = [apply_isomorphism(P, M) for P in eval_points]
 
-    # TODO: Remove
-    OA_avx = theta_to_avx512_4_2_1(OA)
-    print_avx512_blobs(OA_avx, "apply_isom")
-
     # Split the null point to the Montgomery coefficients
     (A1, C1), (A2, C2) = theta_to_product(OA)
 
@@ -273,12 +302,43 @@ def theta_isogeny_chain_4x2x1(
 
 
 def theta_isogeny_chain_8x1x1(
-    OA: AVX_4x2x1, kernel: AVX_8x1x1, n: int, eval_points: list[AVX_4x2x1] = []
+    domain: tuple[Curve],
+    kernel: tuple[BasisX, BasisX],
+    n: int,
+    eval_points: list[tuple[PointJ, PointJ]] = [],
 ):
     """
     Naive (2^n, 2^n) isogeny chain with no strategy using 8x1x1 blocks when possible
     """
-    for i in range(n):
+    E1, E2 = domain
+    B1, B2 = kernel
+
+    # Lift the x-only basis to the Jacobian points
+    P1, Q1 = lift_basis_to_jacobian(E1, B1)
+    P2, Q2 = lift_basis_to_jacobian(E2, B2)
+
+    # Obtain kernel points for gluing
+    P1_8 = double_jac_n(E1, P1, n - 1)
+    P2_8 = double_jac_n(E2, P2, n - 1)
+    Q1_8 = double_jac_n(E1, Q1, n - 1)
+    Q2_8 = double_jac_n(E2, Q2, n - 1)
+
+    # Compute the gluing codomain
+    OA, _, J, N = gluing_codomain(E1, E2, P1_8, P2_8, Q1_8, Q2_8)
+
+    # Push kernel though the gluing isogeny
+    P = gluing_eval(E1, E2, P1, P2, P1_8, P2_8, J, N)
+    Q = gluing_eval(E1, E2, Q1, Q2, P1_8, P2_8, J, N)
+
+    # TODO: look at using 8x1x1 within gluing_eval
+    kernel = AVX_8x1x1(*P, *Q)
+
+    # Push other points through gluing isogeny
+    eval_points = [
+        gluing_eval(E1, E2, R1, R2, P1_8, P2_8, J, N) for (R1, R2) in eval_points
+    ]
+
+    for i in range(1, n):
         # Precompute constants for doubling
         C1, C2 = theta_precompute(OA)
 
