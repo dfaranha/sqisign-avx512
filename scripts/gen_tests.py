@@ -5,7 +5,7 @@ from convert import (
     theta_to_avx512_8_1_1,
     avx512_blobs_8_1_1_to_theta,
 )
-from theta_types import AVX_4x2x1
+from avx_types import AVX_4x2x1
 from theta_structure import (
     hadamard,
     squaring,

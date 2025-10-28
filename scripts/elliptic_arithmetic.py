@@ -1,29 +1,6 @@
 from elliptic_types import Curve, PointX, PointJ, PointW
-from theta_types import AVX_4x2x1
-from theta_structure import squaring, pairwise_multiplication
-
-
-def avx_add(A: AVX_4x2x1, B: AVX_4x2x1) -> AVX_4x2x1:
-    """
-    Add components of two AVX blobs
-    """
-    return AVX_4x2x1(*[a + b for a, b in zip(A, B)])
-
-
-def avx_dbl(
-    A: AVX_4x2x1,
-) -> AVX_4x2x1:
-    """
-    Add components of two AVX blobs
-    """
-    return AVX_4x2x1(*[a + a for a in A])
-
-
-def avx_sub(A: AVX_4x2x1, B: AVX_4x2x1) -> AVX_4x2x1:
-    """
-    Sub components of two AVX blobs
-    """
-    return AVX_4x2x1(*[a - b for a, b in zip(A, B)])
+from avx_types import AVX_4x2x1
+from avx_arithmetic import avx_sqr, avx_pairwise_mul, avx_add, avx_sub, avx_dbl
 
 
 def double_x(E: Curve, P: PointX) -> PointX:
@@ -189,22 +166,22 @@ def four_jac_to_ws(
     # a = 1 - A^2 / 3
     one = AVX_4x2x1(1, 1, 1, 1)
     a = AVX_4x2x1(E1.A, E1.A, E2.A, E2.A)
-    a = pairwise_multiplication(a, A12_over_3)
+    a = avx_pairwise_mul(a, A12_over_3)
     a = avx_sub(one, a)
 
     X = AVX_4x2x1(P1.X, Q1.X, P2.X, Q2.X)
     Y = AVX_4x2x1(P1.Y, Q1.Y, P2.Y, Q2.Y)
     Z = AVX_4x2x1(P1.Z, Q1.Z, P2.Z, Q2.Z)
-    Z2 = squaring(Z)
-    Z4 = squaring(Z2)
+    Z2 = avx_sqr(Z)
+    Z4 = avx_sqr(Z2)
 
     # X = X + Z^2 * A/3
     # Y = Y
     # Z = Z
     # T = a * Z^4
-    tmp = pairwise_multiplication(Z2, A12_over_3)
+    tmp = avx_pairwise_mul(Z2, A12_over_3)
     X = avx_add(X, tmp)
-    T = pairwise_multiplication(Z4, a)
+    T = avx_pairwise_mul(Z4, a)
 
     return X, Y, Z, T, A12_over_3
 
@@ -214,8 +191,8 @@ def four_ws_to_jac(X, Y, Z, T, A12_over_3) -> tuple[PointJ]:
     # Y = P.Y
     # Z = P.Z
 
-    tmp = squaring(Z)
-    tmp = pairwise_multiplication(tmp, A12_over_3)
+    tmp = avx_sqr(Z)
+    tmp = avx_pairwise_mul(tmp, A12_over_3)
     X = avx_sub(X, tmp)
 
     X1, X2, X3, X4 = X
@@ -237,27 +214,27 @@ def double_four_ws(
     Simultaneous point doubling of four points on a short weierstrass curve
     with modified Jacobian coordinates
     """
-    XX = squaring(X)
-    t0 = squaring(Y)
+    XX = avx_sqr(X)
+    t0 = avx_sqr(Y)
     A = avx_dbl(t0)
-    AA = squaring(A)
+    AA = avx_sqr(A)
     U = avx_dbl(AA)
     t0 = avx_add(X, A)
-    t0 = squaring(t0)
+    t0 = avx_sqr(t0)
     t0 = avx_sub(t0, XX)
     S = avx_sub(t0, AA)
     t0 = avx_dbl(XX)
     t0 = avx_add(t0, XX)
     M = avx_add(t0, T)
-    t0 = squaring(M)
+    t0 = avx_sqr(M)
     t1 = avx_dbl(S)
     X3 = avx_sub(t0, t1)
     t0 = avx_sub(S, X3)
-    t0 = pairwise_multiplication(M, t0)
+    t0 = avx_pairwise_mul(M, t0)
     Y3 = avx_sub(t0, U)
-    t0 = pairwise_multiplication(Y, Z)
+    t0 = avx_pairwise_mul(Y, Z)
     Z3 = avx_dbl(t0)
-    t0 = pairwise_multiplication(U, T)
+    t0 = avx_pairwise_mul(U, T)
     T3 = avx_dbl(t0)
 
     return X3, Y3, Z3, T3

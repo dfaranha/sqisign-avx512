@@ -1,4 +1,4 @@
-from theta_types import AVX_4x2x1, AVX_8x1x1
+from avx_types import AVX_4x2x1, AVX_8x1x1
 from theta_structure import pairwise_pair
 
 

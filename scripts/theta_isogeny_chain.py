@@ -1,6 +1,6 @@
 from typing import Tuple
 
-from theta_types import AVX_8x1x1, AVX_4x2x1
+from avx_types import AVX_8x1x1, AVX_4x2x1
 from elliptic_types import Curve, PointJ, BasisX
 
 from elliptic_arithmetic import double_n_four_jac

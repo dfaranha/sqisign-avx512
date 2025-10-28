@@ -1,4 +1,4 @@
-from theta_types import AVX_8x1x1, AVX_4x2x1
+from avx_types import AVX_8x1x1, AVX_4x2x1
 
 EVEN_INDICES = [
     (0, 0),
