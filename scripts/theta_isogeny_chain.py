@@ -3,7 +3,7 @@ from typing import Tuple
 from avx_types import AVX_8x1x1, AVX_4x2x1
 from elliptic_types import Curve, PointJ, BasisX
 
-from elliptic_arithmetic import double_n_four_jac
+from elliptic_arithmetic import four_double_n_jac
 from theta_gluing import lift_basis_to_jacobian, gluing_codomain, gluing_eval
 from theta_structure import (
     hadamard,
@@ -239,7 +239,7 @@ def theta_isogeny_chain_4x2x1(
     P2, Q2 = lift_basis_to_jacobian(E2, B2)
 
     # Obtain kernel points for gluing
-    P1_8, P2_8, Q1_8, Q2_8 = double_n_four_jac(E1, E2, P1, P2, Q1, Q2, n - 1)
+    P1_8, P2_8, Q1_8, Q2_8 = four_double_n_jac(E1, E2, P1, P2, Q1, Q2, n - 1)
 
     # Compute the gluing codomain
     OA, _, J, N = gluing_codomain(E1, E2, P1_8, P2_8, Q1_8, Q2_8)
@@ -315,7 +315,7 @@ def theta_isogeny_chain_8x1x1(
     P2, Q2 = lift_basis_to_jacobian(E2, B2)
 
     # Obtain kernel points for gluing
-    P1_8, P2_8, Q1_8, Q2_8 = double_n_four_jac(E1, E2, P1, P2, Q1, Q2, n - 1)
+    P1_8, P2_8, Q1_8, Q2_8 = four_double_n_jac(E1, E2, P1, P2, Q1, Q2, n - 1)
 
     # Compute the gluing codomain
     OA, _, J, N = gluing_codomain(E1, E2, P1_8, P2_8, Q1_8, Q2_8)

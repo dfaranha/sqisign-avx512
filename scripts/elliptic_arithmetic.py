@@ -30,6 +30,25 @@ def double_x(E: Curve, P: PointX) -> PointX:
     return PointX(X2, Z2)
 
 
+def four_double_x(A24: AVX_4x2x1, C24: AVX_4x2x1, X: AVX_4x2x1, Z: AVX_4x2x1):
+    """
+    Simultaneously double four X-only points where the X-coordinates of P1, Q1
+    P2, Q2 on E1 x E2 are stored within X (and Z resp.)
+    """
+    t0 = avx_add(X, Z)
+    t0 = avx_sqr(t0)
+    t1 = avx_sub(X, Z)
+    t1 = avx_sqr(t1)
+    t2 = avx_sub(t0, t1)
+    t1 = avx_pairwise_mul(t1, C24)
+    X2 = avx_pairwise_mul(t0, t1)
+    t0 = avx_pairwise_mul(t2, A24)
+    t0 = avx_add(t0, t1)
+    Z2 = avx_pairwise_mul(t0, t2)
+
+    return X2, Z2
+
+
 def double_jac(E: Curve, P: PointJ) -> PointJ:
     """
     Algorithm 8.11 of the SQISign spec.
@@ -207,7 +226,7 @@ def four_ws_to_jac(X, Y, Z, T, A12_over_3) -> tuple[PointJ]:
     return P1, P2, Q1, Q2
 
 
-def double_four_ws(
+def four_double_ws(
     X: AVX_4x2x1, Y: AVX_4x2x1, Z: AVX_4x2x1, T: AVX_4x2x1
 ) -> tuple[AVX_4x2x1]:
     """
@@ -240,7 +259,7 @@ def double_four_ws(
     return X3, Y3, Z3, T3
 
 
-def double_n_four_jac(
+def four_double_n_jac(
     E1: Curve, E2: Curve, P1: PointJ, P2: PointJ, Q1: PointJ, Q2: PointJ, n: int
 ) -> tuple[PointJ, PointJ, PointJ, PointJ]:
     # Convert four points into four AVX blobs of X, Y, Z and T coordinates
@@ -248,7 +267,7 @@ def double_n_four_jac(
 
     # Perform doubling n times in this AVX representation
     for _ in range(n):
-        X, Y, Z, U = double_four_ws(X, Y, Z, U)
+        X, Y, Z, U = four_double_ws(X, Y, Z, U)
 
     # Convert back to Jacobian points (out of AVX blobs)
     P1, P2, Q1, Q2 = four_ws_to_jac(X, Y, Z, U, A12_over_3)

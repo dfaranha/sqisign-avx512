@@ -1,6 +1,13 @@
 from avx_types import AVX_4x2x1
 
 
+def avx_neg(A: AVX_4x2x1) -> AVX_4x2x1:
+    """
+    Neg components of an AVX blob
+    """
+    return AVX_4x2x1(*[-a for a in A])
+
+
 def avx_add(A: AVX_4x2x1, B: AVX_4x2x1) -> AVX_4x2x1:
     """
     Add components of two AVX blobs
