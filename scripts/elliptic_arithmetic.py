@@ -1,4 +1,6 @@
 from elliptic_types import Curve, PointX, PointJ, PointW
+from avx_types import AVX_4x2x1
+from avx_arithmetic import avx_sqr, avx_pairwise_mul, avx_add, avx_sub, avx_dbl
 
 
 def double_x(E: Curve, P: PointX) -> PointX:
@@ -26,6 +28,25 @@ def double_x(E: Curve, P: PointX) -> PointX:
     Z2 = t0 * t2
 
     return PointX(X2, Z2)
+
+
+def four_double_x(A24: AVX_4x2x1, C24: AVX_4x2x1, X: AVX_4x2x1, Z: AVX_4x2x1):
+    """
+    Simultaneously double four X-only points where the X-coordinates of P1, Q1
+    P2, Q2 on E1 x E2 are stored within X (and Z resp.)
+    """
+    t0 = avx_add(X, Z)
+    t0 = avx_sqr(t0)
+    t1 = avx_sub(X, Z)
+    t1 = avx_sqr(t1)
+    t2 = avx_sub(t0, t1)
+    t1 = avx_pairwise_mul(t1, C24)
+    X2 = avx_pairwise_mul(t0, t1)
+    t0 = avx_pairwise_mul(t2, A24)
+    t0 = avx_add(t0, t1)
+    Z2 = avx_pairwise_mul(t0, t2)
+
+    return X2, Z2
 
 
 def double_jac(E: Curve, P: PointJ) -> PointJ:
@@ -149,6 +170,109 @@ def double_jac_n(E: Curve, P: PointJ, n: int):
     for _ in range(n):
         Q = double_ws(Q)  # 3M 5S
     return ws_to_jac(Q, A_over_3)
+
+
+def four_jac_to_ws(
+    E1: Curve, E2: Curve, P1: PointJ, P2: PointJ, Q1: PointJ, Q2: PointJ
+) -> tuple[AVX_4x2x1]:
+    assert E1.C.is_one()
+    assert E2.C.is_one()
+
+    A1_over_3 = E1.A / 3
+    A2_over_3 = E2.A / 3
+    A12_over_3 = AVX_4x2x1(A1_over_3, A1_over_3, A2_over_3, A2_over_3)
+
+    # a = 1 - A^2 / 3
+    one = AVX_4x2x1(1, 1, 1, 1)
+    a = AVX_4x2x1(E1.A, E1.A, E2.A, E2.A)
+    a = avx_pairwise_mul(a, A12_over_3)
+    a = avx_sub(one, a)
+
+    X = AVX_4x2x1(P1.X, Q1.X, P2.X, Q2.X)
+    Y = AVX_4x2x1(P1.Y, Q1.Y, P2.Y, Q2.Y)
+    Z = AVX_4x2x1(P1.Z, Q1.Z, P2.Z, Q2.Z)
+    Z2 = avx_sqr(Z)
+    Z4 = avx_sqr(Z2)
+
+    # X = X + Z^2 * A/3
+    # Y = Y
+    # Z = Z
+    # T = a * Z^4
+    tmp = avx_pairwise_mul(Z2, A12_over_3)
+    X = avx_add(X, tmp)
+    T = avx_pairwise_mul(Z4, a)
+
+    return X, Y, Z, T, A12_over_3
+
+
+def four_ws_to_jac(X, Y, Z, T, A12_over_3) -> tuple[PointJ]:
+    # X = P.X - P.Z**2 * A_over_3
+    # Y = P.Y
+    # Z = P.Z
+
+    tmp = avx_sqr(Z)
+    tmp = avx_pairwise_mul(tmp, A12_over_3)
+    X = avx_sub(X, tmp)
+
+    X1, X2, X3, X4 = X
+    Y1, Y2, Y3, Y4 = Y
+    Z1, Z2, Z3, Z4 = Z
+
+    P1 = PointJ(X1, Y1, Z1)
+    Q1 = PointJ(X2, Y2, Z2)
+    P2 = PointJ(X3, Y3, Z3)
+    Q2 = PointJ(X4, Y4, Z4)
+
+    return P1, P2, Q1, Q2
+
+
+def four_double_ws(
+    X: AVX_4x2x1, Y: AVX_4x2x1, Z: AVX_4x2x1, T: AVX_4x2x1
+) -> tuple[AVX_4x2x1]:
+    """
+    Simultaneous point doubling of four points on a short weierstrass curve
+    with modified Jacobian coordinates
+    """
+    XX = avx_sqr(X)
+    t0 = avx_sqr(Y)
+    A = avx_dbl(t0)
+    AA = avx_sqr(A)
+    U = avx_dbl(AA)
+    t0 = avx_add(X, A)
+    t0 = avx_sqr(t0)
+    t0 = avx_sub(t0, XX)
+    S = avx_sub(t0, AA)
+    t0 = avx_dbl(XX)
+    t0 = avx_add(t0, XX)
+    M = avx_add(t0, T)
+    t0 = avx_sqr(M)
+    t1 = avx_dbl(S)
+    X3 = avx_sub(t0, t1)
+    t0 = avx_sub(S, X3)
+    t0 = avx_pairwise_mul(M, t0)
+    Y3 = avx_sub(t0, U)
+    t0 = avx_pairwise_mul(Y, Z)
+    Z3 = avx_dbl(t0)
+    t0 = avx_pairwise_mul(U, T)
+    T3 = avx_dbl(t0)
+
+    return X3, Y3, Z3, T3
+
+
+def four_double_n_jac(
+    E1: Curve, E2: Curve, P1: PointJ, P2: PointJ, Q1: PointJ, Q2: PointJ, n: int
+) -> tuple[PointJ, PointJ, PointJ, PointJ]:
+    # Convert four points into four AVX blobs of X, Y, Z and T coordinates
+    X, Y, Z, U, A12_over_3 = four_jac_to_ws(E1, E2, P1, P2, Q1, Q2)
+
+    # Perform doubling n times in this AVX representation
+    for _ in range(n):
+        X, Y, Z, U = four_double_ws(X, Y, Z, U)
+
+    # Convert back to Jacobian points (out of AVX blobs)
+    P1, P2, Q1, Q2 = four_ws_to_jac(X, Y, Z, U, A12_over_3)
+
+    return P1, P2, Q1, Q2
 
 
 def add_components(E: Curve, P: PointJ, Q: PointJ):

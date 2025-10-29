@@ -1,5 +1,6 @@
 from elliptic_types import Curve, PointX, BasisX, PointJ
-from theta_types import AVX_4x2x1, AVX_8x1x1
+from avx_types import AVX_4x2x1, AVX_8x1x1
+from avx_arithmetic import avx_pairwise_mul, avx_add, avx_sub, avx_neg
 from theta_structure import (
     squaring,
     hadamard,
@@ -8,7 +9,7 @@ from theta_structure import (
 )
 from utilities import apply_isomorphism
 
-from elliptic_arithmetic import double_x, add_components
+from elliptic_arithmetic import four_double_x, add_components
 from utilities import batched_inversion, sqrt_fp2
 
 
@@ -58,89 +59,118 @@ def lift_basis_to_jacobian(E: Curve, basis: BasisX) -> tuple[PointJ, PointJ]:
     return P, Q
 
 
-def jacobian_to_xz(P: PointJ) -> PointX:
+def domain_to_avx(E1: Curve, E2: Curve):
     """
-    Convert a Jacobian point (X : Y : Z) to projective x-only (X : Z)
+    Helper function:
+
+    Convert the curves (A24 : C24) from 64 bit limbs
+    to two AVX4x2x1 blobs with coordinates
+    (A1_24, A1_24, A2_24, A2_24) and (C1_24, C1_24, C2_24, C2_24)
+    which are used for computing simultaneous doubles.
     """
-    X, _, Z = P
-    if Z.is_zero():
-        return PointX(Z.parent().one(), Z)
-    return PointX(X, Z * Z)
+    A24 = AVX_4x2x1(E1.A24, E1.A24, E2.A24, E2.A24)
+    C24 = AVX_4x2x1(E1.C24, E1.C24, E2.C24, E2.C24)
+
+    return A24, C24
 
 
-def gluing_kernel_to_x_only(
+def gluing_kernel_to_avx(
     P1: PointJ, P2: PointJ, Q1: PointJ, Q2: PointJ
 ) -> tuple[PointX, PointX, PointX, PointX]:
     """
     Helper function:
 
     Given the kernel ((P1, P2), (Q1, Q2)) map the Jacobian points
-    onto the Kummer Line ready for codomain computation
+    into two AVX4x2x1 blobs which hold the X and Z coordinates of
+    the points P1, Q1, P2, Q2
     """
-    xP1 = jacobian_to_xz(P1)
-    xP2 = jacobian_to_xz(P2)
-    xQ1 = jacobian_to_xz(Q1)
-    xQ2 = jacobian_to_xz(Q2)
+    PX1, _, PZ1 = P1
+    PX2, _, PZ2 = P2
+    QX1, _, QZ1 = Q1
+    QX2, _, QZ2 = Q2
 
-    return (xP1, xP2, xQ1, xQ2)
+    # Convert from 64 bit to 51 bit representation
+    X = AVX_4x2x1(PX1, QX1, PX2, QX2)
+    Z = AVX_4x2x1(PZ1, QZ1, PZ2, QZ2)
+    Z = squaring(Z)
+
+    return X, Z
 
 
-def _compute_matrix(X, Z, U, W, inv_det, inv_Z):
+def _compute_matrix(
+    X: AVX_4x2x1,
+    Z: AVX_4x2x1,
+    U: AVX_4x2x1,
+    W: AVX_4x2x1,
+    inv_det: AVX_4x2x1,
+    inv_Z: AVX_4x2x1,
+) -> tuple[AVX_4x2x1]:
     """
     Helper function:
 
     Subroutine to compute the matrix given data from action_by_translation
     """
-    d = U * Z * inv_det
-    b = -W * Z * inv_det
-    c = U * X * inv_det - X * inv_Z
-    a = -d
-    return (a, b, c, d)
+    # ======================================
+    # For the ith coordinate of X, Z, U, W we compute ai, bi, ci, di as:
+    # d = U * Z * inv_det
+    # b = -W * Z * inv_det
+    # c = U * X * inv_det - X * inv_Z
+    # a = -d
+
+    t1 = pairwise_multiplication(Z, inv_det)
+    D = pairwise_multiplication(U, t1)
+    B = pairwise_multiplication(W, t1)
+    B = avx_neg(B)
+    C = pairwise_multiplication(U, inv_det)
+    C = avx_sub(C, inv_Z)
+    C = pairwise_multiplication(C, X)
+    A = avx_neg(D)
+
+    a1, a2, a3, a4 = A
+    b1, b2, b3, b4 = B
+    c1, c2, c3, c4 = C
+    d1, d2, d3, d4 = D
+
+    g1 = AVX_4x2x1(a1, b1, c1, d1)
+    h1 = AVX_4x2x1(a2, b2, c2, d2)
+    g2 = AVX_4x2x1(a3, b3, c3, d3)
+    h2 = AVX_4x2x1(a4, b4, c4, d4)
+
+    return g1, g2, h1, h2
 
 
 def action_by_translation(
-    E1: Curve, E2: Curve, P1_4: PointX, P2_4: PointX, Q1_4: PointX, Q2_4: PointX
+    A24: AVX_4x2x1, C24: AVX_4x2x1, X_4: AVX_4x2x1, Z_4: AVX_4x2x1
 ):
     """
     Algorithm 8.36 of the SQISign spec.
 
     Compute the translation matrix induced by the generator of our order 4
     isotropic basis <(P1,P2)x(Q1,Q2)> in E_1 x E_2.
-
-    Args:
-        Pi, Qi are four torsion points on (E1 x E2)
-
-    Returns:
-        tuple: return the translation matrices corresponding to all input points
     """
-    XP1, ZP1 = P1_4
-    XQ1, ZQ1 = Q1_4
-    UP1, WP1 = double_x(E1, P1_4)
-    UQ1, WQ1 = double_x(E1, Q1_4)
-    dP1 = WP1 * XP1 - UP1 * ZP1
-    dQ1 = WQ1 * XQ1 - UQ1 * ZQ1
+    U, W = four_double_x(A24, C24, X_4, Z_4)
 
-    XP2, ZP2 = P2_4
-    XQ2, ZQ2 = Q2_4
-    UP2, WP2 = double_x(E2, P2_4)
-    UQ2, WQ2 = double_x(E2, Q2_4)
-    dP2 = WP2 * XP2 - UP2 * ZP2
-    dQ2 = WQ2 * XQ2 - UQ2 * ZQ2
+    t1 = pairwise_multiplication(W, X_4)
+    t2 = pairwise_multiplication(U, Z_4)
+    d = avx_sub(t1, t2)
 
-    # invert all determinants and z-coords
-    inverses = batched_inversion(*[dP1, dP2, dQ1, dQ2, ZP1, ZP2, ZQ1, ZQ2])
+    # invert all determinants and z-coords.
+    # TODO: this needs to be done with AVX operations or we need to convert
+    #       back to 64 bit limbs here...
+    ZP1, ZQ1, ZP2, ZQ2 = Z_4
+    dP1, dQ1, dP2, dQ2 = d
+    inverses = batched_inversion(*[dP1, dQ1, dP2, dQ2, ZP1, ZQ1, ZP2, ZQ2])
+    inv_det = AVX_4x2x1(*inverses[0:4])
+    inv_Z = AVX_4x2x1(*inverses[4:])
 
     # Compute matrices from points
-    g1 = _compute_matrix(XP1, ZP1, UP1, WP1, inverses[0], inverses[4])
-    g2 = _compute_matrix(XP2, ZP2, UP2, WP2, inverses[1], inverses[5])
-    h1 = _compute_matrix(XQ1, ZQ1, UQ1, WQ1, inverses[2], inverses[6])
-    h2 = _compute_matrix(XQ2, ZQ2, UQ2, WQ2, inverses[3], inverses[7])
+    g1, g2, h1, h2 = _compute_matrix(X_4, Z_4, U, W, inv_det, inv_Z)
 
     return g1, g2, h1, h2
 
 
 def theta_change_of_basis(
-    E1: Curve, E2: Curve, P1_4: PointX, P2_4: PointX, Q1_4: PointX, Q2_4: PointX
+    A24: AVX_4x2x1, C24: AVX_4x2x1, X_4: AVX_4x2x1, Z_4: AVX_4x2x1
 ) -> tuple[AVX_8x1x1, AVX_8x1x1]:
     """
     Algorithm 8.37 of the SQIsign spec.
@@ -155,32 +185,92 @@ def theta_change_of_basis(
     Returns:
         Matrix: the 4x4 change of basis matrix
     """
-    g1, g2, h1, h2 = action_by_translation(E1, E2, P1_4, P2_4, Q1_4, Q2_4)
+    g1, g2, h1, h2 = action_by_translation(A24, C24, X_4, Z_4)
 
-    t1 = g1[0] * h1[0] + g1[1] * h1[2]
-    t2 = g1[2] * h1[0] + g1[3] * h1[2]
-    t3 = g2[0] * h2[0] + g2[1] * h2[2]
-    t4 = g2[2] * h2[0] + g2[3] * h2[2]
+    # =======================================================
+    # The standard computation for this operation is given by
+    #
+    # t1 = g1[0] * h1[0] + g1[1] * h1[2]
+    # t2 = g1[2] * h1[0] + g1[3] * h1[2]
+    # t3 = g2[0] * h2[0] + g2[1] * h2[2]
+    # t4 = g2[2] * h2[0] + g2[3] * h2[2]
 
-    a = g1[0] * g2[0] + h1[0] * h2[0] + t1 * t3 + 1
-    b = g1[0] * g2[2] + h1[0] * h2[2] + t1 * t4
-    c = g1[2] * g2[0] + h1[2] * h2[0] + t2 * t3
-    d = g1[2] * g2[2] + h1[2] * h2[2] + t2 * t4
+    # a = g1[0] * g2[0] + h1[0] * h2[0] + t1 * t3 + 1
+    # b = g1[0] * g2[2] + h1[0] * h2[2] + t1 * t4
+    # c = g1[2] * g2[0] + h1[2] * h2[0] + t2 * t3
+    # d = g1[2] * g2[2] + h1[2] * h2[2] + t2 * t4
 
-    a1 = h2[0] * a + h2[1] * b
-    b1 = h2[2] * a + h2[3] * b
-    c1 = h2[0] * c + h2[1] * d
-    d1 = h2[2] * c + h2[3] * d
+    # a1 = h2[0] * a + h2[1] * b
+    # b1 = h2[2] * a + h2[3] * b
+    # c1 = h2[0] * c + h2[1] * d
+    # d1 = h2[2] * c + h2[3] * d
 
-    a2 = g1[0] * a + g1[1] * c
-    b2 = g1[0] * b + g1[1] * d
-    c2 = g1[2] * a + g1[3] * c
-    d2 = g1[2] * b + g1[3] * d
+    # a2 = g1[0] * a + g1[1] * c
+    # b2 = g1[0] * b + g1[1] * d
+    # c2 = g1[2] * a + g1[3] * c
+    # d2 = g1[2] * b + g1[3] * d
 
-    a3 = g1[0] * a1 + g1[1] * c1
-    b3 = g1[0] * b1 + g1[1] * d1
-    c3 = g1[2] * a1 + g1[3] * c1
-    d3 = g1[2] * b1 + g1[3] * d1
+    # a3 = g1[0] * a1 + g1[1] * c1
+    # b3 = g1[0] * b1 + g1[1] * d1
+    # c3 = g1[2] * a1 + g1[3] * c1
+    # d3 = g1[2] * b1 + g1[3] * d1
+    #
+    # We can do this using `pairwise_multiplication()` of AVX 4x2x1
+    # Blobs but there's a lot of memory management which I think might
+    # mean this is not ultimately slower...
+    # =======================================================
+    # Compute T = (t1, t2, t3, t4)
+    T0 = AVX_4x2x1(g1[0], g1[2], g2[0], g2[2])
+    T1 = AVX_4x2x1(h1[0], h1[0], h2[0], h2[0])
+    T = avx_pairwise_mul(T0, T1)
+    T0 = AVX_4x2x1(g1[1], g1[3], g2[1], g2[3])
+    T1 = AVX_4x2x1(h1[2], h1[2], h2[2], h2[2])
+    T2 = avx_pairwise_mul(T0, T1)
+    T = avx_add(T, T2)
+    t1, t2, t3, t4 = T
+
+    # Compute A0 = a, b, c, d
+    T0 = AVX_4x2x1(g1[0], g1[0], g1[2], g1[2])
+    T1 = AVX_4x2x1(g2[0], g2[2], g2[0], g2[2])
+    A0 = avx_pairwise_mul(T0, T1)
+    A0 = avx_add(
+        A0, AVX_4x2x1(1, 0, 0, 0)
+    )  # TODO: this would need special handling....
+    T1 = AVX_4x2x1(h1[0], h1[0], h1[2], h1[2])
+    T2 = AVX_4x2x1(h2[0], h2[2], h2[0], h2[2])
+    T3 = avx_pairwise_mul(T1, T2)
+    A0 = avx_add(A0, T3)
+    T1 = AVX_4x2x1(t1, t1, t2, t2)
+    T3 = AVX_4x2x1(t3, t4, t3, t4)
+    T4 = avx_pairwise_mul(T1, T3)
+    A0 = avx_add(A0, T4)
+    a, b, c, d = A0
+
+    # Compute A1 = a1, b1, c1, d1
+    A1 = AVX_4x2x1(a, a, c, c)
+    A1 = avx_pairwise_mul(A1, T2)  # T2 = AVX_4x2x1(h2[0], h2[2], h2[0], h2[2])
+    T1 = AVX_4x2x1(b, b, d, d)
+    T2 = AVX_4x2x1(h2[1], h2[3], h2[1], h2[3])
+    T3 = avx_pairwise_mul(T1, T2)
+    A1 = avx_add(A1, T3)
+    a1, b1, c1, d1 = A1
+
+    # Compute A2 = a2, b2, c2, d2
+    A2 = AVX_4x2x1(a, b, a, b)
+    A2 = avx_pairwise_mul(A2, T0)  # T0 = AVX_4x2x1(g1[0], g1[0], g1[2], g1[2])
+    T1 = AVX_4x2x1(g1[1], g1[1], g1[3], g1[3])
+    T2 = AVX_4x2x1(c, d, c, d)
+    T3 = avx_pairwise_mul(T1, T2)
+    A2 = avx_add(A2, T3)
+    a2, b2, c2, d2 = A2
+
+    # Compute A3 = a3, b3, c3, d3
+    A3 = AVX_4x2x1(a1, b1, a1, b1)
+    A3 = avx_pairwise_mul(A3, T0)  # T0 = AVX_4x2x1(g1[0], g1[0], g1[2], g1[2])
+    T2 = AVX_4x2x1(c1, d1, c1, d1)
+    T3 = avx_pairwise_mul(T1, T2)  # T1 = AVX_4x2x1(g1[1], g1[1], g1[3], g1[3])
+    A3 = avx_add(A3, T3)
+    a3, b3, c3, d3 = A3
 
     return (
         AVX_8x1x1(a, b, c, d, a1, b1, c1, d1),
@@ -188,27 +278,28 @@ def theta_change_of_basis(
     )
 
 
-def product_to_theta(P1: PointX, P2: PointX, N: tuple[AVX_8x1x1]) -> AVX_4x2x1:
+def product_to_theta(
+    X: AVX_4x2x1, Z: AVX_4x2x1, N: tuple[AVX_8x1x1]
+) -> tuple[AVX_4x2x1]:
     """
     Algorithm 8.38 of the SQISign spec.
-
-    Given a couple of point P in E1xE2, compute their representative in the theta model.
-
-    Args:
-        P (tuple): A couple of elliptic points in E1xE2
-        N (Matrix): the change of basis matrix describing our theta structure
-
-    Returns:
-        ThetaPoint: the image of theta structure
     """
     # extract X,Z coordinates on pairs of points
-    X1, Z1 = P1
-    X2, Z2 = P2
+    X1, X2, X3, X4 = X
+    Z1, Z2, Z3, Z4 = Z
 
-    # Pack into a ThetaPoint
-    P = AVX_4x2x1(X1 * X2, X1 * Z2, Z1 * X2, Z1 * Z2)
+    t1 = AVX_4x2x1(X1, X1, Z1, Z1)
+    t2 = AVX_4x2x1(X3, Z3, X3, Z3)
+    P1 = pairwise_multiplication(t1, t2)
 
-    return apply_isomorphism(P, N)
+    t1 = AVX_4x2x1(X2, X2, Z2, Z2)
+    t2 = AVX_4x2x1(X4, Z4, X4, Z4)
+    P2 = pairwise_multiplication(t1, t2)
+
+    P1 = apply_isomorphism(P1, N)
+    P2 = apply_isomorphism(P2, N)
+
+    return P1, P2
 
 
 def gluing_codomain(
@@ -222,21 +313,18 @@ def gluing_codomain(
     """
     Algorithm 8.39 of the SQIsign spec.
     """
-    # Convert from the Jacobian points to x-only
-    xP1_8, xP2_8, xQ1_8, xQ2_8 = gluing_kernel_to_x_only(P1_8, P2_8, Q1_8, Q2_8)
+    # Convert from the Jacobian points to x-only and from 64 to 51 bit limbs
+    A24, C24 = domain_to_avx(E1, E2)
+    X_8, Z_8 = gluing_kernel_to_avx(P1_8, P2_8, Q1_8, Q2_8)
 
     # Double points to recover 4-torsion for change of basis
-    xP1_4 = double_x(E1, xP1_8)
-    xP2_4 = double_x(E2, xP2_8)
-    xQ1_4 = double_x(E1, xQ1_8)
-    xQ2_4 = double_x(E2, xQ2_8)
+    X_4, Z_4 = four_double_x(A24, C24, X_8, Z_8)
 
     # Compute the change of basis for our theta structure
-    N = theta_change_of_basis(E1, E2, xP1_4, xP2_4, xQ1_4, xQ2_4)
+    N = theta_change_of_basis(A24, C24, X_4, Z_4)
 
     # Lift both 8-torsion points above the generator of our basis in the theta model.
-    P1 = product_to_theta(xP1_8, xP2_8, N)
-    P2 = product_to_theta(xQ1_8, xQ2_8, N)
+    P1, P2 = product_to_theta(X_8, Z_8, N)
 
     # compute their dual-image.
     P1 = squaring(P1)
@@ -245,7 +333,6 @@ def gluing_codomain(
     P1 = hadamard(P1)
     P2 = hadamard(P2)
 
-    # TODO: do parallel things below
     X1, Y1, Z1, W1 = P1
     X2, _, Z2, W2 = P2
     if not (W1.is_zero() and W2.is_zero()):
@@ -308,6 +395,16 @@ def gluing_eval(
 ) -> AVX_4x2x1:
     """
     Algorithm 8.40 of the SQIsign spec.
+
+    For limb design, the current choice is to accept PointJ which are made of
+    three coordinates assumed to have 64-bit limb representation.
+
+    These points are passed into `add_components()` which yield three fp2 coordinates
+    each and we compute the cartesian product of these to get 9 total coordinates.
+
+    These coordinates are converted fro 64 to 51 bit limbs and packed into
+    the AVX4x2x1 blobs which are ThetaPoints. These theta points should stay
+    with 51 bit limb representations until splitting into PointX coordinates.
     """
     # Unpack x, y from the Theta Point
     # J = (x : x : y : y)
@@ -343,6 +440,7 @@ def gluing_eval(
     # pairwise_multiplication and then addition as well.
     # ============================================================
 
+    # Here we convert from 64 bit to 51 bit limb representations.
     U = AVX_4x2x1(u1 * u2 + v1 * v2, u1 * w2, w1 * u2, w1 * w2)
     V = AVX_4x2x1(v1 * u2 + u1 * v2, v1 * w2, w1 * v2, 0)
 

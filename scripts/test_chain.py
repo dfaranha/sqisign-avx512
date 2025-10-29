@@ -66,7 +66,6 @@ domain = (E1, E2)
 kernel = (B1, B2)
 
 for isogeny_algorithm in [theta_isogeny_chain_4x2x1, theta_isogeny_chain_8x1x1]:
-
     (A3, C3), (A4, C4), images = isogeny_algorithm(
         domain, kernel, length, [(P1, P2), (Q1, Q2)]
     )
