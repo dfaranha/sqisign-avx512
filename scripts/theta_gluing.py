@@ -1,6 +1,6 @@
 from elliptic_types import Curve, PointX, BasisX, PointJ
 from avx_types import AVX_4x2x1, AVX_8x1x1
-from avx_arithmetic import avx_pairwise_mul, avx_add, avx_sub, avx_neg
+from avx_arithmetic import avx_sqr, avx_pairwise_mul, avx_add, avx_sub, avx_neg
 from theta_structure import (
     squaring,
     hadamard,
@@ -102,60 +102,57 @@ def _compute_matrix(
     Z: AVX_4x2x1,
     U: AVX_4x2x1,
     W: AVX_4x2x1,
-    D: AVX_4x2x1,
+    det: AVX_4x2x1,
 ) -> tuple[AVX_4x2x1]:
     """
     Helper function:
 
     Subroutine to compute the matrix given data from action_by_translation
     Uses an alternative projective representation to avoid all inversions.
+
+    With inverses precomputed we need five calls to "pairwise_mul" so there
+    is an extra cost of a single avx_sqr call
     """
-    # ======================================
+    # ============================================================================
     # For the ith coordinate of X, Z, U, W we compute ai, bi, ci, di as:
     # d = U * Z * inv_det
     # b = -W * Z * inv_det
     # c = U * X * inv_det - X * inv_Z
     # a = -d
+    #
+    # We want to work projectively here to remove the inversion.
+    #
+    # So let's write this with a (1 / det * Z) outside the front.
+    # (1 / det * Z)  [- U * Z^2              -W * Z^2]
+    #                [  U * X * Z - X * det   U * Z^2]
+    # We can then return the matrix along with the projective factor.
+    # ============================================================================
 
-    # We want to work projectively here to remove the inversion. So let's write this
-    # with a (1 / det * Z) outside the front.
-    # (1 / det * Z)  [- U * Z^2               W * Z^2]
-    #                [  U* X * Z - X * det    U * Z^2]
+    Z_sqr = avx_sqr(Z)
+    D = avx_pairwise_mul(U, Z_sqr)
+    B = avx_pairwise_mul(W, Z_sqr)
+    B = avx_neg(B)
+    C = avx_pairwise_mul(U, Z)
+    C = avx_sub(C, det)
+    C = avx_pairwise_mul(X, C)
+    A = avx_neg(D)
+    pi = avx_pairwise_mul(Z, det)
 
-    X1, X2, X3, X4 = X
-    Z1, Z2, Z3, Z4 = Z
-    U1, U2, U3, U4 = U
-    W1, W2, W3, W4 = W
-    D1, D2, D3, D4 = D
+    # TODO:
+    # Memory management from the ai, bi, ci, di to the
+    # matrix gi, hi, can be totally avoided as theta_change_of_basis
+    # unpacks these anyway.
+    a1, a2, a3, a4 = A
+    b1, b2, b3, b4 = B
+    c1, c2, c3, c4 = C
+    d1, d2, d3, d4 = D
 
-    g1 = AVX_4x2x1(-U1 * Z1**2, -W1 * Z1**2, U1 * X1 * Z1 - X1 * D1, U1 * Z1**2)
-    h1 = AVX_4x2x1(-U2 * Z2**2, -W2 * Z2**2, U2 * X2 * Z2 - X2 * D2, U2 * Z2**2)
-    g2 = AVX_4x2x1(-U3 * Z3**2, -W3 * Z3**2, U3 * X3 * Z3 - X3 * D3, U3 * Z3**2)
-    h2 = AVX_4x2x1(-U4 * Z4**2, -W4 * Z4**2, U4 * X4 * Z4 - X4 * D4, U4 * Z4**2)
-    pi = pairwise_multiplication(Z, D)
+    g1 = AVX_4x2x1(a1, b1, c1, d1)
+    h1 = AVX_4x2x1(a2, b2, c2, d2)
+    g2 = AVX_4x2x1(a3, b3, c3, d3)
+    h2 = AVX_4x2x1(a4, b4, c4, d4)
 
     return g1, g2, h1, h2, pi
-
-    # t1 = pairwise_multiplication(Z, inv_det)
-    # D = pairwise_multiplication(U, t1)
-    # B = pairwise_multiplication(W, t1)
-    # B = avx_neg(B)
-    # C = pairwise_multiplication(U, inv_det)
-    # C = avx_sub(C, inv_Z)
-    # C = pairwise_multiplication(C, X)
-    # A = avx_neg(D)
-
-    # a1, a2, a3, a4 = A
-    # b1, b2, b3, b4 = B
-    # c1, c2, c3, c4 = C
-    # d1, d2, d3, d4 = D
-
-    # g1 = AVX_4x2x1(a1, b1, c1, d1)
-    # h1 = AVX_4x2x1(a2, b2, c2, d2)
-    # g2 = AVX_4x2x1(a3, b3, c3, d3)
-    # h2 = AVX_4x2x1(a4, b4, c4, d4)
-
-    # return g1, g2, h1, h2
 
 
 def action_by_translation(
