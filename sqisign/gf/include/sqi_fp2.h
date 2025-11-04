@@ -97,12 +97,22 @@ fp2_neg(fp2_t *x, const fp2_t *y)
     fp_neg(&(x->im), &(y->im));
 }
 
+/**
+ * if ct1 = 1, it multiplies by i
+ * if ct1 = 0, it multiplies by -i
+ */
 static inline void
-fp2_muli(fp2_t *x, const fp2_t *y)
+fp2_mul_i(fp2_t *x, const fp2_t *y, uint32_t ctl)
 {
-    fp_neg(&x->re, &y->im);
-    x->im = y->re; 
+    fp_t t0, t1;
+
+    fp_neg(&t0, &(y->re));
+    fp_neg(&t1, &(y->im));
+    fp_select(&(x->re), &(y->im), &t1, -ctl);
+    fp_select(&(x->im), &t0, &(y->re), -ctl);
 }
+
+
 
 // #ifndef NO_FP2X_MUL
 // static inline void

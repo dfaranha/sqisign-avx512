@@ -107,7 +107,7 @@ bool test_fp2(int iterations)
 
         // a - a == 0
         fp2_sub_8x1x1(d, a, a);
-        if (fp2_is_equal_8x1x1(d, zero) != 0xff) {
+        if (fp2_is_zero_8x1x1(d) != 0xff) {
             passed = 0;
             break;
         }
@@ -152,7 +152,7 @@ bool test_fp2(int iterations)
         // a + (-a) == 0
         fp2_neg_8x1x1(d, a);
         fp2_add_8x1x1(e, a, d);
-        if (fp2_is_equal_8x1x1(e, zero) != 0xff) {
+        if (fp2_is_zero_8x1x1(e) != 0xff) {
             passed = 0;
             break;
         }
@@ -177,7 +177,7 @@ bool test_fp2(int iterations)
 
         // -0 == 0
         fp2_neg_8x1x1(d, zero);
-        if (fp2_is_equal_8x1x1(d, zero) != 0xff) {
+        if (fp2_is_zero_8x1x1(d) != 0xff) {
             passed = 0;
             break;
         }
@@ -202,7 +202,7 @@ bool test_fp2(int iterations)
 
         //  a * 0  == 0
         fp2_mul_8x1x1(d, a, zero);
-        if (fp2_is_equal_8x1x1(d, zero) != 0xff) {
+        if (fp2_is_zero_8x1x1(d) != 0xff) {
             passed = 0;
             break;
         }
@@ -272,7 +272,7 @@ bool test_fp2(int iterations)
 
         // 0^2 == 0
         fp2_sqr_8x1x1(d, zero);
-        if (fp2_is_equal_8x1x1(d, zero) != 0xff) {
+        if (fp2_is_zero_8x1x1(d) != 0xff) {
             passed = 0;
             break;
         }
@@ -421,7 +421,7 @@ bool test_fp2(int iterations)
 
         // a - a == 0
         fp2_sub_4x1x2(d, a, a);
-        if (fp2_is_equal_4x1x2(d, zero) != 0xf) {
+        if (fp2_is_zero_4x1x2(d) != 0xf) {
             passed = 0;
             break;
         }
@@ -466,7 +466,7 @@ bool test_fp2(int iterations)
         // a + (-a) == 0
         fp2_neg_4x1x2(d, a);
         fp2_add_4x1x2(e, a, d);
-        if (fp2_is_equal_4x1x2(e, zero) != 0xf) {
+        if (fp2_is_zero_4x1x2(e) != 0xf) {
             passed = 0;
             break;
         }
@@ -491,7 +491,7 @@ bool test_fp2(int iterations)
 
         // -0 == 0
         fp2_neg_4x1x2(d, zero);
-        if (fp2_is_equal_4x1x2(d, zero) != 0xf) {
+        if (fp2_is_zero_4x1x2(d) != 0xf) {
             passed = 0;
             break;
         }
@@ -514,7 +514,7 @@ bool test_fp2(int iterations)
 
         //  a * 0  == 0
         fp2_mul_4x1x2(d, a, zero);
-        if (fp2_is_equal_4x1x2(d, zero) != 0xf) {
+        if (fp2_is_zero_4x1x2(d) != 0xf) {
             passed = 0;
             break;
         }
@@ -584,7 +584,7 @@ bool test_fp2(int iterations)
 
         // 0^2 == 0
         fp2_sqr_4x1x2(d, zero);
-        if (fp2_is_equal_4x1x2(d, zero) != 0xf) {
+        if (fp2_is_zero_4x1x2(d) != 0xf) {
             passed = 0;
             break;
         }
@@ -710,7 +710,7 @@ bool test_fp2(int iterations)
 
         // a - a == 0
         fp2_sub_4x2x1(d, a, a);
-        if (fp2_is_equal_4x2x1(d, zero) != 0xf) {
+        if (fp2_is_zero_4x2x1(d) != 0xf) {
             passed = 0;
             break;
         }
@@ -755,7 +755,7 @@ bool test_fp2(int iterations)
         // a + (-a) == 0
         fp2_neg_4x2x1(d, a);
         fp2_add_4x2x1(e, a, d);
-        if (fp2_is_equal_4x2x1(e, zero) != 0xf) {
+        if (fp2_is_zero_4x2x1(e) != 0xf) {
             passed = 0;
             break;
         }
@@ -780,7 +780,7 @@ bool test_fp2(int iterations)
 
         // -0 == 0
         fp2_neg_4x2x1(d, zero);
-        if (fp2_is_equal_4x2x1(d, zero) != 0xf) {
+        if (fp2_is_zero_4x2x1(d) != 0xf) {
             passed = 0;
             break;
         }
@@ -805,7 +805,7 @@ bool test_fp2(int iterations)
 
         //  a * 0  == 0
         fp2_mul_4x2x1(d, a, zero);
-        if (fp2_is_equal_4x2x1(d, zero) != 0xf) {
+        if (fp2_is_zero_4x2x1(d) != 0xf) {
             passed = 0;
             break;
         }
@@ -875,7 +875,7 @@ bool test_fp2(int iterations)
 
         // 0^2 == 0
         fp2_sqr_4x2x1(d, zero);
-        if (fp2_is_equal_4x2x1(d, zero) != 0xf) {
+        if (fp2_is_zero_4x2x1(d) != 0xf) {
             passed = 0;
             break;
         }
@@ -1032,7 +1032,7 @@ bool test_fp2(int iterations)
 
         // a - a == 0
         fp2_sub_2x2x2(d, a, a);
-        if (fp2_is_equal_2x2x2(d, zero) != 0x3) {
+        if (fp2_is_zero_2x2x2(d) != 0x3) {
             passed = 0;
             break;
         }
@@ -1077,7 +1077,7 @@ bool test_fp2(int iterations)
         // a + (-a) == 0
         fp2_neg_2x2x2(d, a);
         fp2_add_2x2x2(e, a, d);
-        if (fp2_is_equal_2x2x2(e, zero) != 0x3) {
+        if (fp2_is_zero_2x2x2(e) != 0x3) {
             passed = 0;
             break;
         }
@@ -1102,7 +1102,7 @@ bool test_fp2(int iterations)
 
         // -0 == 0
         fp2_neg_2x2x2(d, zero);
-        if (fp2_is_equal_2x2x2(d, zero) != 0x3) {
+        if (fp2_is_zero_2x2x2(d) != 0x3) {
             passed = 0;
             break;
         }
@@ -1127,7 +1127,7 @@ bool test_fp2(int iterations)
 
         //  a * 0  == 0
         fp2_mul_2x2x2(d, a, zero);
-        if (fp2_is_equal_2x2x2(d, zero) != 0x3) {
+        if (fp2_is_zero_2x2x2(d) != 0x3) {
             passed = 0;
             break;
         }
@@ -1197,7 +1197,7 @@ bool test_fp2(int iterations)
 
         // 0^2 == 0
         fp2_sqr_2x2x2(d, zero);
-        if (fp2_is_equal_2x2x2(d, zero) != 0x3) {
+        if (fp2_is_zero_2x2x2(d) != 0x3) {
             passed = 0;
             break;
         }
@@ -1331,7 +1331,7 @@ bool test_fp2(int iterations)
 
         // a - a == 0
         fp2_sub_2x4x1(d, a, a);
-        if (fp2_is_equal_2x4x1(d, zero) != 0x3) {
+        if (fp2_is_zero_2x4x1(d) != 0x3) {
             passed = 0;
             break;
         }
@@ -1376,7 +1376,7 @@ bool test_fp2(int iterations)
         // a + (-a) == 0
         fp2_neg_2x4x1(d, a);
         fp2_add_2x4x1(e, a, d);
-        if (fp2_is_equal_2x4x1(e, zero) != 0x3) {
+        if (fp2_is_zero_2x4x1(e) != 0x3) {
             passed = 0;
             break;
         }
@@ -1401,7 +1401,7 @@ bool test_fp2(int iterations)
 
         // -0 == 0
         fp2_neg_2x4x1(d, zero);
-        if (fp2_is_equal_2x4x1(d, zero) != 0x3) {
+        if (fp2_is_zero_2x4x1(d) != 0x3) {
             passed = 0;
             break;
         }
@@ -1426,7 +1426,7 @@ bool test_fp2(int iterations)
 
         //  a * 0  == 0
         fp2_mul_2x4x1(d, a, zero);
-        if (fp2_is_equal_2x4x1(d, zero) != 0x3) {
+        if (fp2_is_zero_2x4x1(d) != 0x3) {
             passed = 0;
             break;
         }
@@ -1496,7 +1496,7 @@ bool test_fp2(int iterations)
 
         // 0^2 == 0
         fp2_sqr_2x4x1(d, zero);
-        if (fp2_is_equal_2x4x1(d, zero) != 0x3) {
+        if (fp2_is_zero_2x4x1(d) != 0x3) {
             passed = 0;
             break;
         }
@@ -1562,7 +1562,7 @@ bool test_fp2(int iterations)
         for(int j = 0; j < 16; j++) {
             e[j] = VAND(d[j], t);
         }
-        if(fp2_is_equal_8x1x1(e, zero) != 0xff) {
+        if(fp2_is_zero_8x1x1(e) != 0xff) {
             passed = 0;
             break;
         }
@@ -1603,7 +1603,7 @@ bool test_fp2(int iterations)
         for(int j = 0; j < 8; j++) {
             e[j] = VAND(d[j], t);
         }
-        if(fp2_is_equal_4x2x1(e, zero) != 0xf) {
+        if(fp2_is_zero_4x2x1(e) != 0xf) {
             passed = 0;
             break;
         }
@@ -1645,7 +1645,7 @@ bool test_fp2(int iterations)
         for (int j = 0; j < 16; j++) {
             e[j] = VAND(d[j], t);
         }
-        if (fp2_is_equal_8x1x1(e, zero) != 0xff) {
+        if (fp2_is_zero_8x1x1(e) != 0xff) {
             passed = 0;
             break;
         }
@@ -1724,7 +1724,7 @@ bool test_fp2(int iterations)
         for (int j = 0; j < 8; j++) {
             e[j] = VAND(d[j], t);
         }
-        if (fp2_is_equal_4x2x1(e, zero) != 0xf) {
+        if (fp2_is_zero_4x2x1(e) != 0xf) {
             passed = 0;
             break;
         }
@@ -1798,7 +1798,7 @@ bool test_fp2(int iterations)
             d[j] = VAND(d[j], t);
             f[j] = VAND(f[j], t);
         }
-        if (fp2_is_equal_8x1x1(d, zero) != 0xff || fp2_is_equal_8x1x1(f, zero) != 0xff) {
+        if (fp2_is_zero_8x1x1(d) != 0xff || fp2_is_zero_8x1x1(f) != 0xff) {
             passed = 0;
             break;
         }
@@ -1885,7 +1885,7 @@ bool test_fp2(int iterations)
             d[j] = VAND(d[j], t);
             f[j] = VAND(f[j], t);
         }
-        if (fp2_is_equal_4x2x1(d, zero) != 0xf || fp2_is_equal_4x2x1(f, zero) != 0xf) {
+        if (fp2_is_zero_4x2x1(d) != 0xf || fp2_is_zero_4x2x1(f) != 0xf) {
             passed = 0;
             break;
         }

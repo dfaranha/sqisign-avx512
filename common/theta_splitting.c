@@ -106,11 +106,11 @@ void splitting_apply_isomorphism(__m512i* res, int* matrix, __m512i* null)
                 fp2_sub(res_unvec+i, res_unvec+i, null_unvec+j);
             }
             if (matrix_entry == 5) {
-                fp2_muli(&tmp, null_unvec+j);
+                fp2_mul_i(&tmp, null_unvec+j, 1);
                 fp2_add(res_unvec+i, res_unvec+i, &tmp);
             }
             if (matrix_entry == 7) {
-                fp2_muli(&tmp, null_unvec+j);
+                fp2_mul_i(&tmp, null_unvec+j, 1);
                 fp2_sub(res_unvec+i, res_unvec+i, &tmp);
             }
         }
@@ -148,4 +148,24 @@ void splitting_theta_to_product(__m512i* product, __m512i* null)
     //TODO: Python code checks that a * d = b * c and that C1, C2 != 0.
 
     fp2_unvectorized_to_4x2x1(product, product_unvec);
+}
+
+void splitting_theta_point_to_mont(__m512i* mont_points, __m512i* theta_point, __m512i* null)
+{
+    printf("splitting is zero %d\n", fp2_is_zero_4x2x1(theta_point));
+    fp2_t theta_point_unvec[4], null_unvec[4], mont_points_unvec[4], m1, m2, m3, m4;
+    fp2_4x2x1_to_unvectorized(theta_point_unvec, theta_point); // theta = (x, y, z, _)
+    fp2_4x2x1_to_unvectorized(null_unvec, null); // null = (a, b, c, _)
+
+    fp2_mul(&m1, null_unvec, theta_point_unvec+1); // a*y
+    fp2_mul(&m2, null_unvec, theta_point_unvec+2); // a*z
+    fp2_mul(&m3, null_unvec+1, theta_point_unvec); // b*x
+    fp2_mul(&m4, null_unvec+2, theta_point_unvec); // c*x
+
+    fp2_add(mont_points_unvec, &m2, &m4);   // X1 = a * z + c * x
+    fp2_add(mont_points_unvec+1, &m1, &m3); // X2 = a * y + b * x
+    fp2_sub(mont_points_unvec+2, &m2, &m4); // Z1 = a * z - c * x
+    fp2_sub(mont_points_unvec+3, &m1, &m3); // Z2 = a * y  - b * x TODO: python script says m2 - m3, but this is a typo
+
+    fp2_unvectorized_to_4x2x1(mont_points, mont_points_unvec);
 }

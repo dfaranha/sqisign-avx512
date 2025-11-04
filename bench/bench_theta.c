@@ -4,6 +4,7 @@
 #include "fp2_lvl3.h"
 #include "theta.h"
 #include "utils.h"
+#include "KAT.h"
 
 #define N_RUNS 10
 
@@ -11,7 +12,7 @@ void bench_theta(int iterations)
 {
     uint64_t cycles[N_RUNS];
     uint64_t start, end, tmp;
-    __m512i a[16], b[16], c[16], d[16];
+    __m512i a[16], b[16], c[16], d[16], e[16], f[16];
     rand_fp2_8x1x1(a);
     rand_fp2_8x1x1(b);
     rand_fp2_8x1x1(c);
@@ -98,16 +99,20 @@ void bench_theta(int iterations)
     print_bench_res("eval (h1, h2 = 0, 1)", cycles[(N_RUNS/2) -1], tmp);
 
     // chain
+    fp2_tomont_4x2x1(KAT_OA, KAT_OA);
+    fp2_tomont_4x2x1(KAT_KER_P1, KAT_KER_P1);
+    fp2_tomont_4x2x1(KAT_KER_P2, KAT_KER_P2);
+
     int n = 188 - 1;
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        theta_isogeny_chain_single(a, b, c, d, n);
+        theta_isogeny_chain_single(a, b, KAT_OA, KAT_KER_P1, KAT_KER_P2, c, n, 0);
         end = cpucycles();
         cycles[i] = (end - start);
     }
     tmp = fp2_is_equal_4x2x1(a, b);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("chain n = 187, 10 runs", cycles[(N_RUNS/2)-1], tmp);
+    print_bench_res("chain n = 187, num_points = 0, 10 runs", cycles[(N_RUNS/2)-1], tmp);
 
     printf("Theta pair benchmarks:\n");
 

@@ -72,10 +72,10 @@ void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
  * Compute the (2^n, 2^n)-isogeny chain defined by the theta points a and b, and outputs the codomain.
  * There is no gluing step, we assume the points are already in theta-coordinates.
  * @param null The theta null point of the domain.
- * @param a, b The points of order 2^(n+2) defining the isogeny.
+ * @param ker_a, ker_b The points of order 2^(n+2) defining the isogeny.
  * @param n The length of the isogeny chain.
  */
-void theta_isogeny_chain_single(__m512i* prod, __m512i* null, __m512i* a, __m512i* b, const int n);
+void theta_isogeny_chain_single(__m512i* prod, __m512i* eval_pts, __m512i* null, __m512i* ker_a, __m512i* ker_b, __m512i* pts, const int n, const int num_pts);
 
 // ======================================================================================================
 //                                                 Pair
@@ -134,9 +134,9 @@ void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2);
  * Compute the (2^n, 2^n)-isogeny chain defined by the theta points a and b, and outputs the codomain.
  * There is no gluing step, we assume the points are already in theta-coordinates.
  * @param null The theta null point of the domain.
- * @param ab The points of order 2^(n+2) defining the isogeny, stored in the 8x1x1 format.
+ * @param ker The points of order 2^(n+2) defining the isogeny, stored in the 8x1x1 format.
  * @param n The length of the isogeny chain.
  */
-void theta_isogeny_chain_pair(__m512i* prod, __m512i* null, __m512i* ab, const int n);
+void theta_isogeny_chain_pair(__m512i* codom, __m512i* null, __m512i* ker, const int n);
 
 #endif

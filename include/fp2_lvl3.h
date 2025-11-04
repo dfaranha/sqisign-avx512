@@ -28,6 +28,11 @@ void fp2_copy_8x1x1(__m512i* res, __m512i* a);
  */
 int fp2_is_equal_8x1x1(__m512i* a, __m512i* b);
 
+/**
+ *   Returns an 8-bit mask. The i-th bit is 1 iff the i-th Fp2 element is zero
+ */
+int fp2_is_zero_8x1x1(__m512i* a);
+
 void fp2_add_8x1x1(__m512i* res, __m512i* a, __m512i* b);
 
 void fp2_sub_8x1x1(__m512i* res, __m512i* a, __m512i* b);
@@ -59,10 +64,16 @@ void fp2_frommont_8x1x1(__m512i*res, __m512i* a);
 
 void fp2_setzero_4x1x2(__m512i* res);
 void fp2_copy_4x1x2(__m512i* res, __m512i* a);
+
 /**
  *   Returns a 4-bit mask. The ith bit is 1 iff the i-th Fp2 elements are equal
  */
  int fp2_is_equal_4x1x2(__m512i* a, __m512i* b);
+
+ /**
+ *   Returns a 4-bit mask. The ith bit is 1 iff the i-th Fp2 element is zero
+ */
+ int fp2_is_zero_4x1x2(__m512i* a);
 
  void fp2_add_4x1x2(__m512i* res, __m512i* a, __m512i* b);
  
@@ -90,10 +101,16 @@ void fp2_copy_4x1x2(__m512i* res, __m512i* a);
 
 void fp2_setzero_4x2x1(__m512i* res);
 void fp2_copy_4x2x1(__m512i* res, __m512i* a);
+
 /**
  *   Returns a 4-bit mask. The ith bit is 1 iff the i-th Fp2 elements are equal
  */
 int fp2_is_equal_4x2x1(__m512i* a, __m512i* b);
+
+/**
+ *   Returns a 4-bit mask. The ith bit is 1 iff the i-th Fp2 element is zero
+ */
+int fp2_is_zero_4x2x1(__m512i* a);
 
 void fp2_add_4x2x1(__m512i* res, __m512i* a, __m512i* b);
 
@@ -129,6 +146,11 @@ void fp2_copy_2x2x2(__m512i* res, __m512i* a);
  */
 int fp2_is_equal_2x2x2(__m512i* a, __m512i* b);
 
+/**
+ *   Returns a 2-bit mask. The ith bit is 1 iff the i-th Fp2 element is zero
+ */
+int fp2_is_zero_2x2x2(__m512i* a);
+
 void fp2_add_2x2x2(__m512i* res, __m512i* a, __m512i* b);
 
 void fp2_sub_2x2x2(__m512i* res, __m512i* a, __m512i* b);
@@ -159,8 +181,12 @@ void fp2_frommont_2x2x2(__m512i*res, __m512i* a);
  /**
   *   Returns a 2-bit mask. The ith bit is 1 iff the i-th Fp2 elements are equal
   */
-
 int fp2_is_equal_2x4x1(__m512i* a, __m512i* b);
+
+/**
+  *   Returns a 2-bit mask. The ith bit is 1 iff the i-th Fp2 element is zero
+  */
+int fp2_is_zero_2x4x1(__m512i* a);
 
 void fp2_add_2x4x1(__m512i* res, __m512i* a, __m512i* b);
 

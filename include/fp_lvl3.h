@@ -51,6 +51,11 @@ void fp_duplicate_8x1(__m512i* res, const uint64_t* a);
 int fp_is_equal_8x1(__m512i* a, __m512i* b);
 
 /**
+ *   Returns an 8-bit mask which is 1 iff the i-th Fp elements are equal
+ */
+int fp_is_zero_8x1(__m512i* a);
+
+/**
  *  res = a + b (mod p)
  */
 void fp_add_8x1(__m512i* res, __m512i* a, __m512i* b);
@@ -115,6 +120,11 @@ void fp_duplicate_4x2(__m512i* res, const uint64_t* a);
  *   Returns a 4-bit mask which is 1 iff the i-th Fp elements are equal
  */
 int fp_is_equal_4x2(__m512i* a, __m512i* b);
+
+/**
+ *   Returns a 4-bit mask which is 1 iff the i-th Fp element is zero
+ */
+int fp_is_zero_4x2(__m512i* a);
 
 void fp_add_4x2(__m512i* res, __m512i* a, __m512i* b);
 

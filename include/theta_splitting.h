@@ -36,4 +36,15 @@ void splitting_apply_isomorphism(__m512i* res, int* matrix, __m512i* null);
 
 void splitting_theta_to_product(__m512i* product, __m512i* null);
 
+/**
+ * Given a theta null point OA in a compatible form with splitting, compute
+ * P1, P2 in E1 x E2 on the corresponding product of Montgomery curves.
+ *
+ * TODO: can we use parallelism here?
+ * @param mont_points The output is (X_1, X_2, Z_1, Z_2) in the 4x2x1 format, where Pi = (Xi, Zi)
+ * @param theta_point The theta point in the 4x2x1 format
+ * @param null The theta null point
+ */
+void splitting_theta_point_to_mont(__m512i* mont_points, __m512i* theta_point, __m512i* null);
+
 #endif

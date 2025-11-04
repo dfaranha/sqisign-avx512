@@ -24,6 +24,13 @@ int fp2_is_equal_8x1x1(__m512i* a, __m512i* b)
     return lo & hi;
 }
 
+int fp2_is_zero_8x1x1(__m512i* a)
+{
+    int lo = fp_is_zero_8x1(a);
+    int hi = fp_is_zero_8x1(a+8);
+    return lo & hi;
+}
+
 void fp2_add_8x1x1(__m512i* res, __m512i* a, __m512i* b)
 {
     fp_add_8x1(res, a, b);
@@ -108,6 +115,13 @@ int fp2_is_equal_4x1x2(__m512i* a, __m512i* b)
     return lo & hi;
 }
 
+int fp2_is_zero_4x1x2(__m512i* a)
+{
+    int lo = fp_is_zero_4x2(a);
+    int hi = fp_is_zero_4x2(a+4);
+    return lo & hi;
+}
+
 void fp2_add_4x1x2(__m512i* res, __m512i* a, __m512i* b)
 {
     fp_add_4x2(res, a, b);
@@ -174,6 +188,13 @@ int fp2_is_equal_4x2x1(__m512i* a, __m512i* b)
 {
     int lo = fp_is_equal_4x2(a, b);
     int hi = fp_is_equal_4x2(a+4, b+4);
+    return lo & hi;
+}
+
+int fp2_is_zero_4x2x1(__m512i* a)
+{
+    int lo = fp_is_zero_4x2(a);
+    int hi = fp_is_zero_4x2(a+4);
     return lo & hi;
 }
 
@@ -257,6 +278,20 @@ int fp2_is_equal_2x2x2(__m512i* a, __m512i* b)
     return res;
 }
 
+int fp2_is_zero_2x2x2(__m512i* a)
+{
+    __m512i zero = VZERO();
+    __mmask8 mask, acc, res;
+    acc = 0xff;
+    for(int i = 0; i < 4; i++){
+        mask = VCMPEQ(a[i], zero);
+        acc = acc & mask;
+    }
+    res = (acc & (acc >> 1) & (acc >> 2) & (acc >> 3) & 0x1) 
+        | ((acc >> 3) & (acc >> 4) & (acc >> 5) & (acc >> 6) & 0x2);
+    return res;
+}
+
 void fp2_add_2x2x2(__m512i* res, __m512i* a, __m512i* b)
 {
     fp_add_4x2(res, a, b);
@@ -320,6 +355,20 @@ int fp2_is_equal_2x4x1(__m512i* a, __m512i* b)
     acc = 0xff;
     for(int i = 0; i < 4; i++){
         mask = VCMPEQ(a[i], b[i]);
+        acc = acc & mask;
+    }
+    res = (acc & (acc >> 2) & 0x1) 
+        | ((acc >> 3) & (acc >> 5) & 0x2);
+    return res;
+}
+
+int fp2_is_zero_2x4x1(__m512i* a)
+{
+    __m512i zero = VZERO();
+    __mmask8 mask, acc, res;
+    acc = 0xff;
+    for(int i = 0; i < 4; i++){
+        mask = VCMPEQ(a[i], zero);
         acc = acc & mask;
     }
     res = (acc & (acc >> 2) & 0x1) 

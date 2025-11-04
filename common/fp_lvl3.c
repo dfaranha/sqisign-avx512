@@ -49,6 +49,19 @@ int fp_is_equal_8x1(__m512i* a, __m512i* b)
     return acc;
 }
 
+// Assumes that elements are fully reduced mod p, so there is only one representative.
+int fp_is_zero_8x1(__m512i* a)
+{
+    __mmask8 mask, acc;
+    __m512i zero = VZERO();
+    acc = 0xFF;
+    for(int i = 0; i < 8; i++){
+        mask = VCMPEQ(a[i], zero);
+        acc = acc & mask;
+    }
+    return acc;
+}
+
 // Following AVX512 SIKE paper
 // Currently the arithmetic is mod p, 
 // I think they do mod 2p to not have to do the final step of the Montgomery reduction
@@ -769,6 +782,24 @@ int fp_is_equal_4x2(__m512i* a, __m512i* b)
     acc = 0xff;
     for(int i = 0; i < 4; i++){
         mask = VCMPEQ(a[i], b[i]);
+        acc = acc & mask;
+    }
+    // a = b iff both halfs are equal
+    res = (acc & (acc >> 1) & 0x1) 
+        | ((acc >> 1) & (acc >> 2) & 0x2) 
+        | ((acc >> 2) & (acc >> 3) & 0x4) 
+        | ((acc >> 3) & (acc >> 4) & 0x8);
+    return res;
+}
+
+// Assumes that elements are fully reduced mod p, so there is only one representative.
+int fp_is_zero_4x2(__m512i* a)
+{
+    __m512i zero = VZERO();
+    __mmask8 mask, acc, res;
+    acc = 0xff;
+    for(int i = 0; i < 4; i++){
+        mask = VCMPEQ(a[i], zero);
         acc = acc & mask;
     }
     // a = b iff both halfs are equal

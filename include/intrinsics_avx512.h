@@ -25,6 +25,7 @@
 // Comparison
 #define VCMPEQ(A, B) _mm512_cmpeq_epi64_mask(A, B) // DST is an 8-bit mask, where the i-th bit is 1 if the i-th limbs are equal
 #define VSIGN(A) _mm512_movepi64_mask(A) // DST is an 8-bit mask, where the i-th bit is 1 if the i-th limb has top bit 1
+#define VTEST(A, B) _mm512_test_epi64_mask(A, B) // DST is an 8-bit mask, where the i-th bit is 1 if A[i] & B[i] is non-zero.
 
 // Assignment
 #define VSET(A, B, C, D, E, F, G, H) _mm512_set_epi64(H, G, F, E, D, C, B, A) // DST = { A, B, C, D, E, F, G, H}

@@ -140,7 +140,7 @@ bool test_fp(int iterations)
 
         // a - a == 0
         fp_sub_8x1(d, a, a);
-        if (fp_is_equal_8x1(d, zero) != 0xff) {
+        if (fp_is_zero_8x1(d) != 0xff) {
             passed = 0;
             break;
         }
@@ -184,7 +184,7 @@ bool test_fp(int iterations)
         // a + (-a) == 0
         fp_neg_8x1(d, a);
         fp_add_8x1(e, a, d);
-        if (fp_is_equal_8x1(e, zero) != 0xff) {
+        if (fp_is_zero_8x1(e) != 0xff) {
             passed = 0;
             break;
         }
@@ -209,7 +209,7 @@ bool test_fp(int iterations)
 
         // -0 == 0
         fp_neg_8x1(d, zero);
-        if (fp_is_equal_8x1(d, zero) != 0xff) {
+        if (fp_is_zero_8x1(d) != 0xff) {
             passed = 0;
             break;
         }
@@ -272,7 +272,7 @@ bool test_fp(int iterations)
 
         //  a * 0  == 0
         fp_mul_8x1(d, a, zero);
-        if (fp_is_equal_8x1(d, zero) != 0xff) {
+        if (fp_is_zero_8x1(d) != 0xff) {
             passed = 0;
             break;
         }
@@ -347,7 +347,7 @@ bool test_fp(int iterations)
 
         // 0^2 == 0
         fp_sqr_8x1(d, zero);
-        if (fp_is_equal_8x1(d, zero) != 0xff) {
+        if (fp_is_zero_8x1(d) != 0xff) {
             passed = 0;
             break;
         }
@@ -514,7 +514,7 @@ bool test_fp(int iterations)
 
         // a - a == 0
         fp_sub_4x2(d, a, a);
-        if (fp_is_equal_4x2(d, zero) != 0xf) {
+        if (fp_is_zero_4x2(d) != 0xf) {
             passed = 0;
             break;
         }
@@ -558,7 +558,7 @@ bool test_fp(int iterations)
         // a + (-a) == 0
         fp_neg_4x2(d, a);
         fp_add_4x2(e, a, d);
-        if (fp_is_equal_4x2(e, zero) != 0xf) {
+        if (fp_is_zero_4x2(e) != 0xf) {
             passed = 0;
             break;
         }
@@ -583,7 +583,7 @@ bool test_fp(int iterations)
 
         // -0 == 0
         fp_neg_4x2(d, zero);
-        if (fp_is_equal_4x2(d, zero) != 0xf) {
+        if (fp_is_zero_4x2(d) != 0xf) {
             passed = 0;
             break;
         }
@@ -636,7 +636,7 @@ bool test_fp(int iterations)
 
         //  a * 0  == 0
         fp_mul_4x2(d, a, zero);
-        if (fp_is_equal_4x2(d, zero) != 0xf) {
+        if (fp_is_zero_4x2(d) != 0xf) {
             passed = 0;
             break;
         }
@@ -711,7 +711,7 @@ bool test_fp(int iterations)
 
         // 0^2 == 0
         fp_sqr_4x2(d, zero);
-        if (fp_is_equal_4x2(d, zero) != 0xf) {
+        if (fp_is_zero_4x2(d) != 0xf) {
             passed = 0;
             break;
         }
