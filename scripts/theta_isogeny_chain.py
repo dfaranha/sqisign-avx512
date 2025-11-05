@@ -2,7 +2,12 @@ from avx_types import AVX_8x1x1
 from elliptic_types import Curve, PointJ, BasisX
 
 from elliptic_arithmetic import four_double_n_jac
-from theta_gluing import lift_basis_to_jacobian, gluing_codomain, gluing_eval
+from theta_gluing import (
+    lift_basis_to_jacobian,
+    gluing_codomain,
+    gluing_eval,
+    gluing_eval_pair,
+)
 from theta_isogeny import (
     theta_precompute,
     theta_double,
@@ -72,8 +77,6 @@ def theta_isogeny_chain_4x2x1(
     # Push kernel though the gluing isogeny
     for i in range(k):
         P1, P2, Q1, Q2 = strat_points[i]
-        # TODO: can we do something even faster here with a gluing_eval_pair
-        #       using 8x1x1 blocks?
         imP = gluing_eval(E1, E2, P1, P2, P1_8, P2_8, J, N)
         imQ = gluing_eval(E1, E2, Q1, Q2, P1_8, P2_8, J, N)
         strat_points[i] = (imP, imQ)
@@ -194,10 +197,7 @@ def theta_isogeny_chain_8x1x1(
     # Push kernel though the gluing isogeny
     for i in range(k):
         P1, P2, Q1, Q2 = strat_points[i]
-        # TODO: can we do something even faster here with a gluing_eval_pair
-        #       using 8x1x1 blocks?
-        imP = gluing_eval(E1, E2, P1, P2, P1_8, P2_8, J, N)
-        imQ = gluing_eval(E1, E2, Q1, Q2, P1_8, P2_8, J, N)
+        imP, imQ = gluing_eval_pair(E1, E2, P1, P2, Q1, Q2, P1_8, P2_8, J, N)
         imP_Q = AVX_8x1x1(*imP, *imQ)
         strat_points[i] = imP_Q
         orders[i] = orders[i] - 1

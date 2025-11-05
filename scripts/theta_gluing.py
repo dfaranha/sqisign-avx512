@@ -503,3 +503,70 @@ def gluing_eval(
     im_P = hadamard(im_P)
 
     return im_P
+
+
+def gluing_eval_pair(
+    E1: Curve,
+    E2: Curve,
+    P1: PointJ,
+    P2: PointJ,
+    Q1: PointJ,
+    Q2: PointJ,
+    T1_8: PointJ,
+    T2_8: PointJ,
+    J: AVX_4x2x1,
+    N: tuple[AVX_8x1x1, AVX_8x1x1],
+) -> AVX_4x2x1:
+    """
+    Same as the above but accepts a pair of points on E1 x E2 as
+    (P1, P2) and (Q1, Q2)
+    """
+    # Add components
+    u1, v1, w1 = add_components(E1, P1, T1_8)
+    u2, v2, w2 = add_components(E2, P2, T2_8)
+
+    u3, v3, w3 = add_components(E1, Q1, T1_8)
+    u4, v4, w4 = add_components(E2, Q2, T2_8)
+
+    # Here we convert from 64 bit to 51 bit limb representations.
+    U1 = AVX_4x2x1(u1 * u2 + v1 * v2, u1 * w2, w1 * u2, w1 * w2)
+    V1 = AVX_4x2x1(v1 * u2 + u1 * v2, v1 * w2, w1 * v2, 0)
+
+    U2 = AVX_4x2x1(u3 * u4 + v3 * v4, u3 * w4, w3 * u4, w3 * w4)
+    V2 = AVX_4x2x1(v3 * u4 + u3 * v4, v3 * w4, w3 * v4, 0)
+
+    U1 = apply_isomorphism(U1, N)
+    V1 = apply_isomorphism(V1, N)
+
+    U2 = apply_isomorphism(U2, N)
+    V2 = apply_isomorphism(V2, N)
+
+    U1 = squaring(U1)
+    V1 = squaring(V1)
+
+    U2 = squaring(U2)
+    V2 = squaring(V2)
+
+    # Hadamard of component wise subtraction of U, V
+    im_P = AVX_4x2x1(U1.x - V1.x, U1.y - V1.y, U1.z - V1.z, U1.w - V1.w)
+    im_P = hadamard(im_P)
+
+    im_Q = AVX_4x2x1(U2.x - V2.x, U2.y - V2.y, U2.z - V2.z, U2.w - V2.w)
+    im_Q = hadamard(im_Q)
+
+    # Unpack x, y from the Theta Point
+    # J = (x : x : y : y)
+    assert J[0] == J[1]
+    assert J[2] == J[3]
+    x, y = J[0], J[2]
+
+    # Scaling by (y : y : x : x)
+    J_prime = AVX_4x2x1(y, y, x, x)
+    im_P = pairwise_multiplication(im_P, J_prime)
+    im_Q = pairwise_multiplication(im_Q, J_prime)
+
+    # Final Hadamard
+    im_P = hadamard(im_P)
+    im_Q = hadamard(im_Q)
+
+    return im_P, im_Q
