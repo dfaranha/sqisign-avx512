@@ -22,6 +22,7 @@ from theta_splitting import (
     splitting_isomorphism_matrix,
     theta_to_product,
     theta_product_point_to_montgomery,
+    randomized_null_point,
 )
 from utilities import batched_inversion, apply_isomorphism
 
@@ -54,6 +55,7 @@ def theta_isogeny_chain_4x2x1(
     kernel: tuple[BasisX, BasisX],
     length: int,
     eval_points: list[tuple[PointX, PointX]] = [],
+    randomise: bool = False,
 ):
     # We normalise points and the curve parameters the below functions stay with
     # 64 bit limbs to make use of the faster(?) sqrt we have available
@@ -170,6 +172,10 @@ def theta_isogeny_chain_4x2x1(
     OA = apply_isomorphism(OA, M)
     eval_points = [apply_isomorphism(P, M) for P in eval_points]
 
+    if randomise:
+        OA, N = randomized_null_point(OA)
+        eval_points = [apply_isomorphism(P, N) for P in eval_points]
+
     # Split the null point to the Montgomery coefficients
     (A1, C1), (A2, C2) = theta_to_product(OA)
 
@@ -183,6 +189,7 @@ def theta_isogeny_chain_8x1x1(
     kernel: tuple[BasisX, BasisX],
     length: int,
     eval_points: list[tuple[PointX, PointX]] = [],
+    randomise: bool = False,
 ):
     # We normalise points and the curve parameters the below functions stay with
     # 64 bit limbs to make use of the faster(?) sqrt we have available
@@ -296,6 +303,10 @@ def theta_isogeny_chain_8x1x1(
     # Apply the splitting isomorphism
     OA = apply_isomorphism(OA, M)
     eval_points = [apply_isomorphism(P, M) for P in eval_points]
+
+    if randomise:
+        OA, N = randomized_null_point(OA)
+        eval_points = [apply_isomorphism(P, N) for P in eval_points]
 
     # Split the null point to the Montgomery coefficients
     (A1, C1), (A2, C2) = theta_to_product(OA)

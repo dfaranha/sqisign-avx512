@@ -66,20 +66,32 @@ zero = PointX(F.one(), F.zero())
 input_images = [(xP1, zero), (zero, xP2)]
 
 for isogeny_algorithm in [theta_isogeny_chain_4x2x1, theta_isogeny_chain_8x1x1]:
-    (A3, C3), (A4, C4), images = isogeny_algorithm(domain, kernel, length, input_images)
-    assert A3 / C3 == A3_check
-    assert A4 / C4 == A4_check
+    for randomise in [True, False]:
+        (A3, C3), (A4, C4), images = isogeny_algorithm(
+            domain, kernel, length, input_images, randomise
+        )
+        if not randomise:
+            assert A3 / C3 == A3_check
+            assert A4 / C4 == A4_check
+        else:
+            E3 = EllipticCurve(F, [0, A3 / C3, 0, 1, 0])
+            E3_check = EllipticCurve(F, [0, A3_check, 0, 1, 0])
+            assert E3.j_invariant() == E3_check.j_invariant()
 
-    (xP3, xP4), (xQ3, xQ4) = images
+            E4 = EllipticCurve(F, [0, A4 / C4, 0, 1, 0])
+            E4_check = EllipticCurve(F, [0, A4_check, 0, 1, 0])
+            assert E4.j_invariant() == E4_check.j_invariant()
 
-    P3 = lift_to_curve(A3_check, xP3)
-    P4 = lift_to_curve(A4_check, xP4)
-    Q3 = lift_to_curve(A3_check, xP3)
-    Q4 = lift_to_curve(A4_check, xP4)
+        (xP3, xP4), (xQ3, xQ4) = images
 
-    assert is_four_torsion(P3 + Q3) or is_four_torsion(P3 - Q3)
-    assert is_four_torsion(P4 + Q4) or is_four_torsion(P4 - Q4)
+        P3 = lift_to_curve(A3 / C3, xP3)
+        P4 = lift_to_curve(A4 / C4, xP4)
+        Q3 = lift_to_curve(A3 / C3, xP3)
+        Q4 = lift_to_curve(A4 / C4, xP4)
 
-    print(f"test {isogeny_algorithm.__name__} passed")
+        assert is_four_torsion(P3 + Q3) or is_four_torsion(P3 - Q3)
+        assert is_four_torsion(P4 + Q4) or is_four_torsion(P4 - Q4)
+
+        print(f"test {isogeny_algorithm.__name__} passed")
 
 print("All tests passed")
