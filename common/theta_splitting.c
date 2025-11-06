@@ -88,7 +88,7 @@ void splitting_isom_matrix(int* matrix, __m512i* null)
     }
 }
 
-void splitting_apply_isomorphism(__m512i* res, int* matrix, __m512i* null)
+void splitting_apply_isomorphism(__m512i* res, __m512i* null, int* matrix)
 {
     // TODO: Atm we unvectorize multiple times, to match the avx512 interface of the methods.
     //       This is suboptimal, but maybe we want to get rid of the unvectorized code anyways?
@@ -152,7 +152,6 @@ void splitting_theta_to_product(__m512i* product, __m512i* null)
 
 void splitting_theta_point_to_mont(__m512i* mont_points, __m512i* theta_point, __m512i* null)
 {
-    printf("splitting is zero %d\n", fp2_is_zero_4x2x1(theta_point));
     fp2_t theta_point_unvec[4], null_unvec[4], mont_points_unvec[4], m1, m2, m3, m4;
     fp2_4x2x1_to_unvectorized(theta_point_unvec, theta_point); // theta = (x, y, z, _)
     fp2_4x2x1_to_unvectorized(null_unvec, null); // null = (a, b, c, _)

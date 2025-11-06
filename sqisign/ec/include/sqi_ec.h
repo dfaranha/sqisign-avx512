@@ -254,8 +254,7 @@ uint32_t lift_basis(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E
  *
  * @return 0xFFFFFFFF if the order is correct, 0 otherwise
  */
-static int
-test_point_order_twof(const ec_point_t *P, const ec_curve_t *E, int t)
+static int test_point_order_twof(const ec_point_t *P, const ec_curve_t *E, int t)
 {
     ec_point_t test;
     ec_curve_t curve;
@@ -283,8 +282,7 @@ test_point_order_twof(const ec_point_t *P, const ec_curve_t *E, int t)
  *
  * @return 0xFFFFFFFF if the order is correct, 0 otherwise
  */
-static int
-test_jac_order_twof(const jac_point_t *P, const ec_curve_t *E, int t)
+static int test_jac_order_twof(const jac_point_t *P, const ec_curve_t *E, int t)
 {
     jac_point_t test;
     test = *P;
@@ -297,6 +295,49 @@ test_jac_order_twof(const jac_point_t *P, const ec_curve_t *E, int t)
         return 0;
     DBL(&test, &test, E);
     return (fp2_is_zero(&test.z));
+}
+
+static void ec_montA_to_curve(ec_curve_t *E, const fp2_t *A)
+{
+    fp2_copy(&E->A, A);
+    fp2_set_one(&E->C);
+    E->is_A24_computed_and_normalized = false;
+    ec_curve_normalize_A24(E);
+}
+
+static void ec_montAC_to_curve(ec_curve_t *E, const fp2_t *A, const fp2_t *C)
+{
+    fp2_copy(&E->A, A);
+    fp2_copy(&E->C, C);
+    E->is_A24_computed_and_normalized = false;
+    ec_curve_normalize_A24(E);
+    ec_normalize_curve(E);
+}
+
+static int ec_test_is_on_curve(const ec_curve_t *E, const ec_point_t *P) 
+{
+    fp2_t x, one, C_inv, tmp;
+
+    // point at infinity:
+    if (fp2_is_zero(&P->z)) 
+        return !fp2_is_zero(&P->x); 
+
+    // x = X/Z
+    fp2_copy(&x, &P->z);
+    fp2_inv(&x);
+    fp2_mul(&x, &x, &P->x);   // x1 = X1 / Z1
+
+    fp2_set_one(&one);
+    fp2_copy(&C_inv, &E->C);
+    fp2_inv(&C_inv);
+
+    // check that Cy^2 = x^3 + Ax^2 + x
+    fp2_add(&tmp, &x, &E->A);
+    fp2_mul(&tmp, &tmp, &x);
+    fp2_add(&tmp, &tmp, &one);
+    fp2_mul(&tmp, &tmp, &x);
+    fp2_mul(&tmp, &tmp, &C_inv);
+    return fp2_is_square(&tmp);
 }
 
 #endif

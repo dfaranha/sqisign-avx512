@@ -215,10 +215,11 @@ void theta_isogeny_chain_single(__m512i* codom, __m512i* eval_pts, __m512i* null
 
     // Splitting
     splitting_isom_matrix(isom_matrix, codom_null);
-    splitting_apply_isomorphism(codom_null, isom_matrix, codom_null);
+    splitting_apply_isomorphism(codom_null, codom_null, isom_matrix);
     splitting_theta_to_product(codom, codom_null);
 
     for (int i = 0; i < num_pts; i++) {
+        splitting_apply_isomorphism(eval_pts+8*i, eval_pts+8*i, isom_matrix);
         splitting_theta_point_to_mont(eval_pts+8*i, eval_pts+8*i, codom_null);
     }
 }
@@ -410,6 +411,6 @@ void theta_isogeny_chain_pair(__m512i* codom, __m512i* null, __m512i* ker, const
 
     // Splitting
     splitting_isom_matrix(isom_matrix, codom_null);
-    splitting_apply_isomorphism(codom_null, isom_matrix, codom_null);
+    splitting_apply_isomorphism(codom_null, codom_null, isom_matrix);
     splitting_theta_to_product(codom, codom_null);
 }

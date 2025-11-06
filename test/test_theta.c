@@ -95,7 +95,9 @@ bool test_theta(int iterations)
     fp2_tomont_4x2x1(P, P);
     fp2_tomont_4x2x1(Q, Q);
 
-    fp2_t codom_unvec[4], eval_pts_unvec[4], A3_expected, A3_actual, A4_expected, A4_actual, x1, x2, tmp1, tmp2, tmp3;
+    ec_curve_t E3_expected, E3_actual, E4_expected, E4_actual;
+    ec_point_t eval_P1, eval_P2;
+    fp2_t codom_unvec[4], eval_pts_unvec[4], A3_expected, A4_expected;
     fp_decode(&A3_expected.re, (const void *) ((uint64_t[6])
         {10867719576459308538U, 14426381232393286251U, 5948554069610288516U, 1853058860160698092U, 9225241635731980790U, 4588529309365208364U}
     ));
@@ -108,6 +110,8 @@ bool test_theta(int iterations)
     fp_decode(&A4_expected.im, (const void *) ((uint64_t[6])
         {1492077505230043599U, 2736745017500914223U, 13160692708435571952U, 527388762590340581U, 17004613965867689856U, 3325318217617652149U}
     ));
+    ec_montA_to_curve(&E3_expected, &A3_expected);
+    ec_montA_to_curve(&E4_expected, &A4_expected);
 
     //We reduce by one as we have already done the gluing step
     int n = 188 - 1;
@@ -121,81 +125,33 @@ bool test_theta(int iterations)
     theta_isogeny_chain_single(codom, eval_pts, OA, P, Q, pts, n, num_pts);
 
     fp2_4x2x1_to_unvectorized(codom_unvec, codom);
-    fp2_copy(&A3_actual, codom_unvec+1);
-    fp2_copy(&A4_actual, codom_unvec+3);
-    fp2_inv(&A3_actual);
-    fp2_inv(&A4_actual);
-    fp2_mul(&A3_actual, &A3_actual, codom_unvec);
-    fp2_mul(&A4_actual, &A4_actual, codom_unvec+2);
-
-    // Check that the evaluated points are not zero
-    int nonzero1 = fp2_is_zero_4x2x1(eval_pts) == 0 ? 1 : 0;
-    int nonzero2 = fp2_is_zero_4x2x1(eval_pts + 8) == 0 ? 1 : 0;
+    ec_montAC_to_curve(&E3_actual, codom_unvec, codom_unvec+1);
+    ec_montAC_to_curve(&E4_actual, codom_unvec+2, codom_unvec+3);
+    int is_E3_correct = fp2_is_equal(&E3_expected.A, &E3_actual.A);
+    int is_E4_correct = fp2_is_equal(&E4_expected.A, &E4_actual.A);
 
     // Check that evaluated points are on the curves:
-    fp2_4x2x1_to_unvectorized(eval_pts_unvec, eval_pts);
-    fp2_copy(&x1, eval_pts_unvec+2);
-    fp2_copy(&x2, eval_pts_unvec+3);
-    fp2_inv(&x1);
-    fp2_inv(&x2);
-    fp2_mul(&x1, &x1, eval_pts_unvec);   // x1 = X1 / Z1
-    fp2_mul(&x2, &x2, eval_pts_unvec+1); // x2 = X2 / Z2
-    
-    fp2_mul(&tmp1, &x1, &x1);
-    fp2_mul(&tmp2, &x1, &tmp1); // x1^3
-    fp2_mul(&tmp1, &tmp1, &A3_expected); // A * x1^2
-    fp2_add(&tmp1, &tmp1, &tmp2);
-    fp2_add(&tmp1, &tmp1, &x1); // x1^3 + A * x1^2 + x1
-    int on_curve1 = fp2_is_square(&tmp1);
-    fp2_mul(&tmp1, &x2, &x2);
-    fp2_mul(&tmp2, &x2, &tmp1); // x2^3
-    fp2_mul(&tmp1, &tmp1, &A4_expected); // A * x2^2
-    fp2_add(&tmp1, &tmp1, &tmp2);
-    fp2_add(&tmp1, &tmp1, &x2); // x2^3 + A * x2^2 + x2
-    int on_curve2 = fp2_is_square(&tmp1);
+    passed = is_E3_correct | is_E4_correct;
+    for (int i = 0; i < num_pts && passed != 0; i++) {
+        fp2_4x2x1_to_unvectorized(eval_pts_unvec, eval_pts + 8*i);
+        eval_P1.x = eval_pts_unvec[0];
+        eval_P2.x = eval_pts_unvec[1];
+        eval_P1.z = eval_pts_unvec[2];
+        eval_P2.z = eval_pts_unvec[3]; //TODO: Order different than for codomain (x, x, z, z) VS (x, z, x, z)
 
-    //Check that the evaluated points are of order 4:
-    ec_point_t P3, P4; //, A24_3, A24_4;
-    fp2_copy(&P3.x, eval_pts_unvec);
-    fp2_copy(&P3.z, eval_pts_unvec+2);
-    fp2_copy(&P4.x, eval_pts_unvec+1);
-    fp2_copy(&P4.z, eval_pts_unvec+3);
+        int on_curve_E3 = ec_test_is_on_curve(&E3_expected, &eval_P1);
+        int on_curve_E4 = ec_test_is_on_curve(&E4_expected, &eval_P2);
 
-    // // (A + 2 : 4*C) = (A + 2 : 4)
-    // fp2_set_one(&A24_3.x);
-    // fp2_add(&A24_3.x, &A24_3.x, &A24_3.x);
-    // fp2_add(&A24_3.x, &A24_3.x, &A3_expected);
-    // fp2_set_one(&A24_3.z);
-    // fp2_add(&A24_3.z, &A24_3.z, &A24_3.z);
-    // fp2_add(&A24_3.z, &A24_3.z, &A24_3.z);
-    // ec_normalize_point(A24_3);
-    // fp2_set_one(&A24_4.x);
-    // fp2_add(&A24_4.x, &A24_4.x, &A24_4.x);
-    // fp2_add(&A24_4.x, &A24_4.x, &A4_expected);
-    // fp2_set_one(&A24_4.z);
-    // fp2_add(&A24_4.z, &A24_4.z, &A24_4.z);
-    // fp2_add(&A24_4.z, &A24_4.z, &A24_4.z);
-    // ec_normalize_point(A24_4);
+        int is_order4_P1 = test_point_order_twof(&eval_P1, &E3_expected, 2);
+        int is_order4_P2 = test_point_order_twof(&eval_P2, &E4_expected, 2);
+        int is_order4 = is_order4_P1 | is_order4_P2;
+        
+        //printf("E3 matches %d on_curve %d order4 %d \n", is_E3_correct, on_curve_E3, is_order4_P1); 
+        //printf("E4 matches %d on_curve %d order4 %d \n", is_E4_correct, on_curve_E4, is_order4_P2);
 
-    ec_curve_t E3, E4;
-    fp2_copy(&E3.A, &A3_expected);
-    fp2_copy(&E4.A, &A4_expected);
-    fp2_set_one(&E3.C);
-    fp2_set_one(&E4.C);
-    E3.is_A24_computed_and_normalized = false;
-    E4.is_A24_computed_and_normalized = false;
+        passed = on_curve_E3 & on_curve_E4 & is_order4;
+    }
 
-    int order4_1 = test_point_order_twof(&P3, &E3, 2);
-    int order4_2 = test_point_order_twof(&P4, &E4, 2);
-
-    
-    printf("curve1 %X %d %d on_curve2 %X %d %d \n", fp2_is_zero_4x2x1(eval_pts), on_curve1, order4_1, fp2_is_zero_4x2x1(eval_pts+8), on_curve2, order4_2);
-
-    passed = (fp2_is_equal(&A3_expected, &A3_actual)) 
-        & (fp2_is_equal(&A4_expected, &A4_actual))
-        & nonzero1 & nonzero2
-        & on_curve1 & on_curve2
-        & 0x1;
     print_test_res("Chain KAT", passed);
     if (passed == 0) {
         return false;
@@ -333,17 +289,13 @@ bool test_theta(int iterations)
     theta_isogeny_chain_pair(codom, OA, PQ, n);
 
     fp2_4x2x1_to_unvectorized(codom_unvec, codom);
-    fp2_copy(&A3_actual, codom_unvec+1);
-    fp2_copy(&A4_actual, codom_unvec+3);
-    fp2_inv(&A3_actual);
-    fp2_inv(&A4_actual);
-    fp2_mul(&A3_actual, &A3_actual, codom_unvec);
-    fp2_mul(&A4_actual, &A4_actual, codom_unvec+2);
+    ec_montAC_to_curve(&E3_actual, codom_unvec, codom_unvec+1);
+    ec_montAC_to_curve(&E4_actual, codom_unvec+2, codom_unvec+3);
+    is_E3_correct = fp2_is_equal(&E3_expected.A, &E3_actual.A);
+    is_E4_correct = fp2_is_equal(&E4_expected.A, &E4_actual.A);
 
 
-    passed = (fp2_is_equal(&A3_expected, &A3_actual)) 
-        & (fp2_is_equal(&A4_expected, &A4_actual))
-        & 0x1;
+    passed = is_E3_correct & is_E4_correct;
     print_test_res("Chain KAT", passed);
     if (passed == 0) {
         return false;
