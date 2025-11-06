@@ -1,4 +1,6 @@
+from os import urandom
 from avx_types import AVX_8x1x1, AVX_4x2x1
+from utilities import apply_isomorphism
 
 EVEN_INDICES = [
     (0, 0),
@@ -95,6 +97,32 @@ def splitting_isomorphism_matrix(OA: AVX_4x2x1):
     M = SPLITTING_MAPS[splitting_index]
 
     return M
+
+
+def randomized_null_point(P: AVX_4x2x1) -> AVX_4x2x1:
+    """
+    Algorithm 8.44 of the SQIsign spec.
+
+    Randomize the null point OA by some isomorphism of the product curves. Returns
+    OA and N, in case N is needed for the evaluation points as well.
+    """
+    # assumes p = 3 mod 4 and we're working in Fp2 with modulus x^2 + 1
+    i = P[0].parent().gen()
+    assert i * i == -1
+
+    RANDOMIZATION_MAPS = [
+        (AVX_8x1x1(1, 0, 0, 0, 0, 1, 0, 0), AVX_8x1x1(0, 0, 1, 0, 0, 0, 0, 1)),
+        (AVX_8x1x1(0, 0, 0, 1, 0, 0, 1, 0), AVX_8x1x1(0, 1, 0, 0, 1, 0, 0, 0)),
+        (AVX_8x1x1(1, 1, 1, 1, 1, -1, 1, -1), AVX_8x1x1(1, 1, -1, -1, 1, -1, -1, 1)),
+        (AVX_8x1x1(1, -1, -1, 1, -1, -1, 1, 1), AVX_8x1x1(-1, 1, -1, 1, 1, 1, 1, 1)),
+        (AVX_8x1x1(-1, i, i, 1, i, -1, 1, i), AVX_8x1x1(i, 1, -1, i, 1, i, i, -1)),
+        (AVX_8x1x1(1, i, i, -1, i, 1, -1, i), AVX_8x1x1(i, -1, 1, i, -1, i, i, 1)),
+    ]
+
+    random_index = int.from_bytes(urandom(4), byteorder="little") % 6
+    N = RANDOMIZATION_MAPS[random_index]
+
+    return apply_isomorphism(P, N), N
 
 
 def theta_to_product(OA: AVX_4x2x1):
