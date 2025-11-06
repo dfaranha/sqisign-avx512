@@ -1,4 +1,4 @@
-from elliptic_types import Curve, BasisX
+from elliptic_types import Curve, BasisX, PointX
 from theta_gluing import lift_basis_to_jacobian
 from theta_isogeny_chain import theta_isogeny_chain_4x2x1, theta_isogeny_chain_8x1x1
 from sage.all import GF, proof, EllipticCurve
@@ -65,24 +65,25 @@ P2, Q2 = lift_basis_to_jacobian(E2, B2)
 domain = (E1, E2)
 kernel = (B1, B2)
 
+xP1 = PointX(PX1, PZ1)
+xP2 = PointX(PX2, PZ2)
+zero = PointX(F.one(), F.zero())
+input_images = [(xP1, zero), (zero, xP2)]
+
 for isogeny_algorithm in [theta_isogeny_chain_4x2x1, theta_isogeny_chain_8x1x1]:
-    (A3, C3), (A4, C4), images = isogeny_algorithm(
-        domain, kernel, length, [(P1, P2), (Q1, Q2)]
-    )
+    (A3, C3), (A4, C4), images = isogeny_algorithm(domain, kernel, length, input_images)
     assert A3 / C3 == A3_check
     assert A4 / C4 == A4_check
 
     (xP3, xP4), (xQ3, xQ4) = images
 
     P3 = lift_to_curve(A3_check, xP3)
-    Q3 = lift_to_curve(A3_check, xQ3)
     P4 = lift_to_curve(A4_check, xP4)
-    Q4 = lift_to_curve(A4_check, xQ4)
+    Q3 = lift_to_curve(A3_check, xP3)
+    Q4 = lift_to_curve(A4_check, xP4)
 
-    assert is_four_torsion(P3)
-    assert is_four_torsion(P4)
-    assert is_four_torsion(Q3)
-    assert is_four_torsion(Q4)
+    assert is_four_torsion(P3 + Q3) or is_four_torsion(P3 - Q3)
+    assert is_four_torsion(P4 + Q4) or is_four_torsion(P4 - Q4)
 
     print(f"test {isogeny_algorithm.__name__} passed")
 

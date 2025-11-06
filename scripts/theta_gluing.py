@@ -1,6 +1,13 @@
-from elliptic_types import Curve, PointX, BasisX, PointJ
+from elliptic_types import Curve, BasisX, PointJ, PointX
 from avx_types import AVX_4x2x1, AVX_8x1x1
-from avx_arithmetic import avx_sqr, avx_pairwise_mul, avx_add, avx_sub, avx_neg
+from avx_arithmetic import (
+    avx_sqr,
+    avx_pairwise_mul,
+    avx_add,
+    avx_sub,
+    avx_neg,
+    avx_wide_pairwise_mul,
+)
 from theta_structure import (
     squaring,
     hadamard,
@@ -9,7 +16,7 @@ from theta_structure import (
 )
 from utilities import apply_isomorphism
 
-from elliptic_arithmetic import four_double_x, add_components
+from elliptic_arithmetic import four_double_x, four_add_components
 from utilities import sqrt_fp2
 
 
@@ -23,7 +30,8 @@ def lift_basis_to_jacobian(E: Curve, basis: BasisX) -> tuple[PointJ, PointJ]:
     PQX, PQZ = basis.PmQX, basis.PmQZ
 
     # We need the Montgomery coefficient from the curve
-    A = E.A / E.C  # TODO: remove inversion
+    A = E.A
+    assert E.C == 1
 
     # compute PY with a square root
     PYPY = PX * (PX**2 + PX * A + 1)
@@ -59,42 +67,14 @@ def lift_basis_to_jacobian(E: Curve, basis: BasisX) -> tuple[PointJ, PointJ]:
     return P, Q
 
 
-def domain_to_avx(E1: Curve, E2: Curve):
+def gluing_kernel_to_x_only(X: AVX_4x2x1, Z: AVX_4x2x1) -> tuple[AVX_4x2x1, AVX_4x2x1]:
     """
     Helper function:
 
-    Convert the curves (A24 : C24) from 64 bit limbs
-    to two AVX4x2x1 blobs with coordinates
-    (A1_24, A1_24, A2_24, A2_24) and (C1_24, C1_24, C2_24, C2_24)
-    which are used for computing simultaneous doubles.
+    Given the kernel as the X, Y, Z coordinates of Jacobian coordinates
+    return the x-only coordinates (X : Z)
     """
-    A24 = AVX_4x2x1(E1.A24, E1.A24, E2.A24, E2.A24)
-    C24 = AVX_4x2x1(E1.C24, E1.C24, E2.C24, E2.C24)
-
-    return A24, C24
-
-
-def gluing_kernel_to_avx(
-    P1: PointJ, P2: PointJ, Q1: PointJ, Q2: PointJ
-) -> tuple[PointX, PointX, PointX, PointX]:
-    """
-    Helper function:
-
-    Given the kernel ((P1, P2), (Q1, Q2)) map the Jacobian points
-    into two AVX4x2x1 blobs which hold the X and Z coordinates of
-    the points P1, Q1, P2, Q2
-    """
-    PX1, _, PZ1 = P1
-    PX2, _, PZ2 = P2
-    QX1, _, QZ1 = Q1
-    QX2, _, QZ2 = Q2
-
-    # Convert from 64 bit to 51 bit representation
-    X = AVX_4x2x1(PX1, QX1, PX2, QX2)
-    Z = AVX_4x2x1(PZ1, QZ1, PZ2, QZ2)
-    Z = squaring(Z)
-
-    return X, Z
+    return X, avx_sqr(Z)
 
 
 def _compute_matrix(
@@ -156,7 +136,7 @@ def _compute_matrix(
 
 
 def action_by_translation(
-    A24: AVX_4x2x1, C24: AVX_4x2x1, X_4: AVX_4x2x1, Z_4: AVX_4x2x1
+    A24: AVX_4x2x1, X_4: AVX_4x2x1, Z_4: AVX_4x2x1
 ) -> tuple[AVX_4x2x1]:
     """
     Algorithm 8.36 of the SQISign spec.
@@ -164,7 +144,7 @@ def action_by_translation(
     Compute the translation matrix induced by the generator of our order 4
     isotropic basis <(P1,P2)x(Q1,Q2)> in E_1 x E_2.
     """
-    U, W = four_double_x(A24, C24, X_4, Z_4)
+    U, W = four_double_x(A24, X_4, Z_4)
 
     t1 = pairwise_multiplication(W, X_4)
     t2 = pairwise_multiplication(U, Z_4)
@@ -177,7 +157,7 @@ def action_by_translation(
 
 
 def theta_change_of_basis(
-    A24: AVX_4x2x1, C24: AVX_4x2x1, X_4: AVX_4x2x1, Z_4: AVX_4x2x1
+    A24: AVX_4x2x1, X_4: AVX_4x2x1, Z_4: AVX_4x2x1
 ) -> tuple[AVX_8x1x1, AVX_8x1x1]:
     """
     Algorithm 8.37 of the SQIsign spec.
@@ -204,7 +184,7 @@ def theta_change_of_basis(
     is four copies of the same element. This happens for 6 of the 9 total calls for
     avx_pairwise_mul.
     """
-    g1, g2, h1, h2, proj = action_by_translation(A24, C24, X_4, Z_4)
+    g1, g2, h1, h2, proj = action_by_translation(A24, X_4, Z_4)
 
     # Extract out the projective factors we need to remove all inversions
     dg1, dh1, dg2, dh2 = proj
@@ -319,7 +299,7 @@ def theta_change_of_basis(
     )
 
 
-def product_to_theta(
+def product_to_theta_pair(
     X: AVX_4x2x1, Z: AVX_4x2x1, N: tuple[AVX_8x1x1]
 ) -> tuple[AVX_4x2x1]:
     """
@@ -344,28 +324,23 @@ def product_to_theta(
 
 
 def gluing_codomain(
-    E1: Curve,
-    E2: Curve,
-    P1_8: PointJ,
-    P2_8: PointJ,
-    Q1_8: PointJ,
-    Q2_8: PointJ,
+    A24_12: AVX_4x2x1,
+    X_8: AVX_4x2x1,
+    Z_8: AVX_4x2x1,
 ) -> tuple[AVX_4x2x1, AVX_4x2x1, AVX_4x2x1, tuple[AVX_8x1x1, AVX_8x1x1]]:
     """
     Algorithm 8.39 of the SQIsign spec.
     """
-    # Convert from the Jacobian points to x-only and from 64 to 51 bit limbs
-    A24, C24 = domain_to_avx(E1, E2)
-    X_8, Z_8 = gluing_kernel_to_avx(P1_8, P2_8, Q1_8, Q2_8)
+    X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)
 
     # Double points to recover 4-torsion for change of basis
-    X_4, Z_4 = four_double_x(A24, C24, X_8, Z_8)
+    X_4, Z_4 = four_double_x(A24_12, X_8, Z_8)
 
     # Compute the change of basis for our theta structure
-    N = theta_change_of_basis(A24, C24, X_4, Z_4)
+    N = theta_change_of_basis(A24_12, X_4, Z_4)
 
     # Lift both 8-torsion points above the generator of our basis in the theta model.
-    P1, P2 = product_to_theta(X_8, Z_8, N)
+    P1, P2 = product_to_theta_pair(X_8, Z_8, N)
 
     # compute their dual-image.
     P1 = squaring(P1)
@@ -424,96 +399,10 @@ def gluing_codomain(
     return OA, OA_dual_inv, J, N
 
 
-def gluing_eval(
-    E1: Curve,
-    E2: Curve,
-    P1: PointJ,
-    P2: PointJ,
-    T1_8: PointJ,
-    T2_8: PointJ,
-    J: AVX_4x2x1,
-    N: tuple[AVX_8x1x1, AVX_8x1x1],
-) -> AVX_4x2x1:
-    """
-    Algorithm 8.40 of the SQIsign spec.
-
-    For limb design, the current choice is to accept PointJ which are made of
-    three coordinates assumed to have 64-bit limb representation.
-
-    These points are passed into `add_components()` which yield three fp2 coordinates
-    each and we compute the cartesian product of these to get 9 total coordinates.
-
-    These coordinates are converted fro 64 to 51 bit limbs and packed into
-    the AVX4x2x1 blobs which are ThetaPoints. These theta points should stay
-    with 51 bit limb representations until splitting into PointX coordinates.
-    """
-    # Unpack x, y from the Theta Point
-    # J = (x : x : y : y)
-    assert J[0] == J[1]
-    assert J[2] == J[3]
-    x, y = J[0], J[2]
-
-    # Add components
-    u1, v1, w1 = add_components(E1, P1, T1_8)
-    u2, v2, w2 = add_components(E2, P2, T2_8)
-
-    # Perform S(N * U) and S(N * V)
-    # ============================================================
-    # We need the following 9 products which
-    #
-    # u1 * u2
-    # u1 * v2
-    # u1 * w2
-    #
-    # v1 * u2
-    # v1 * v2
-    # v1 * w2
-    #
-    # w1 * u2
-    # w1 * v2
-    # w1 * w2
-    #
-    # We also need to do two additions:
-    # u1 * u2 + v1 * v2
-    # v1 * u2 + u1 * v2
-    #
-    # If we use the normal AVX stuff this means 3 calls to
-    # pairwise_multiplication and then addition as well.
-    # ============================================================
-
-    # Here we convert from 64 bit to 51 bit limb representations.
-    U = AVX_4x2x1(u1 * u2 + v1 * v2, u1 * w2, w1 * u2, w1 * w2)
-    V = AVX_4x2x1(v1 * u2 + u1 * v2, v1 * w2, w1 * v2, 0)
-
-    U = apply_isomorphism(U, N)
-    V = apply_isomorphism(V, N)
-
-    U = squaring(U)
-    V = squaring(V)
-
-    # Hadamard of component wise subtraction of U, V
-    im_P = AVX_4x2x1(U.x - V.x, U.y - V.y, U.z - V.z, U.w - V.w)
-    im_P = hadamard(im_P)
-
-    # Scaling by (y : y : x : x)
-    J_prime = AVX_4x2x1(y, y, x, x)
-    im_P = pairwise_multiplication(im_P, J_prime)
-
-    # Final Hadamard
-    im_P = hadamard(im_P)
-
-    return im_P
-
-
 def gluing_eval_pair(
-    E1: Curve,
-    E2: Curve,
-    P1: PointJ,
-    P2: PointJ,
-    Q1: PointJ,
-    Q2: PointJ,
-    T1_8: PointJ,
-    T2_8: PointJ,
+    A_12: AVX_4x2x1,
+    P: tuple[AVX_4x2x1],
+    T8: tuple[AVX_4x2x1],
     J: AVX_4x2x1,
     N: tuple[AVX_8x1x1, AVX_8x1x1],
 ) -> AVX_4x2x1:
@@ -522,25 +411,56 @@ def gluing_eval_pair(
     (P1, P2) and (Q1, Q2)
     """
     # Add components
-    u1, v1, w1 = add_components(E1, P1, T1_8)
-    u2, v2, w2 = add_components(E2, P2, T2_8)
+    # u1, v1, w1 = add_components(E1, P1, T1_8)
+    # u3, v3, w3 = add_components(E1, Q1, T1_8)
+    # u2, v2, w2 = add_components(E2, P2, T2_8)
+    # u4, v4, w4 = add_components(E2, Q2, T2_8)
 
-    u3, v3, w3 = add_components(E1, Q1, T1_8)
-    u4, v4, w4 = add_components(E2, Q2, T2_8)
+    U, V, W = four_add_components(A_12, P, T8)
 
-    # Here we convert from 64 bit to 51 bit limb representations.
-    U1 = AVX_4x2x1(u1 * u2 + v1 * v2, u1 * w2, w1 * u2, w1 * w2)
-    V1 = AVX_4x2x1(v1 * u2 + u1 * v2, v1 * w2, w1 * v2, 0)
+    # ===============================================================
+    # We want to compute four additions and 9 multiplications as best
+    # as we can...
+    #
+    # U1 = AVX_4x2x1(u1 * u2 + v1 * v2, u1 * w2, w1 * u2, w1 * w2)
+    # U2 = AVX_4x2x1(u3 * u4 + v3 * v4, u3 * w4, w3 * u4, w3 * w4)
+    # V1 = AVX_4x2x1(v1 * u2 + u1 * v2, v1 * w2, w1 * v2, 0)
+    # V2 = AVX_4x2x1(v3 * u4 + u3 * v4, v3 * w4, w3 * v4, 0)
+    # ===============================================================
 
-    U2 = AVX_4x2x1(u3 * u4 + v3 * v4, u3 * w4, w3 * u4, w3 * w4)
-    V2 = AVX_4x2x1(v3 * u4 + u3 * v4, v3 * w4, w3 * v4, 0)
+    u1, u3, u2, u4 = U
+    v1, v3, v2, v4 = V
+    w1, w3, w2, w4 = W
 
+    TT0 = AVX_8x1x1(u1, u1, w1, w1, u3, u3, w3, w3)
+    TT1 = AVX_8x1x1(u2, w2, u2, w2, u4, w4, u4, w4)
+    u1u2, u1w2, w1u2, w1w2, u3u4, u3w4, w3u4, w3w4 = avx_wide_pairwise_mul(TT0, TT1)
+
+    TT0 = AVX_8x1x1(v1, u1, v1, w1, v3, u3, v3, w3)
+    TT1 = AVX_8x1x1(u2, v2, w2, v2, u4, v4, w4, v4)
+    v1u2, u1v2, v1w2, w1v2, v3u4, u3v4, v3w4, w3v4 = avx_wide_pairwise_mul(TT0, TT1)
+
+    T0 = AVX_4x2x1(v1, v3, 0, 0)
+    T1 = AVX_4x2x1(v2, v4, 0, 0)
+    v1v2, v3v4, _, _ = avx_pairwise_mul(T0, T1)  # Two redundant mul here.
+
+    T0 = AVX_4x2x1(u1u2, u3u4, v1u2, v3u4)
+    T1 = AVX_4x2x1(v1v2, v3v4, u1v2, u3v4)
+    u1u2_v1v2, u3u4_v3v4, v1u2_u1v2, v3u4_u3v4 = avx_add(T0, T1)
+
+    U1 = AVX_4x2x1(u1u2_v1v2, u1w2, w1u2, w1w2)
+    U2 = AVX_4x2x1(u3u4_v3v4, u3w4, w3u4, w3w4)
+    V1 = AVX_4x2x1(v1u2_u1v2, v1w2, w1v2, 0)
+    V2 = AVX_4x2x1(v3u4_u3v4, v3w4, w3v4, 0)
+
+    # TODO: can we apply the isomorphism on a pair of points in a better way?
     U1 = apply_isomorphism(U1, N)
     V1 = apply_isomorphism(V1, N)
-
     U2 = apply_isomorphism(U2, N)
     V2 = apply_isomorphism(V2, N)
 
+    # TODO: we could do all of the below with 8x1x1 with U1 || U2 and V1 || V2 to get
+    # im_P || im_Q
     U1 = squaring(U1)
     V1 = squaring(V1)
 
@@ -548,10 +468,10 @@ def gluing_eval_pair(
     V2 = squaring(V2)
 
     # Hadamard of component wise subtraction of U, V
-    im_P = AVX_4x2x1(U1.x - V1.x, U1.y - V1.y, U1.z - V1.z, U1.w - V1.w)
+    im_P = avx_sub(U1, V1)
     im_P = hadamard(im_P)
 
-    im_Q = AVX_4x2x1(U2.x - V2.x, U2.y - V2.y, U2.z - V2.z, U2.w - V2.w)
+    im_Q = avx_sub(U2, V2)
     im_Q = hadamard(im_Q)
 
     # Unpack x, y from the Theta Point
@@ -570,3 +490,35 @@ def gluing_eval_pair(
     im_Q = hadamard(im_Q)
 
     return im_P, im_Q
+
+
+def product_to_theta(P1: PointX, P2: PointX, N: tuple[AVX_8x1x1]):
+    """
+    Given a pair of x-only points, compute the corresponding theta point
+    NOTE: here we translate from 64 to 51 bit limbs.
+    """
+    X1, Z1 = P1
+    X2, Z2 = P2
+    T = AVX_4x2x1(X1 * X2, X1 * Z2, Z1 * X2, Z1 * Z2)
+    return apply_isomorphism(T, N)
+
+
+def gluing_eval_special(
+    P1: PointX, P2: PointX, OA_inv: AVX_4x2x1, N: tuple[AVX_8x1x1]
+) -> AVX_4x2x1:
+    """
+    Evaluation of couple points of the form (P1, 0) or (0, P2)
+    which are the only form needed for SQIsign
+    """
+    assert P1.Z.is_zero() or P2.Z.is_zero()
+
+    # Here we translate from x-only points with 64 bit limbs to a theta point
+    # with 51 bit limbs
+    T = product_to_theta(P1, P2, N)
+    T = squaring(T)
+    T = hadamard(T)
+    assert T.w.is_zero()  # this is the special case we must have
+    T = pairwise_multiplication(T, OA_inv)
+    T = hadamard(T)
+
+    return T
