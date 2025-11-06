@@ -1,5 +1,4 @@
 from elliptic_types import Curve, BasisX, PointX
-from theta_gluing import lift_basis_to_jacobian
 from theta_isogeny_chain import theta_isogeny_chain_4x2x1, theta_isogeny_chain_8x1x1
 from sage.all import GF, proof, EllipticCurve
 
@@ -56,10 +55,6 @@ E2 = Curve(A2, F.one(), A2 + 2, F(4))
 # Pack the basis together
 B1 = BasisX(PX1, PZ1, QX1, QZ1, PmQX1, PmQZ1)
 B2 = BasisX(PX2, PZ2, QX2, QZ2, PmQX2, PmQZ2)
-
-# Get the kernel as Jacobian points to test image
-P1, Q1 = lift_basis_to_jacobian(E1, B1)
-P2, Q2 = lift_basis_to_jacobian(E2, B2)
 
 # Ensure the output from the chain matches
 domain = (E1, E2)
