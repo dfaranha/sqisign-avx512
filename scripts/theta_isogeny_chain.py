@@ -1,6 +1,7 @@
-from avx_types import AVX_4x2x1, AVX_8x1x1
+from avx_types import AVX_4x2x1
 from elliptic_types import Curve, BasisX, PointX
 
+from avx_arithmetic import avx_811_to_421
 from elliptic_arithmetic import four_double_n_jac
 from theta_gluing import (
     lift_basis_to_jacobian,
@@ -102,7 +103,8 @@ def theta_isogeny_chain_4x2x1(
     # Push kernel though the gluing isogeny
     for i in range(k):
         P = strat_points[i]
-        imP, imQ = gluing_eval_pair(A_12, P, T8, J, N)
+        imPQ = gluing_eval_pair(A_12, P, T8, J, N)
+        imP, imQ = avx_811_to_421(imPQ)
         strat_points[i] = (imP, imQ)
         orders[i] = orders[i] - 1
 
@@ -233,7 +235,7 @@ def theta_isogeny_chain_8x1x1(
 
     # Compute the gluing codomain
     X_8, Y_8, Z_8 = strat_points[k]
-    OA, OA_inv, J, N = gluing_codomain(A24_12, X_8, Z_8)
+    OA, OA_inv, J_prime, N = gluing_codomain(A24_12, X_8, Z_8)
 
     # Package the point we use for translation
     T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
@@ -244,8 +246,7 @@ def theta_isogeny_chain_8x1x1(
     # Push kernel though the gluing isogeny
     for i in range(k):
         P = strat_points[i]
-        imP, imQ = gluing_eval_pair(A_12, P, T8, J, N)
-        imP_Q = AVX_8x1x1(*imP, *imQ)
+        imP_Q = gluing_eval_pair(A_12, P, T8, J_prime, N)
         strat_points[i] = imP_Q
         orders[i] = orders[i] - 1
 
