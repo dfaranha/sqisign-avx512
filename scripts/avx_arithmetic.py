@@ -1,4 +1,4 @@
-from avx_types import AVX_4x2x1
+from avx_types import AVX_4x2x1, AVX_8x1x1
 
 
 def avx_neg(A: AVX_4x2x1) -> AVX_4x2x1:
@@ -43,3 +43,10 @@ def avx_pairwise_mul(P: AVX_4x2x1, Q: AVX_4x2x1) -> AVX_4x2x1:
     Pairwise multiplication of AVX blobs
     """
     return AVX_4x2x1(P.x * Q.x, P.y * Q.y, P.z * Q.z, P.w * Q.w)
+
+
+def avx_wide_pairwise_mul(P: AVX_8x1x1, Q: AVX_8x1x1) -> AVX_8x1x1:
+    """
+    Pairwise multiplication of AVX_8x1x1 blobs
+    """
+    return AVX_8x1x1(*[a * b for a, b in zip(P, Q)])
