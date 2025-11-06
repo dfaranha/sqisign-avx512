@@ -1,4 +1,4 @@
-from elliptic_types import Curve, BasisX, PointJ, PointX
+from elliptic_types import PointX
 from avx_types import AVX_4x2x1, AVX_8x1x1
 from avx_arithmetic import (
     avx_sqr,
@@ -7,64 +7,20 @@ from avx_arithmetic import (
     avx_sub,
     avx_neg,
     avx_wide_pairwise_mul,
+    avx_wide_sub,
 )
 from theta_structure import (
     squaring,
     hadamard,
     pairwise_multiplication,
     pairwise_multiplication_3,
+    squaring_pair,
+    hadamard_pair,
+    pairwise_pair,
 )
-from utilities import apply_isomorphism
+from utilities import apply_isomorphism, apply_isomorphism_pair
 
 from elliptic_arithmetic import four_double_x, four_add_components
-from utilities import sqrt_fp2
-
-
-def lift_basis_to_jacobian(E: Curve, basis: BasisX) -> tuple[PointJ, PointJ]:
-    """
-    Given an x-only basis, lift to <P, Q> in Jacobian coordinates
-    """
-    # Unpack coordinates and normalise P = (PX : 1)
-    PX = basis.PX / basis.PZ
-    QX, QZ = basis.QX, basis.QZ
-    PQX, PQZ = basis.PmQX, basis.PmQZ
-
-    # We need the Montgomery coefficient from the curve
-    A = E.A
-    assert E.C == 1
-
-    # compute PY with a square root
-    PYPY = PX * (PX**2 + PX * A + 1)
-    PY = sqrt_fp2(PYPY)
-    P = PointJ(PX, PY, 1)
-
-    # compute QY with Okeya-Sakurai algorithm
-    v1 = PX * QZ
-    v2 = QX + v1
-    v3 = QX - v1
-    v3 = v3 * v3
-    v3 = v3 * PQX
-    v1 = A + A
-    v1 = v1 * QZ
-    v2 = v2 + v1
-    v4 = PX * QX
-    v4 = v4 + QZ
-    v2 = v2 * v4
-    v1 = v1 * QZ
-    v2 = v2 - v1
-    v2 = v2 * PQZ
-    QY = v3 - v2
-    v1 = PY + PY
-    v1 = v1 * QZ
-    v1 = v1 * PQZ
-    QX = QX * v1
-    QZ = QZ * v1
-    v1 = QZ * QZ
-    QY = QY * v1
-    QX = QX * QZ
-    Q = PointJ(QX, QY, QZ)
-
-    return P, Q
 
 
 def gluing_kernel_to_x_only(X: AVX_4x2x1, Z: AVX_4x2x1) -> tuple[AVX_4x2x1, AVX_4x2x1]:
@@ -309,18 +265,13 @@ def product_to_theta_pair(
     X1, X2, X3, X4 = X
     Z1, Z2, Z3, Z4 = Z
 
-    t1 = AVX_4x2x1(X1, X1, Z1, Z1)
-    t2 = AVX_4x2x1(X3, Z3, X3, Z3)
-    P1 = pairwise_multiplication(t1, t2)
+    t1 = AVX_8x1x1(X1, X1, Z1, Z1, X2, X2, Z2, Z2)
+    t2 = AVX_8x1x1(X3, Z3, X3, Z3, X4, Z4, X4, Z4)
+    P12 = avx_wide_pairwise_mul(t1, t2)
 
-    t1 = AVX_4x2x1(X2, X2, Z2, Z2)
-    t2 = AVX_4x2x1(X4, Z4, X4, Z4)
-    P2 = pairwise_multiplication(t1, t2)
+    P12 = apply_isomorphism_pair(P12, N)
 
-    P1 = apply_isomorphism(P1, N)
-    P2 = apply_isomorphism(P2, N)
-
-    return P1, P2
+    return P12
 
 
 def gluing_codomain(
@@ -340,17 +291,13 @@ def gluing_codomain(
     N = theta_change_of_basis(A24_12, X_4, Z_4)
 
     # Lift both 8-torsion points above the generator of our basis in the theta model.
-    P1, P2 = product_to_theta_pair(X_8, Z_8, N)
+    P12 = product_to_theta_pair(X_8, Z_8, N)
 
     # compute their dual-image.
-    P1 = squaring(P1)
-    P2 = squaring(P2)
+    P12 = squaring_pair(P12)
+    P12 = hadamard_pair(P12)
 
-    P1 = hadamard(P1)
-    P2 = hadamard(P2)
-
-    X1, Y1, Z1, W1 = P1
-    X2, _, Z2, W2 = P2
+    X1, Y1, Z1, W1, X2, _, Z2, W2 = P12
     if not (W1.is_zero() and W2.is_zero()):
         raise ValueError("last coordinate is not zero")
 
@@ -380,7 +327,6 @@ def gluing_codomain(
 
     t1 = AVX_4x2x1(X1, Y1, X1, 1)
     t2 = AVX_4x2x1(X2, X2, Z2, 1)
-
     A, B, C, _ = pairwise_multiplication_3(t1, t2)
 
     t1 = AVX_4x2x1(Y1, C, B, 1)
@@ -394,16 +340,16 @@ def gluing_codomain(
 
     OA = hadamard(AVX_4x2x1(A, B, C, 0))
     OA_dual_inv = AVX_4x2x1(A_inv, B_inv, C_inv, 0)
-    J = AVX_4x2x1(x, x, y, y)
+    J_prime = AVX_4x2x1(y, y, x, x)
 
-    return OA, OA_dual_inv, J, N
+    return OA, OA_dual_inv, J_prime, N
 
 
 def gluing_eval_pair(
     A_12: AVX_4x2x1,
     P: tuple[AVX_4x2x1],
     T8: tuple[AVX_4x2x1],
-    J: AVX_4x2x1,
+    J_prime: AVX_4x2x1,
     N: tuple[AVX_8x1x1, AVX_8x1x1],
 ) -> AVX_4x2x1:
     """
@@ -448,48 +394,27 @@ def gluing_eval_pair(
     T1 = AVX_4x2x1(v1v2, v3v4, u1v2, u3v4)
     u1u2_v1v2, u3u4_v3v4, v1u2_u1v2, v3u4_u3v4 = avx_add(T0, T1)
 
-    U1 = AVX_4x2x1(u1u2_v1v2, u1w2, w1u2, w1w2)
-    U2 = AVX_4x2x1(u3u4_v3v4, u3w4, w3u4, w3w4)
-    V1 = AVX_4x2x1(v1u2_u1v2, v1w2, w1v2, 0)
-    V2 = AVX_4x2x1(v3u4_u3v4, v3w4, w3v4, 0)
+    U12 = AVX_8x1x1(u1u2_v1v2, u1w2, w1u2, w1w2, u3u4_v3v4, u3w4, w3u4, w3w4)
+    V12 = AVX_8x1x1(v1u2_u1v2, v1w2, w1v2, 0, v3u4_u3v4, v3w4, w3v4, 0)
 
-    # TODO: can we apply the isomorphism on a pair of points in a better way?
-    U1 = apply_isomorphism(U1, N)
-    V1 = apply_isomorphism(V1, N)
-    U2 = apply_isomorphism(U2, N)
-    V2 = apply_isomorphism(V2, N)
+    # Apply the isomorphism by N on U1, U2, V1, V2
+    U12 = apply_isomorphism_pair(U12, N)
+    V12 = apply_isomorphism_pair(V12, N)
 
-    # TODO: we could do all of the below with 8x1x1 with U1 || U2 and V1 || V2 to get
-    # im_P || im_Q
-    U1 = squaring(U1)
-    V1 = squaring(V1)
-
-    U2 = squaring(U2)
-    V2 = squaring(V2)
+    U12 = squaring_pair(U12)
+    V12 = squaring_pair(V12)
 
     # Hadamard of component wise subtraction of U, V
-    im_P = avx_sub(U1, V1)
-    im_P = hadamard(im_P)
-
-    im_Q = avx_sub(U2, V2)
-    im_Q = hadamard(im_Q)
-
-    # Unpack x, y from the Theta Point
-    # J = (x : x : y : y)
-    assert J[0] == J[1]
-    assert J[2] == J[3]
-    x, y = J[0], J[2]
+    im_PQ = avx_wide_sub(U12, V12)
+    im_PQ = hadamard_pair(im_PQ)
 
     # Scaling by (y : y : x : x)
-    J_prime = AVX_4x2x1(y, y, x, x)
-    im_P = pairwise_multiplication(im_P, J_prime)
-    im_Q = pairwise_multiplication(im_Q, J_prime)
+    im_PQ = pairwise_pair(im_PQ, J_prime)
 
     # Final Hadamard
-    im_P = hadamard(im_P)
-    im_Q = hadamard(im_Q)
+    im_PQ = hadamard_pair(im_PQ)
 
-    return im_P, im_Q
+    return im_PQ
 
 
 def product_to_theta(P1: PointX, P2: PointX, N: tuple[AVX_8x1x1]):

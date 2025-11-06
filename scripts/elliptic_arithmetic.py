@@ -1,6 +1,64 @@
-from elliptic_types import PointJ
+from elliptic_types import Curve, BasisX, PointJ
 from avx_types import AVX_4x2x1
 from avx_arithmetic import avx_sqr, avx_pairwise_mul, avx_add, avx_sub, avx_dbl
+from utilities import sqrt_fp2
+
+# ======================================================================
+# 64 bit operations
+# ======================================================================
+
+
+def lift_normalised_basis_to_jacobian(E: Curve, basis: BasisX) -> tuple[PointJ, PointJ]:
+    """
+    Given an x-only basis, lift to <P, Q> in Jacobian coordinates
+    """
+    # Unpack coordinates and normalise P = (PX : 1)
+    PX = basis.PX
+    assert basis.PZ == 1
+    QX, QZ = basis.QX, basis.QZ
+    PQX, PQZ = basis.PmQX, basis.PmQZ
+
+    # We need the Montgomery coefficient from the curve
+    A = E.A
+    assert E.C == 1
+
+    # compute PY with a square root
+    PYPY = PX * (PX**2 + PX * A + 1)
+    PY = sqrt_fp2(PYPY)
+    P = PointJ(PX, PY, 1)
+
+    # compute QY with Okeya-Sakurai algorithm
+    v1 = PX * QZ
+    v2 = QX + v1
+    v3 = QX - v1
+    v3 = v3 * v3
+    v3 = v3 * PQX
+    v1 = A + A
+    v1 = v1 * QZ
+    v2 = v2 + v1
+    v4 = PX * QX
+    v4 = v4 + QZ
+    v2 = v2 * v4
+    v1 = v1 * QZ
+    v2 = v2 - v1
+    v2 = v2 * PQZ
+    QY = v3 - v2
+    v1 = PY + PY
+    v1 = v1 * QZ
+    v1 = v1 * PQZ
+    QX = QX * v1
+    QZ = QZ * v1
+    v1 = QZ * QZ
+    QY = QY * v1
+    QX = QX * QZ
+    Q = PointJ(QX, QY, QZ)
+
+    return P, Q
+
+
+# ======================================================================
+# AVX operations
+# ======================================================================
 
 
 def four_double_x(A24: AVX_4x2x1, X: AVX_4x2x1, Z: AVX_4x2x1):

@@ -1,6 +1,15 @@
 from avx_types import AVX_4x2x1, AVX_8x1x1
 
 
+def avx_811_to_421(wide: AVX_8x1x1) -> tuple[AVX_4x2x1, AVX_4x2x1]:
+    """
+    Convert a pair of points within a AVX_8x1x1 to two AVX_4x2x1
+    """
+    A = AVX_4x2x1(*wide[:4])
+    B = AVX_4x2x1(*wide[4:])
+    return A, B
+
+
 def avx_neg(A: AVX_4x2x1) -> AVX_4x2x1:
     """
     Neg components of an AVX blob
@@ -43,6 +52,20 @@ def avx_pairwise_mul(P: AVX_4x2x1, Q: AVX_4x2x1) -> AVX_4x2x1:
     Pairwise multiplication of AVX blobs
     """
     return AVX_4x2x1(P.x * Q.x, P.y * Q.y, P.z * Q.z, P.w * Q.w)
+
+
+def avx_wide_add(A: AVX_8x1x1, B: AVX_8x1x1) -> AVX_8x1x1:
+    """
+    Sub components of two AVX_8x1x1 blobs
+    """
+    return AVX_8x1x1(*[a + b for a, b in zip(A, B)])
+
+
+def avx_wide_sub(A: AVX_8x1x1, B: AVX_8x1x1) -> AVX_8x1x1:
+    """
+    Sub components of two AVX_8x1x1 blobs
+    """
+    return AVX_8x1x1(*[a - b for a, b in zip(A, B)])
 
 
 def avx_wide_pairwise_mul(P: AVX_8x1x1, Q: AVX_8x1x1) -> AVX_8x1x1:

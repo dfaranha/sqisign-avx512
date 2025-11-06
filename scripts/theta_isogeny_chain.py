@@ -1,9 +1,9 @@
-from avx_types import AVX_4x2x1, AVX_8x1x1
+from avx_types import AVX_4x2x1
 from elliptic_types import Curve, BasisX, PointX
 
-from elliptic_arithmetic import four_double_n_jac
+from avx_arithmetic import avx_811_to_421
+from elliptic_arithmetic import lift_normalised_basis_to_jacobian, four_double_n_jac
 from theta_gluing import (
-    lift_basis_to_jacobian,
     gluing_codomain,
     gluing_eval_pair,
     gluing_eval_special,
@@ -23,7 +23,30 @@ from theta_splitting import (
     theta_to_product,
     theta_product_point_to_montgomery,
 )
-from utilities import apply_isomorphism
+from utilities import batched_inversion, apply_isomorphism
+
+
+def normalise_chain_input(
+    domain: tuple[Curve], kernel: tuple[BasisX, BasisX]
+) -> tuple[Curve, Curve, BasisX, BasisX]:
+    """
+    Given a domain E1 x E2 and a two x-only bases on these curves
+    we normalize x(P1) and x(P2), and additionally the curve
+    constants
+    """
+    E1, E2 = domain
+    B1, B2 = kernel
+
+    inv_P1_Z, inv_P2_Z, inv_E1_C, inv_E1_C24, inv_E2_C, inv_E2_C24 = batched_inversion(
+        B1.PZ, B2.PZ, E1.C, E1.C24, E2.C, E2.C24
+    )
+
+    E1 = Curve(E1.A * inv_E1_C, 1, E1.A24 * inv_E1_C24, 1)
+    E2 = Curve(E2.A * inv_E2_C, 1, E2.A24 * inv_E2_C24, 1)
+    B1 = BasisX(B1.PX * inv_P1_Z, 1, B1.QX, B1.QZ, B1.PmQX, B1.PmQZ)
+    B2 = BasisX(B2.PX * inv_P2_Z, 1, B2.QX, B2.QZ, B2.PmQX, B2.PmQZ)
+
+    return E1, E2, B1, B2
 
 
 def theta_isogeny_chain_4x2x1(
@@ -32,21 +55,11 @@ def theta_isogeny_chain_4x2x1(
     length: int,
     eval_points: list[tuple[PointX, PointX]] = [],
 ):
-    # Extract out the domain
-    E1, E2 = domain
-
-    # For the basis lift we normalize the curve coefficients
-    # which we should do with batched inversion. This also
-    # helps save a few M per double later one.
-    # TODO: we also need to normalise xP in B1 and B2, so this
-    # should be done in one big function.
-    E1 = Curve(E1.A / E1.C, 1, E1.A24 / E1.C24, 1)
-    E2 = Curve(E2.A / E2.C, 1, E2.A24 / E2.C24, 1)
-
-    # Lift the x-only basis to the Jacobian points
-    B1, B2 = kernel
-    P1, Q1 = lift_basis_to_jacobian(E1, B1)
-    P2, Q2 = lift_basis_to_jacobian(E2, B2)
+    # We normalise points and the curve parameters the below functions stay with
+    # 64 bit limbs to make use of the faster(?) sqrt we have available
+    E1, E2, B1, B2 = normalise_chain_input(domain, kernel)
+    P1, Q1 = lift_normalised_basis_to_jacobian(E1, B1)
+    P2, Q2 = lift_normalised_basis_to_jacobian(E2, B2)
 
     # We are now in the position to convert from 64 to 51 bit limbs
     # For the curve we need to pack the Montgomery coefficient for
@@ -61,9 +74,7 @@ def theta_isogeny_chain_4x2x1(
 
     # Initalise the strategy arrays
     space = length.bit_length() + 1
-    strat_points = [
-        (AVX_4x2x1(0, 0, 0, 0), AVX_4x2x1(0, 0, 0, 0), AVX_4x2x1(0, 0, 0, 0))
-    ] * space
+    strat_points = [(None, None, None)] * space
     orders = [0] * space
 
     # Set the first values
@@ -73,9 +84,7 @@ def theta_isogeny_chain_4x2x1(
 
     # Step One:
     # Perform repeated doubling of the Jacobian points and store intermediate results
-    # to push through the isogeny. TODO: at the moment these points are PointJ, which
-    # are arrays with 64-bit limb representations, but this doesn't need to be the case,
-    # what I need to add is a AVX_PointJ type which we use here.
+    # to push through the isogeny.
     while orders[k] != 1:
         k = k + 1
         # TODO: need to balance this in the C code to find the optional
@@ -102,7 +111,8 @@ def theta_isogeny_chain_4x2x1(
     # Push kernel though the gluing isogeny
     for i in range(k):
         P = strat_points[i]
-        imP, imQ = gluing_eval_pair(A_12, P, T8, J, N)
+        imPQ = gluing_eval_pair(A_12, P, T8, J, N)
+        imP, imQ = avx_811_to_421(imPQ)
         strat_points[i] = (imP, imQ)
         orders[i] = orders[i] - 1
 
@@ -174,21 +184,11 @@ def theta_isogeny_chain_8x1x1(
     length: int,
     eval_points: list[tuple[PointX, PointX]] = [],
 ):
-    # Extract out the domain
-    E1, E2 = domain
-
-    # For the basis lift we normalize the curve coefficents
-    # which we should do with batched inversion. This also
-    # helps save a few M per double later one.
-    # TODO: we also need to normalise xP in B1 and B2, so this
-    # should be done in one big function.
-    E1 = Curve(E1.A / E1.C, 1, E1.A24 / E1.C24, 1)
-    E2 = Curve(E2.A / E2.C, 1, E2.A24 / E2.C24, 1)
-
-    # Lift the x-only basis to the Jacobian points
-    B1, B2 = kernel
-    P1, Q1 = lift_basis_to_jacobian(E1, B1)
-    P2, Q2 = lift_basis_to_jacobian(E2, B2)
+    # We normalise points and the curve parameters the below functions stay with
+    # 64 bit limbs to make use of the faster(?) sqrt we have available
+    E1, E2, B1, B2 = normalise_chain_input(domain, kernel)
+    P1, Q1 = lift_normalised_basis_to_jacobian(E1, B1)
+    P2, Q2 = lift_normalised_basis_to_jacobian(E2, B2)
 
     # We are now in the position to convert from 64 to 51 bit limbs
     # For the curve we need to pack the Montgomery coefficient for
@@ -203,9 +203,7 @@ def theta_isogeny_chain_8x1x1(
 
     # Initalise the strategy arrays
     space = length.bit_length() + 1
-    strat_points = [
-        (AVX_4x2x1(0, 0, 0, 0), AVX_4x2x1(0, 0, 0, 0), AVX_4x2x1(0, 0, 0, 0))
-    ] * space
+    strat_points = [(None, None, None)] * space
     orders = [0] * space
 
     # Set the first values
@@ -233,7 +231,7 @@ def theta_isogeny_chain_8x1x1(
 
     # Compute the gluing codomain
     X_8, Y_8, Z_8 = strat_points[k]
-    OA, OA_inv, J, N = gluing_codomain(A24_12, X_8, Z_8)
+    OA, OA_inv, J_prime, N = gluing_codomain(A24_12, X_8, Z_8)
 
     # Package the point we use for translation
     T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
@@ -244,8 +242,7 @@ def theta_isogeny_chain_8x1x1(
     # Push kernel though the gluing isogeny
     for i in range(k):
         P = strat_points[i]
-        imP, imQ = gluing_eval_pair(A_12, P, T8, J, N)
-        imP_Q = AVX_8x1x1(*imP, *imQ)
+        imP_Q = gluing_eval_pair(A_12, P, T8, J_prime, N)
         strat_points[i] = imP_Q
         orders[i] = orders[i] - 1
 
