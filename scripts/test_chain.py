@@ -61,37 +61,56 @@ domain = (E1, E2)
 kernel = (B1, B2)
 
 xP1 = PointX(PX1, PZ1)
+xQ1 = PointX(QX1, QZ1)
+xPmQ1 = PointX(PmQX1, PmQZ1)
 xP2 = PointX(PX2, PZ2)
 zero = PointX(F.one(), F.zero())
-input_images = [(xP1, zero), (zero, xP2)]
+input_images_two = [(xP1, zero), (zero, xP2)]
+input_images_three = [(xP1, zero), (xQ1, zero), (xPmQ1, zero)]
+
 
 for isogeny_algorithm in [theta_isogeny_chain_4x2x1, theta_isogeny_chain_8x1x1]:
     for randomise in [True, False]:
-        (A3, C3), (A4, C4), images = isogeny_algorithm(
-            domain, kernel, length, input_images, randomise
-        )
-        if not randomise:
-            assert A3 / C3 == A3_check
-            assert A4 / C4 == A4_check
-        else:
-            E3 = EllipticCurve(F, [0, A3 / C3, 0, 1, 0])
-            E3_check = EllipticCurve(F, [0, A3_check, 0, 1, 0])
-            assert E3.j_invariant() == E3_check.j_invariant()
+        for input_images in [input_images_two, input_images_three]:
+            (A3, C3), (A4, C4), images = isogeny_algorithm(
+                domain, kernel, length, input_images, randomise
+            )
+            if not randomise:
+                assert A3 / C3 == A3_check
+                assert A4 / C4 == A4_check
+            else:
+                E3 = EllipticCurve(F, [0, A3 / C3, 0, 1, 0])
+                E3_check = EllipticCurve(F, [0, A3_check, 0, 1, 0])
+                assert E3.j_invariant() == E3_check.j_invariant()
 
-            E4 = EllipticCurve(F, [0, A4 / C4, 0, 1, 0])
-            E4_check = EllipticCurve(F, [0, A4_check, 0, 1, 0])
-            assert E4.j_invariant() == E4_check.j_invariant()
+                E4 = EllipticCurve(F, [0, A4 / C4, 0, 1, 0])
+                E4_check = EllipticCurve(F, [0, A4_check, 0, 1, 0])
+                assert E4.j_invariant() == E4_check.j_invariant()
 
-        (xP3, xP4), (xQ3, xQ4) = images
+            if len(input_images) == 2:
+                (xP3, xP4), (xQ3, xQ4) = images
 
-        P3 = lift_to_curve(A3 / C3, xP3)
-        P4 = lift_to_curve(A4 / C4, xP4)
-        Q3 = lift_to_curve(A3 / C3, xP3)
-        Q4 = lift_to_curve(A4 / C4, xP4)
+                P3 = lift_to_curve(A3 / C3, xP3)
+                P4 = lift_to_curve(A4 / C4, xP4)
+                Q3 = lift_to_curve(A3 / C3, xQ3)
+                Q4 = lift_to_curve(A4 / C4, xQ4)
 
-        assert is_four_torsion(P3 + Q3) or is_four_torsion(P3 - Q3)
-        assert is_four_torsion(P4 + Q4) or is_four_torsion(P4 - Q4)
+                assert is_four_torsion(P3 + Q3) or is_four_torsion(P3 - Q3)
+                assert is_four_torsion(P4 + Q4) or is_four_torsion(P4 - Q4)
 
-        print(f"test {isogeny_algorithm.__name__} passed")
+            elif len(input_images) == 3:
+                (xP3, xP4), (xQ3, xQ4), (xR3, xR4) = images
+
+                P3 = lift_to_curve(A3 / C3, xP3)
+                P4 = lift_to_curve(A4 / C4, xP4)
+                Q3 = lift_to_curve(A3 / C3, xQ3)
+                Q4 = lift_to_curve(A4 / C4, xQ4)
+                R3 = lift_to_curve(A3 / C3, xR3)
+                R4 = lift_to_curve(A4 / C4, xR4)
+
+                assert R3.x() in [(P3 - Q3).x(), (P3 + Q3).x()]
+                assert R4.x() in [(P4 - Q4).x(), (P4 + Q4).x()]
+
+            print(f"test {isogeny_algorithm.__name__} passed")
 
 print("All tests passed")
