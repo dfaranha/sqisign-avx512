@@ -160,20 +160,10 @@ def four_double_ws(
     return X3, Y3, Z3, T3
 
 
-def four_double_n_jac(
-    A12: AVX_4x2x1, X_M: AVX_4x2x1, Y_M: AVX_4x2x1, Z_M: AVX_4x2x1, n: int
-) -> tuple[AVX_4x2x1, AVX_4x2x1, AVX_4x2x1]:
-    # Convert from points on the Montgomery to Weierstrass Curve
-    X, Y, Z, U, A12_over_3 = four_jac_to_ws(A12, X_M, Y_M, Z_M)
-
-    # Perform doubling n times in this AVX representation
+def four_double_ws_n(X: AVX_4x2x1, Y: AVX_4x2x1, Z: AVX_4x2x1, T: AVX_4x2x1, n: int):
     for _ in range(n):
-        X, Y, Z, U = four_double_ws(X, Y, Z, U)
-
-    # Convert back to Jacobian points (out of AVX blobs)
-    X, Y, Z = four_ws_to_jac(X, Y, Z, A12_over_3)
-
-    return X, Y, Z
+        X, Y, Z, T = four_double_ws(X, Y, Z, T)
+    return X, Y, Z, T
 
 
 def four_add_components(A: AVX_4x2x1, P: tuple[AVX_4x2x1], Q: tuple[AVX_4x2x1]):
