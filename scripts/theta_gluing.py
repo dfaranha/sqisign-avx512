@@ -424,8 +424,11 @@ def eval_product_to_theta(P1: PointX, P2: PointX, N: tuple[AVX_8x1x1]):
     """
     X1, Z1 = P1
     X2, Z2 = P2
-    T = AVX_4x2x1(X1 * X2, X1 * Z2, Z1 * X2, Z1 * Z2)
-    return apply_isomorphism(T, N)
+    P = AVX_4x2x1(X1, X1, Z1, Z1)
+    T0 = AVX_4x2x1(X2, Z2, X2, Z2)
+    P = avx_pairwise_mul(P, T0)
+
+    return apply_isomorphism(P, N)
 
 
 def eval_product_to_theta_pair(
@@ -440,9 +443,10 @@ def eval_product_to_theta_pair(
     X3, Z3 = Q1
     X4, Z4 = Q2
 
-    PQ = AVX_8x1x1(
-        X1 * X2, X1 * Z2, Z1 * X2, Z1 * Z2, X3 * X4, X3 * Z4, Z3 * X4, Z3 * Z4
-    )
+    PQ = AVX_8x1x1(X1, X1, Z1, Z1, X3, X3, Z3, Z3)
+    T0 = AVX_8x1x1(X2, Z2, X2, Z2, X4, Z4, X4, Z4)
+    PQ = avx_wide_pairwise_mul(PQ, T0)
+
     return apply_isomorphism_pair(PQ, N)
 
 
