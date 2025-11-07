@@ -65,6 +65,9 @@ def compute_product_doubles(
 
     # Now we store within strat_points the Weierstrass coordinates instead.
     # In C I guess this is slightly more annoying as we need different allocation?
+    # In fact, we could just store X, Y, Z in here and have U as an extra AXV blob
+    # which we keep somewhere in the stack simply within the loop, as we don't use
+    # it for the conversion back in the end anyway.
     strat_points[0] = X, Y, Z, U
 
     # All doubling is performed in the Weierstrass model without conversions
