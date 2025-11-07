@@ -417,7 +417,7 @@ def gluing_eval_pair(
     return im_PQ
 
 
-def product_to_theta(P1: PointX, P2: PointX, N: tuple[AVX_8x1x1]):
+def eval_product_to_theta(P1: PointX, P2: PointX, N: tuple[AVX_8x1x1]):
     """
     Given a pair of x-only points, compute the corresponding theta point
     NOTE: here we translate from 64 to 51 bit limbs.
@@ -426,6 +426,24 @@ def product_to_theta(P1: PointX, P2: PointX, N: tuple[AVX_8x1x1]):
     X2, Z2 = P2
     T = AVX_4x2x1(X1 * X2, X1 * Z2, Z1 * X2, Z1 * Z2)
     return apply_isomorphism(T, N)
+
+
+def eval_product_to_theta_pair(
+    P1: PointX, P2: PointX, Q1: PointX, Q2: PointX, N: tuple[AVX_8x1x1]
+):
+    """
+    Given a pair of x-only points, compute the corresponding theta point
+    NOTE: here we translate from 64 to 51 bit limbs.
+    """
+    X1, Z1 = P1
+    X2, Z2 = P2
+    X3, Z3 = Q1
+    X4, Z4 = Q2
+
+    PQ = AVX_8x1x1(
+        X1 * X2, X1 * Z2, Z1 * X2, Z1 * Z2, X3 * X4, X3 * Z4, Z3 * X4, Z3 * Z4
+    )
+    return apply_isomorphism_pair(PQ, N)
 
 
 def gluing_eval_special(
@@ -439,7 +457,7 @@ def gluing_eval_special(
 
     # Here we translate from x-only points with 64 bit limbs to a theta point
     # with 51 bit limbs
-    T = product_to_theta(P1, P2, N)
+    T = eval_product_to_theta(P1, P2, N)
     T = squaring(T)
     T = hadamard(T)
     assert T.w.is_zero()  # this is the special case we must have
@@ -447,3 +465,32 @@ def gluing_eval_special(
     T = hadamard(T)
 
     return T
+
+
+def gluing_eval_special_pair(
+    P1: PointX,
+    P2: PointX,
+    Q1: PointX,
+    Q2: PointX,
+    OA_inv: AVX_4x2x1,
+    N: tuple[AVX_8x1x1],
+) -> AVX_4x2x1:
+    """
+    Evaluation of couple points of the form (P1, 0) or (0, P2)
+    which are the only form needed for SQIsign
+    """
+    assert P1.Z.is_zero() or P2.Z.is_zero()
+    assert Q1.Z.is_zero() or Q2.Z.is_zero()
+
+    # Here we translate from x-only points with 64 bit limbs to a theta point
+    # with 51 bit limbs
+    PQ = eval_product_to_theta_pair(P1, P2, Q1, Q2, N)
+    PQ = squaring_pair(PQ)
+    PQ = hadamard_pair(PQ)
+    assert PQ.w1.is_zero()  # this is the special case we must have
+    assert PQ.w2.is_zero()  # this is the special case we must have
+
+    PQ = pairwise_pair(PQ, OA_inv)
+    PQ = hadamard_pair(PQ)
+
+    return PQ
