@@ -2,7 +2,12 @@ from avx_types import AVX_4x2x1
 from elliptic_types import Curve, BasisX, PointX
 
 from avx_arithmetic import avx_811_to_421
-from elliptic_arithmetic import lift_normalised_basis_to_jacobian, four_double_n_jac
+from elliptic_arithmetic import (
+    lift_normalised_basis_to_jacobian,
+    four_jac_to_ws,
+    four_double_ws_n,
+    four_ws_to_jac,
+)
 from theta_gluing import (
     gluing_codomain,
     gluing_eval_pair,
@@ -50,6 +55,41 @@ def normalise_chain_input(
     return E1, E2, B1, B2
 
 
+def compute_product_doubles(
+    A_12: AVX_4x2x1, strat_points: list[tuple[AVX_4x2x1]], orders: list[int], k: int
+):
+    # When we start doubling, only the first element is defined. We convert this
+    # from the Montgomery to the Weierstrass model
+    X_M, Y_M, Z_M = strat_points[0]
+    X, Y, Z, U, A12_over_3 = four_jac_to_ws(A_12, X_M, Y_M, Z_M)
+
+    # Now we store within strat_points the Weierstrass coordinates instead.
+    # In C I guess this is slightly more annoying as we need different allocation?
+    strat_points[0] = X, Y, Z, U
+
+    # All doubling is performed in the Weierstrass model without conversions
+    while orders[k] != 1:
+        k = k + 1
+        # TODO: need to balance this in the C code to find the optional
+        # splitting of the chain, as eval is more expensive than doubling
+        if orders[k - 1] >= 16:
+            n = orders[k - 1] // 2
+        else:
+            n = orders[k - 1] - 1
+
+        X, Y, Z, T = strat_points[k - 1]
+        strat_points[k] = four_double_ws_n(X, Y, Z, T, n)
+        orders[k] = orders[k - 1] - n
+
+    # Now we must convert the Weierstrass model back to the Montgomery model
+    # Which is done only on the points we have doubled so far.
+    for i in range(k + 1):
+        X, Y, Z, _ = strat_points[i]
+        strat_points[i] = four_ws_to_jac(X, Y, Z, A12_over_3)
+
+    return strat_points, orders, k
+
+
 def theta_isogeny_chain_4x2x1(
     domain: tuple[Curve],
     kernel: tuple[BasisX, BasisX],
@@ -87,18 +127,7 @@ def theta_isogeny_chain_4x2x1(
     # Step One:
     # Perform repeated doubling of the Jacobian points and store intermediate results
     # to push through the isogeny.
-    while orders[k] != 1:
-        k = k + 1
-        # TODO: need to balance this in the C code to find the optional
-        # splitting of the chain, as eval is more expensive than doubling
-        if orders[k - 1] >= 16:
-            n = orders[k - 1] // 2
-        else:
-            n = orders[k - 1] - 1
-
-        ker_X, ker_Y, ker_Z = strat_points[k - 1]
-        strat_points[k] = four_double_n_jac(A_12, ker_X, ker_Y, ker_Z, n)
-        orders[k] = orders[k - 1] - n
+    strat_points, orders, k = compute_product_doubles(A_12, strat_points, orders, k)
 
     # Compute the gluing codomain
     X_8, Y_8, Z_8 = strat_points[k]
@@ -223,18 +252,7 @@ def theta_isogeny_chain_8x1x1(
     # to push through the isogeny. TODO: at the moment these points are PointJ, which
     # are arrays with 64-bit limb representations, but this doesn't need to be the case,
     # what I need to add is a AVX_PointJ type which we use here.
-    while orders[k] != 1:
-        k = k + 1
-        # TODO: need to balance this in the C code to find the optional
-        # splitting of the chain, as eval is more expensive than doubling
-        if orders[k - 1] >= 16:
-            n = orders[k - 1] // 2
-        else:
-            n = orders[k - 1] - 1
-
-        ker_X, ker_Y, ker_Z = strat_points[k - 1]
-        strat_points[k] = four_double_n_jac(A_12, ker_X, ker_Y, ker_Z, n)
-        orders[k] = orders[k - 1] - n
+    strat_points, orders, k = compute_product_doubles(A_12, strat_points, orders, k)
 
     # Compute the gluing codomain
     X_8, Y_8, Z_8 = strat_points[k]
