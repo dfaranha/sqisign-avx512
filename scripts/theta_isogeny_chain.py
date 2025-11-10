@@ -128,13 +128,6 @@ def theta_isogeny_chain_4x2x1(
     orders[0] = length
     k = 0
 
-    # If we can evaluate images in pairs we save time, so given the eval_points as input
-    # we want to take pairs of inputs into eval_points_pairs and then if len(eval_points)
-    # there'll be a single point in eval_point_single
-    nk = len(eval_points)
-    eval_pairs = [(eval_points[i], eval_points[i + 1]) for i in range(0, nk - 1, 2)]
-    eval_single = [] if nk % 2 == 0 else [eval_points[-1]]
-
     # Step One:
     # Perform repeated doubling of the Jacobian points and store intermediate results
     # to push through the isogeny.
@@ -159,11 +152,7 @@ def theta_isogeny_chain_4x2x1(
         orders[i] = orders[i] - 1
 
     # Push other points through gluing isogeny
-    eval_pairs = [
-        gluing_eval_special_pair(P1, P2, Q1, Q2, OA_inv, N)
-        for ((P1, P2), (Q1, Q2)) in eval_pairs
-    ]
-    eval_single = [gluing_eval_special(P1, P2, OA_inv, N) for (P1, P2) in eval_single]
+    eval_points = [gluing_eval_special(P1, P2, OA_inv, N) for (P1, P2) in eval_points]
 
     # Main loop
     # Compute length - 1 (2, 2)-isogenies in the theta model
@@ -207,31 +196,21 @@ def theta_isogeny_chain_4x2x1(
         k = k - 1
 
         # Push the images through the kernel
-        eval_pairs = [theta_eval_pair(P, inv, h1, h2) for P in eval_pairs]
-        eval_single = [theta_eval(P, inv, h1, h2) for P in eval_single]
+        eval_points = [theta_eval(P, inv, h1, h2) for P in eval_points]
 
     # Compute the splitting isomorphism
     M = splitting_isomorphism_matrix(OA)
 
     # Apply the splitting isomorphism
     OA = apply_isomorphism(OA, M)
-    eval_pairs = [apply_isomorphism_pair(P, M) for P in eval_pairs]
-    eval_single = [apply_isomorphism(P, M) for P in eval_single]
+    eval_points = [apply_isomorphism(P, M) for P in eval_points]
 
     if randomise:
         OA, N = randomized_null_point(OA)
-        eval_pairs = [apply_isomorphism_pair(P, N) for P in eval_pairs]
-        eval_single = [apply_isomorphism(P, N) for P in eval_single]
+        eval_points = [apply_isomorphism(P, N) for P in eval_points]
 
     # Split the null point to the Montgomery coefficients
     (A1, C1), (A2, C2) = theta_to_product(OA)
-
-    # Recreate a list of 4x2x1 theta points to split.
-    eval_points = [avx_811_to_421(P) for P in eval_pairs]
-    eval_points = [item for tup in eval_points for item in tup]
-    if eval_single:
-        eval_points.append(eval_single[0])
-
     images = [theta_product_point_to_montgomery(P, OA) for P in eval_points]
 
     return (A1, C1), (A2, C2), images
