@@ -189,7 +189,7 @@ void splitting_apply_isomorphism_old(__m512i* res, __m512i* null, int* matrix)
     fp2_unvectorized_to_4x2x1(res, res_unvec);
 }
 
-void splitting_theta_to_product(__m512i* product, __m512i* null) 
+void splitting_theta_to_product_old(__m512i* product, __m512i* null) 
 {
     // TODO: Atm we unvectorize multiple times, to match the avx512 interface of the methods.
     //       This is suboptimal, but maybe we want to get rid of the unvectorized code anyways?
@@ -219,6 +219,38 @@ void splitting_theta_to_product(__m512i* product, __m512i* null)
     //TODO: Python code checks that a * d = b * c and that C1, C2 != 0.
 
     fp2_unvectorized_to_4x2x1(product, product_unvec);
+}
+
+void splitting_theta_to_product(__m512i* product, __m512i* null) 
+{    
+    __m512i tmp[8], idx1, idx2;
+    __mmask8 mask = 0x0f;
+    
+    // x = a^4, y = b^4, z = c^4
+    // TODO: Wastes one squaring, can we make use of it? I think the answer is no...
+    fp2_sqr_4x2x1(tmp, null);
+    fp2_sqr_4x2x1(tmp, tmp);
+
+    // (x, x, x, x)
+    idx1 = VSET(0, 1, 0, 1, 0, 1, 0, 1);
+    // (z, y, z, y)
+    idx2 = VSET(4, 5, 2, 3, 4, 5, 2, 3);
+    for (int i = 0; i < 8; i++) {
+        product[i] = VPERM512(idx1, tmp[i]);
+        tmp[i] = VPERM512(idx2, tmp[i]);
+    }
+    
+    // (x+z, x+y, x-z, x-y)
+    fp2_mixaddsub_4x2x1(product, product, tmp, mask);
+
+    // (-2*(x+y), -2*(x+y), -, -)
+    fp2_add_4x2x1(tmp, product, product);
+    fp2_neg_4x2x1(tmp, tmp);
+    
+    // (-2*(x+y), -2*(x+y), x-z, x-y)
+    for (int i = 0; i < 8; i++) {
+        product[i] = VBLEND(mask, product[i], tmp[i]);
+    }
 }
 
 void splitting_theta_point_to_mont_single(__m512i* mont_points, __m512i* theta_point, __m512i* null)

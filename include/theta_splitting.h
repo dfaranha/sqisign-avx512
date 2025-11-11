@@ -122,6 +122,7 @@ void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, const spli
 void splitting_apply_isomorphism_pair(__m512i* res, __m512i* point, const splitting_matrix_t* matrix);
 
 void splitting_theta_to_product(__m512i* product, __m512i* null);
+void splitting_theta_to_product_old(__m512i* product, __m512i* null);
 
 /**
  * Given a theta null point OA in a compatible form with splitting, compute

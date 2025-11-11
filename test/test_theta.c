@@ -163,8 +163,8 @@ bool test_theta(int iterations)
     theta_isogeny_chain_single(codom, eval_pts, OA, P, Q, pts, n, num_pts);
 
     fp2_4x2x1_to_unvectorized(codom_unvec, codom);
-    ec_montAC_to_curve(&E3_actual, codom_unvec, codom_unvec+1);
-    ec_montAC_to_curve(&E4_actual, codom_unvec+2, codom_unvec+3);
+    ec_montAC_to_curve(&E3_actual, codom_unvec, codom_unvec+2);
+    ec_montAC_to_curve(&E4_actual, codom_unvec+1, codom_unvec+3);
     int is_E3_correct = fp2_is_equal(&E3_expected.A, &E3_actual.A);
     int is_E4_correct = fp2_is_equal(&E4_expected.A, &E4_actual.A);
 
@@ -175,7 +175,7 @@ bool test_theta(int iterations)
         eval_P1.x = eval_pts_unvec[0];
         eval_P2.x = eval_pts_unvec[1];
         eval_P1.z = eval_pts_unvec[2];
-        eval_P2.z = eval_pts_unvec[3]; //TODO: Order different than for codomain (x, x, z, z) VS (x, z, x, z)
+        eval_P2.z = eval_pts_unvec[3];
 
         int on_curve_E3 = ec_test_is_on_curve(&E3_expected, &eval_P1);
         int on_curve_E4 = ec_test_is_on_curve(&E4_expected, &eval_P2);
@@ -344,8 +344,8 @@ bool test_theta(int iterations)
     theta_isogeny_chain_pair(codom, eval_pts, OA, PQ, pts, n, num_pts);
 
     fp2_4x2x1_to_unvectorized(codom_unvec, codom);
-    ec_montAC_to_curve(&E3_actual, codom_unvec, codom_unvec+1);
-    ec_montAC_to_curve(&E4_actual, codom_unvec+2, codom_unvec+3);
+    ec_montAC_to_curve(&E3_actual, codom_unvec, codom_unvec+2);
+    ec_montAC_to_curve(&E4_actual, codom_unvec+1, codom_unvec+3);
     is_E3_correct = fp2_is_equal(&E3_expected.A, &E3_actual.A);
     is_E4_correct = fp2_is_equal(&E4_expected.A, &E4_actual.A);
     passed = is_E3_correct & is_E4_correct;
@@ -363,7 +363,7 @@ bool test_theta(int iterations)
         eval_P1.x = eval_pts_unvec[0];
         eval_P2.x = eval_pts_unvec[1];
         eval_P1.z = eval_pts_unvec[2];
-        eval_P2.z = eval_pts_unvec[3]; //TODO: Order different than for codomain (x, x, z, z) VS (x, z, x, z)
+        eval_P2.z = eval_pts_unvec[3];
 
         int on_curve_E3 = ec_test_is_on_curve(&E3_expected, &eval_P1);
         int on_curve_E4 = ec_test_is_on_curve(&E4_expected, &eval_P2);

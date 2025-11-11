@@ -112,6 +112,31 @@ void bench_theta(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("splitting_apply_isomorphism_new", cycles[(N_RUNS/2) -1], tmp);
 
+    // splitting_theta_to_product
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            splitting_theta_to_product_old(a, b);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp2_is_equal_4x2x1(a, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("splitting_theta_to_product old", cycles[(N_RUNS/2) -1], tmp);
+
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            splitting_theta_to_product(a, b);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp2_is_equal_4x2x1(a, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("splitting_theta_to_product new", cycles[(N_RUNS/2) -1], tmp);
+
     // chain
     fp2_tomont_4x2x1(KAT_OA, KAT_OA);
     fp2_tomont_4x2x1(KAT_KER_P1, KAT_KER_P1);
