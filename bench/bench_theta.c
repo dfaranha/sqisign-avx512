@@ -3,6 +3,7 @@
 #include "fp_lvl3.h"
 #include "fp2_lvl3.h"
 #include "theta.h"
+#include "theta_splitting.h"
 #include "utils.h"
 #include "KAT.h"
 
@@ -97,6 +98,32 @@ void bench_theta(int iterations)
     tmp = fp2_is_equal_4x2x1(a, b);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("eval (h1, h2 = 0, 1)", cycles[(N_RUNS/2) -1], tmp);
+
+    // splittin_apply_isomorphism
+    int int_matrix[16] = {1,5,1,5, 1,7,3,5, 1,5,3,7, 3,5,3,5};
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            splitting_apply_isomorphism(a, b, int_matrix);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp2_is_equal_4x2x1(a, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("splitting_apply_isomorphism_old", cycles[(N_RUNS/2) -1], tmp);
+
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            splitting_apply_isomorphism_single(a, b, SPLITTING_MATRICES);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp2_is_equal_4x2x1(a, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("splitting_apply_isomorphism_new", cycles[(N_RUNS/2) -1], tmp);
 
     // chain
     fp2_tomont_4x2x1(KAT_OA, KAT_OA);

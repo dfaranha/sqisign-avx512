@@ -164,7 +164,8 @@ void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
 void theta_isogeny_chain_single(__m512i* codom, __m512i* eval_pts, __m512i* null, __m512i* ker_a, __m512i* ker_b, __m512i* pts, const int n, const int num_pts)
 {
     bool h1, h2;
-    int isom_matrix[16];
+    //int isom_matrix[16];
+    splitting_matrix_t isom_matrix;
     __m512i c1[8], c2[8], p1[8], p2[8], k1[8], k2[8], codom_null[8], inv[8];
     fp2_copy_4x2x1(p1, ker_a);
     fp2_copy_4x2x1(p2, ker_b);
@@ -214,12 +215,12 @@ void theta_isogeny_chain_single(__m512i* codom, __m512i* eval_pts, __m512i* null
     }
 
     // Splitting
-    splitting_isom_matrix(isom_matrix, codom_null);
-    splitting_apply_isomorphism(codom_null, codom_null, isom_matrix);
+    splitting_isom_matrix_new(&isom_matrix, codom_null);
+    splitting_apply_isomorphism_single(codom_null, codom_null, &isom_matrix);
     splitting_theta_to_product(codom, codom_null);
 
     for (int i = 0; i < num_pts; i++) {
-        splitting_apply_isomorphism(eval_pts+8*i, eval_pts+8*i, isom_matrix);
+        splitting_apply_isomorphism_single(eval_pts+8*i, eval_pts+8*i, &isom_matrix);
         splitting_theta_point_to_mont(eval_pts+8*i, eval_pts+8*i, codom_null);
     }
 }

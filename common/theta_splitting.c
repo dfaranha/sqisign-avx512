@@ -88,6 +88,64 @@ void splitting_isom_matrix(int* matrix, __m512i* null)
     }
 }
 
+void splitting_isom_matrix_new(splitting_matrix_t* matrix, __m512i* null)
+{
+    int index = splitting_get_index(null);
+    *matrix = SPLITTING_MATRICES[index];
+}
+
+// res = (point[2*index], point[2*index+1], point[2*index], point[2*index+1], ...)
+void splitting_duplicate_pair_in_array(__m512i* res, __m512i* point, const int index, const int arraylen) {
+    __m512i indices = VSET(2*index, 2*index+1 , 2*index, 2*index+1, 2*index, 2*index+1, 2*index, 2*index+1);
+    for (int i = 0; i < arraylen; i++) {
+        res[i] = VPERM512(indices, point[i]);
+    }
+}
+
+void splitting_mul_matrix_column_single(__m512i* res, __m512i* dup, const splitting_matrix_t* matrix, const int index)
+{
+    __m512i tmp[8];
+    
+    // Negate re when matrix entry is -1 or -i. Negate im when -1 or i.
+    __mmask8 negate_mask = matrix->is_negative[index] ^ (0xaa & matrix->is_imaginary[index]);
+    fp2_neg_4x2x1(tmp, dup);
+    
+    for (int i = 0; i < 8; i++) {
+        res[i] = VBLEND(negate_mask, dup[i], tmp[i]);
+
+        // conditional swap of re and im if multiplying by imaginary
+        tmp[i] = VSHUFFLE(res[i], 0x4e);
+        res[i] = VBLEND(matrix->is_imaginary[index], res[i], tmp[i]);
+
+        // conditionally set to 0
+        res[i] = VBLEND(matrix->is_zero[index], res[i], VZERO());
+    }
+
+}
+
+void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, splitting_matrix_t* matrix)
+{
+    __m512i vec[8], point_copy[8], indices;
+    __mmask8 negate_mask;
+    fp2_copy_4x2x1(point_copy, point); // in case res = point
+    
+    // Let vec(a_1), ..., vec(a_4) be the columns of the matrix A.
+    // A * (x, y, z, t)^t = x * vec(a_1) + y * vec(a_2) + z * vec(a_3) + t * vec(a_4)
+    // To compute x*vec(a_1), we create a vector (x, x, x, x)^t, 
+    // then do coordinate-wise mult with vec(a_1).
+
+    splitting_duplicate_pair_in_array(res, point_copy, 0, 8);
+    splitting_mul_matrix_column_single(res, res, matrix, 0);
+
+    for (int j = 1; j < 4; j++) {
+        splitting_duplicate_pair_in_array(vec, point_copy, j, 8);
+        splitting_mul_matrix_column_single(vec, vec, matrix, j);
+        fp2_add_4x2x1(res, res, vec);
+    }
+
+
+}
+
 void splitting_apply_isomorphism(__m512i* res, __m512i* null, int* matrix)
 {
     // TODO: Atm we unvectorize multiple times, to match the avx512 interface of the methods.
