@@ -17,9 +17,9 @@ static const int EVEN_J[NUM_EVEN_PAIRS] = { 0, 1, 2, 3, 0, 2, 0, 1, 0, 3 };
  * 
  * The reason why the bits 2*j and 2*j+1 encode the same value is that it is a convenient format
  * for multiplying one or two points by the matrix.
- * One point: It is in the 4x2x1 format, so the limbs 2*j and 2*j+1 both are for the j-th Fp2 element.
+ * One point: In the 4x2x1 format the limbs 2*j and 2*j+1 are both for the j-th Fp2 element.
  * Two points: They are stored in the 8x1x1 format as (x, x', y, y', ...),
- *             so the same operation should be applied to limb 2*j and 2*j+1 for j=0,...,3.
+ *             so the same operation should be applied to limb 2*j and 2*j+1 for j = 0, ..., 3.
  */
 typedef struct splitting_matrix_t
 {
@@ -119,6 +119,8 @@ void splitting_isom_matrix(splitting_matrix_t* matrix, __m512i* null);
 
 void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, const splitting_matrix_t* matrix);
 
+void splitting_apply_isomorphism_pair(__m512i* res, __m512i* point, const splitting_matrix_t* matrix);
+
 void splitting_theta_to_product(__m512i* product, __m512i* null);
 
 /**
@@ -130,11 +132,27 @@ void splitting_theta_to_product(__m512i* product, __m512i* null);
  * @param theta_point The theta point in the 4x2x1 format
  * @param null The theta null point
  */
-void splitting_theta_point_to_mont(__m512i* mont_points, __m512i* theta_point, __m512i* null);
+void splitting_theta_point_to_mont_single(__m512i* mont_points, __m512i* theta_point, __m512i* null);
+
+/**
+ * Given a theta null point OA in a compatible form with splitting, compute
+ * P1, P2 in E1 x E2 on the corresponding product of Montgomery curves.
+ *
+ * TODO: can we use parallelism here?
+ * @param mont_points The output is the Montgomery points interleaved as
+                      (X_1, X'_1, X_2, X'_2, Z_1, Z'_1, Z_2, Z'_2), where 
+                      (X_1, Z_1) and (X_2, Z_2) correspond to the theta point (X, Y, Z, T).
+ * @param theta_point The theta points (X, Y, Z, T) and (X', Y', Z', T') interleaved 
+                      in the 8x1x1 format.
+ * @param null The theta null point
+ */
+void splitting_theta_point_to_mont_pair(__m512i* mont_points, __m512i* theta_point, __m512i* null);
 
 
 // Internal functions
 void splitting_duplicate_pair_in_array(__m512i* res, __m512i* point, const int index, const int arraylen);
 void splitting_mul_matrix_column_single(__m512i* res, __m512i* dup, const splitting_matrix_t* matrix, const int index);
+void splitting_mul_matrix_column_pair(__m512i* res, __m512i* dup, const splitting_matrix_t* matrix, const int index);
+
 
 #endif

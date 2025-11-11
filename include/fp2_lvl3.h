@@ -224,11 +224,15 @@ void fp2_4x2x1_to_unvectorized(fp2_t* res, __m512i* src);
 
 /**
  * Converts an Fp2 8x1x1 to two 4x2x1's.
+ * src = (x_1, x_2, y_1, y_2, ...)
+ * res = ((x_1, y_1, ...), (x_2, y_2, ...))
  */
 void fp2_8x1x1_to_4x2x1(__m512i* res, __m512i* src);
 
 /**
  * Converts two Fp2 4x2x1's to an 8x1x1.
+ * src_i = (x_i, y_i, z_i, t_i)
+ * res = (x_1, x_2, y_1, y_2, ...)
  */
 void fp2_4x2x1_to_8x1x1(__m512i* res, __m512i* src1, __m512i* src2);
 

@@ -11,7 +11,7 @@
 
 bool test_theta(int iterations)
 {
-    __m512i a[16], b[16], c[16], d[16], e[16], f[16], zero[16], one[16], t;
+    __m512i a[16], b[16], c[16], d[16], e[16], f[16], g[16], zero[16], one[16], t;
     fp2_setzero_8x1x1(zero);
     fp2_setzero_8x1x1(one);
     one[0] = VSETALL(1);
@@ -317,9 +317,29 @@ bool test_theta(int iterations)
         return false;
     }
 
+    // splitting isomorphism
+    for (int i = 0; i < iterations && passed; i++) {
+        rand_fp2_4x2x1(a);
+        rand_fp2_4x2x1(b);
+        fp2_4x2x1_to_8x1x1(c, a, b);
+
+        for(int j = 0; j < 4 && passed; j++) {
+            splitting_mul_matrix_column_single(d, a, &matrix, j);
+            splitting_mul_matrix_column_single(e, b, &matrix, j);
+            fp2_4x2x1_to_8x1x1(f, d, e);
+            splitting_mul_matrix_column_pair(g, c, &matrix, j);
+            passed = fp2_is_equal_8x1x1(f, g) == 0xff;
+        }
+    }
+    print_test_res("splitting isomorphism", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     // Isogeny chain KAT
     __m512i PQ[16];
     fp2_4x2x1_to_8x1x1(PQ, P, Q);
+    fp2_4x2x1_to_8x1x1(pts, pts, pts+8);
 
     theta_isogeny_chain_pair(codom, eval_pts, OA, PQ, pts, n, num_pts);
 
@@ -328,10 +348,16 @@ bool test_theta(int iterations)
     ec_montAC_to_curve(&E4_actual, codom_unvec+2, codom_unvec+3);
     is_E3_correct = fp2_is_equal(&E3_expected.A, &E3_actual.A);
     is_E4_correct = fp2_is_equal(&E4_expected.A, &E4_actual.A);
+    passed = is_E3_correct & is_E4_correct;
 
     // Check that evaluated points are on the curves:
-    passed = is_E3_correct & is_E4_correct;
-    //printf("passed %d\n", passed);
+
+    //Converting pairs back to two separate points.
+    int num_pair_pts = num_pts / 2;
+    for(int i = 0; i < num_pair_pts; i++) {
+        fp2_8x1x1_to_4x2x1(eval_pts+16*i, eval_pts+16*i);
+    }
+    
     for (int i = 0; i < num_pts && passed != 0; i++) {
         fp2_4x2x1_to_unvectorized(eval_pts_unvec, eval_pts + 8*i);
         eval_P1.x = eval_pts_unvec[0];
