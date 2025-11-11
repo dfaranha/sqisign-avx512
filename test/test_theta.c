@@ -155,6 +155,7 @@ bool test_theta(int iterations)
     int num_pts = 2;
 
     __m512i pts[num_pts*8];
+    __m512i pts_copy[num_pts*8];
     __m512i eval_pts[num_pts*8];
     fp2_copy_4x2x1(pts, P);
     fp2_copy_4x2x1(pts+8, Q);
@@ -168,7 +169,7 @@ bool test_theta(int iterations)
     int is_E4_correct = fp2_is_equal(&E4_expected.A, &E4_actual.A);
 
     // Check that evaluated points are on the curves:
-    passed = is_E3_correct | is_E4_correct;
+    passed = is_E3_correct & is_E4_correct;
     for (int i = 0; i < num_pts && passed != 0; i++) {
         fp2_4x2x1_to_unvectorized(eval_pts_unvec, eval_pts + 8*i);
         eval_P1.x = eval_pts_unvec[0];
@@ -320,7 +321,7 @@ bool test_theta(int iterations)
     __m512i PQ[16];
     fp2_4x2x1_to_8x1x1(PQ, P, Q);
 
-    theta_isogeny_chain_pair(codom, OA, PQ, n);
+    theta_isogeny_chain_pair(codom, eval_pts, OA, PQ, pts, n, num_pts);
 
     fp2_4x2x1_to_unvectorized(codom_unvec, codom);
     ec_montAC_to_curve(&E3_actual, codom_unvec, codom_unvec+1);
@@ -328,7 +329,27 @@ bool test_theta(int iterations)
     is_E3_correct = fp2_is_equal(&E3_expected.A, &E3_actual.A);
     is_E4_correct = fp2_is_equal(&E4_expected.A, &E4_actual.A);
 
+    // Check that evaluated points are on the curves:
     passed = is_E3_correct & is_E4_correct;
+    //printf("passed %d\n", passed);
+    for (int i = 0; i < num_pts && passed != 0; i++) {
+        fp2_4x2x1_to_unvectorized(eval_pts_unvec, eval_pts + 8*i);
+        eval_P1.x = eval_pts_unvec[0];
+        eval_P2.x = eval_pts_unvec[1];
+        eval_P1.z = eval_pts_unvec[2];
+        eval_P2.z = eval_pts_unvec[3]; //TODO: Order different than for codomain (x, x, z, z) VS (x, z, x, z)
+
+        int on_curve_E3 = ec_test_is_on_curve(&E3_expected, &eval_P1);
+        int on_curve_E4 = ec_test_is_on_curve(&E4_expected, &eval_P2);
+
+        int is_order4_P1 = test_point_order_twof(&eval_P1, &E3_expected, 2);
+        int is_order4_P2 = test_point_order_twof(&eval_P2, &E4_expected, 2);
+        int is_order4 = is_order4_P1 | is_order4_P2;
+        
+        passed = on_curve_E3 & on_curve_E4 & is_order4;
+        //printf("passed %d %d %d %d %d\n", passed, on_curve_E3, on_curve_E4, is_order4_P1, is_order4_P2);
+    }
+
     print_test_res("Chain KAT", passed);
     if (passed == 0) {
         return false;

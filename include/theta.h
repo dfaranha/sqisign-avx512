@@ -71,9 +71,13 @@ void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
 /**
  * Compute the (2^n, 2^n)-isogeny chain defined by the theta points a and b, and outputs the codomain.
  * There is no gluing step, we assume the points are already in theta-coordinates.
+ * @param prod Output. The codomain product E3 x E4
+ * @param eval_pts Output. The evaluation of the points in pts.
  * @param null The theta null point of the domain.
  * @param ker_a, ker_b The points of order 2^(n+2) defining the isogeny.
+ * @param pts The points to be evalutated
  * @param n The length of the isogeny chain.
+ * @param num_pts The number of points to be evaluated
  */
 void theta_isogeny_chain_single(__m512i* prod, __m512i* eval_pts, __m512i* null, __m512i* ker_a, __m512i* ker_b, __m512i* pts, const int n, const int num_pts);
 
@@ -133,10 +137,14 @@ void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2);
 /**
  * Compute the (2^n, 2^n)-isogeny chain defined by the theta points a and b, and outputs the codomain.
  * There is no gluing step, we assume the points are already in theta-coordinates.
- * @param null The theta null point of the domain, stored in the 4x2x1 format.
+ * @param prod Output. The codomain product E3 x E4
+ * @param eval_pts Output. The evaluation of the points in pts.
+ * @param null The theta null point of the domain in the 4x2x1 format.
  * @param ker The points of order 2^(n+2) defining the isogeny, stored in the 8x1x1 format.
+ * @param pts The points to be evalutated. 
  * @param n The length of the isogeny chain.
+ * @param num_pts The number of points to be evaluated
  */
-void theta_isogeny_chain_pair(__m512i* codom, __m512i* null, __m512i* ker, const int n);
+void theta_isogeny_chain_pair(__m512i* codom, __m512i* eval_pts, __m512i* null, __m512i* ker, __m512i* pts, const int n, const int num_pts);
 
 #endif

@@ -117,7 +117,7 @@ int splitting_get_index(__m512i* null);
  */
 void splitting_isom_matrix(splitting_matrix_t* matrix, __m512i* null);
 
-void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, splitting_matrix_t* matrix);
+void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, const splitting_matrix_t* matrix);
 
 void splitting_theta_to_product(__m512i* product, __m512i* null);
 

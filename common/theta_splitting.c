@@ -86,7 +86,7 @@ void splitting_mul_matrix_column_single(__m512i* res, __m512i* dup, const splitt
 
 }
 
-void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, splitting_matrix_t* matrix)
+void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, const splitting_matrix_t* matrix)
 {
     __m512i vec[8], point_copy[8], indices;
     __mmask8 negate_mask;

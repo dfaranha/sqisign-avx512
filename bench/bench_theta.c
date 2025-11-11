@@ -100,19 +100,6 @@ void bench_theta(int iterations)
     print_bench_res("eval (h1, h2 = 0, 1)", cycles[(N_RUNS/2) -1], tmp);
 
     // splittin_apply_isomorphism
-    int int_matrix[16] = {1,5,1,5, 1,7,3,5, 1,5,3,7, 3,5,3,5};
-    for(int i = 0; i < N_RUNS; i++) {
-        start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
-            splitting_apply_isomorphism(a, b, int_matrix);
-        }
-        end = cpucycles();
-        cycles[i] = (end - start)/iterations;
-    }
-    tmp = fp2_is_equal_4x2x1(a, b);
-    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("splitting_apply_isomorphism_old", cycles[(N_RUNS/2) -1], tmp);
-
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int i = 0; i < iterations; i++) {
@@ -221,14 +208,16 @@ void bench_theta(int iterations)
     print_bench_res("eval (h1, h2 = 0, 1)", cycles[(N_RUNS/2) -1], tmp);
 
     // chain
-    n = 188 - 1;
+    __m512i KAT_KER[16];
+    fp2_4x2x1_to_8x1x1(KAT_KER, KAT_KER_P1, KAT_KER_P2);
+
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        theta_isogeny_chain_pair(a, b, c, n);
+        theta_isogeny_chain_pair(a, b, KAT_OA, KAT_KER, c, n, 0);
         end = cpucycles();
         cycles[i] = (end - start);
     }
     tmp = fp2_is_equal_4x2x1(a, b);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("chain n = 187, 10 runs", cycles[(N_RUNS/2)-1], tmp);
+    print_bench_res("chain n = 187, num_points = 0, 10 runs", cycles[(N_RUNS/2)-1], tmp);
 }

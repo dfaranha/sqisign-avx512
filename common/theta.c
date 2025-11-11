@@ -173,8 +173,8 @@ void theta_isogeny_chain_single(__m512i* codom, __m512i* eval_pts, __m512i* null
 
     // Initialize eval_pts. 8 is the number of __m512i vectors in a fp2 4x2x1 element.
     // TODO: copy impl might be inefficient.
-    for (int i = 0; i < num_pts*8; i++) {
-        fp2_copy_4x2x1(eval_pts+i, pts+i);
+    for (int i = 0; i < num_pts; i++) {
+        fp2_copy_4x2x1(eval_pts+8*i, pts+8*i);
     }
 
     for (int i = 0; i < n; i++) {
@@ -373,13 +373,16 @@ void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
     }
 }
 
-void theta_isogeny_chain_pair(__m512i* codom, __m512i* null, __m512i* ker, const int n)
+void theta_isogeny_chain_pair(__m512i* codom, __m512i* eval_pts, __m512i* null, __m512i* ker, __m512i* pts, const int n, const int num_pts)
 {
     bool h1, h2;
     splitting_matrix_t isom_matrix;
     __m512i c1[8], c2[8], p[16], k[16], codom_null[8], inv[8];
     fp2_copy_8x1x1(p, ker);
     fp2_copy_4x2x1(codom_null, null);
+    for (int i = 0; i < num_pts; i++) {
+        fp2_copy_4x2x1(eval_pts+8*i, pts+8*i);
+    }
 
     for (int i = 0; i < n; i++) {
         // Precompute constants for doubling
@@ -408,10 +411,20 @@ void theta_isogeny_chain_pair(__m512i* codom, __m512i* null, __m512i* ker, const
 
         // Push the kernel through the images
         theta_eval_pair(p, p, inv, h1, h2);
+
+        // Eval points
+        for (int j = 0; j < num_pts; j++) {
+            theta_eval_single(eval_pts+8*j, eval_pts+8*j, inv, h1, h2);
+        }
     }
 
     // Splitting
     splitting_isom_matrix(&isom_matrix, codom_null);
     splitting_apply_isomorphism_single(codom_null, codom_null, &isom_matrix);
     splitting_theta_to_product(codom, codom_null);
+
+    for (int i = 0; i < num_pts; i++) {
+        splitting_apply_isomorphism_single(eval_pts+8*i, eval_pts+8*i, &isom_matrix);
+        splitting_theta_point_to_mont(eval_pts+8*i, eval_pts+8*i, codom_null);
+    }
 }
