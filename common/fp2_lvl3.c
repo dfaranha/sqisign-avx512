@@ -49,6 +49,13 @@ void fp2_neg_8x1x1(__m512i* res, __m512i* a)
     fp_neg_8x1(res+8, a+8);
 }
 
+void fp2_mixaddsub_8x1x1(__m512i* res, __m512i* a, __m512i* b, 
+  const __mmask8 add_mask_re, const __mmask8 add_mask_im)
+{
+    fp_mixaddsub_8x1(res, a, b, add_mask_re);
+    fp_mixaddsub_8x1(res+8, a+8, b+8, add_mask_im);
+}
+
 void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i s1[8], s2[8], t1[8], t2[8], t3[8];
@@ -211,6 +218,11 @@ void fp2_sub_4x2x1(__m512i* res, __m512i* a, __m512i* b)
 void fp2_neg_4x2x1(__m512i* res, __m512i* a)
 {
     fp_neg_8x1(res, a);
+}
+
+void fp2_mixaddsub_4x2x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)
+{
+    fp_mixaddsub_8x1(res, a, b, add_mask);
 }
 
 void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b)
@@ -801,25 +813,29 @@ void fp2_4x2x1_to_array(uint64_t* res, __m512i* src)
 
 void fp2_8x1x1_to_4x2x1(__m512i* res, __m512i* src)
 {
-    __m512i t_re, t_im;
+    __m512i src_re, src_im, t_re, t_im;
 
     for (int i = 0; i < 8; i++) {
-        t_re = VSHUFFLE(src[i], 0x4e); // a, b, c, d, ... -> b, a, d, c, ...
-        t_im = VSHUFFLE(src[i+8], 0x4e);
-        res[i] = VBLEND(0xaa, src[i], t_im); 
-        res[i+8] = VBLEND(0xaa, t_re, src[i+8]);
+        src_re = src[i]; // to allow res = src
+        src_im = src[i+8];
+        t_re = VSHUFFLE(src_re, 0x4e); // a, b, c, d, ... -> b, a, d, c, ...
+        t_im = VSHUFFLE(src_im, 0x4e);
+        res[i] = VBLEND(0xaa, src_re, t_im); 
+        res[i+8] = VBLEND(0xaa, t_re, src_im);
     }
 }
 
 void fp2_4x2x1_to_8x1x1(__m512i* res, __m512i* src1, __m512i* src2)
 {
-    __m512i t1, t2;
+    __m512i s1, s2, t1, t2;
 
     for (int i = 0; i < 8; i++) {
-        t1 = VSHUFFLE(src1[i], 0x4e); // a, b, c, d, ... -> b, a, d, c, ...
-        t2 = VSHUFFLE(src2[i], 0x4e);
-        res[i] = VBLEND(0xaa, src1[i], t2); 
-        res[i+8] = VBLEND(0xaa, t1, src2[i]);
+        s1 = src1[i];
+        s2 = src2[i];
+        t1 = VSHUFFLE(s1, 0x4e); // a, b, c, d, ... -> b, a, d, c, ...
+        t2 = VSHUFFLE(s2, 0x4e);
+        res[i] = VBLEND(0xaa, s1, t2); 
+        res[i+8] = VBLEND(0xaa, t1, s2);
     }
 }
 

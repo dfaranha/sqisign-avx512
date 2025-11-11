@@ -207,6 +207,31 @@ void bench_theta(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("eval (h1, h2 = 0, 1)", cycles[(N_RUNS/2) -1], tmp);
 
+    // splitting_theta_point_to_mont_pair
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            splitting_theta_point_to_mont_pair_old(a, b, c);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp2_is_equal_8x1x1(a, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("splitting_theta_point_to_mont_pair old", cycles[(N_RUNS/2) -1], tmp);
+
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            splitting_theta_point_to_mont_pair(a, b, c);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp2_is_equal_8x1x1(a, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("splitting_theta_point_to_mont_pair new", cycles[(N_RUNS/2) -1], tmp);
+
     // chain
     __m512i KAT_KER[16];
     fp2_4x2x1_to_8x1x1(KAT_KER, KAT_KER_P1, KAT_KER_P2);

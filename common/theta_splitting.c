@@ -223,24 +223,59 @@ void splitting_theta_to_product(__m512i* product, __m512i* null)
 
 void splitting_theta_point_to_mont_single(__m512i* mont_points, __m512i* theta_point, __m512i* null)
 {
-    fp2_t theta_point_unvec[4], null_unvec[4], mont_points_unvec[4], m1, m2, m3, m4;
-    fp2_4x2x1_to_unvectorized(theta_point_unvec, theta_point); // theta = (x, y, z, _)
-    fp2_4x2x1_to_unvectorized(null_unvec, null); // null = (a, b, c, _)
+    __m512i tmp[8], idx1, idx2;
+    __mmask8 add_mask;
+    
+    idx1 = VSET(4, 5, 2, 3, 0, 1, 0, 1); // (c, b, a, a)
+    idx2 = VSET(0, 1, 0, 1, 4, 5, 2, 3); // (x, x, z, y)
+    for (int i = 0; i < 8; i++) {
+        tmp[i] = VPERM512(idx1, null[i]);
+        mont_points[i] = VPERM512(idx2, theta_point[i]);
+    }
+    fp2_mul_4x2x1(mont_points, mont_points, tmp); // (c*x, b*x, a*z, a*y)
 
-    fp2_mul(&m1, null_unvec, theta_point_unvec+1); // a*y
-    fp2_mul(&m2, null_unvec, theta_point_unvec+2); // a*z
-    fp2_mul(&m3, null_unvec+1, theta_point_unvec); // b*x
-    fp2_mul(&m4, null_unvec+2, theta_point_unvec); // c*x
+    idx1 = VSET(4, 5, 6, 7, 0, 1, 2, 3);    // (a*z, a*y, c*x, b*x)
+    for (int i = 0; i < 8; i++) {
+        tmp[i] = VPERM512(idx1, mont_points[i]);
+    }
 
-    fp2_add(mont_points_unvec, &m2, &m4);   // X1 = a * z + c * x
-    fp2_add(mont_points_unvec+1, &m1, &m3); // X2 = a * y + b * x
-    fp2_sub(mont_points_unvec+2, &m2, &m4); // Z1 = a * z - c * x
-    fp2_sub(mont_points_unvec+3, &m1, &m3); // Z2 = a * y  - b * x
-
-    fp2_unvectorized_to_4x2x1(mont_points, mont_points_unvec);
+    // (a*z + c*x, a*y + b*x, a*x - c*x, a*y - b*x)
+    add_mask = 0x0f;
+    fp2_mixaddsub_4x2x1(mont_points, mont_points, tmp, add_mask);
 }
 
 void splitting_theta_point_to_mont_pair(__m512i* mont_points, __m512i* theta_points, __m512i* null)
+{
+    __m512i tmp[16], idx;
+    __mmask8 add_mask;
+
+    idx = VSET(4, 5, 2, 3, 0, 1, 0, 1); // (c, c, b, a)
+    for (int i = 0; i < 8; i++) {
+        tmp[i] = VPERM512(idx, null[i]);
+    }
+    fp2_4x2x1_to_8x1x1(tmp, tmp, tmp); // (c, c, c, c, b, b, a, a)
+    
+    idx = VSET(0, 1, 0, 1, 4, 5, 2, 3); // (x, x', x, x' z, z', y, y')
+    for (int i = 0; i < 16; i++) {
+        mont_points[i] = VPERM512(idx, theta_points[i]);
+    }
+
+    // (c*x, c*x', b*x, b*x', a*z, a*z', a*y, a*y')
+    fp2_mul_8x1x1(mont_points, mont_points, tmp); 
+
+    // (a*z, a*z', a*y, a*y', c*x, c*x', b*x, b*x')
+    idx = VSET(4, 5, 6, 7, 0, 1, 2, 3);    
+    for (int i = 0; i < 16; i++) {
+        tmp[i] = VPERM512(idx, mont_points[i]);
+    }
+
+    // (a*z + c*x, a*z' + c*x', a*y + b*x, a*y' + b*x', 
+    //  a*x - c*x, a*x' - c*x', a*y - b*x, a*y' - b*x')
+    add_mask = 0x0f;
+    fp2_mixaddsub_8x1x1(mont_points, mont_points, tmp, add_mask, add_mask);
+}
+
+void splitting_theta_point_to_mont_pair_old(__m512i* mont_points, __m512i* theta_points, __m512i* null)
 {
     fp2_t theta_points_unvec[8], null_unvec[4], mont_points_unvec[8], tmp[8];
     // theta = (x, x', y, y', z, z', _, _)

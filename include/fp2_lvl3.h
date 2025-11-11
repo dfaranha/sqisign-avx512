@@ -39,6 +39,13 @@ void fp2_sub_8x1x1(__m512i* res, __m512i* a, __m512i* b);
 
 void fp2_neg_8x1x1(__m512i* res, __m512i* a);
 
+/**
+ * add_mask_re has 8-bits, one per Fp2 element in the 8x1x1.
+ * If add_mask_re[i]=1, re(res[i]) = re(a[i]) + re(b[i]), else re(res[i]) = re(a[i]) - re(b[i])
+ */
+void fp2_mixaddsub_8x1x1(__m512i* res, __m512i* a, __m512i* b, 
+  const __mmask8 add_mask_re, const __mmask8 add_mask_im);
+
 void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b);
 
 void fp2_sqr_8x1x1(__m512i* res, __m512i* a);
@@ -117,6 +124,12 @@ void fp2_add_4x2x1(__m512i* res, __m512i* a, __m512i* b);
 void fp2_sub_4x2x1(__m512i* res, __m512i* a, __m512i* b);
 
 void fp2_neg_4x2x1(__m512i* res, __m512i* a);
+
+/**
+ * add_mask has 8-bits, one per Fp element in the 4x2x1.
+ * If add_mask[i]=1, res[i] = a[i] + b[i], else res[i] = a[i] - b[i]
+ */
+void fp2_mixaddsub_4x2x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
 
 void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b);
 

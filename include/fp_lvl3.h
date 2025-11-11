@@ -71,7 +71,7 @@ void fp_sub_8x1(__m512i* res, __m512i* a, __m512i* b);
 void fp_neg_8x1(__m512i* res, __m512i* a);
 
 /**
- * If the i-th bit of add_mask is 1, res[i] = a[i] + b[i] mod p, else res[i] = a[i] - b[i] mod p
+ * If add_mask[i]=1 res[i] = a[i] + b[i], else res[i] = a[i] - b[i]
  */
 void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
 
