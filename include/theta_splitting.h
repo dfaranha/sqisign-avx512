@@ -7,9 +7,23 @@
 static const int EVEN_I[NUM_EVEN_PAIRS] = { 0, 0, 0, 0, 1, 1, 2, 2, 3, 3 };
 static const int EVEN_J[NUM_EVEN_PAIRS] = { 0, 1, 2, 3, 0, 2, 0, 1, 0, 3 };
 
+/**
+ * Encodes a 4x4 matrix A  with entries in {0, 1, -1, i, -i}
+ * The i-th mask of each array encodes the i-th column of A.
+ * Bit 2*j and 2*k+1 encodes A_(i,j).
+ * is_zero: If A_(i,j) = 0, both bits are 1
+ * is_negative: If A_(i,j) is negative, both bits are 1
+ * is_imaginary: If A_(i,j) is imaginary, both bits are 1
+ * 
+ * The reason why the bits 2*j and 2*j+1 encode the same value is that it is a convenient format
+ * for multiplying one or two points by the matrix.
+ * One point: It is in the 4x2x1 format, so the limbs 2*j and 2*j+1 both are for the j-th Fp2 element.
+ * Two points: They are stored in the 8x1x1 format as (x, x', y, y', ...),
+ *             so the same operation should be applied to limb 2*j and 2*j+1 for j=0,...,3.
+ */
 typedef struct splitting_matrix_t
 {
-    __mmask8 is_zero[4]; // zero[i] is for the i-th column.
+    __mmask8 is_zero[4];
     __mmask8 is_negative[4];
     __mmask8 is_imaginary[4];
 } splitting_matrix_t;
@@ -95,24 +109,14 @@ int splitting_get_index(__m512i* null);
 
 /**
  * Algorithm 8.42 of the SQIsign spec v2.0.1
- * Samples a random isomorphism matrix.
- * The matrix is represented by two AVX_8x1x1 vectors, one for the first two rows, and the other as the last two rows
- * Entries:
- * 0: 0
- * 1: 1
- * 3: -1
- * 5: i
- * 7: -i
- * First bit encodes whether it is 0 or not, second if it is negative, third if it is imaginary.
+ * Samples an isomorphism matrix.
  *
  * TODO: At the moment, this is not randomized
- * @param matrix The output is a 4x4 matrix over Fp2 stored as two 8x1x1.
+ * @param matrix The output is a 4x4 matrix over Fp2.
  * @param null The theta null point
  */
-void splitting_isom_matrix(int* matrix, __m512i* null);
-void splitting_isom_matrix_new(splitting_matrix_t* matrix, __m512i* null);
+void splitting_isom_matrix(splitting_matrix_t* matrix, __m512i* null);
 
-void splitting_apply_isomorphism(__m512i* res, __m512i* null, int* matrix);
 void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, splitting_matrix_t* matrix);
 
 void splitting_theta_to_product(__m512i* product, __m512i* null);

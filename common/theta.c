@@ -215,7 +215,7 @@ void theta_isogeny_chain_single(__m512i* codom, __m512i* eval_pts, __m512i* null
     }
 
     // Splitting
-    splitting_isom_matrix_new(&isom_matrix, codom_null);
+    splitting_isom_matrix(&isom_matrix, codom_null);
     splitting_apply_isomorphism_single(codom_null, codom_null, &isom_matrix);
     splitting_theta_to_product(codom, codom_null);
 
@@ -376,7 +376,7 @@ void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
 void theta_isogeny_chain_pair(__m512i* codom, __m512i* null, __m512i* ker, const int n)
 {
     bool h1, h2;
-    int isom_matrix[16];
+    splitting_matrix_t isom_matrix;
     __m512i c1[8], c2[8], p[16], k[16], codom_null[8], inv[8];
     fp2_copy_8x1x1(p, ker);
     fp2_copy_4x2x1(codom_null, null);
@@ -411,7 +411,7 @@ void theta_isogeny_chain_pair(__m512i* codom, __m512i* null, __m512i* ker, const
     }
 
     // Splitting
-    splitting_isom_matrix(isom_matrix, codom_null);
-    splitting_apply_isomorphism(codom_null, codom_null, isom_matrix);
+    splitting_isom_matrix(&isom_matrix, codom_null);
+    splitting_apply_isomorphism_single(codom_null, codom_null, &isom_matrix);
     splitting_theta_to_product(codom, codom_null);
 }

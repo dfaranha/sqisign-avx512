@@ -183,9 +183,6 @@ bool test_theta(int iterations)
         int is_order4_P2 = test_point_order_twof(&eval_P2, &E4_expected, 2);
         int is_order4 = is_order4_P1 | is_order4_P2;
         
-        //printf("E3 matches %d on_curve %d order4 %d \n", is_E3_correct, on_curve_E3, is_order4_P1); 
-        //printf("E4 matches %d on_curve %d order4 %d \n", is_E4_correct, on_curve_E4, is_order4_P2);
-
         passed = on_curve_E3 & on_curve_E4 & is_order4;
     }
 
@@ -330,7 +327,6 @@ bool test_theta(int iterations)
     ec_montAC_to_curve(&E4_actual, codom_unvec+2, codom_unvec+3);
     is_E3_correct = fp2_is_equal(&E3_expected.A, &E3_actual.A);
     is_E4_correct = fp2_is_equal(&E4_expected.A, &E4_actual.A);
-
 
     passed = is_E3_correct & is_E4_correct;
     print_test_res("Chain KAT", passed);

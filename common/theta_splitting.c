@@ -51,44 +51,7 @@ int splitting_get_index(__m512i* null)
     return index;
 }
 
-void splitting_isom_matrix(int* matrix, __m512i* null)
-{
-    int index = splitting_get_index(null);
-    switch (index) {
-        case 0:
-            memcpy(matrix, (int[16]) {1, 5, 1, 5, 1, 7, 3, 5, 1, 5, 3, 7, 3, 5, 3, 5}, sizeof(int)*16);
-            break;
-        case 1:
-            memcpy(matrix, (int[16]) {1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 3, 0, 0}, sizeof(int)*16);
-            break;
-        case 2:
-            memcpy(matrix, (int[16]) {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 3, 0}, sizeof(int)*16);
-            break;
-        case 3:
-            memcpy(matrix, (int[16]) {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 3}, sizeof(int)*16);
-            break;
-        case 4:
-            memcpy(matrix, (int[16]) {1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 3, 3, 3, 1, 3, 1}, sizeof(int)*16);
-            break;
-        case 5:
-            memcpy(matrix, (int[16]) {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0}, sizeof(int)*16);
-            break;
-        case 6:
-            memcpy(matrix, (int[16]) {1, 1, 1, 1, 1, 3, 1, 3, 1, 3, 3, 1, 3, 3, 1, 1}, sizeof(int)*16);
-            break;
-        case 7:
-            memcpy(matrix, (int[16]) {1, 1, 1, 1, 1, 3, 1, 3, 1, 3, 3, 1, 1, 1, 3, 3}, sizeof(int)*16);
-            break;
-        case 8:
-            memcpy(matrix, (int[16]) {1, 1, 1, 1, 1, 3, 1, 3, 1, 1, 3, 3, 3, 1, 1, 3}, sizeof(int)*16);
-            break;
-        default: //TODO should be case 9, default should throw error. It is this way for now to make the benchmarks with nonsense input not crash.
-            memcpy(matrix, (int[16]) {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}, sizeof(int)*16);
-        
-    }
-}
-
-void splitting_isom_matrix_new(splitting_matrix_t* matrix, __m512i* null)
+void splitting_isom_matrix(splitting_matrix_t* matrix, __m512i* null)
 {
     int index = splitting_get_index(null);
     *matrix = SPLITTING_MATRICES[index];
@@ -146,7 +109,7 @@ void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, splitting_
 
 }
 
-void splitting_apply_isomorphism(__m512i* res, __m512i* null, int* matrix)
+void splitting_apply_isomorphism_old(__m512i* res, __m512i* null, int* matrix)
 {
     // TODO: Atm we unvectorize multiple times, to match the avx512 interface of the methods.
     //       This is suboptimal, but maybe we want to get rid of the unvectorized code anyways?

@@ -17,7 +17,7 @@ void print_test_res(char * title, int passed)
     }
     dots[dots_len] = 0; //0-terminated
 
-    char * passed_txt = (passed == 1) ? "PASSED" : "FAILED";
+    char * passed_txt = (passed == 0) ? "FAILED" : "PASSED";
     printf("   %s %s %s\n", title, dots, passed_txt);
 }
 
@@ -33,15 +33,15 @@ int main()
     int n_tests = 1000;
     bool passed;
 
-    // passed = test_fp(n_tests);
-    // if(!passed) {
-    //     return 0;
-    // }
-    // passed = test_fp2(n_tests);
-    // if(!passed)
-    // {
-    //     return 0;
-    // }
+    passed = test_fp(n_tests);
+    if(!passed) {
+        return 0;
+    }
+    passed = test_fp2(n_tests);
+    if(!passed)
+    {
+        return 0;
+    }
     passed = test_theta(n_tests);
     if(!passed)
     {

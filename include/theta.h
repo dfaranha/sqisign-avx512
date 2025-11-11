@@ -133,7 +133,7 @@ void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2);
 /**
  * Compute the (2^n, 2^n)-isogeny chain defined by the theta points a and b, and outputs the codomain.
  * There is no gluing step, we assume the points are already in theta-coordinates.
- * @param null The theta null point of the domain.
+ * @param null The theta null point of the domain, stored in the 4x2x1 format.
  * @param ker The points of order 2^(n+2) defining the isogeny, stored in the 8x1x1 format.
  * @param n The length of the isogeny chain.
  */
