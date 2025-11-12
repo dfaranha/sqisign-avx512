@@ -7,17 +7,12 @@
 
 #include <string.h>
 
-bool splitting_chi(int i, int j)
+bool splitting_chi_old(int i, int j)
 {
-    for (int k = 0; k < NUM_EVEN_PAIRS; k++) {
-        if (i == EVEN_I[k] && j == EVEN_J[k]) {
-            return true;
-        }
-    }
-    return false;
+    return (i == 0) | (j == 0) | (i + j == 3) | (i + j == 6);
 }
 
-int splitting_get_index(__m512i* null) 
+int splitting_get_index_old(__m512i* null) 
 {
     int count = 0;
     int index = -1;
@@ -32,7 +27,7 @@ int splitting_get_index(__m512i* null)
         fp2_set_zero(&sum);
         for (int l = 0; l < 4; l++) {
             fp2_mul(&term, null_unvec + l, null_unvec + (j ^ l));
-            if (splitting_chi(i, l)) {
+            if (splitting_chi_old(i, l)) {
                 fp2_add(&sum, &sum, &term);
             }
             else {
@@ -50,6 +45,108 @@ int splitting_get_index(__m512i* null)
     }
     return index;
 }
+
+int splitting_get_index(__m512i* null)
+{
+    __m512i tmp1[8], tmp2[8], tmp3[8], tmp4[8], idx1, idx2, idx3, idx4;
+    __mmask8 add_mask;
+    int is_zero, index = 0, num_found = 0, t;
+
+    // === (0, 0), (1, 0), (2, 0), (3, 0) === 
+    fp2_sqr_4x2x1(tmp1, null);
+    
+    idx1 = VSET(0, 1, 0, 1, 0, 1, 0, 1);
+    idx2 = VSET(2, 3, 2, 3, 2, 3, 2, 3);
+    idx3 = VSET(4, 5, 4, 5, 4, 5, 4, 5);
+    idx4 = VSET(6, 7, 6, 7, 6, 7, 6, 7);
+    for (int i = 0; i < 8; i++) {
+        tmp2[i] = VPERM512(idx2, tmp1[i]);
+        tmp3[i] = VPERM512(idx3, tmp1[i]);
+        tmp4[i] = VPERM512(idx4, tmp1[i]);
+        tmp1[i] = VPERM512(idx1, tmp1[i]);
+    }
+    add_mask = 0x33; // +, -, +, -
+    fp2_mixaddsub_4x2x1(tmp1, tmp1, tmp2, add_mask);
+    add_mask = 0x0f; // +, +, -, -
+    fp2_mixaddsub_4x2x1(tmp1, tmp1, tmp3, add_mask);
+    add_mask = 0xc3; // +, -, -, +
+    fp2_mixaddsub_4x2x1(tmp1, tmp1, tmp4, add_mask);
+    
+    is_zero = fp2_is_zero_4x2x1(tmp1);
+    t = is_zero & 0x1; // (0,0 ) has index 0
+    num_found += t;
+    t = (is_zero >> 1) & 0x1;
+    num_found += t;
+    index = index*(1-t) + 4*t; // (1, 0) has index 4
+    t = (is_zero >> 2) & 0x1;
+    num_found += t;
+    index = index*(1-t) + 6*t; // (2, 0) has index 6
+    t = (is_zero >> 3) & 0x1;
+    num_found += t;
+    index = index*(1-t) + 8*t; // (3, 0) has index 8
+
+    // === (0, 1), (0, 2), (2, 1), (1, 2) === 
+    idx1 = VSET(0, 1, 0, 1, 2, 3, 4, 5);
+    idx2 = VSET(2, 3, 4, 5, 6, 7, 6, 7);
+    for (int i = 0; i < 8; i++) {
+        tmp1[i] = VPERM512(idx1, null[i]);
+        tmp2[i] = VPERM512(idx2, null[i]);
+    }
+    fp2_mul_4x2x1(tmp1, tmp1, tmp2);
+    
+    idx1 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    idx2 = VSET(6, 7, 4, 5, 6, 7, 5, 5);
+    for (int i = 0; i < 8; i++) {
+        tmp2[i] = VPERM512(idx2, tmp1[i]);
+        tmp1[i] = VPERM512(idx1, tmp1[i]);
+    }
+    add_mask = 0x0f;
+    fp2_mixaddsub_4x2x1(tmp1, tmp1, tmp2, add_mask);
+    is_zero = fp2_is_zero_4x2x1(tmp1);
+    t = is_zero & 0x1;
+    num_found += t;
+    index = index*(1-t) + t; // (0, 1) has index 1
+    t = (is_zero >> 1) & 0x1;
+    num_found += t;
+    index = index*(1-t) + 2*t; // (0, 2) has index 2
+    t = (is_zero >> 2) & 0x1;
+    num_found += t;
+    index = index*(1-t) + 7*t; // (2, 1) has index 7
+    t = (is_zero >> 3) & 0x1;
+    num_found += t;
+    index = index*(1-t) + 5*t; // (1, 2) has index 5
+
+    // === (0, 3), (3, 3) ===
+    // preparing 2x4x1 directly
+    idx1 = VSET(0, 0, 1, 1, 2, 2, 3, 3);
+    idx2 = VSET(6, 6, 7, 7, 4, 4, 5, 5); // if this was not swapped we could use standard conv.
+    for (int i = 0; i < 8; i++) {
+        tmp1[i] = VPERM512MASKZ(0x55, null[i], idx1);
+        tmp2[i] = VPERM512MASKZ(0x55, null[i], idx2);
+    }
+
+    fp2_mul_2x4x1(tmp1, tmp1, tmp2);
+    idx1 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    idx2 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    for (int i = 0; i < 8; i++) {
+        tmp2[i] = VPERM512MASKZ(0x55, tmp1[i], idx2);
+        tmp1[i] = VPERM512MASKZ(0x55, tmp1[i], idx1);
+    }
+    add_mask = 0x0f;
+    fp2_mixaddsub_2x4x1(tmp1, tmp1, tmp2, add_mask);
+    is_zero = fp2_is_zero_2x4x1(tmp1);
+    t = is_zero & 0x1;
+    num_found += t;
+    index = index*(1-t) + 3*t;
+    t = (is_zero >> 1) & 0x1;
+    num_found += t;
+    index = index*(1-t) + 9*t;
+
+    if (num_found != 1) {
+        return -1;
+    } 
+    return index;
+} 
 
 void splitting_isom_matrix(splitting_matrix_t* matrix, __m512i* null)
 {

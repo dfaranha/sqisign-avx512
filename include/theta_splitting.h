@@ -106,6 +106,7 @@ static const splitting_matrix_t SPLITTING_MATRICES[10] = {
  * @param null The theta null point
  */
 int splitting_get_index(__m512i* null);
+int splitting_get_index_old(__m512i* null);
 
 /**
  * Algorithm 8.42 of the SQIsign spec v2.0.1

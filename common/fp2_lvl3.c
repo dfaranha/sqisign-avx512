@@ -403,6 +403,11 @@ void fp2_neg_2x4x1(__m512i* res, __m512i* a)
     fp_neg_8x1(res, a);
 }
 
+void fp2_mixaddsub_2x4x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)
+{
+    fp_mixaddsub_8x1(res, a, b, add_mask);
+}
+
 void fp2_mul_2x4x1(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i s1[8], s2[8], t1[8], t2[8];

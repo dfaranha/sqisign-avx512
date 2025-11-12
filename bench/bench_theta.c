@@ -116,6 +116,31 @@ void bench_theta(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int i = 0; i < iterations; i++) {
+            tmp += splitting_get_index_old(a);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp2_is_equal_4x2x1(a, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("splitting_get_index old", cycles[(N_RUNS/2) -1], tmp);
+
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            tmp += splitting_get_index(a);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp2_is_equal_4x2x1(a, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("splitting_get_index new", cycles[(N_RUNS/2) -1], tmp);
+
+    // splitting_theta_to_product
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
             splitting_theta_to_product_old(a, b);
         }
         end = cpucycles();
