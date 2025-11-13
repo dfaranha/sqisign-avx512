@@ -3,6 +3,8 @@
 #include "fp_lvl3.h"
 #include "fp2_lvl3.h"
 #include "theta.h"
+#include "theta_gluing.h"
+#include "theta_middle.h"
 #include "theta_splitting.h"
 #include "utils.h"
 #include "KAT.h"
