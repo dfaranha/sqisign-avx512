@@ -318,10 +318,6 @@ static int ec_test_is_on_curve(const ec_curve_t *E, const ec_point_t *P)
 {
     fp2_t x, one, C_inv, tmp;
 
-    // point at infinity:
-    if (fp2_is_zero(&P->z)) 
-        return !fp2_is_zero(&P->x); 
-
     // x = X/Z
     fp2_copy(&x, &P->z);
     fp2_inv(&x);
@@ -337,7 +333,36 @@ static int ec_test_is_on_curve(const ec_curve_t *E, const ec_point_t *P)
     fp2_add(&tmp, &tmp, &one);
     fp2_mul(&tmp, &tmp, &x);
     fp2_mul(&tmp, &tmp, &C_inv);
-    return fp2_is_square(&tmp);
+
+    return fp2_is_square(&tmp) | fp2_is_zero(&P->z); // point at inf
+}
+
+static void ec_j_inv(fp2_t* j_inv, ec_curve_t* curve) 
+{
+    fp2_t nom, denom, tmp;
+
+    fp2_sqr(&tmp, &curve->A);
+    
+    // nom = 3, denom = 4
+    fp2_set_one(&nom);
+    fp2_add(&denom, &nom, &nom);
+    fp2_add(&denom, &denom, &denom);
+    fp2_sub(&nom, &denom, &nom);
+
+    // nom = A^2 - 3, denom = A^2 - 4
+    fp2_sub(&nom, &tmp, &nom);
+    fp2_sub(&denom, &tmp, &denom);
+
+    // nom = 2^8 * (A^2 - 3)^3
+    fp2_sqr(&tmp, &nom);
+    fp2_mul(&nom, &nom, &tmp);
+    for (int i = 0; i < 8; i++) {
+        fp2_add(&nom, &nom, &nom);
+    }
+
+    // nom / denom
+    fp2_inv(&denom);
+    fp2_mul(j_inv, &nom, &denom);
 }
 
 #endif

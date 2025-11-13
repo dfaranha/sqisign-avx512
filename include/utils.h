@@ -11,6 +11,10 @@
 #include "intrinsics_avx512.h"
 
 uint64_t rand_uint64();
+
+// Samples uniformly from [min, max].
+// nbits is the number of bits of max.
+uint64_t rand_in_range(const uint64_t min, const uint64_t max, const int nbits);
 __m512i rand_512i();
 void rand_fp_8x1(__m512i* res);
 void rand_fp_4x2(__m512i* res);

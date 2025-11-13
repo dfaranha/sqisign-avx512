@@ -2,6 +2,7 @@
 #include "fp2_lvl3.h"
 #include "theta.h"
 #include "theta_splitting.h"
+#include "utils.h"
 
 #include "sqi_fp2.h"
 
@@ -152,6 +153,13 @@ void splitting_isom_matrix(splitting_matrix_t* matrix, __m512i* null)
 {
     int index = splitting_get_index(null);
     *matrix = SPLITTING_MATRICES[index];
+}
+
+void splitting_rand_matrix(splitting_matrix_t* matrix)
+{
+    // sampling uniformly at random from [0,5]
+    int index = rand_in_range(0, 5, 3); 
+    *matrix = RAND_MATRICES[index];
 }
 
 // res = (point[2*index], point[2*index+1], point[2*index], point[2*index+1], ...)

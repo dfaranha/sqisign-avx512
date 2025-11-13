@@ -161,11 +161,13 @@ void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
     }
 }
 
-void theta_isogeny_chain_single(__m512i* codom, __m512i* eval_pts, __m512i* null, __m512i* ker_a, __m512i* ker_b, __m512i* pts, const int n, const int num_pts)
+void theta_isogeny_chain_single(__m512i* codom, __m512i* eval_pts, __m512i* null, 
+    __m512i* ker_a, __m512i* ker_b, __m512i* pts, const int n, const int num_pts, 
+    const bool randomize)
 {
     bool h1, h2;
     //int isom_matrix[16];
-    splitting_matrix_t isom_matrix;
+    splitting_matrix_t isom_matrix, rand_matrix;
     __m512i c1[8], c2[8], p1[8], p2[8], k1[8], k2[8], codom_null[8], inv[8];
     fp2_copy_4x2x1(p1, ker_a);
     fp2_copy_4x2x1(p2, ker_b);
@@ -217,10 +219,21 @@ void theta_isogeny_chain_single(__m512i* codom, __m512i* eval_pts, __m512i* null
     // Splitting
     splitting_isom_matrix(&isom_matrix, codom_null);
     splitting_apply_isomorphism_single(codom_null, codom_null, &isom_matrix);
-    splitting_theta_to_product(codom, codom_null);
 
     for (int i = 0; i < num_pts; i++) {
         splitting_apply_isomorphism_single(eval_pts+8*i, eval_pts+8*i, &isom_matrix);
+    }
+
+    if (randomize) {
+        splitting_rand_matrix(&rand_matrix);
+        splitting_apply_isomorphism_single(codom_null, codom_null, &rand_matrix);
+        for (int i = 0; i < num_pts; i++) {
+            splitting_apply_isomorphism_single(eval_pts+8*i, eval_pts+8*i, &rand_matrix);
+        }
+    }
+
+    splitting_theta_to_product(codom, codom_null);
+    for (int i = 0; i < num_pts; i++) {
         splitting_theta_point_to_mont_single(eval_pts+8*i, eval_pts+8*i, codom_null);
     }
 }
@@ -373,9 +386,10 @@ void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
     }
 }
 
-void theta_isogeny_chain_pair(__m512i* codom, __m512i* eval_pts, __m512i* null, __m512i* ker, __m512i* pts, const int n, const int num_pts)
+void theta_isogeny_chain_pair(__m512i* codom, __m512i* eval_pts, __m512i* null, __m512i* ker, 
+    __m512i* pts, const int n, const int num_pts, const bool randomize)
 {
-    splitting_matrix_t isom_matrix;
+    splitting_matrix_t isom_matrix, rand_matrix;
     __m512i c1[8], c2[8], p[16], k[16], codom_null[8], inv[8];
     bool h1, h2;
     bool num_pts_is_odd = (num_pts & 0x1);
@@ -427,14 +441,29 @@ void theta_isogeny_chain_pair(__m512i* codom, __m512i* eval_pts, __m512i* null, 
     // Splitting
     splitting_isom_matrix(&isom_matrix, codom_null);
     splitting_apply_isomorphism_single(codom_null, codom_null, &isom_matrix);
-    splitting_theta_to_product(codom, codom_null);
-
     for (int i = 0; i < num_pair_pts; i++) {
         splitting_apply_isomorphism_pair(eval_pts+16*i, eval_pts+16*i, &isom_matrix);
-        splitting_theta_point_to_mont_pair(eval_pts+16*i, eval_pts+16*i, codom_null);
     }
     if (num_pts_is_odd) {
         splitting_apply_isomorphism_single(eval_pts+8*(num_pts-1), eval_pts+8*(num_pts-1), &isom_matrix);
+    }
+
+    if (randomize) {
+        splitting_rand_matrix(&rand_matrix);
+        splitting_apply_isomorphism_single(codom_null, codom_null, &rand_matrix);
+        for (int i = 0; i < num_pair_pts; i++) {
+            splitting_apply_isomorphism_pair(eval_pts+16*i, eval_pts+16*i, &rand_matrix);
+        }
+        if (num_pts_is_odd) {
+            splitting_apply_isomorphism_single(eval_pts+8*(num_pts-1), eval_pts+8*(num_pts-1), &rand_matrix);
+        }
+    }
+
+    splitting_theta_to_product(codom, codom_null);
+    for (int i = 0; i < num_pair_pts; i++) {
+        splitting_theta_point_to_mont_pair(eval_pts+16*i, eval_pts+16*i, codom_null);
+    }
+    if (num_pts_is_odd) {
         splitting_theta_point_to_mont_single(eval_pts+8*(num_pts-1), eval_pts+8*(num_pts-1), codom_null);
     }
 }

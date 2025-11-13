@@ -100,6 +100,39 @@ static const splitting_matrix_t SPLITTING_MATRICES[10] = {
     }
 };
 
+static const splitting_matrix_t RAND_MATRICES[6] = {
+    {
+        { 0xfc, 0xf3, 0xcf, 0x3f },
+        { 0x00, 0x00, 0x00, 0x00 },
+        { 0x00, 0x00, 0x00, 0x00 }
+    },
+    {
+        { 0x3f, 0xcf, 0xf3, 0xfc },
+        { 0x00, 0x00, 0x00, 0x00 },
+        { 0x00, 0x00, 0x00, 0x00 }
+    },
+    {
+        { 0x00, 0x00, 0x00, 0x00 },
+        { 0x00, 0xcc, 0xf0, 0x3c },
+        { 0x00, 0x00, 0x00, 0x00 }
+    },
+    {
+        { 0x00, 0x00, 0x00, 0x00 },
+        { 0x3c, 0x0f, 0x33, 0x00 },
+        { 0x00, 0x00, 0x00, 0x00 }
+    },
+    {
+        { 0x00, 0x00, 0x00, 0x00 },
+        { 0x03, 0x0c, 0x30, 0xc0 },
+        { 0x3c, 0xc3, 0xc3, 0x3c }
+    },
+    {
+        { 0x00, 0x00, 0x00, 0x00 },
+        { 0xc0, 0x30, 0x0c, 0x03 },
+        { 0x3c, 0xc3, 0xc3, 0x3c }
+    }
+};
+
 /**
  * Algorithm 8.41 of the SQIsign spec v2.0.1, modified to output the index in the list of even pairs (i,j)
  * In case zero or multiple pairs are found, it outputs -1.
@@ -112,11 +145,12 @@ int splitting_get_index_old(__m512i* null);
  * Algorithm 8.42 of the SQIsign spec v2.0.1
  * Samples an isomorphism matrix.
  *
- * TODO: At the moment, this is not randomized
  * @param matrix The output is a 4x4 matrix over Fp2.
  * @param null The theta null point
  */
 void splitting_isom_matrix(splitting_matrix_t* matrix, __m512i* null);
+
+void splitting_rand_matrix(splitting_matrix_t* matrix);
 
 void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, const splitting_matrix_t* matrix);
 

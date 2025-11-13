@@ -2,6 +2,8 @@
 #include <string.h>
 #include "utils.h"
 
+// TODO: Might not be cryptographically secure randomness.
+
 uint64_t rand_uint64() 
 {
 	uint64_t r = 0;
@@ -9,6 +11,18 @@ uint64_t rand_uint64()
 		r = r*2 + rand()%2;
 	}
 	return r;
+}
+
+uint64_t rand_in_range(const uint64_t min, const uint64_t max, const int nbits)
+{
+    uint64_t r;
+    do {
+        r = 0;
+        for (int i = 0; i < nbits; i++) {
+            r = r*2 + rand()%2;
+        }
+    } while (r < min || r > max );
+    return r;
 }
 
 __m512i rand_512i() 

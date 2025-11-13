@@ -79,7 +79,9 @@ void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
  * @param n The length of the isogeny chain.
  * @param num_pts The number of points to be evaluated
  */
-void theta_isogeny_chain_single(__m512i* prod, __m512i* eval_pts, __m512i* null, __m512i* ker_a, __m512i* ker_b, __m512i* pts, const int n, const int num_pts);
+void theta_isogeny_chain_single(__m512i* prod, __m512i* eval_pts, __m512i* null, 
+    __m512i* ker_a, __m512i* ker_b, __m512i* pts, const int n, const int num_pts, 
+    const bool randomize);
 
 // ======================================================================================================
 //                                                 Pair
@@ -145,6 +147,7 @@ void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2);
  * @param n The length of the isogeny chain.
  * @param num_pts The number of points to be evaluated
  */
-void theta_isogeny_chain_pair(__m512i* codom, __m512i* eval_pts, __m512i* null, __m512i* ker, __m512i* pts, const int n, const int num_pts);
+void theta_isogeny_chain_pair(__m512i* codom, __m512i* eval_pts, __m512i* null, __m512i* ker, 
+    __m512i* pts, const int n, const int num_pts, const bool randomize);
 
 #endif
