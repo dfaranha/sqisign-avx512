@@ -8,45 +8,6 @@
 
 #include <string.h>
 
-bool splitting_chi_old(int i, int j)
-{
-    return (i == 0) | (j == 0) | (i + j == 3) | (i + j == 6);
-}
-
-int splitting_get_index_old(__m512i* null) 
-{
-    int count = 0;
-    int index = -1;
-    int i, j;
-    fp2_t null_unvec[4];
-    fp2_t sum, term;
-    fp2_4x2x1_to_unvectorized(null_unvec, null);
-
-    for (int k = 0; k < NUM_EVEN_PAIRS; k++) {
-        i = EVEN_I[k];
-        j = EVEN_J[k];
-        fp2_set_zero(&sum);
-        for (int l = 0; l < 4; l++) {
-            fp2_mul(&term, null_unvec + l, null_unvec + (j ^ l));
-            if (splitting_chi_old(i, l)) {
-                fp2_add(&sum, &sum, &term);
-            }
-            else {
-                fp2_sub(&sum, &sum, &term);
-            }
-        }
-        if (fp2_is_zero(&sum)) {
-            index = k;
-            count += 1;
-        }
-    }
-
-    if (count != 1) {
-        return -1;
-    }
-    return index;
-}
-
 int splitting_get_index(__m512i* null)
 {
     __m512i tmp1[8], tmp2[8], tmp3[8], tmp4[8], idx1, idx2, idx3, idx4;
@@ -264,68 +225,6 @@ void splitting_apply_isomorphism_pair(__m512i* res, __m512i* points, const split
     }
 }
 
-void splitting_apply_isomorphism_old(__m512i* res, __m512i* null, int* matrix)
-{
-    // TODO: Atm we unvectorize multiple times, to match the avx512 interface of the methods.
-    //       This is suboptimal, but maybe we want to get rid of the unvectorized code anyways?
-    fp2_t null_unvec[4], res_unvec[4], tmp;
-    fp2_4x2x1_to_unvectorized(null_unvec, null);
-
-    for (int i = 0; i < 4; i++) {
-        fp2_set_zero(res_unvec+i);
-        for (int j = 0; j < 4; j++) {
-            int matrix_entry = matrix[4*i + j];
-            if (matrix_entry == 1) {
-                fp2_add(res_unvec+i, res_unvec+i, null_unvec+j);
-            }
-            if (matrix_entry == 3) {
-                fp2_sub(res_unvec+i, res_unvec+i, null_unvec+j);
-            }
-            if (matrix_entry == 5) {
-                fp2_mul_i(&tmp, null_unvec+j, 1);
-                fp2_add(res_unvec+i, res_unvec+i, &tmp);
-            }
-            if (matrix_entry == 7) {
-                fp2_mul_i(&tmp, null_unvec+j, 1);
-                fp2_sub(res_unvec+i, res_unvec+i, &tmp);
-            }
-        }
-    }
-    fp2_unvectorized_to_4x2x1(res, res_unvec);
-}
-
-void splitting_theta_to_product_old(__m512i* product, __m512i* null) 
-{
-    // TODO: Atm we unvectorize multiple times, to match the avx512 interface of the methods.
-    //       This is suboptimal, but maybe we want to get rid of the unvectorized code anyways?
-    fp2_t null_unvec[4], product_unvec[4], x, y, z;
-    fp2_4x2x1_to_unvectorized(null_unvec, null);
-    
-    // x = a^4, y = b^4, z = c^4
-    fp2_sqr(&x, &null_unvec[0]);
-    fp2_sqr(&x, &x);
-    fp2_sqr(&y, &null_unvec[1]);
-    fp2_sqr(&y, &y);
-    fp2_sqr(&z, &null_unvec[2]);
-    fp2_sqr(&z, &z);
-
-    // A1 = -2*(x+z), C2 = x - z
-    fp2_add(product_unvec, &x, &z);
-    fp2_add(product_unvec, product_unvec, product_unvec);
-    fp2_neg(product_unvec, product_unvec);
-    fp2_sub(product_unvec+1, &x, &z);
-
-    // A2 = -2*(x+y), C2 = x - y
-    fp2_add(product_unvec+2, &x, &y);
-    fp2_add(product_unvec+2, product_unvec+2, product_unvec+2);
-    fp2_neg(product_unvec+2, product_unvec+2);
-    fp2_sub(product_unvec+3, &x, &y);
-
-    //TODO: Python code checks that a * d = b * c and that C1, C2 != 0.
-
-    fp2_unvectorized_to_4x2x1(product, product_unvec);
-}
-
 void splitting_theta_to_product(__m512i* product, __m512i* null) 
 {    
     __m512i tmp[8], idx1, idx2;
@@ -410,34 +309,4 @@ void splitting_theta_point_to_mont_pair(__m512i* mont_points, __m512i* theta_poi
     //  a*x - c*x, a*x' - c*x', a*y - b*x, a*y' - b*x')
     add_mask = 0x0f;
     fp2_mixaddsub_8x1x1(mont_points, mont_points, tmp, add_mask, add_mask);
-}
-
-void splitting_theta_point_to_mont_pair_old(__m512i* mont_points, __m512i* theta_points, __m512i* null)
-{
-    fp2_t theta_points_unvec[8], null_unvec[4], mont_points_unvec[8], tmp[8];
-    // theta = (x, x', y, y', z, z', _, _)
-    fp2_8x1x1_to_unvectorized(theta_points_unvec, theta_points);
-    // null = (a, b, c, _)
-    fp2_4x2x1_to_unvectorized(null_unvec, null); 
-
-    fp2_mul(tmp, null_unvec, theta_points_unvec+2); // a*y
-    fp2_mul(tmp+1, null_unvec, theta_points_unvec+3);
-    fp2_mul(tmp+2, null_unvec, theta_points_unvec+4); // a*z
-    fp2_mul(tmp+3, null_unvec, theta_points_unvec+5);
-    fp2_mul(tmp+4, null_unvec+1, theta_points_unvec); // b*x
-    fp2_mul(tmp+5, null_unvec+1, theta_points_unvec+1);
-    fp2_mul(tmp+6, null_unvec+2, theta_points_unvec); // c*x
-    fp2_mul(tmp+7, null_unvec+2, theta_points_unvec+1);
-    
-
-    fp2_add(mont_points_unvec, tmp+2, tmp+6);   // X1 = a * z + c * x
-    fp2_add(mont_points_unvec+1, tmp+3, tmp+7);
-    fp2_add(mont_points_unvec+2, tmp, tmp+4);   // X2 = a * y + b * x
-    fp2_add(mont_points_unvec+3, tmp+1, tmp+5);
-    fp2_sub(mont_points_unvec+4, tmp+2, tmp+6); // Z1 = a * z - c * x
-    fp2_sub(mont_points_unvec+5, tmp+3, tmp+7);
-    fp2_sub(mont_points_unvec+6, tmp, tmp+4);   // Z2 = a * y  - b * x
-    fp2_sub(mont_points_unvec+7, tmp+1, tmp+5);
-
-    fp2_unvectorized_to_8x1x1(mont_points, mont_points_unvec);
 }

@@ -139,7 +139,6 @@ static const splitting_matrix_t RAND_MATRICES[6] = {
  * @param null The theta null point
  */
 int splitting_get_index(__m512i* null);
-int splitting_get_index_old(__m512i* null);
 
 /**
  * Algorithm 8.42 of the SQIsign spec v2.0.1
@@ -157,7 +156,6 @@ void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, const spli
 void splitting_apply_isomorphism_pair(__m512i* res, __m512i* point, const splitting_matrix_t* matrix);
 
 void splitting_theta_to_product(__m512i* product, __m512i* null);
-void splitting_theta_to_product_old(__m512i* product, __m512i* null);
 
 /**
  * Given a theta null point OA in a compatible form with splitting, compute
@@ -182,7 +180,6 @@ void splitting_theta_point_to_mont_single(__m512i* mont_points, __m512i* theta_p
  * @param null The theta null point
  */
 void splitting_theta_point_to_mont_pair(__m512i* mont_points, __m512i* theta_point, __m512i* null);
-void splitting_theta_point_to_mont_pair_old(__m512i* mont_points, __m512i* theta_point, __m512i* null);
 
 
 // Internal functions
