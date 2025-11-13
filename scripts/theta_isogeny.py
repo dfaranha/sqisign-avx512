@@ -9,6 +9,7 @@ from theta_structure import (
     hadamard_pair,
     pairwise_pair,
 )
+from utilities import sqrt_fp2
 
 
 def theta_precompute(OA: AVX_4x2x1) -> tuple[AVX_4x2x1, AVX_4x2x1]:
@@ -131,6 +132,116 @@ def theta_codomain_4x2x1(
 
     # Here we only need two multiplications, we could make a special function
     inv = pairwise_multiplication_2(inv, t1)
+
+    if h2:
+        OB = hadamard(OB)
+
+    return OB, inv
+
+
+def theta_codomain_with_four_torsion(
+    ker_P: AVX_4x2x1,
+    OA: AVX_4x2x1,
+    h1: bool,
+    h2: bool,
+) -> tuple[AVX_4x2x1, AVX_4x2x1]:
+    if h1:
+        T1 = hadamard(ker_P)
+        T1 = squaring(T1)
+        T1 = hadamard(T1)
+
+        T2 = hadamard(OA)
+        T2 = squaring(T2)
+        T2 = hadamard(T2)
+    else:
+        T1 = squaring(ker_P)
+        T1 = hadamard(T1)
+
+        T2 = squaring(OA)
+        T2 = hadamard(T2)
+
+    xAB, _, xCD, _ = T1
+    AA, BB, CC, DD = T2
+
+    # TODO: here are two fp2 sqrt, do we want to do something
+    #       in parallel here, or convert from 64-bit for the last
+    #       two steps where we need sqrts?
+    AB = sqrt_fp2(AA * BB)
+    AC = sqrt_fp2(AA * CC)
+
+    # NOTE: this uses 4 calls to pairwise_multiplication which
+    #       is 16M but you can do it in 14M for serial computation.
+    #       Good news is that the spec uses 15M instead of 14M, so
+    #       there's an extra saving here we made :)
+    #
+    # x A^3 BC as a projective factor
+    # A = xAB * AA * AC
+    # B = AB * AC * xAB
+    # C = xAB * AA * CC
+    # D = xCD * AB * AA
+
+    # x A^2 B^3 C^2 D^2 as a projective factor
+    # A_inv = xAB * BB * CC * DD
+    # B_inv = xAB * AB * CC * DD
+    # C_inv = xAB * AC * BB * DD
+    # D_inv = AB * BB * AC * xCD
+
+    T0 = AVX_4x2x1(xAB, xAB, xCD, BB)
+    T1 = AVX_4x2x1(AC, CC, AB, DD)
+    t0, t1, t2, t3 = pairwise_multiplication(T0, T1)
+
+    OB = AVX_4x2x1(AA, AB, AA, AA)
+    T0 = AVX_4x2x1(t0, t0, t1, t2)
+    OB = pairwise_multiplication(OB, T0)
+
+    T0 = AVX_4x2x1(AB, BB, 0, 0)
+    T1 = AVX_4x2x1(DD, AC, 0, 0)
+    t4, t5, _, _ = pairwise_multiplication_2(T0, T1)
+
+    inv = AVX_4x2x1(t1, t1, t0, t2)
+    T0 = AVX_4x2x1(t3, t4, t3, t5)
+    inv = pairwise_multiplication(inv, T0)
+
+    if h2:
+        OB = hadamard(OB)
+
+    return OB, inv
+
+
+def theta_codomain_with_no_torsion(
+    OA: AVX_4x2x1,
+    h1: bool,
+    h2: bool,
+) -> tuple[AVX_4x2x1, AVX_4x2x1]:
+    if h1:
+        T1 = hadamard(OA)
+        T1 = squaring(T1)
+        T1 = hadamard(T1)
+    else:
+        T1 = squaring(OA)
+        T1 = hadamard(T1)
+
+    # TODO: here are three fp2 sqrt, do we want to do something
+    #       in parallel here, or convert from 64-bit for the last
+    #       two steps where we need sqrts?
+    AA, BB, CC, DD = T1
+    AB = sqrt_fp2(AA * BB)
+    AC = sqrt_fp2(AA * CC)
+    AD = sqrt_fp2(AA * DD)
+    OB = AVX_4x2x1(AA, AB, AC, AD)
+
+    # This calls pairwise_multiplication twice for a total of
+    # 8M where as in serial we only need 7, so 1 M is technically
+    # redundant here.
+    # A_inv = BB * CC * DD
+    # B_inv = AB * CC * DD
+    # C_inv = BB * AC * DD
+    # D_inv = BB * CC * AD
+    inv = AVX_4x2x1(BB, AB, BB, BB)
+    T0 = AVX_4x2x1(CC, CC, AC, CC)
+    inv = pairwise_multiplication(inv, T0)
+    T0 = AVX_4x2x1(DD, DD, DD, AD)
+    inv = pairwise_multiplication(inv, T0)
 
     if h2:
         OB = hadamard(OB)
