@@ -169,32 +169,37 @@ def theta_codomain_with_four_torsion(
     AB = sqrt_fp2(AA * BB)
     AC = sqrt_fp2(AA * CC)
 
-    # TODO: this uses 5 calls to pairwise_multiplication which
-    #       is 20M but you can do it in 15M for serial computation
-    #       so there's probably something better i can do here.
+    # NOTE: this uses 4 calls to pairwise_multiplication which
+    #       is 16M but you can do it in 14M for serial computation.
+    #       Good news is that the spec uses 15M instead of 14M, so
+    #       there's an extra saving here we made :)
     #
     # x A^3 BC as a projective factor
     # A = xAB * AA * AC
     # B = AB * AC * xAB
     # C = xAB * AA * CC
     # D = xCD * AB * AA
-    OB = AVX_4x2x1(xAB, AB, xAB, xCD)
-    T0 = AVX_4x2x1(AA, AC, AA, AB)
-    OB = pairwise_multiplication(OB, T0)
-    T0 = AVX_4x2x1(AC, xAB, CC, AA)
-    OB = pairwise_multiplication(OB, T0)
 
     # x A^2 B^3 C^2 D^2 as a projective factor
     # A_inv = xAB * BB * CC * DD
     # B_inv = xAB * AB * CC * DD
     # C_inv = xAB * AC * BB * DD
     # D_inv = AB * BB * AC * xCD
-    inv = AVX_4x2x1(xAB, xAB, xAB, AB)
-    T0 = AVX_4x2x1(BB, AB, AC, BB)
-    inv = pairwise_multiplication(inv, T0)
-    T0 = AVX_4x2x1(CC, CC, BB, AC)
-    inv = pairwise_multiplication(inv, T0)
-    T0 = AVX_4x2x1(DD, DD, DD, xCD)
+
+    T0 = AVX_4x2x1(xAB, xAB, xCD, BB)
+    T1 = AVX_4x2x1(AC, CC, AB, DD)
+    t0, t1, t2, t3 = pairwise_multiplication(T0, T1)
+
+    OB = AVX_4x2x1(AA, AB, AA, AA)
+    T0 = AVX_4x2x1(t0, t0, t1, t2)
+    OB = pairwise_multiplication(OB, T0)
+
+    T0 = AVX_4x2x1(AB, BB, 0, 0)
+    T1 = AVX_4x2x1(DD, AC, 0, 0)
+    t4, t5, _, _ = pairwise_multiplication_2(T0, T1)
+
+    inv = AVX_4x2x1(t1, t1, t0, t2)
+    T0 = AVX_4x2x1(t3, t4, t3, t5)
     inv = pairwise_multiplication(inv, T0)
 
     if h2:
@@ -225,6 +230,9 @@ def theta_codomain_with_no_torsion(
     AD = sqrt_fp2(AA * DD)
     OB = AVX_4x2x1(AA, AB, AC, AD)
 
+    # This calls pairwise_multiplication twice for a total of
+    # 8M where as in serial we only need 7, so 1 M is technically
+    # redundant here.
     # A_inv = BB * CC * DD
     # B_inv = AB * CC * DD
     # C_inv = BB * AC * DD
