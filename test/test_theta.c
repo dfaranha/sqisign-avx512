@@ -152,7 +152,7 @@ bool test_theta(int iterations)
 
     //We reduce by one as we have already done the gluing step
     int n = 188 - 1;
-    int num_pts = 2;
+    int num_pts = 3;
     bool randomize = true;
 
     __m512i pts[num_pts*8];
@@ -160,6 +160,7 @@ bool test_theta(int iterations)
     __m512i eval_pts[num_pts*8];
     fp2_copy_4x2x1(pts, P);
     fp2_copy_4x2x1(pts+8, Q);
+    fp2_copy_4x2x1(pts+16, Q);
 
     theta_isogeny_chain_single(codom, eval_pts, OA, P, Q, pts, n, num_pts, randomize);
 
