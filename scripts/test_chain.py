@@ -1,5 +1,10 @@
 from elliptic_types import Curve, BasisX, PointX
-from theta_isogeny_chain import theta_isogeny_chain_4x2x1, theta_isogeny_chain_8x1x1
+from theta_isogeny_chain import (
+    theta_isogeny_chain_4x2x1,
+    theta_isogeny_chain_8x1x1,
+    theta_isogeny_chain_with_torsion_4x2x1,
+    theta_isogeny_chain_with_torsion_8x1x1,
+)
 from sage.all import GF, proof, EllipticCurve
 
 
@@ -12,6 +17,32 @@ def lift_to_curve(A, P):
 
 def is_four_torsion(P):
     return (4 * P).is_zero()
+
+
+def double_double_torsion(E, B):
+    F = E.base_ring()
+
+    P = E.lift_x(B.PX / B.PZ)
+    Q = E.lift_x(B.QX / B.QZ)
+    PmQ = E.lift_x(B.PmQX / B.PmQZ)
+
+    if (P - Q).x() != PmQ.x():
+        Q = -Q
+    assert (P - Q).x() == PmQ.x()
+
+    P = 4 * P
+    Q = 4 * Q
+    PmQ = P - Q
+
+    return BasisX(P.x(), F.one(), Q.x(), F.one(), PmQ.x(), F.one())
+
+
+def remove_extra_torsion(E1, E2, B1, B2):
+    EE1 = EllipticCurve([0, E1.A / E1.C, 0, 1, 0])
+    EE2 = EllipticCurve([0, E2.A / E2.C, 0, 1, 0])
+    B1 = double_double_torsion(EE1, B1)
+    B2 = double_double_torsion(EE2, B2)
+    return B1, B2
 
 
 proof.all(False)
@@ -58,7 +89,19 @@ B2 = BasisX(PX2, PZ2, QX2, QZ2, PmQX2, PmQZ2)
 
 # Ensure the output from the chain matches
 domain = (E1, E2)
-kernel = (B1, B2)
+extra_kernel = (B1, B2)
+exact_kernel = remove_extra_torsion(E1, E2, B1, B2)
+
+# Ensure the orders of the kernel match what we expect
+EE1 = EllipticCurve([0, E1.A / E1.C, 0, 1, 0])
+EE2 = EllipticCurve([0, E2.A / E2.C, 0, 1, 0])
+assert EE1.lift_x(B1.PX / B1.PZ) * 2 ** (length) != EE1.zero()
+assert EE2.lift_x(B2.PX / B2.PZ) * 2 ** (length) != EE2.zero()
+assert EE1.lift_x(B1.PX / B1.PZ) * 2 ** (length + 2) == EE1.zero()
+assert EE2.lift_x(B2.PX / B2.PZ) * 2 ** (length + 2) == EE2.zero()
+_B1, _B2 = exact_kernel
+assert EE1.lift_x(_B1.PX / _B1.PZ) * 2 ** (length) == EE1.zero()
+assert EE2.lift_x(_B2.PX / _B2.PZ) * 2 ** (length) == EE2.zero()
 
 xP1 = PointX(PX1, PZ1)
 xQ1 = PointX(QX1, QZ1)
@@ -69,23 +112,46 @@ input_images_two = [(xP1, zero), (zero, xP2)]
 input_images_three = [(xP1, zero), (xQ1, zero), (xPmQ1, zero)]
 
 
-for isogeny_algorithm in [theta_isogeny_chain_4x2x1, theta_isogeny_chain_8x1x1]:
+for isogeny_algorithm in [
+    theta_isogeny_chain_4x2x1,
+    theta_isogeny_chain_8x1x1,
+    theta_isogeny_chain_with_torsion_4x2x1,
+    theta_isogeny_chain_with_torsion_8x1x1,
+]:
     for randomise in [True, False]:
         for input_images in [input_images_two, input_images_three]:
+            if "with_torsion" in isogeny_algorithm.__name__:
+                kernel = extra_kernel
+            else:
+                kernel = exact_kernel
+
             (A3, C3), (A4, C4), images = isogeny_algorithm(
                 domain, kernel, length, input_images, randomise
             )
-            if not randomise:
-                assert A3 / C3 == A3_check
-                assert A4 / C4 == A4_check
+            if "with_torsion" in isogeny_algorithm.__name__:
+                if not randomise:
+                    assert A3 / C3 == A3_check
+                    assert A4 / C4 == A4_check
+                else:
+                    E3 = EllipticCurve(F, [0, A3 / C3, 0, 1, 0])
+                    E3_check = EllipticCurve(F, [0, A3_check, 0, 1, 0])
+                    assert E3.j_invariant() == E3_check.j_invariant()
+
+                    E4 = EllipticCurve(F, [0, A4 / C4, 0, 1, 0])
+                    E4_check = EllipticCurve(F, [0, A4_check, 0, 1, 0])
+                    assert E4.j_invariant() == E4_check.j_invariant()
             else:
+                # Sign ambiguity from sqrt in this case means we're only
+                # isomorphic to the concrete test here, regardless of randomise
                 E3 = EllipticCurve(F, [0, A3 / C3, 0, 1, 0])
                 E3_check = EllipticCurve(F, [0, A3_check, 0, 1, 0])
-                assert E3.j_invariant() == E3_check.j_invariant()
 
                 E4 = EllipticCurve(F, [0, A4 / C4, 0, 1, 0])
                 E4_check = EllipticCurve(F, [0, A4_check, 0, 1, 0])
-                assert E4.j_invariant() == E4_check.j_invariant()
+
+                j_check = [E3_check.j_invariant(), E4_check.j_invariant()]
+                assert E3.j_invariant() in j_check
+                assert E4.j_invariant() in j_check
 
             if len(input_images) == 2:
                 (xP3, xP4), (xQ3, xQ4) = images
