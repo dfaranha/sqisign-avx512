@@ -146,34 +146,28 @@ def theta_codomain_with_four_torsion(
     h2: bool,
 ) -> tuple[AVX_4x2x1, AVX_4x2x1]:
     if h1:
-        T1 = hadamard(ker_P)
-        T1 = squaring(T1)
-        T1 = hadamard(T1)
+        ker_P = hadamard(ker_P)
+        OA = hadamard(OA)
 
-        T2 = hadamard(OA)
-        T2 = squaring(T2)
-        T2 = hadamard(T2)
-    else:
-        T1 = squaring(ker_P)
-        T1 = hadamard(T1)
+    T1 = squaring(ker_P)
+    T1 = hadamard(T1)
 
-        T2 = squaring(OA)
-        T2 = hadamard(T2)
+    T2 = squaring(OA)
+    T2 = hadamard(T2)
 
     xAB, _, xCD, _ = T1
     AA, BB, CC, DD = T2
 
+    T0 = AVX_4x2x1(AA, AA, xAB, BB)
+    T1 = AVX_4x2x1(BB, CC, CC, DD)
+    AABB, AACC, xABCC, BBDD = pairwise_multiplication(T0, T1)
+
     # TODO: here are two fp2 sqrt, do we want to do something
     #       in parallel here, or convert from 64-bit for the last
     #       two steps where we need sqrts?
-    AB = sqrt_fp2(AA * BB)
-    AC = sqrt_fp2(AA * CC)
+    AB = sqrt_fp2(AABB)
+    AC = sqrt_fp2(AACC)
 
-    # NOTE: this uses 4 calls to pairwise_multiplication which
-    #       is 16M but you can do it in 14M for serial computation.
-    #       Good news is that the spec uses 15M instead of 14M, so
-    #       there's an extra saving here we made :)
-    #
     # x A^3 BC as a projective factor
     # A = xAB * AA * AC
     # B = AB * AC * xAB
@@ -186,20 +180,16 @@ def theta_codomain_with_four_torsion(
     # C_inv = xAB * AC * BB * DD
     # D_inv = AB * BB * AC * xCD
 
-    T0 = AVX_4x2x1(xAB, xAB, xCD, BB)
-    T1 = AVX_4x2x1(AC, CC, AB, DD)
-    t0, t1, t2, t3 = pairwise_multiplication(T0, T1)
+    T0 = AVX_4x2x1(xAB, AB, xCD, BB)
+    T1 = AVX_4x2x1(AC, DD, AB, AC)
+    xABAC, ABDD, xCDAB, BBAC = pairwise_multiplication(T0, T1)
 
     OB = AVX_4x2x1(AA, AB, AA, AA)
-    T0 = AVX_4x2x1(t0, t0, t1, t2)
+    T0 = AVX_4x2x1(xABAC, xABAC, xABCC, xCDAB)
     OB = pairwise_multiplication(OB, T0)
 
-    T0 = AVX_4x2x1(AB, BB, 0, 0)
-    T1 = AVX_4x2x1(DD, AC, 0, 0)
-    t4, t5, _, _ = pairwise_multiplication_2(T0, T1)
-
-    inv = AVX_4x2x1(t1, t1, t0, t2)
-    T0 = AVX_4x2x1(t3, t4, t3, t5)
+    inv = AVX_4x2x1(xABCC, xABCC, xABAC, xCDAB)
+    T0 = AVX_4x2x1(BBDD, ABDD, BBDD, BBAC)
     inv = pairwise_multiplication(inv, T0)
 
     if h2:
@@ -214,12 +204,9 @@ def theta_codomain_with_no_torsion(
     h2: bool,
 ) -> tuple[AVX_4x2x1, AVX_4x2x1]:
     if h1:
-        T1 = hadamard(OA)
-        T1 = squaring(T1)
-        T1 = hadamard(T1)
-    else:
-        T1 = squaring(OA)
-        T1 = hadamard(T1)
+        OA = hadamard(OA)
+    T1 = squaring(OA)
+    T1 = hadamard(T1)
 
     # TODO: here are three fp2 sqrt, do we want to do something
     #       in parallel here, or convert from 64-bit for the last
