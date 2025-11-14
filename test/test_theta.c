@@ -4,6 +4,8 @@
 #include "fp2_lvl3.h"
 #include "test.h"
 #include "theta.h"
+#include "theta_gluing.h"
+#include "theta_middle.h"
 #include "theta_splitting.h"
 #include "utils.h"
 
@@ -11,92 +13,11 @@
 
 bool test_theta(int iterations)
 {
-    __m512i a[16], b[16], c[16], d[16], e[16], f[16], g[16], zero[16], one[16], t;
-    fp2_setzero_8x1x1(zero);
-    fp2_setzero_8x1x1(one);
-    one[0] = VSETALL(1);
+    __m512i a[16], b[16], c[16], d[16], e[16], f[16], g[16];
+
     int passed = 1;
 
-    printf("Theta single tests:\n");
-
-    // Hadamard
-    for (int i = 0; i < iterations; i++) {
-        rand_fp2_4x2x1(a);
-        rand_fp2_4x2x1(b);
-        
-        // H^2 is mult by 4
-        theta_had_single(d, a);
-        theta_had_single(e, d);
-        fp2_add_4x2x1(f, a, a);
-        fp2_add_4x2x1(f, f, f);
-
-        if (fp2_is_equal_4x2x1(e, f) != 0xf) {
-            passed = 0;
-            break;
-        }
-
-        // In place
-        fp2_copy_4x2x1(d, a);
-        theta_had_single(d, d);
-        theta_had_single(e, a);
-
-        if (fp2_is_equal_4x2x1(d, e) != 0xf) {
-            passed = 0;
-            break;
-        }
-
-        // Linear H*a + H*b = H*(a+b)
-        theta_had_single(d, a);
-        theta_had_single(e, b);
-        fp2_add_4x2x1(d, d, e);
-        fp2_add_4x2x1(f, a, b);
-        theta_had_single(f, f);
-
-        if (fp2_is_equal_4x2x1(d, f) != 0xf) {
-            passed = 0;
-            break;
-        }
-    }
-    print_test_res("Hadamard", passed);
-    if (passed == 0) {
-        return false;
-    }
-
-    // splitting isomorphism
-    splitting_matrix_t matrix = {
-        { 0xff, 0x00, 0x00, 0x00 }, // zero
-        { 0x0f, 0xcc, 0x00, 0x00 }, // negative
-        { 0x03, 0xf0, 0x00, 0x00 }  // imaginary
-    };
-
-    for (int i = 0; i < iterations; i++) {
-        rand_fp2_4x2x1(a);
-
-        // Multiplication by first column should be all 0's
-        splitting_mul_matrix_column_single(b, a, &matrix, 0);
-        if (fp2_is_zero_4x2x1(b) != 0xf) {
-            passed = 0;
-            break;
-        }
-
-        fp2_copy_4x2x1(b, a); // testing in-place operation
-        splitting_mul_matrix_column_single(b, b, &matrix, 1);
-        int correct_mul_1 = fp2_is_equal_4x2x1(b, a) == 0x1;
-        fp2_neg_4x2x1(c, a);
-        int correct_mul_minus1 = fp2_is_equal_4x2x1(b, c) == 0x2;
-        fp2_muli_4x2x1(c, a);
-        int correct_mul_i = fp2_is_equal_4x2x1(b, c) == 0x4;
-        fp2_neg_4x2x1(c, c);
-        int correct_mul_minusi = fp2_is_equal_4x2x1(b, c) == 0x8;
-        passed = correct_mul_1 & correct_mul_minus1 & correct_mul_i & correct_mul_minus1;
-        if (passed == 0) {
-            break;
-        }
-    }
-    print_test_res("splitting isomorphism", passed);
-    if (passed == 0) {
-        return false;
-    }
+    printf("Theta chain tests:\n");
 
     // Isogeny chain KAT
     // TODO move cats to their own file, so they also can be used in bench
@@ -198,151 +119,7 @@ bool test_theta(int iterations)
         passed = on_curve_E3 & on_curve_E4 & is_order4;
     }
 
-    print_test_res("Chain KAT", passed);
-    if (passed == 0) {
-        return false;
-    }
-
-    printf("Theta pair tests:\n");
-
-    // Hadamard
-    for (int i = 0; i < iterations; i++) {
-        rand_fp2_8x1x1(a);
-        rand_fp2_8x1x1(b);
-        
-        // H^2 is mult by 4
-        theta_had_pair(d, a);
-        theta_had_pair(e, d);
-        fp2_add_8x1x1(f, a, a);
-        fp2_add_8x1x1(f, f, f);
-
-        if (fp2_is_equal_8x1x1(e, f) != 0xff) {
-            passed = 0;
-            break;
-        }
-
-        // In place
-        fp2_copy_8x1x1(d, a);
-        theta_had_pair(d, d);
-        theta_had_pair(e, a);
-
-        if (fp2_is_equal_8x1x1(d, e) != 0xff) {
-            passed = 0;
-            break;
-        }
-
-        // Linear H*a + H*b = H*(a+b)
-        theta_had_pair(d, a);
-        theta_had_pair(e, b);
-        fp2_add_8x1x1(d, d, e);
-        fp2_add_8x1x1(f, a, b);
-        theta_had_pair(f, f);
-
-        if (fp2_is_equal_8x1x1(d, f) != 0xff) {
-            passed = 0;
-            break;
-        }
-
-        // Pair matches single
-        theta_had_pair(d, a);
-        fp2_8x1x1_to_4x2x1(e, a);
-        theta_had_single(e, e);
-        theta_had_single(e+8, e+8);
-        fp2_4x2x1_to_8x1x1(f, e, e+8);
-
-        if (fp2_is_equal_8x1x1(d, f) != 0xff) {
-            passed = 0;
-            break;
-        }
-    }
-    print_test_res("Hadamard", passed);
-    if (passed == 0) {
-        return false;
-    }
-
-    // mul
-    for (int i = 0; i < iterations; i++) {
-        rand_fp2_8x1x1(a);
-        rand_fp2_4x2x1(b);
-
-        // Pair matches single
-        theta_mul_pair(d, a, b);
-        fp2_8x1x1_to_4x2x1(e, a);
-        theta_mul_single(f, e, b);
-        theta_mul_single(f+8, e+8, b);
-        fp2_4x2x1_to_8x1x1(e, f, f+8);
-
-        if (fp2_is_equal_8x1x1(d, e) != 0xff) {
-            passed = 0;
-            break;
-        }
-    }
-    print_test_res("mul", passed);
-    if (passed == 0) {
-        return false;
-    }
-
-    for (int i = 0; i < iterations; i++) {
-        rand_fp2_8x1x1(a);
-        rand_fp2_4x2x1(b);
-        rand_fp2_4x2x1(c);
-
-        // Pair matches single
-        theta_double_pair(d, a, b, c);
-        fp2_8x1x1_to_4x2x1(e, a);
-        theta_double_single(f, e, b, c);
-        theta_double_single(f+8, e+8, b, c);
-        fp2_4x2x1_to_8x1x1(e, f, f+8);
-        if (fp2_is_equal_8x1x1(d, e) != 0xff) {
-            passed = 0;
-            break;
-        }
-    }
-    print_test_res("double", passed);
-    if (passed == 0) {
-        return false;
-    }
-
-    // TODO: Test is not using an actual dual theta point
-    // eval
-    for (int i = 0; i < iterations; i++) {
-        rand_fp2_8x1x1(a);
-        rand_fp2_4x2x1(b);
-        bool h1 = false;
-        bool h2 = true;
-
-        // Pair matches single
-        theta_eval_pair(d, a, b, h1, h2);
-        fp2_8x1x1_to_4x2x1(e, a);
-        theta_eval_single(f, e, b, h1, h2);
-        theta_eval_single(f+8, e+8, b, h1, h2);
-        fp2_4x2x1_to_8x1x1(e, f, f+8);
-
-        if (fp2_is_equal_8x1x1(d, e) != 0xff) {
-            passed = 0;
-            break;
-        }
-    }
-    print_test_res("eval", passed);
-    if (passed == 0) {
-        return false;
-    }
-
-    // splitting isomorphism
-    for (int i = 0; i < iterations && passed; i++) {
-        rand_fp2_4x2x1(a);
-        rand_fp2_4x2x1(b);
-        fp2_4x2x1_to_8x1x1(c, a, b);
-
-        for(int j = 0; j < 4 && passed; j++) {
-            splitting_mul_matrix_column_single(d, a, &matrix, j);
-            splitting_mul_matrix_column_single(e, b, &matrix, j);
-            fp2_4x2x1_to_8x1x1(f, d, e);
-            splitting_mul_matrix_column_pair(g, c, &matrix, j);
-            passed = fp2_is_equal_8x1x1(f, g) == 0xff;
-        }
-    }
-    print_test_res("splitting isomorphism", passed);
+    print_test_res("chain 4x2x1 KAT", passed);
     if (passed == 0) {
         return false;
     }
@@ -396,7 +173,7 @@ bool test_theta(int iterations)
         passed = on_curve_E3 & on_curve_E4 & is_order4;
     }
 
-    print_test_res("Chain KAT", passed);
+    print_test_res("chain 8x1x1 KAT", passed);
     if (passed == 0) {
         return false;
     }
