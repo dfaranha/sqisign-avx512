@@ -179,7 +179,7 @@ void fp_sub_8x1(__m512i* res, __m512i* a, __m512i* b)
     t0 = VSUB(t0, VAND(p_bot, sign_mask));
     t7 = VADD(t7, VAND(p_top, sign_mask));
 
-    // Propogate the carry
+    // Propagate the carry
     t1 = VADD(t1, VSRA(t0, LIMB_LEN));
     t2 = VADD(t2, VSRA(t1, LIMB_LEN));
     t3 = VADD(t3, VSRA(t2, LIMB_LEN));
@@ -746,6 +746,136 @@ void fp_frommont_8x1(__m512i* res, __m512i* a)
     fp_setzero_8x1(one);
     one[0] = VSETALL(1);
     fp_mul_8x1(res, a, one);
+}
+
+// Single-length multiprecision addition, no correction, no carry propagation
+void mp_add_8x1(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t0, t1, t2, t3, t4, t5, t6, t7;
+
+    t0 = VADD(a[0], b[0]);
+    t1 = VADD(a[1], b[1]);
+    t2 = VADD(a[2], b[2]);
+    t3 = VADD(a[3], b[3]);
+    t4 = VADD(a[4], b[4]);
+    t5 = VADD(a[5], b[5]);
+    t6 = VADD(a[6], b[6]);
+    t7 = VADD(a[7], b[7]);
+
+    // Output result
+    res[0] = t0;
+    res[1] = t1;
+    res[2] = t2;
+    res[3] = t3;
+    res[4] = t4;
+    res[5] = t5;
+    res[6] = t6;
+    res[7] = t7;
+}
+
+// Double-length multiprecision subtraction res = res - a - b, no correction, no carry propagation
+void mp_dblsubx2_8x1(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15;
+
+    t0 = VSUB(res[0], b[0]);
+    t1 = VSUB(res[1], b[1]);
+    t2 = VSUB(res[2], b[2]);
+    t3 = VSUB(res[3], b[3]);
+    t4 = VSUB(res[4], b[4]);
+    t5 = VSUB(res[5], b[5]);
+    t6 = VSUB(res[6], b[6]);
+    t7 = VSUB(res[7], b[7]);
+    t8 = VSUB(res[8], b[8]);
+    t9 = VSUB(res[9], b[9]);
+    t10 = VSUB(res[10], b[10]);
+    t11 = VSUB(res[11], b[11]);
+    t12 = VSUB(res[12], b[12]);
+    t13 = VSUB(res[13], b[13]);
+    t14 = VSUB(res[14], b[14]);
+    t15 = VSUB(res[15], b[15]);
+
+    t0 = VSUB(t0, c[0]);
+    t1 = VSUB(t1, c[1]);
+    t2 = VSUB(t2, c[2]);
+    t3 = VSUB(t3, c[3]);
+    t4 = VSUB(t4, c[4]);
+    t5 = VSUB(t5, c[5]);
+    t6 = VSUB(t6, c[6]);
+    t7 = VSUB(t7, c[7]);
+    t8 = VSUB(t8, c[8]);
+    t9 = VSUB(t9, c[9]);
+    t10 = VSUB(t10, c[10]);
+    t11 = VSUB(t11, c[11]);
+    t12 = VSUB(t12, c[12]);
+    t13 = VSUB(t13, c[13]);
+    t14 = VSUB(t14, c[14]);
+    t15 = VSUB(t15, c[15]);
+
+    // Output result
+    res[0] = t0;
+    res[1] = t1;
+    res[2] = t2;
+    res[3] = t3;
+    res[4] = t4;
+    res[5] = t5;
+    res[6] = t6;
+    res[7] = t7;
+    res[8] = t8;
+    res[9] = t9;
+    res[10] = t10;
+    res[11] = t11;
+    res[12] = t12;
+    res[13] = t13;
+    res[14] = t14;
+    res[15] = t15;
+}
+
+// Double-length subtraction/addition res = a - b. If res < 0 then add p * 2^384         ///////// DO WE NEED CARRY PROPAGATION?
+void mp_subaddx2_8x1(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15;
+
+    t0 = VSUB(res[0], b[0]);
+    t1 = VSUB(res[1], b[1]);
+    t2 = VSUB(res[2], b[2]);
+    t3 = VSUB(res[3], b[3]);
+    t4 = VSUB(res[4], b[4]);
+    t5 = VSUB(res[5], b[5]);
+    t6 = VSUB(res[6], b[6]);
+    t7 = VSUB(res[7], b[7]);
+    t8 = VSUB(res[8], b[8]);
+    t9 = VSUB(res[9], b[9]);
+    t10 = VSUB(res[10], b[10]);
+    t11 = VSUB(res[11], b[11]);
+    t12 = VSUB(res[12], b[12]);
+    t13 = VSUB(res[13], b[13]);
+    t14 = VSUB(res[14], b[14]);
+    t15 = VSUB(res[15], b[15]);
+
+    // If result is negative, we add 2^384 * p
+    sign_mask = VSRA(t15, 63);
+
+    t8 = VSUB(t8, VAND(p_bot, sign_mask));         ////////// TO VERIFY CORRECTNESS, IT WILL DEPEND ON INTEGER MUL IMPLEMENTATION
+    t15 = VADD(t15, VAND(p_top, sign_mask));
+
+    // Output result
+    res[0] = t0;
+    res[1] = t1;
+    res[2] = t2;
+    res[3] = t3;
+    res[4] = t4;
+    res[5] = t5;
+    res[6] = t6;
+    res[7] = t7;
+    res[8] = t8;
+    res[9] = t9;
+    res[10] = t10;
+    res[11] = t11;
+    res[12] = t12;
+    res[13] = t13;
+    res[14] = t14;
+    res[15] = t15;
 }
 
 // ======================================================================================================

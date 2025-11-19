@@ -41,7 +41,7 @@ int main()
 	srand((unsigned) time(&t));
     // =================================================
 
-    int n_bench = 1000;
+    int n_bench = 1000000;
 
     bench_fp(n_bench);
     bench_fp2(n_bench);
