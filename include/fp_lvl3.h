@@ -15,9 +15,10 @@
 #define FP_NUM_64LIMBS 6
 #define FP_NUM_AVXLIMBS 8
 
-static const uint64_t LIMB_LEN = 51;
-static const uint64_t LIMB_MASK = 0x7ffffffffffff;
-static const uint64_t LAST_LIMB_MASK = 0x3ffffff;
+static const uint64_t LIMB_LEN = 51;                 ///////// PLANNING SWITCHING TO LIMB_LEN = 48
+static const uint64_t LIMB_ALIGN = 52 - LIMB_LEN;
+static const uint64_t LIMB_MASK = 0x7ffffffffffff;   ///////// THIS WOULD CHANGE TO LIMB_MASK 0xFFFFFFFFFFFF
+static const uint64_t LAST_LIMB_MASK = 0x3ffffff;    ///////// IS THIS USED SOMEWHERE?
 // p in radix 2^51
 static const uint64_t p[8] = { 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x207ffff };
 

@@ -541,7 +541,7 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
     t14 = VMULADDL(t14, a[7], b[7]); // Will be 52 bits
     t15 = VZERO();
 
-    // Propogate the carry TODO: Can we delay further?
+    // Propagate the carry TODO: Can we delay further?
     // Result is 766 = 15 * 51 + 1 bits, so t15 just holds one bit
     t1 = VADD(t1, VSRA(t0, LIMB_LEN));
     t2 = VADD(t2, VSRA(t1, LIMB_LEN));
@@ -701,7 +701,7 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
     t8 = VADD(t8, quo);
     t15 = VADD(t15, VSL(rem, 19));
 
-    // Propogate carry
+    // Propagate carry
     t9 = VADD(t9, VSRA(t8, LIMB_LEN));
     t10 = VADD(t10, VSRA(t9, LIMB_LEN));
     t11 = VADD(t11, VSRA(t10, LIMB_LEN));
@@ -778,39 +778,39 @@ void mp_dblsubx2_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15;
 
-    t0 = VSUB(res[0], b[0]);
-    t1 = VSUB(res[1], b[1]);
-    t2 = VSUB(res[2], b[2]);
-    t3 = VSUB(res[3], b[3]);
-    t4 = VSUB(res[4], b[4]);
-    t5 = VSUB(res[5], b[5]);
-    t6 = VSUB(res[6], b[6]);
-    t7 = VSUB(res[7], b[7]);
-    t8 = VSUB(res[8], b[8]);
-    t9 = VSUB(res[9], b[9]);
-    t10 = VSUB(res[10], b[10]);
-    t11 = VSUB(res[11], b[11]);
-    t12 = VSUB(res[12], b[12]);
-    t13 = VSUB(res[13], b[13]);
-    t14 = VSUB(res[14], b[14]);
-    t15 = VSUB(res[15], b[15]);
+    t0 = VSUB(res[0], a[0]);
+    t1 = VSUB(res[1], a[1]);
+    t2 = VSUB(res[2], a[2]);
+    t3 = VSUB(res[3], a[3]);
+    t4 = VSUB(res[4], a[4]);
+    t5 = VSUB(res[5], a[5]);
+    t6 = VSUB(res[6], a[6]);
+    t7 = VSUB(res[7], a[7]);
+    t8 = VSUB(res[8], a[8]);
+    t9 = VSUB(res[9], a[9]);
+    t10 = VSUB(res[10], a[10]);
+    t11 = VSUB(res[11], a[11]);
+    t12 = VSUB(res[12], a[12]);
+    t13 = VSUB(res[13], a[13]);
+    t14 = VSUB(res[14], a[14]);
+    t15 = VSUB(res[15], a[15]);
 
-    t0 = VSUB(t0, c[0]);
-    t1 = VSUB(t1, c[1]);
-    t2 = VSUB(t2, c[2]);
-    t3 = VSUB(t3, c[3]);
-    t4 = VSUB(t4, c[4]);
-    t5 = VSUB(t5, c[5]);
-    t6 = VSUB(t6, c[6]);
-    t7 = VSUB(t7, c[7]);
-    t8 = VSUB(t8, c[8]);
-    t9 = VSUB(t9, c[9]);
-    t10 = VSUB(t10, c[10]);
-    t11 = VSUB(t11, c[11]);
-    t12 = VSUB(t12, c[12]);
-    t13 = VSUB(t13, c[13]);
-    t14 = VSUB(t14, c[14]);
-    t15 = VSUB(t15, c[15]);
+    t0 = VSUB(t0, b[0]);
+    t1 = VSUB(t1, b[1]);
+    t2 = VSUB(t2, b[2]);
+    t3 = VSUB(t3, b[3]);
+    t4 = VSUB(t4, b[4]);
+    t5 = VSUB(t5, b[5]);
+    t6 = VSUB(t6, b[6]);
+    t7 = VSUB(t7, b[7]);
+    t8 = VSUB(t8, b[8]);
+    t9 = VSUB(t9, b[9]);
+    t10 = VSUB(t10, b[10]);
+    t11 = VSUB(t11, b[11]);
+    t12 = VSUB(t12, b[12]);
+    t13 = VSUB(t13, b[13]);
+    t14 = VSUB(t14, b[14]);
+    t15 = VSUB(t15, b[15]);
 
     // Output result
     res[0] = t0;
@@ -854,10 +854,10 @@ void mp_subaddx2_8x1(__m512i* res, __m512i* a, __m512i* b)
     t15 = VSUB(res[15], b[15]);
 
     // If result is negative, we add 2^384 * p
-    sign_mask = VSRA(t15, 63);
+    //sign_mask = VSRA(t15, 63);
 
-    t8 = VSUB(t8, VAND(p_bot, sign_mask));         ////////// TO VERIFY CORRECTNESS, IT WILL DEPEND ON INTEGER MUL IMPLEMENTATION
-    t15 = VADD(t15, VAND(p_top, sign_mask));
+    //t8 = VSUB(t8, VAND(p_bot, sign_mask));         ////////// TO VERIFY CORRECTNESS, IT WILL DEPEND ON INTEGER MUL IMPLEMENTATION
+    //t15 = VADD(t15, VAND(p_top, sign_mask));
 
     // Output result
     res[0] = t0;
@@ -876,6 +876,246 @@ void mp_subaddx2_8x1(__m512i* res, __m512i* a, __m512i* b)
     res[13] = t13;
     res[14] = t14;
     res[15] = t15;
+}
+
+
+void mp_mul_8x1_karat(__m512i* res, __m512i* a, __m512i* b)
+{
+    const __m512i a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3];
+    const __m512i a4 = a[4], a5 = a[5], a6 = a[6], a7 = a[7];
+    const __m512i b0 = b[0], b1 = b[1], b2 = b[2], b3 = b[3];
+    const __m512i b4 = b[4], b5 = b[5], b6 = b[6], b7 = b[7];
+    const __m512i limb_mask = VSETALL(LIMB_MASK);
+    __m512i ta0, ta1, ta2, ta3;
+    __m512i tb0, tb1, tb2, tb3;
+    __m512i t0 = VZERO(), t1 = VZERO(), t2 = VZERO(), t3 = VZERO();
+    __m512i t4 = VZERO(), t5 = VZERO(), t6 = VZERO(), t7 = VZERO();
+    __m512i t8 = VZERO(), t9 = VZERO(), t10 = VZERO(), t11 = VZERO();
+    __m512i t12 = VZERO(), t13 = VZERO(), t14 = VZERO(), t15 = VZERO();
+    __m512i s0 = VZERO(), s1 = VZERO(), s2 = VZERO(), s3 = VZERO();
+    __m512i s4 = VZERO(), s5 = VZERO(), s6 = VZERO(), s7 = VZERO();
+    __m512i s8 = VZERO(), s9 = VZERO(), s10 = VZERO(), s11 = VZERO();
+    __m512i s12 = VZERO(), s13 = VZERO(), s14 = VZERO(), s15 = VZERO();
+    __m512i m0 = VZERO(), m1 = VZERO(), m2 = VZERO(), m3 = VZERO();
+    __m512i m4 = VZERO(), m5 = VZERO(), m6 = VZERO(), m7 = VZERO();
+
+    // tL(t0-t7) <- aL(a0-a3) * bL(b0-b4)
+
+    t0 = VMULADDL(t0, a0, b0);
+    s0 = VMULADDH(s0, a0, b0);
+    s0 = VSL(s0, LIMB_ALIGN);
+
+    t1 = VMULADDL(s0, a0, b1);
+    t1 = VMULADDL(t1, a1, b0);
+    s1 = VMULADDH(s1, a0, b1);
+    s1 = VMULADDH(s1, a1, b0);
+    s1 = VSL(s1, LIMB_ALIGN);
+
+    t2 = VMULADDL(s1, a0, b2);
+    t2 = VMULADDL(t2, a1, b1);
+    t2 = VMULADDL(t2, a2, b0);
+    s2 = VMULADDH(s2, a0, b2);
+    s2 = VMULADDH(s2, a1, b1);
+    s2 = VMULADDH(s2, a2, b0);
+    s2 = VSL(s2, LIMB_ALIGN);
+
+    t3 = VMULADDL(s2, a0, b3);
+    t3 = VMULADDL(t3, a1, b2);
+    t3 = VMULADDL(t3, a2, b1);
+    t3 = VMULADDL(t3, a3, b0);
+    s3 = VMULADDH(s3, a0, b3);
+    s3 = VMULADDH(s3, a1, b2);
+    s3 = VMULADDH(s3, a2, b1);
+    s3 = VMULADDH(s3, a3, b0);
+    s3 = VSL(s3, LIMB_ALIGN);
+
+    t4 = VMULADDL(s3, a1, b3);
+    t4 = VMULADDL(t4, a2, b2);
+    t4 = VMULADDL(t4, a3, b1);
+    s4 = VMULADDH(s4, a1, b3);
+    s4 = VMULADDH(s4, a2, b2);
+    s4 = VMULADDH(s4, a3, b1);
+    s4 = VSL(s4, LIMB_ALIGN);
+
+    t5 = VMULADDL(s4, a2, b3);
+    t5 = VMULADDL(t5, a3, b2);
+    s5 = VMULADDH(s5, a2, b3);
+    s5 = VMULADDH(s5, a3, b2);
+    s5 = VSL(s5, LIMB_ALIGN);
+
+    t6 = VMULADDL(s5, a3, b3);
+    s6 = VMULADDH(s6, a3, b3);
+    s6 = VSL(s6, LIMB_ALIGN);
+    t7 = s6;
+
+    // tH(t8-t15) <- aH(a4-a7) * bH(b4-b7)
+
+    t8 = VMULADDL(t8, a4, b4);
+    s8 = VMULADDH(s8, a4, b4);
+    s8 = VSL(s8, LIMB_ALIGN);
+
+    t9 = VMULADDL(s8, a4, b5);
+    t9 = VMULADDL(t9, a5, b4);
+    s9 = VMULADDH(s9, a4, b5);
+    s9 = VMULADDH(s9, a5, b4);
+    s9 = VSL(s9, LIMB_ALIGN);
+
+    t10 = VMULADDL(s9, a4, b6);
+    t10 = VMULADDL(t10, a5, b5);
+    t10 = VMULADDL(t10, a6, b4);
+    s10 = VMULADDH(s10, a4, b6);
+    s10 = VMULADDH(s10, a5, b5);
+    s10 = VMULADDH(s10, a6, b4);
+    s10 = VSL(s10, LIMB_ALIGN);
+
+    t11 = VMULADDL(s10, a4, b7);
+    t11 = VMULADDL(t11, a5, b6);
+    t11 = VMULADDL(t11, a6, b5);
+    t11 = VMULADDL(t11, a7, b4);
+    s11 = VMULADDH(s11, a4, b7);
+    s11 = VMULADDH(s11, a5, b6);
+    s11 = VMULADDH(s11, a6, b5);
+    s11 = VMULADDH(s11, a7, b4);
+    s11 = VSL(s11, LIMB_ALIGN);
+
+    t12 = VMULADDL(s11, a5, b7);
+    t12 = VMULADDL(t12, a6, b6);
+    t12 = VMULADDL(t12, a7, b5);
+    s12 = VMULADDH(s12, a5, b7);
+    s12 = VMULADDH(s12, a6, b6);
+    s12 = VMULADDH(s12, a7, b5);
+    s12 = VSL(s12, LIMB_ALIGN);
+
+    t13 = VMULADDL(s12, a6, b7);
+    t13 = VMULADDL(t13, a7, b6);
+    s13 = VMULADDH(s13, a6, b7);
+    s13 = VMULADDH(s13, a7, b6);
+    s13 = VSL(s13, LIMB_ALIGN);
+
+    t14 = VMULADDL(s13, a7, b7);
+    s14 = VMULADDH(s14, a7, b7);
+    s14 = VSL(s14, LIMB_ALIGN);
+    t15 = s14;
+
+    // ta(ta0-ta3) <- aL(a0-a3) + aH(a4-a7)
+    ta0 = VADD(a0, a4);
+    ta1 = VADD(a1, a5);
+    ta2 = VADD(a2, a6);
+    ta3 = VADD(a3, a7);
+
+    // tb(tb0-tb3) <- bL(b0-b3) + bH(b4-b7)
+    tb0 = VADD(b0, b4);
+    tb1 = VADD(b1, b5);
+    tb2 = VADD(b2, b6);
+    tb3 = VADD(b3, b7);
+
+    // tM(m0-m7) = (ta * tb) - tL - tH
+    s0 = s1 = s2 = s3 = s4 = s5 = s6 = s7 = VZERO();
+
+    m0 = VMULADDL(m0, ta0, tb0);
+    s0 = VMULADDH(s0, ta0, tb0);
+    s0 = VSL(s0, LIMB_ALIGN);
+
+    m1 = VMULADDL(s0, ta0, tb1);
+    m1 = VMULADDL(m1, ta1, tb0);
+    s1 = VMULADDH(s1, ta0, tb1);
+    s1 = VMULADDH(s1, ta1, tb0);
+    s1 = VSL(s1, LIMB_ALIGN);
+
+    m2 = VMULADDL(s1, ta0, tb2);
+    m2 = VMULADDL(m2, ta1, tb1);
+    m2 = VMULADDL(m2, ta2, tb0);
+    s2 = VMULADDH(s2, ta0, tb2);
+    s2 = VMULADDH(s2, ta1, tb1);
+    s2 = VMULADDH(s2, ta2, tb0);
+    s2 = VSL(s2, LIMB_ALIGN);
+
+    m3 = VMULADDL(s2, ta0, tb3);
+    m3 = VMULADDL(m3, ta1, tb2);
+    m3 = VMULADDL(m3, ta2, tb1);
+    m3 = VMULADDL(m3, ta3, tb0);
+    s3 = VMULADDH(s3, ta0, tb3);
+    s3 = VMULADDH(s3, ta1, tb2);
+    s3 = VMULADDH(s3, ta2, tb1);
+    s3 = VMULADDH(s3, ta3, tb0);
+    s3 = VSL(s3, LIMB_ALIGN);
+
+    m4 = VMULADDL(s3, ta1, tb3);
+    m4 = VMULADDL(m4, ta2, tb2);
+    m4 = VMULADDL(m4, ta3, tb1);
+    s4 = VMULADDH(s4, ta1, tb3);
+    s4 = VMULADDH(s4, ta2, tb2);
+    s4 = VMULADDH(s4, ta3, tb1);
+    s4 = VSL(s4, LIMB_ALIGN);
+
+    m5 = VMULADDL(s4, ta2, tb3);
+    m5 = VMULADDL(m5, ta3, tb2);
+    s5 = VMULADDH(s5, ta2, tb3);
+    s5 = VMULADDH(s5, ta3, tb2);
+    s5 = VSL(s5, LIMB_ALIGN);
+
+    m6 = VMULADDL(s5, ta3, tb3);
+    s6 = VMULADDH(s6, ta3, tb3);
+    s6 = VSL(s6, LIMB_ALIGN);
+    m7 = s6;
+
+    // tM(m0-m7) <- (ta * tb) - tL - tH
+    m0 = VSUB(m0, VADD(t0, t8));
+    m1 = VSUB(m1, VADD(t1, t9));
+    m2 = VSUB(m2, VADD(t2, t10));
+    m3 = VSUB(m3, VADD(t3, t11));
+    m4 = VSUB(m4, VADD(t4, t12));
+    m5 = VSUB(m5, VADD(t5, t13));
+    m6 = VSUB(m6, VADD(t6, t14));
+    m7 = VSUB(m7, VADD(t7, t15));
+
+    // t = t + tM
+    t4 = VADD(t4, m0);
+    t5 = VADD(t5, m1);
+    t6 = VADD(t6, m2);
+    t7 = VADD(t7, m3);
+    t8 = VADD(t8, m4);
+    t9 = VADD(t9, m5);
+    t10 = VADD(t10, m6);
+    t11 = VADD(t11, m7);
+
+    // Carry propagation 
+    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+    t5 = VADD(t5, VSRA(t4, LIMB_LEN));
+    t6 = VADD(t6, VSRA(t5, LIMB_LEN));
+    t7 = VADD(t7, VSRA(t6, LIMB_LEN));
+    t8 = VADD(t8, VSRA(t7, LIMB_LEN));
+    t9 = VADD(t9, VSRA(t8, LIMB_LEN));
+    t10 = VADD(t10, VSRA(t9, LIMB_LEN));
+    t11 = VADD(t11, VSRA(t10, LIMB_LEN));
+    t12 = VADD(t12, VSRA(t11, LIMB_LEN));
+    t13 = VADD(t13, VSRA(t12, LIMB_LEN));
+    t14 = VADD(t14, VSRA(t13, LIMB_LEN));
+    t15 = VADD(t15, VSRA(t14, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VAND(t3, limb_mask);
+    t4 = VAND(t4, limb_mask);
+    t5 = VAND(t5, limb_mask);
+    t6 = VAND(t6, limb_mask);
+    t7 = VAND(t7, limb_mask);
+    t8 = VAND(t8, limb_mask);
+    t9 = VAND(t9, limb_mask);
+    t10 = VAND(t10, limb_mask);
+    t11 = VAND(t11, limb_mask);
+    t12 = VAND(t12, limb_mask);
+    t13 = VAND(t13, limb_mask);
+    t14 = VAND(t14, limb_mask);
+    //t15 = VAND(t15, bmask);         //////////// WHY WOULD WE NEED THIS MASKING?
+
+    res[0] = t0; res[1] = t1; res[2] = t2; res[3] = t3;
+    res[4] = t4; res[5] = t5; res[6] = t6; res[7] = t7;
+    res[8] = t8; res[9] = t9; res[10] = t10; res[11] = t11;
+    res[12] = t12; res[13] = t13; res[14] = t14; res[15] = t15;
 }
 
 // ======================================================================================================
