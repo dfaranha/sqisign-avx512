@@ -56,17 +56,31 @@ void fp2_mixaddsub_8x1x1(__m512i* res, __m512i* a, __m512i* b,
     fp_mixaddsub_8x1(res+8, a+8, b+8, add_mask_im);
 }
 
-void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)
+void fp2_mul_8x1x1v2(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i s1[8], s2[8], t1[8], t2[8], t3[8];
     fp_add_8x1(s1, a, a+8);
     fp_add_8x1(s2, b, b+8);
-    fp_mul_8x1(t1, a, b);
-    fp_mul_8x1(t2, a+8, b+8);
-    fp_mul_8x1(t3, s1, s2);
+    fp_mul_8x1_school(t1, a, b);
+    fp_mul_8x1_school(t2, a+8, b+8);
+    fp_mul_8x1_school(t3, s1, s2);
     fp_sub_8x1(t3, t3, t1);
     fp_sub_8x1(res+8, t3, t2);
     fp_sub_8x1(res, t1, t2);
+}
+
+void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i s1[8], s2[8], tt1[16], tt2[16], tt3[16], t1[8], t2[8];
+    mp_add_8x1(s1, a, a + 8);
+    mp_add_8x1(s2, b, b + 8);
+    mp_mul_8x1_karat(tt1, a, b);
+    mp_mul_8x1_karat(tt2, a + 8, b + 8);
+    mp_mul_8x1_karat(tt3, s1, s2);
+    mp_dblsubx2_8x1(tt3, tt1, tt2);
+    mp_subx2_8x1(tt1, tt2);
+    rdc_8x1(res + 8, tt3);
+    rdc_8x1(res, tt1);
 }
 
 void fp2_sqr_8x1x1(__m512i* res, __m512i* a)

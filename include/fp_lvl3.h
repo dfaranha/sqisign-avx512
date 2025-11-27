@@ -77,7 +77,12 @@ void fp_neg_8x1(__m512i* res, __m512i* a);
 void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
 
 /**
- *  res = a * b (mod p)
+ *  res = a * b (mod p), multiprecision multiplication using schoolbook
+ */
+void fp_mul_8x1_school(__m512i* res, __m512i* a, __m512i* b);
+
+/**
+ *  res = a * b (mod p), multiprecision multiplication using Karatsuba
  */
 void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b);
 
@@ -95,6 +100,31 @@ void fp_tomont_8x1(__m512i* res, __m512i* a);
  * res = a * R^(-1) (mod p)
  */
 void fp_frommont_8x1(__m512i*res, __m512i* a);
+
+/**
+ *  res = a + b, multiprecision addition, no correction, no carry propagation
+ */
+void mp_add_8x1(__m512i* res, __m512i* a, __m512i* b);
+
+/**
+ *  res = res - a - b, double-length multiprecision subtraction, no correction
+ */
+void mp_dblsubx2_8x1(__m512i* res, __m512i* a, __m512i* b);
+
+/**
+ *  res = res - a, double-length subtraction/addition, no correction
+ */
+void mp_subx2_8x1(__m512i* res, __m512i* a);
+
+/**
+ *  res = a * b, multiprecision multiplication using Karatsuba
+ */
+void mp_mul_8x1_karat(__m512i* res, __m512i* a, __m512i* b);
+
+/**
+ *  res = a (mod p), Montgomery reduction
+ */
+void rdc_8x1(__m512i* res, __m512i* a);
 
 // ======================================================================================================
 //                                                 4x2
