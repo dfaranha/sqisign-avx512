@@ -71,7 +71,7 @@ void fp2_mul_8x1x1v2(__m512i* res, __m512i* a, __m512i* b)
 
 void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i s1[8], s2[8], tt1[16], tt2[16], tt3[16], t1[8], t2[8];
+    __m512i s1[8], s2[8], tt1[16], tt2[16], tt3[16];
     mp_add_8x1(s1, a, a + 8);
     mp_add_8x1(s2, b, b + 8);
     mp_mul_8x1_karat(tt1, a, b);
@@ -85,7 +85,12 @@ void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)
 
 void fp2_sqr_8x1x1(__m512i* res, __m512i* a)
 {
-    fp2_mul_8x1x1(res, a, a);
+    __m512i s1[8], s2[8], s3[8];
+    mp_add_8x1(s1, a, a + 8);
+    fp_sub_8x1(s2, a, a + 8);           ///////// THIS COULD BE OPTIMIZED FOR LIMB SIZE 48
+    mp_add_8x1(s3, a, a);
+    fp_mul_8x1(res, s1, s2);
+    fp_mul_8x1(res + 8, s3, a + 8);
 }
 
 void fp2_muli_8x1x1(__m512i* res, __m512i* a)

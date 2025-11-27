@@ -107,6 +107,11 @@ void fp_frommont_8x1(__m512i*res, __m512i* a);
 void mp_add_8x1(__m512i* res, __m512i* a, __m512i* b);
 
 /**
+ *  res = a - b, multiprecision subtraction, no correction, no carry propagation
+ */
+void mp_sub_8x1(__m512i* res, __m512i* a, __m512i* b);
+
+/**
  *  res = res - a - b, double-length multiprecision subtraction, no correction
  */
 void mp_dblsubx2_8x1(__m512i* res, __m512i* a, __m512i* b);
