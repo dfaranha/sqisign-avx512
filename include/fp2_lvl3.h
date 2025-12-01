@@ -50,6 +50,8 @@ void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b);
 
 void fp2_sqr_8x1x1(__m512i* res, __m512i* a);
 
+void fp2_div3_8x1x1(__m512i* res, __m512i* src);
+
 /**
  * Multipication by i.
  */
@@ -133,9 +135,11 @@ void fp2_mixaddsub_4x2x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 ad
 
 void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b);
 
+void fp2_sqr_4x2x1(__m512i* res, __m512i* a);
+
 void fp2_muli_4x2x1(__m512i* res, __m512i* a);
 
-void fp2_sqr_4x2x1(__m512i* res, __m512i* a);
+void fp2_div3_4x2x1(__m512i* res, __m512i* src);
 
 void fp2_tomont_4x2x1(__m512i* res, __m512i* a);
 
@@ -224,17 +228,6 @@ void fp2_frommont_2x4x1(__m512i* res, __m512i* a);
 // ======================================================================================================
 //                                      Conversions between representations
 // ======================================================================================================
-
-/**
- * Converts between the array representation and the vectorized representations.
- * In the array representation, we store the Fp2 elements one after the other, in one big array.
- * Each Fp2 element is stored in twelve 64-bit integers, with the first six storing the real coefficient.
- */
-void fp2_array_to_8x1x1(__m512i* res, uint64_t* src);
-void fp2_array_to_4x2x1(__m512i* res, uint64_t* src);
-
-void fp2_8x1x1_to_array(uint64_t* res, __m512i* src);
-void fp2_4x2x1_to_array(uint64_t* res, __m512i* src);
 
 void fp2_unvectorized_to_8x1x1(__m512i* res, fp2_t* src);
 void fp2_unvectorized_to_4x2x1(__m512i* res, fp2_t* src);

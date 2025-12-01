@@ -733,6 +733,17 @@ void fp_sqr_8x1(__m512i* res, __m512i* a)
     fp_mul_8x1(res, a, a);
 }
 
+// TODO: Optimize
+void fp_div3_8x1(__m512i* res, __m512i* src)
+{
+    fp_t tmp[8];
+    fp_8x1_to_unvectorized(tmp, src);
+    for (int i = 0; i < 8; i++) {
+        fp_div3(tmp+i, tmp+i);
+    }
+    fp_unvectorized_to_8x1(res, tmp);
+}
+
 void fp_tomont_8x1(__m512i* res, __m512i* a)
 {
     __m512i vR2[8];
@@ -746,6 +757,113 @@ void fp_frommont_8x1(__m512i* res, __m512i* a)
     fp_setzero_8x1(one);
     one[0] = VSETALL(1);
     fp_mul_8x1(res, a, one);
+}
+
+void fp_8x1_to_unvectorized(fp_t* res, __m512i* src)
+{
+    fp_t coeffs[8];
+    __m512i src_frommont[8];
+
+    fp_frommont_8x1(src_frommont, src);
+    fp_51_to_64_bit_limbs_8x1(coeffs, src_frommont);
+
+    // Convert to Montgomery representation
+    for (int i = 0; i < 8; i++) {
+        fp_decode(res+i, (const void *) coeffs[i].arr);
+    }
+}
+
+void fp_51_to_64_bit_limbs_8x1(fp_t* res, __m512i* src)
+{
+    uint64_t t[8];
+    VSTORE(t, src[0]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[0] = t[i];
+    } 
+    VSTORE(t, src[1]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[0] |= (t[i] & 0x1fff) << 51;
+        (res+i)->arr[1] = (t[i] >> 13) & 0x3fffffffff;
+    } 
+    VSTORE(t, src[2]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[1] |= (t[i] & 0x3ffffff) << 38;
+        (res+i)->arr[2] = (t[i] >> 26) & 0x1ffffff;
+    }
+    VSTORE(t, src[3]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[2] |= (t[i] & 0x7fffffffff) << 25;
+        (res+i)->arr[3] = (t[i] >> 39) & 0xfff;
+    }
+    VSTORE(t, src[4]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[3] |= t[i] << 12;
+    }
+    VSTORE(t, src[5]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[3] |= (t[i] & 0x1) << 63;
+        (res+i)->arr[4] = (t[i] >> 1) & 0x3ffffffffffff;
+    }
+    VSTORE(t, src[6]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[4] |= (t[i] & 0x3fff) << 50;
+        (res+i)->arr[5] = (t[i] >> 14) & 0x1fffffffff;
+    }
+    VSTORE(t, src[7]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[5] |= t[i] << 37;
+    }
+}
+
+void fp_unvectorized_to_8x1(__m512i* res, fp_t* src)
+{
+    fp_t coeffs[8];
+
+    // Convert from Montgomery representation
+    for (int i = 0; i < 8; i++) {
+        fp_encode(coeffs[i].arr, src+i);
+    }
+
+    fp_64_to_51_bit_limbs_8x1(res, coeffs);
+    fp_tomont_8x1(res, res);
+}
+
+void fp_64_to_51_bit_limbs_8x1(__m512i* res, fp_t* src)
+{
+    uint64_t t[8];
+
+    for (int i = 0; i < 8; i++) {
+        t[i] = (src+i)->arr[0] & LIMB_MASK;
+    }
+    res[0] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 8; i++) {
+        t[i] = (((src+i)->arr[0] >> 51) & 0x1ffff) | (((src+i)->arr[1] & 0x3fffffffff) << 13); 
+    }
+    res[1] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 8; i++) {
+        t[i] = (((src+i)->arr[1] >> 38) & 0x3ffffff) | (((src+i)->arr[2] & 0x1ffffff) << 26); 
+    }
+    res[2] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 8; i++) {
+        t[i] = (((src+i)->arr[2] >> 25) & 0x7fffffffff) | (((src+i)->arr[3] & 0xfff) << 39); 
+    }
+    res[3] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 8; i++) {
+        t[i] = ((src+i)->arr[3] >> 12) & LIMB_MASK;
+    }
+    res[4] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 8; i++) {
+        t[i] = (((src+i)->arr[3] >> 63) & 0x1) | (((src+i)->arr[4] & 0x3ffffffffffff) << 1); 
+    }
+    res[5] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 8; i++) {
+        t[i] = (((src+i)->arr[4] >> 50) & 0x3fff) | (((src+i)->arr[5] & 0x1fffffffff) << 14); 
+    }
+    res[6] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 8; i++) {
+        t[i] = ((src+i)->arr[5] >> 37) & 0x7ffffff;
+    }
+    res[7] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
 }
 
 // ======================================================================================================

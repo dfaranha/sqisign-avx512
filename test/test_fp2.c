@@ -4,7 +4,7 @@
 #include "fp2_lvl3.h"
 #include "test.h"
 #include "utils.h"
-#include "test_utils.h"
+#include "sqi_test_extras.h"
 
 bool test_fp2(int iterations)
 {
@@ -324,6 +324,25 @@ bool test_fp2(int iterations)
         }
     }
     print_test_res("mult by i", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Division by 3
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_8x1x1(a);
+        fp2_copy_8x1x1(b, a);
+
+        fp2_div3_8x1x1(b, b);
+        fp2_add_8x1x1(c, b, b);
+        fp2_add_8x1x1(c, c, b);
+
+        if (fp2_is_equal_8x1x1(a, c) != 0xff) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 3", passed);
     if (passed == 0) {
         return false;
     }
@@ -931,6 +950,25 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Division by 3
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_4x2x1(a);
+        fp2_copy_4x2x1(b, a);
+
+        fp2_div3_4x2x1(b, b);
+        fp2_add_4x2x1(c, b, b);
+        fp2_add_4x2x1(c, c, b);
+
+        if (fp2_is_equal_4x2x1(a, c) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 3", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     printf("Fp2 lvl3 2x2x2 tests:\n");
 
     // Equality test
@@ -1531,93 +1569,10 @@ bool test_fp2(int iterations)
 
     printf("Fp2 lvl3 conversion tests:\n");
 
-    uint64_t arr1[8*12], arr2[8*12];
-    for(int i = 0; i < iterations; i++) {
-        for(int j = 0; j < 8*12; j++) {
-            arr1[j] = rand_uint64();
-        }
-        rand_fp2_8x1x1(a);
-
-        // Converting back and forth does nothin
-        fp2_array_to_8x1x1(d, arr1);
-        fp2_8x1x1_to_array(arr2, d);
-
-        for(int j = 0; j < 8*12; j++) {
-            if (arr1[j] != arr2[j]) { passed = 0; }
-        }
-        if (passed == 0) {
-            break;
-        }
-
-        fp2_8x1x1_to_array(arr2, a);
-        fp2_array_to_8x1x1(d, arr2);
-        if(fp2_is_equal_8x1x1(a, d) != 0xff) {
-            passed = 0;
-            break;
-        }
-
-        // Top 13 bits of each AVX limb is 0
-        t = VSETALL(0xfff8000000000000);
-        fp2_array_to_8x1x1(d, arr1);
-        for(int j = 0; j < 16; j++) {
-            e[j] = VAND(d[j], t);
-        }
-        if(fp2_is_zero_8x1x1(e) != 0xff) {
-            passed = 0;
-            break;
-        }
-        
-    }
-    print_test_res("array <-> 8x1x1", passed);
-    if (passed == 0) {
-        return false;
-    }
-
-    for(int i = 0; i < iterations; i++) {
-        for(int j = 0; j < 4*12; j++) {
-            arr1[j] = rand_uint64();
-        }
-        rand_fp2_4x2x1(a);
-
-        // Converting back and forth is identity
-        fp2_array_to_4x2x1(d, arr1);
-        fp2_4x2x1_to_array(arr2, d);
-
-        for(int j = 0; j < 4*12; j++) {
-            if (arr1[j] != arr2[j]) { passed = 0; }
-        }
-        if (passed == 0) {
-            break;
-        }
-
-        fp2_4x2x1_to_array(arr2, a);
-        fp2_array_to_4x2x1(d, arr2);
-        if(fp2_is_equal_4x2x1(a, d) != 0xf) {
-            passed = 0;
-            break;
-        }
-
-        // Top 13 bits of each AVX limb is 0
-        t = VSETALL(0xfff8000000000000);
-        fp2_array_to_4x2x1(d, arr1);
-        for(int j = 0; j < 8; j++) {
-            e[j] = VAND(d[j], t);
-        }
-        if(fp2_is_zero_4x2x1(e) != 0xf) {
-            passed = 0;
-            break;
-        }
-        
-    }
-    print_test_res("array <-> 4x2x1", passed);
-    if (passed == 0) {
-        return false;
-    }
-
     fp2_t unvec1[8], unvec2[8];
     for (int i = 0; i < iterations; i++) {
         for (int j = 0; j < 8; j++) {
-            fp2_random_test(&unvec1[j]);
+            fp2_random_test(unvec1+j);
         }
         rand_fp2_8x1x1(a);
 
@@ -1626,7 +1581,7 @@ bool test_fp2(int iterations)
         fp2_8x1x1_to_unvectorized(unvec2, d);
 
         for (int j = 0; j < 8; j++) {
-            if (fp2_is_equal(&unvec1[j], &unvec2[j]) == 0) { passed = 0; }
+            if (fp2_is_equal(unvec1+j, unvec2+j) == 0) { passed = 0; }
         }
         if (passed == 0) {
             break;
@@ -1657,8 +1612,8 @@ bool test_fp2(int iterations)
 
         fp2_8x1x1_to_unvectorized(unvec1, a);
         fp2_8x1x1_to_unvectorized(unvec2, b);
-        for (int i = 0; i < 8; i++) {
-            fp2_mul(&unvec1[i], &unvec1[i], &unvec2[i]);
+        for (int j = 0; j < 8; j++) {
+            fp2_mul(unvec1+j, unvec1+j, unvec2+j);
         }
         fp2_unvectorized_to_8x1x1(d, unvec1);
 
@@ -1668,21 +1623,21 @@ bool test_fp2(int iterations)
         }
 
         for (int j = 0; j < 8; j++) {
-            fp2_random_test(&unvec1[j]);
-            fp2_random_test(&unvec2[j]);
+            fp2_random_test(unvec1+j);
+            fp2_random_test(unvec2+j);
         }
 
         fp2_unvectorized_to_8x1x1(d, unvec1);
         fp2_unvectorized_to_8x1x1(e, unvec2);
 
         for (int j = 0; j < 8; j++) {
-            fp2_mul(&unvec1[j], &unvec1[j], &unvec2[j]);
+            fp2_mul(unvec1+j, unvec1+j, unvec2+j);
         }
         fp2_mul_8x1x1(f, d, e);
         fp2_8x1x1_to_unvectorized(unvec2, f);
         
         for (int j = 0; j < 8; j++) {
-            if (fp2_is_equal(&unvec1[j], &unvec2[j]) == 0) {
+            if (fp2_is_equal(unvec1+j, unvec2+j) == 0) {
                 passed = 0;
                 break;
             }
