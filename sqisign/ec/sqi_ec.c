@@ -1,5 +1,26 @@
 #include "sqi_ec.h"
 
+void
+ec_point_init(ec_point_t *P)
+{ // Initialize point as identity element (1:0)
+    fp2_set_one(&(P->x));
+    fp2_set_zero(&(P->z));
+}
+
+void
+ec_curve_init(ec_curve_t *E)
+{ // Initialize the curve struct
+    // Initialize the constants
+    fp2_set_zero(&(E->A));
+    fp2_set_one(&(E->C));
+
+    // Initialize the point (A+2 : 4C)
+    ec_point_init(&(E->A24));
+
+    // Set the bool to be false by default
+    E->is_A24_computed_and_normalized = false;
+}
+
 uint32_t ec_is_zero(const ec_point_t *P)
 {
     return fp2_is_zero(&P->z);

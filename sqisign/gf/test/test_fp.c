@@ -3,7 +3,8 @@
 #include <string.h>
 #include <time.h>
 #include <inttypes.h>
-#include "test_utils.h"
+
+#include "sqi_test_extras.h"
 //#include <bench_test_arguments.h>
 
 bool

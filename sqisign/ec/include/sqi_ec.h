@@ -80,6 +80,10 @@ typedef struct ec_curve_t
  * @{
  */
 
+// Initalisation for curves and points
+void ec_curve_init(ec_curve_t *E);
+void ec_point_init(ec_point_t *P);
+
 /**
  * @brief Point equality
  *
@@ -161,6 +165,8 @@ void ec_dbl(ec_point_t *res, const ec_point_t *P, const ec_curve_t *curve);
  * @param curve the curve on which P lays
  */
 void ec_dbl_iter(ec_point_t *res, int n, const ec_point_t *P, ec_curve_t *curve);
+
+void xDBL_A24(ec_point_t *Q, const ec_point_t *P, const ec_point_t *A24, const bool A24_normalized);
 
 /**
  * @brief Reduce Z-coordinate of point in place
