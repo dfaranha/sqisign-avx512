@@ -78,6 +78,9 @@ bool test_ec(int iterations)
 
         // Compare
         ec_point_4x2x1_to_unvectorized(Q, xQ, zQ);
+        // TODO remove when code has been merged:
+        //ec_point_unvectorized_to_4x2x1(xR, zR, R);
+        //printf("this works when merging: %x %x\n", fp2_is_equal_4x2x1(xQ, xR), fp2_is_equal_4x2x1(zQ, zR));
         for(int j = 0; j < 4 && passed; j++) {
             passed = ec_is_equal(Q+j, R+j);
         }
