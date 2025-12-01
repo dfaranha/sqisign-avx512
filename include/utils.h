@@ -10,6 +10,7 @@
 #include "fp_lvl3.h"
 #include "intrinsics_avx512.h"
 
+void rand_bytes(uint8_t* bytes, int len);
 uint64_t rand_uint64();
 
 // Samples uniformly from [min, max].
