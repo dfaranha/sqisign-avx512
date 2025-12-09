@@ -246,11 +246,11 @@ void fp2_mixaddsub_4x2x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 ad
 
 void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i s1[8], s2[8], s3[8], t1[8], t2[8];
+    __m512i s1[8], s2[8], s3[8], t1[8], t2[8], t3[8];
     for(int i = 0; i < 8; i++) {
         s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0
         s2[i] = VSHUFFLE(a[i], 0xee); // a1, a1
-        s3[i] = VSHUFFLE(b[i], 0x4e); // b1, b0
+        s3[i] = VSHUFFLE(b[i], 0x4e); // b0, b1
     }
     fp_mul_8x1(t1, s1, b);
     fp_mul_8x1(t2, s2, s3);
@@ -259,7 +259,16 @@ void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b)
 
 void fp2_sqr_4x2x1(__m512i* res, __m512i* a)
 {
-    fp2_mul_4x2x1(res, a, a);
+    __mmask16 k = 0b0011001100110011;
+    __m512i s1[8], s2[8], s3[8], s4[8], t1[8], t2[8];
+    for(int i = 0; i < 8; i++) {
+        s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0
+        s2[i] = VSHUFFLEMASKZ(k, a[i], 0x0e); // 0, a1
+		s3[i] = VSHUFFLE(a[i], 0x4e); // a0, a1
+    }
+    fp_mixaddsub_8x1(t1, s1, s3, 0xff);
+    fp_mixaddsub_8x1(t2, a, s2, 0xaa);
+    fp_mul_8x1(res, t1, t2);
 }
 
 void fp2_muli_4x2x1(__m512i* res, __m512i* a)
