@@ -266,8 +266,8 @@ void fp2_sqr_4x2x1(__m512i* res, __m512i* a)
         s2[i] = VSHUFFLEMASKZ(k, a[i], 0x0e); // 0, a1
 		s3[i] = VSHUFFLE(a[i], 0x4e); // a0, a1
     }
-    fp_mixaddsub_8x1(t1, s1, s3, 0xff);
-    fp_mixaddsub_8x1(t2, a, s2, 0xaa);
+    fp_add_8x1(t1, s1, s3);
+    fp_sub_8x1(t2, a, s2);
     fp_mul_8x1(res, t1, t2);
 }
 
