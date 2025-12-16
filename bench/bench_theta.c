@@ -109,7 +109,7 @@ void bench_theta(int iterations)
     int n = 188 - 1;
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        theta_isogeny_chain_single(a, b, KAT_OA, KAT_KER_P1, KAT_KER_P2, c, n, 0, true);
+        theta_isogeny_chain_no_gluing_single(a, b, KAT_OA, KAT_KER_P1, KAT_KER_P2, c, n, 0, true);
         end = cpucycles();
         cycles[i] = (end - start);
     }
@@ -202,7 +202,7 @@ void bench_theta(int iterations)
 
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        theta_isogeny_chain_pair(a, b, KAT_OA, KAT_KER, c, n, 0, true);
+        theta_isogeny_chain_no_gluing_pair(a, b, KAT_OA, KAT_KER, c, n, 0, true);
         end = cpucycles();
         cycles[i] = (end - start);
     }

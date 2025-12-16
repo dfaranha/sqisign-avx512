@@ -11,7 +11,11 @@ bool test_fp2(int iterations)
     __m512i a[16], b[16], c[16], d[16], e[16], f[16], zero[16], one[16], t;
     fp2_setzero_8x1x1(zero);
     fp2_setzero_8x1x1(one);
+
+    //TODO: This is not one in the other representations, fix the tests below
     one[0] = VSETALL(1);
+    fp2_tomont_8x1x1(one, one);
+
     int passed = 1;
 
     printf("Fp2 lvl3 8x1x1 tests:\n");
@@ -1733,7 +1737,7 @@ bool test_fp2(int iterations)
         rand_fp2_4x2x1(b+8);
 
         // Conversion back and forth is identity
-        fp2_8x1x1_to_4x2x1(d, a);
+        fp2_8x1x1_to_4x2x1(d, d+8, a);
         fp2_4x2x1_to_8x1x1(e, d, d+8);
         if (fp2_is_equal_8x1x1(e, a) != 0xff) {
             passed = 0;
@@ -1741,7 +1745,7 @@ bool test_fp2(int iterations)
         }
 
         fp2_4x2x1_to_8x1x1(f, b, b+8);
-        fp2_8x1x1_to_4x2x1(e, f);
+        fp2_8x1x1_to_4x2x1(e, e+8, f);
         if (fp2_is_equal_4x2x1(e, b) != 0xf || fp2_is_equal_4x2x1(e+8, b+8) != 0xf) {
             passed = 0;
             break;
@@ -1761,7 +1765,7 @@ bool test_fp2(int iterations)
         // In place conversion back and forth is identity
         rand_fp2_8x1x1(c);
         fp2_copy_8x1x1(d, c);
-        fp2_8x1x1_to_4x2x1(c, c);
+        fp2_8x1x1_to_4x2x1(c, c+8, c);
         fp2_4x2x1_to_8x1x1(c, c, c+8);
         if (fp2_is_equal_8x1x1(c, d) != 0xff) {
             passed = 0;
@@ -1772,7 +1776,7 @@ bool test_fp2(int iterations)
         fp2_copy_4x2x1(d, c);
         fp2_copy_4x2x1(d+8, c+8);
         fp2_4x2x1_to_8x1x1(c, c, c+8);
-        fp2_8x1x1_to_4x2x1(c, c);
+        fp2_8x1x1_to_4x2x1(c, c+8, c);
         if (fp2_is_equal_4x2x1(c, d) != 0xf || fp2_is_equal_4x2x1(c+8, d+8) != 0xf) {
             passed = 0;
             break;
@@ -1783,8 +1787,8 @@ bool test_fp2(int iterations)
         rand_fp2_8x1x1(b);
         fp2_mul_8x1x1(c, a, b);
 
-        fp2_8x1x1_to_4x2x1(d, a);
-        fp2_8x1x1_to_4x2x1(e, b);
+        fp2_8x1x1_to_4x2x1(d, d+8, a);
+        fp2_8x1x1_to_4x2x1(e, e+8, b);
         fp2_mul_4x2x1(f, d, e);
         fp2_mul_4x2x1(f+8, d+8, e+8);
         fp2_4x2x1_to_8x1x1(f, f, f+8);
@@ -1802,7 +1806,7 @@ bool test_fp2(int iterations)
         fp2_4x2x1_to_8x1x1(d, a, a+8);
         fp2_4x2x1_to_8x1x1(e, b, b+8);
         fp2_mul_8x1x1(f, d, e);
-        fp2_8x1x1_to_4x2x1(f, f);
+        fp2_8x1x1_to_4x2x1(f, f+8, f);
 
         if (fp2_is_equal_4x2x1(c, f) != 0xf || fp2_is_equal_4x2x1(c+8, f+8) != 0xf) {
             passed = 0;

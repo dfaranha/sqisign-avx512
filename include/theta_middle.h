@@ -49,6 +49,12 @@ void theta_precomp(__m512i* c1, __m512i* c2, __m512i* null);
 void theta_double_single(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2);
 
 /**
+ * Doubles the theta point n times, using the precomputed constants c1 and c2.
+ */
+void theta_double_iter_single(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2, const int n);
+
+
+/**
  * Compute the dual theta null point of the codomain of the (2,2)-isogeny, as well as its inverse.
  * @param res Output. The dual theta null point of the codomain, (1 : beta : gamma : delta).
  * @param res_inv Output. The coordinate-wise inverse of the dual theta null point, (1 : beta^-1 : gamma^-1 : delta^-1).
@@ -56,7 +62,12 @@ void theta_double_single(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2);
  * @param h1 Flag for initally applying Hadamard to k1 and k2.
  * @param h2 Flag for applying Hadamard to the result at the end.
  */
-void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i* k2, bool h1, bool h2);
+void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i* k2, const bool h1, const bool h2);
+
+// updates null and ker
+void theta_codomain_with_four_torsion(__m512i* res_inv, __m512i* null, __m512i* ker, const bool h1, const bool h2);
+
+void theta_codomain_with_no_torsion(__m512i* res_inv, __m512i* null, const bool h1, const bool h2);
 
 /**
  * Evaluate a theta point through a (2,2)-isogeny given the precomputed constants.
@@ -65,7 +76,9 @@ void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i*
  * @param h1 Flag for initially applying Hamard to a.
  * @param h2 Flag for applying Hadamard to res at the end.
  */
-void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2);
+void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, const bool h1, const bool h2);
+
+void theta_eval_list_single(__m512i* pts, __m512i* inv, const bool h1, const bool h2, const int num_pts);
 
 // ======================================================================================================
 //                                                 Pair
@@ -102,6 +115,11 @@ void theta_had_pair_alt(__m512i* res, __m512i* a);
 void theta_double_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2);
 
 /**
+ * Double the pair of theta points n times, using the precomputed constants c1 and c2.
+ */
+void theta_double_iter_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2, const int n);
+
+/**
  * Compute the dual theta null point of the codomain of the (2,2)-isogeny, as well as its inverse.
  * @param res Output. The dual theta null point of the codomain, (1 : beta : gamma : delta).
  * @param res_inv Output. The coordinate-wise inverse of the dual theta null point, (1 : beta^-1 : gamma^-1 : delta^-1).
@@ -109,7 +127,7 @@ void theta_double_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2);
  * @param h1 Flag for initally applying Hadamard to k1 and k2.
  * @param h2 Flag for applying Hadamard to the result at the end.
  */
-void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, bool h1, bool h2);
+void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool h1, const bool h2);
 
 /**
  * Evaluate a pair of theta points through a (2,2)-isogeny given the precomputed constants.
@@ -118,6 +136,8 @@ void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, bool h1, bo
  * @param h1 Flag for initially applying the Hamard to a.
  * @param h2 Flag for applying Hadamard to the result at the end.
  */
-void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2);
+void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, const bool h1, const bool h2);
+
+void theta_eval_list_pair(__m512i* pts, __m512i* inv, const bool h1, const bool h2, const int num_pts);
 
 #endif

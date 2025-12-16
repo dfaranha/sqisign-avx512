@@ -87,9 +87,23 @@ void theta_double_single(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2)
     theta_mul_single(res, res, c2);
 }
 
+void theta_double_iter_single(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2, const int n)
+{
+    if (n == 0) {
+        fp2_copy_4x2x1(res, a);
+        return;
+    }
+
+    theta_double_single(res, a, c1, c2);
+    for (int i = 0; i < n-1; i++) {
+        theta_double_single(res, res, c1, c2);
+    }
+}
+
+
 // Idea 2: Investigate the possibility of 1x8x1 Fp2 mul? Or convert to non-vectorized rep and do a single Fp mul?
 // Warning: Modifies k1 and k2
-void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i* k2, bool h1, bool h2) 
+void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i* k2, const bool h1, const bool h2) 
 {
     __m512i t1[16], t2[16], idx, idx2;
 
@@ -145,7 +159,143 @@ void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i*
     }
 }
 
-void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
+void theta_codomain_with_four_torsion(__m512i* res_inv, __m512i* null, __m512i* ker, const bool h1, const bool h2)
+{
+    __m512i t0[8], t1[8], t2[8];
+    fp2_t unvec0[4], unvec1[4], unvec2[4], unvec3[4], t_unvec[4], AB, AC;
+    
+    if (h1) {
+        theta_had_single(ker, ker);
+        theta_had_single(null, null);
+    }
+
+    fp2_sqr_4x2x1(t0, ker);
+    theta_had_single(t0, t0);
+
+    fp2_sqr_4x2x1(t1, null);
+    theta_had_single(t1, t1);
+
+    // TODO: two wasted squarings? Or needed for had?
+    //xAB, _, xCD, _ = T0
+    //AA, BB, CC, DD = T1
+    fp2_4x2x1_to_unvectorized(unvec0, t0);
+    fp2_4x2x1_to_unvectorized(unvec1, t1);
+
+    // T0 = AVX_4x2x1(AA, AA, xAB, BB)
+    t_unvec[0] = unvec1[0]; t_unvec[1] = unvec1[0]; t_unvec[2] = unvec0[0]; t_unvec[3] = unvec1[1];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec);
+    // T1 = AVX_4x2x1(BB, CC, CC, DD)
+    t_unvec[0] = unvec1[1]; t_unvec[1] = unvec1[2]; t_unvec[2] = unvec1[2]; t_unvec[3] = unvec1[3];
+    fp2_unvectorized_to_4x2x1(t1, t_unvec);
+    //AABB, AACC, xABCC, BBDD = pairwise_multiplication(T0, T1)
+    fp2_mul_4x2x1(t0, t0, t1);
+    fp2_4x2x1_to_unvectorized(unvec2, t0);
+
+    // TODO: here are two fp2 sqrt, do we want to do something
+    //       in parallel here, or convert from 64-bit for the last
+    //       two steps where we need sqrts?
+    fp2_copy(&AB, unvec2);
+    fp2_copy(&AC, unvec2+1);
+    fp2_sqrt(&AB);
+    fp2_sqrt(&AC);
+
+    // x A^3 BC as a projective factor
+    // A = xAB * AA * AC
+    // B = AB * AC * xAB
+    // C = xAB * AA * CC
+    // D = xCD * AB * AA
+
+    // x A^2 B^3 C^2 D^2 as a projective factor
+    // A_inv = xAB * BB * CC * DD
+    // B_inv = xAB * AB * CC * DD
+    // C_inv = xAB * AC * BB * DD
+    // D_inv = AB * BB * AC * xCD
+
+    // T0 = AVX_4x2x1(xAB, AB, xCD, BB)
+    t_unvec[0] = unvec0[0]; t_unvec[1] = AB; t_unvec[2] = unvec0[2]; t_unvec[3] = unvec1[1];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec);
+    // T1 = AVX_4x2x1(AC, DD, AB, AC)
+    t_unvec[0] = AC; t_unvec[1] = unvec1[3]; t_unvec[2] = AB; t_unvec[3] = AC;
+    fp2_unvectorized_to_4x2x1(t1, t_unvec);
+    //xABAC, ABDD, xCDAB, BBAC = pairwise_multiplication(T0, T1)
+    fp2_mul_4x2x1(t0, t0, t1);
+    fp2_4x2x1_to_unvectorized(unvec3, t0);
+
+    // OB = AVX_4x2x1(AA, AB, AA, AA)
+    t_unvec[0] = unvec1[0]; t_unvec[1] = AB; t_unvec[2] = unvec1[0]; t_unvec[2] = unvec1[0];
+    fp2_unvectorized_to_4x2x1(null, t_unvec);
+    //T0 = AVX_4x2x1(xABAC, xABAC, xABCC, xCDAB)
+    t_unvec[0] = unvec3[0]; t_unvec[1] = unvec3[0]; t_unvec[2] = unvec2[2]; t_unvec[3] = unvec3[2];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec);
+    fp2_mul_4x2x1(null, null, t0);
+
+    // inv = AVX_4x2x1(xABCC, xABCC, xABAC, xCDAB)
+    t_unvec[0] = unvec2[2]; t_unvec[1] = unvec2[2]; t_unvec[2] = unvec3[0]; t_unvec[3] = unvec3[2];
+    fp2_unvectorized_to_4x2x1(res_inv, t_unvec);
+    // T0 = AVX_4x2x1(BBDD, ABDD, BBDD, BBAC)
+    t_unvec[0] = unvec2[3]; t_unvec[1] = unvec3[1]; t_unvec[2] = unvec2[3]; t_unvec[3] = unvec3[3];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec);
+    fp2_mul_4x2x1(res_inv, res_inv, t0);
+
+    if (h2) {
+        theta_had_single(null, null);
+    }
+}
+
+void theta_codomain_with_no_torsion(__m512i* res_inv, __m512i* null, const bool h1, const bool h2)
+{
+    __m512i t0[8], t1[8];
+    fp2_t unvec[4], t_unvec[4], AB, AC, AD;
+    
+    if (h1) {
+        theta_had_single(null, null);
+    }
+    fp2_sqr_4x2x1(t0, null);
+    theta_had_single(t0, t0);
+
+    // TODO: here are three fp2 sqrt, do we want to do something
+    //       in parallel here, or convert from 64-bit for the last
+    //       two steps where we need sqrts?
+    // AA, BB, CC, DD = T0
+    fp2_4x2x1_to_unvectorized(unvec, t0);
+    fp2_mul(&AB, unvec, unvec + 1);
+    fp2_mul(&AC, unvec, unvec + 2);
+    fp2_mul(&AD, unvec, unvec + 3);
+    fp2_sqrt(&AB);
+    fp2_sqrt(&AC);
+    fp2_sqrt(&AD);
+    // OB = AVX_4x2x1(AA, AB, AC, AD)
+    t_unvec[0] = unvec[0]; t_unvec[1] = AB; t_unvec[2] = AC; t_unvec[3] = AD;
+    fp2_unvectorized_to_4x2x1(null, t_unvec);
+
+    // This calls pairwise_multiplication twice for a total of
+    // 8M where as in serial we only need 7, so 1 M is technically
+    // redundant here.
+    // A_inv = BB * CC * DD
+    // B_inv = AB * CC * DD
+    // C_inv = BB * AC * DD
+    // D_inv = BB * CC * AD
+    
+    // inv = AVX_4x2x1(BB, AB, BB, BB)
+    t_unvec[0] = unvec[1]; t_unvec[1] = AB; t_unvec[2] = unvec[1]; t_unvec[3] = unvec[1];
+    fp2_unvectorized_to_4x2x1(res_inv, t_unvec);
+    // T0 = AVX_4x2x1(CC, CC, AC, CC)
+    t_unvec[0] = unvec[2]; t_unvec[1] = unvec[2]; t_unvec[2] = AC; t_unvec[3] = unvec[2];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec);
+    fp2_mul_4x2x1(res_inv, res_inv, t0);
+    
+    // T0 = AVX_4x2x1(DD, DD, DD, AD)
+    t_unvec[0] = unvec[3]; t_unvec[1] = unvec[3]; t_unvec[2] = unvec[3]; t_unvec[3] = AD;
+    fp2_unvectorized_to_4x2x1(t0, t_unvec);
+    fp2_mul_4x2x1(res_inv, res_inv, t0);
+   
+    if (h2) {
+        theta_had_single(null, null);
+    }
+}
+
+
+void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, const bool h1, const bool h2)
 {
     if (h1) {
         theta_had_single(res, a);
@@ -155,6 +305,13 @@ void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
     theta_mul_single(res, res, inv);
     if (h2) {
         theta_had_single(res, res);
+    }
+}
+
+void theta_eval_list_single(__m512i* pts, __m512i* inv, const bool h1, const bool h2, const int num_pts)
+{
+    for (int i = 0; i < num_pts; i++) {
+        theta_eval_single(pts + 8*i, pts + 8*i, inv, h1, h2);
     }
 }
 
@@ -237,7 +394,20 @@ void theta_double_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2)
     theta_mul_pair(res, res, c2);
 }
 
-void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, bool h1, bool h2)
+void theta_double_iter_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2, const int n)
+{
+    if (n == 0) { 
+        fp2_copy_8x1x1(res, a);
+        return; 
+    }
+
+    theta_double_pair(res, a, c1, c2);
+    for (int i = 0; i < n-1; i++) {
+        theta_double_pair(res, res, c1, c2);
+    }
+}
+
+void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool h1, const bool h2)
 {
     __m512i k_split[16], t1[16], t2[16], idx, idx2;
 
@@ -251,7 +421,7 @@ void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, bool h1, bo
 
     // Input: k = (k1, k2) = (xi, yi, zi, wi)_{i=1,2}
     // TODO: Is this necessary?
-    fp2_8x1x1_to_4x2x1(k_split, k);
+    fp2_8x1x1_to_4x2x1(k_split, k_split+8, k);
 
     // t1 = (x1, y1, z2, w2)
     // t2 = (y2, x2, w2, z2)
@@ -293,7 +463,7 @@ void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, bool h1, bo
     }
 }
 
-void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
+void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, const bool h1, const bool h2)
 {
     if (h1) {
         theta_had_pair(res, a);
@@ -305,3 +475,17 @@ void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
         theta_had_pair(res, res);
     }
 }
+
+void theta_eval_list_pair(__m512i* pts, __m512i* inv, const bool h1, const bool h2, const int num_pts)
+{
+    bool num_pts_is_odd = (num_pts & 0x1);
+    int num_pair_pts = num_pts / 2;
+
+    for (int i = 0; i < num_pair_pts; i++) {
+        theta_eval_pair(pts + 16*i, pts + 16*i, inv, h1, h2);
+    }
+    if (num_pts_is_odd) {
+        theta_eval_single(pts+8*(num_pts-1), pts+8*(num_pts-1), inv, h1, h2);
+    }
+}
+

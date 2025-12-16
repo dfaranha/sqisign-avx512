@@ -3,10 +3,41 @@
 
 #include <stdbool.h>
 #include "intrinsics_avx512.h"
+#include "sqi_hd.h"
+#include "sqi_ec.h"
 
-// ======================================================================================================
-//                                              Single    
-// ======================================================================================================
+// ====================================================================
+//                 Helper functions for isogeny chains    
+// ====================================================================
+
+// Normalizes in place
+void theta_normalize_chain_input(
+    theta_couple_curve_t* E12, theta_kernel_couple_points_t* ker
+);
+
+int theta_compute_product_doubles(
+    __m512i* A_12, __m512i* strat_points_x, __m512i* strat_points_y, __m512i* strat_points_z,
+    uint16_t* orders, int space
+);
+
+// ====================================================================
+//  Isogeny chains where we have the 2^n torsion only (requires sqrts)   
+// ====================================================================
+
+void theta_isogeny_chain_no_torsion_singe(
+    theta_couple_curve_t* res_E34, 
+    theta_couple_point_t* res_pts, 
+    theta_couple_curve_t* E12, 
+    theta_kernel_couple_points_t* ker,
+    theta_couple_point_t* pts, 
+    const int n, 
+    const int num_pts, 
+    const bool randomize
+);
+
+// ====================================================================
+//                 Chains without gluing    
+// ==================================================================== 
 
 /**
  * The "naive" approach:
@@ -27,13 +58,9 @@
  * @param n The length of the isogeny chain.
  * @param num_pts The number of points to be evaluated
  */
-void theta_isogeny_chain_single(__m512i* prod, __m512i* eval_pts, __m512i* null, 
+void theta_isogeny_chain_no_gluing_single(__m512i* prod, __m512i* eval_pts, __m512i* null, 
     __m512i* ker_a, __m512i* ker_b, __m512i* pts, const int n, const int num_pts, 
     const bool randomize);
-
-// ======================================================================================================
-//                                                 Pair
-// ======================================================================================================
 
 /**
  * Here we (sometimes) store two theta points (a, b, c, d) and (e, f, g, h) simultaneously in the 8x1x1 Fp2 format.
@@ -52,7 +79,7 @@ void theta_isogeny_chain_single(__m512i* prod, __m512i* eval_pts, __m512i* null,
  * @param n The length of the isogeny chain.
  * @param num_pts The number of points to be evaluated
  */
-void theta_isogeny_chain_pair(__m512i* codom, __m512i* eval_pts, __m512i* null, __m512i* ker, 
+void theta_isogeny_chain_no_gluing_pair(__m512i* codom, __m512i* eval_pts, __m512i* null, __m512i* ker, 
     __m512i* pts, const int n, const int num_pts, const bool randomize);
 
 #endif

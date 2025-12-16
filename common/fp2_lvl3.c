@@ -511,7 +511,7 @@ void fp2_4x2x1_to_unvectorized(fp2_t* res, __m512i* src)
     }
 }
 
-void fp2_8x1x1_to_4x2x1(__m512i* res, __m512i* src)
+void fp2_8x1x1_to_4x2x1(__m512i* res1, __m512i* res2, __m512i* src)
 {
     __m512i src_re, src_im, t_re, t_im;
 
@@ -520,8 +520,8 @@ void fp2_8x1x1_to_4x2x1(__m512i* res, __m512i* src)
         src_im = src[i+8];
         t_re = VSHUFFLE(src_re, 0x4e); // a, b, c, d, ... -> b, a, d, c, ...
         t_im = VSHUFFLE(src_im, 0x4e);
-        res[i] = VBLEND(0xaa, src_re, t_im); 
-        res[i+8] = VBLEND(0xaa, t_re, src_im);
+        res1[i] = VBLEND(0xaa, src_re, t_im); 
+        res2[i] = VBLEND(0xaa, t_re, src_im);
     }
 }
 
