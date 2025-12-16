@@ -441,7 +441,7 @@ void fp2_mul_2x4x1(__m512i* res, __m512i* a, __m512i* b)
     __m512i s1[8], s2[8], t1[8], t2[8];
     for(int i = 0; i < 8; i++) {
         s1[i] = VSHUFFLE(a[i], 0x44);   // a0, a0, a1, a1
-        s2[i] = VPERM256(b[i], 0x28);      // b0, b1, b1, b0
+        s2[i] = VPERM256(b[i], 0x28);   // b0, b1, b1, b0
     }
     fp_mul_8x1(t1, s1, s2);
     for(int i = 0; i < 8; i++) {
@@ -453,7 +453,17 @@ void fp2_mul_2x4x1(__m512i* res, __m512i* a, __m512i* b)
 
 void fp2_sqr_2x4x1(__m512i* res, __m512i* a)
 {
-    fp2_mul_2x4x1(res, a, a);
+    __m512i s1[8], s2[8], t1[8], t2[8];
+    for(int i = 0; i < 8; i++) {
+        s1[i] = VSHUFFLE(a[i], 0x44);   // a0, a0, a1, a1
+        s2[i] = VPERM256(a[i], 0x28);   // a0, a1, a1, a0
+    }
+    fp_mul_8x1(t1, s1, s2);
+    for(int i = 0; i < 8; i++) {
+        t2[i] = VPERM256MASKZ(0x55, t1[i], 0x32);
+        t1[i] = VPERM256MASKZ(0x55, t1[i], 0x10);
+    }
+    fp_mixaddsub_8x1(res, t1, t2, 0xcc);
 }
  
 void fp2_tomont_2x4x1(__m512i* res, __m512i* a)
