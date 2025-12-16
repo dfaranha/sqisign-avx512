@@ -16,7 +16,7 @@ def deterministic_fp2_root(a):
     """
     Ensure the square root matches deterministic output
     """
-    a0, a1 = a.list()
+    a0, a1 = a.polynomial().list()
 
     a0_is_zero = a0.is_zero()
     a0_is_odd = int(a0) & 1
@@ -49,7 +49,7 @@ def sqrt_fp2(x):
     F = x.parent()
     p = F.characteristic()
 
-    a0, a1 = x.list()
+    a0, a1 = x.polynomial().list()
 
     delta = sqrt_fp(a0**2 + a1**2)
     if a1.is_zero():
