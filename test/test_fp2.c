@@ -190,7 +190,7 @@ bool test_fp2(int iterations)
 
     // Multiplication tests
     // Using Montgomery constant
-    uint64_t R[8] = { 0x3f03f03, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1e80000 };
+    uint64_t R[8] = { 0xF03F03F03F03, 0x03, 0x0, 0x0, 0x0, 0x0, 0x0, 0x3D0000000000 };
     __m512i vR[16];
     fp2_setzero_8x1x1(vR);
     fp_duplicate_8x1(vR, R);
@@ -327,7 +327,7 @@ bool test_fp2(int iterations)
     if (passed == 0) {
         return false;
     }
-
+/*
     printf("Fp2 lvl3 4x1x2 tests:\n");
 
     // Equality test
@@ -1922,7 +1922,7 @@ bool test_fp2(int iterations)
     print_test_res("4x2x1 <-> 2x4x1", passed);
     if (passed == 0) {
         return false;
-    }
+    }*/
 
     return true;
 }

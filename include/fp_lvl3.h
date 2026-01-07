@@ -1,6 +1,6 @@
 /**
  *   The SQISign lvl3 prime is p = 65 * 2^376 - 1
- *   It is 383 bits, so the number of 51-bit limbs needed is 383/51 < 8
+ *   It is 383 bits, so the number of 48-bit limbs needed is 383/48 < 8
  *   
  *   Formats: a x b = a vectors of b Fp limbs
  */
@@ -15,20 +15,20 @@
 #define FP_NUM_64LIMBS 6
 #define FP_NUM_AVXLIMBS 8
 
-static const uint64_t LIMB_LEN = 51;                 ///////// PLANNING SWITCHING TO LIMB_LEN = 48
+static const uint64_t LIMB_LEN = 48;
 static const uint64_t LIMB_ALIGN = 52 - LIMB_LEN;
-static const uint64_t LIMB_MASK = 0x7ffffffffffff;   ///////// THIS WOULD CHANGE TO LIMB_MASK 0xFFFFFFFFFFFF
-static const uint64_t LAST_LIMB_MASK = 0x3ffffff;    ///////// IS THIS USED SOMEWHERE?
-// p in radix 2^51
-static const uint64_t p[8] = { 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x207ffff };
+static const uint64_t LIMB_MASK = 0xffffffffffff;
+static const uint64_t LAST_LIMB_MASK = 0x7fffffffffff;    ///////// IS THIS USED SOMEWHERE?
+// p in radix 2^48
+static const uint64_t p[8] = { 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0x40ffffffffff };
 
-static const uint64_t p_plus_1_top = 0x2080000;
-// 2*p in radix 2^51
-static const uint64_t p2[8] = { 0x7fffffffffffe, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x40fffff };
+static const uint64_t p_plus_1_top = 0x410000000000;
+// 2*p in radix 2^48
+static const uint64_t p2[8] = { 0xfffffffffffe, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0x81ffffffffff };
 
 // We use the Montgomery representation with R = 2^408
 // R2 is R^2 mod p, which is needed to convert to the representation.
-static const uint64_t R2[8] = { 0x3732f52771f91, 0x7e07e07e07e2, 0x40fc0fc0fc0fc, 0x781f81f81f81f, 0x3f03f03f03f03, 0x7e07e07e07e0, 0x40fc0fc0fc0fc, 0xf9f81f };
+static const uint64_t R2[8] = { 0x7B0FD07F000F, 0x732F52771F91, 0xF03F03F03F13, 0xF03F03F03F03, 0xF03F03F03F03, 0xF03F03F03F03, 0xF03F03F03F03, 0x213F03F03F03 };
 
 // ======================================================================================================
 //                                                 8x1

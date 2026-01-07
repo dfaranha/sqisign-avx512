@@ -72,7 +72,7 @@ void fp_add_8x1(__m512i* res, __m512i* a, __m512i* b)
     __m512i p_bot = VSETALL(1);
     __m512i p_top = VSETALL(p_plus_1_top);
     
-    // Add 51-bit limbs
+    // Add 48-bit limbs
     t0 = VADD(a[0], b[0]);
     t1 = VADD(a[1], b[1]);
     t2 = VADD(a[2], b[2]);
@@ -276,7 +276,7 @@ void fp_neg_8x1(__m512i* res, __m512i* a)
 
 // TODO: Possible to only do final reduction at the end of Fp2 mul, not here?
 // Used in Fp2 4x2x1
-void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)
+void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)                      ////////////// NOT REVIEWED YET
 {
     __m512i t[8], sign_mask;
     __m512i limb_mask = VSETALL(LIMB_MASK);
@@ -355,7 +355,7 @@ void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     res[7] = t[7];
 }
 
-void fp_mul_8x1_school(__m512i* res, __m512i* a, __m512i* b)
+void fp_mul_8x1_school(__m512i* res, __m512i* a, __m512i* b)                                                 ////////////// NOT REVIEWED YET
 {
     //Likely not needed to use t15, but for now we keep things simple:
     __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15; 
@@ -752,7 +752,6 @@ void fp_frommont_8x1(__m512i* res, __m512i* a)
 void mp_add_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t0, t1, t2, t3, t4, t5, t6, t7;
-    __m512i limb_mask = VSETALL(LIMB_MASK);        ///////
 
     t0 = VADD(a[0], b[0]);
     t1 = VADD(a[1], b[1]);
@@ -762,22 +761,6 @@ void mp_add_8x1(__m512i* res, __m512i* a, __m512i* b)
     t5 = VADD(a[5], b[5]);
     t6 = VADD(a[6], b[6]);
     t7 = VADD(a[7], b[7]);
-
-    // Carry propagation                   ////// ONLY NEEDED FOR LIMB SIZE 51, REMOVE FOR LIMB SIZE 48
-    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
-    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
-    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
-    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
-    t5 = VADD(t5, VSRA(t4, LIMB_LEN));
-    t6 = VADD(t6, VSRA(t5, LIMB_LEN));
-    t7 = VADD(t7, VSRA(t6, LIMB_LEN));
-    t0 = VAND(t0, limb_mask);
-    t1 = VAND(t1, limb_mask);
-    t2 = VAND(t2, limb_mask);
-    t3 = VAND(t3, limb_mask);
-    t4 = VAND(t4, limb_mask);
-    t5 = VAND(t5, limb_mask);
-    t6 = VAND(t6, limb_mask);
 
     // Output result
     res[0] = t0;
@@ -794,7 +777,6 @@ void mp_add_8x1(__m512i* res, __m512i* a, __m512i* b)
 void mp_sub_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t0, t1, t2, t3, t4, t5, t6, t7;
-    __m512i limb_mask = VSETALL(LIMB_MASK);        ///////
 
     t0 = VSUB(a[0], b[0]);
     t1 = VSUB(a[1], b[1]);
@@ -804,22 +786,6 @@ void mp_sub_8x1(__m512i* res, __m512i* a, __m512i* b)
     t5 = VSUB(a[5], b[5]);
     t6 = VSUB(a[6], b[6]);
     t7 = VSUB(a[7], b[7]);
-
-    // Carry propagation                   ////// ONLY NEEDED FOR LIMB SIZE 51, REMOVE FOR LIMB SIZE 48
-    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
-    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
-    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
-    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
-    t5 = VADD(t5, VSRA(t4, LIMB_LEN));
-    t6 = VADD(t6, VSRA(t5, LIMB_LEN));
-    t7 = VADD(t7, VSRA(t6, LIMB_LEN));
-    t0 = VAND(t0, limb_mask);
-    t1 = VAND(t1, limb_mask);
-    t2 = VAND(t2, limb_mask);
-    t3 = VAND(t3, limb_mask);
-    t4 = VAND(t4, limb_mask);
-    t5 = VAND(t5, limb_mask);
-    t6 = VAND(t6, limb_mask);
 
     // Output result
     res[0] = t0;
@@ -923,7 +889,7 @@ void mp_dblsubx2_8x1(__m512i* res, __m512i* a, __m512i* b)
     res[15] = t15;
 }
 
-// Double-length subtraction res = res - a
+// Double-length multiprecision subtraction res = res - a
 void mp_subx2_8x1(__m512i* res, __m512i* a)
 {
     __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15;
@@ -1128,7 +1094,7 @@ void mp_mul_8x1_karat(__m512i* res, __m512i* a, __m512i* b)
     tb2 = VADD(b2, b6);
     tb3 = VADD(b3, b7);
 
-    // tM(m0-m7) <- (ta * tb) - tL - tH
+    // tM(m0-m7) <- ta(ta0-ta3) * tb(tb0-tb3)
     s0 = s1 = s2 = s3 = s4 = s5 = s6 = s7 = VZERO();
 
     m0 = VMULADDL(m0, ta0, tb0);
@@ -1214,25 +1180,30 @@ void rdc_8x1(__m512i* res, __m512i* a)
     const __m512i a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3], a4 = a[4];
     const __m512i a5 = a[5], a6 = a[6], a7 = a[7], a8 = a[8], a9 = a[9];
     const __m512i a10 = a[10], a11 = a[11], a12 = a[12], a13 = a[13], a14 = a[14], a15 = a[15];
-    __m512i r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15;
-    __m512i s7, hi, cnst;
+    __m512i r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16;
+    __m512i s7, s8, hi, cnst;
     __m512i zero = VZERO();
     __m512i one = VSETALL(1);
     __m512i limb_mask = VSETALL(LIMB_MASK);
     __mmask8 msb_mask;
 
-// Montgomery reduction with R = 2^408
-// low(a) = (a0, a1, ... , a7) is 8*51 = 408 bits
-// m = -p^(-1) mod 2^408 = 65 * 2^376 + 1
-// The output of this reduction is (a + (low(a) * m mod 2^408)*p) / 2^408 = \lfloor (a + (low(a) * m mod 2^408) * 65 * 2^376) / 2^408 \rfloor
+// Montgomery reduction with R = 2^432
+// low(a) = (a0, a1, ... , a7, a8) is 9*48 = 432 bits
+// m = -p^(-1) mod 2^432 = 65 * 2^376 + 1
+// The output of this reduction is (a + (low(a) * m mod 2^432)*p) / 2^432 = \lfloor (a + (low(a) * m mod 2^432) * 65 * 2^376) / 2^432 \rfloor
 
-// We begin by computing m * low mod 2^408. Note that 376 = 7 * 51 + 19.
-// Then m * low = (a0 * 65 * 2^376) + low mod 2^408.
-// Thus, we only need to update the top limb.
+// We begin by computing m * low mod 2^432. Note that 376 = 7 * 48 + 40.
+// Then m * low = (a0:a1 * 65 * 2^376) + low mod 2^432.
+// Thus, we only need to update the top two limbs.
 // s0 = a0, s1 = a1, ... , s6 = a6
-cnst = VSETALL((uint64_t)65 << 19);                           ////////// THIS IS FOR LIMB SIZE 51
+cnst = VSETALL((uint64_t)65 << 40);
 s7 = VMULADDL(a7, a0, cnst);
+s8 = VMULADDH(zero, a0, cnst);
+s8 = VADD(a8, VSL(s8, LIMB_ALIGN));
+s8 = VMULADDL(s8, a1, cnst);
+s8 = VADD(s8, VSRA(s7, LIMB_LEN));
 s7 = VAND(s7, limb_mask);
+s8 = VAND(s8, limb_mask);
 
 // r <- s * (p+1)
 r7 = VMULADDL(zero, a0, cnst);
@@ -1257,8 +1228,11 @@ r13 = VMULADDL(hi, a6, cnst);
 hi = VMULADDH(zero, a6, cnst);
 hi = VSL(hi, LIMB_ALIGN);
 r14 = VMULADDL(hi, s7, cnst);
-r15 = VMULADDH(zero, s7, cnst);
-r15 = VSL(r15, LIMB_ALIGN);
+hi = VMULADDH(zero, s7, cnst);
+hi = VSL(hi, LIMB_ALIGN);
+r15 = VMULADDL(hi, s8, cnst);
+r16 = VMULADDH(zero, s8, cnst);
+r16 = VSL(r16, LIMB_ALIGN);
 
 // r <- a + r
 r7 = VADD(a7, r7);
@@ -1272,13 +1246,6 @@ r14 = VADD(a14, r14);
 r15 = VADD(a15, r15);
 
 // Carry propagation
-r1 = VADD(r1, VSRA(a0, LIMB_LEN));
-r2 = VADD(r2, VSRA(a1, LIMB_LEN));
-r3 = VADD(r3, VSRA(a2, LIMB_LEN));
-r4 = VADD(r4, VSRA(a3, LIMB_LEN));
-r5 = VADD(r5, VSRA(a4, LIMB_LEN));
-r6 = VADD(r6, VSRA(a5, LIMB_LEN));
-r7 = VADD(r7, VSRA(a6, LIMB_LEN));
 r8 = VADD(r8, VSRA(r7, LIMB_LEN));
 r9 = VADD(r9, VSRA(r8, LIMB_LEN));
 r10 = VADD(r10, VSRA(r9, LIMB_LEN));
@@ -1287,56 +1254,34 @@ r12 = VADD(r12, VSRA(r11, LIMB_LEN));
 r13 = VADD(r13, VSRA(r12, LIMB_LEN));
 r14 = VADD(r14, VSRA(r13, LIMB_LEN));
 r15 = VADD(r15, VSRA(r14, LIMB_LEN));
-r0 = VAND(r0, limb_mask);
-r1 = VAND(r1, limb_mask);
-r2 = VAND(r2, limb_mask);
-r3 = VAND(r3, limb_mask);
-r4 = VAND(r4, limb_mask);
-r5 = VAND(r5, limb_mask);
-r6 = VAND(r6, limb_mask);
-r7 = VAND(r7, limb_mask);
-r8 = VAND(r8, limb_mask);
+r16 = VADD(r16, VSRA(r15, LIMB_LEN));
 r9 = VAND(r9, limb_mask);
 r10 = VAND(r10, limb_mask);
 r11 = VAND(r11, limb_mask);
 r12 = VAND(r12, limb_mask);
 r13 = VAND(r13, limb_mask);
 r14 = VAND(r14, limb_mask);
+r15 = VAND(r15, limb_mask);
 
-// The result is in r8:r15 after dividing by R = 2^408
+// The result is in r9:r16 after dividing by R = 2^432
 // Final correction to get the result down to 383 bits:
 // If bit383 = 1 then mask is all 1's, else it's all 0's
 // If bit383 = 1 then subtract by (p + 1) - 1 => r - (65*2^376) + 1 
-hi = VSL(r15, 37);                                                      /////////// THIS IS FOR LIMB SIZE 51 -> 37 = 64 - (384 - (7*51))
+hi = VSL(r16, 16);                      // 64 - (384 - (7*48)) = 16
 msb_mask = VSIGN(hi);
-VSUBMASK(r15, msb_mask, r15, cnst);
-VADDMASK(r8, msb_mask, r8, one);
+VSUBMASK(r16, msb_mask, r16, cnst);
+VADDMASK(r9, msb_mask, r9, one);
 
-// Carry propagation
-r9 = VADD(r9, VSRA(r8, LIMB_LEN));
-r10 = VADD(r10, VSRA(r9, LIMB_LEN));
-r11 = VADD(r11, VSRA(r10, LIMB_LEN));
-r12 = VADD(r12, VSRA(r11, LIMB_LEN));
-r13 = VADD(r13, VSRA(r12, LIMB_LEN));
-r14 = VADD(r14, VSRA(r13, LIMB_LEN));
-r15 = VADD(r15, VSRA(r14, LIMB_LEN));
-r8 = VAND(r8, limb_mask);
-r9 = VAND(r9, limb_mask);
-r10 = VAND(r10, limb_mask);
-r11 = VAND(r11, limb_mask);
-r12 = VAND(r12, limb_mask);
-r13 = VAND(r13, limb_mask);
-r14 = VAND(r14, limb_mask);
-
-// Output result
-res[0] = r8;
-res[1] = r9;
-res[2] = r10;
-res[3] = r11;
-res[4] = r12;
-res[5] = r13;
-res[6] = r14;
-res[7] = r15;
+// Output result: final carry propagation is left for the final result. 
+//                Bottom limb can have up to 49 bits.
+res[0] = r9;
+res[1] = r10;
+res[2] = r11;
+res[3] = r12;
+res[4] = r13;
+res[5] = r14;
+res[6] = r15;
+res[7] = r16;
 }
 
 void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)

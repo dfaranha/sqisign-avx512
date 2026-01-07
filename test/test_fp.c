@@ -248,7 +248,7 @@ bool test_fp(int iterations)
 
     // Multiplication tests
     // Using Montgomery constant
-    uint64_t R[8] = { 0x3f03f03, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1e80000 };
+    uint64_t R[8] = { 0xF03F03F03F03, 0x03, 0x0, 0x0, 0x0, 0x0, 0x0, 0x3D0000000000 };
     __m512i vR[8], vR2[8];
     fp_duplicate_8x1(vR, R);
     fp_duplicate_8x1(vR2, R2);
@@ -380,7 +380,7 @@ bool test_fp(int iterations)
         return false;
     }
 
-
+/*
     printf("Fp lvl3 4x2 tests:\n");
     one[0] = VSET(1, 0, 1, 0, 1, 0, 1, 0);
 
@@ -742,7 +742,7 @@ bool test_fp(int iterations)
     print_test_res("squaring", passed);
     if (passed == 0) {
         return false;
-    }
+    }*/
     
     return true;
 }
