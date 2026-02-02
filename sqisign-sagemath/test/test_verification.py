@@ -37,9 +37,9 @@ def generic_KAT_test(level=1):
         f"assets/PQCsignKAT_{sqisign.sk_len}_SQIsign_lvl{level}.rsp"
     )
 
-    print(f"Testing {NUM_KATS} of total {len(kat_tests)} tests for level {level}")
+    # print(f"Testing {NUM_KATS} of total {len(kat_tests)} tests for level {level}")
     for i, test in enumerate(kat_tests[:NUM_KATS]):
-        print(".", end="", flush=True)
+        # print(".", end="", flush=True)
 
         # Assert lengths match expectation from KAT
         assert len(test["msg"]) == test["mlen"]
@@ -53,7 +53,7 @@ def generic_KAT_test(level=1):
 
         # Run SQIsign verification
         assert sqisign.verify(test["msg"], signature, test["pk"])
-    print(f" level {level} tests passed!")
+    # print(f" level {level} tests passed!")
 
 
 def test_level_1():
