@@ -396,16 +396,11 @@ def two_two_isogeny_chain_with_torsion(
     E3 = KummerLine(Fq, [A1, C1])
     E4 = KummerLine(Fq, [A2, C2])
 
-    print(f"const unsigned ISOGENY_LENGTH = {length};")
-    print(
-        f"const theta_couple_curve_t DOMAIN = {to_theta_couple_curve(E1.a(), E2.a())};"
-    )
-    print(
-        f"const theta_kernel_couple_points_t KERNEL = {to_theta_kernel_couple_point(chl_basis, aux_basis)};"
-    )
-    print(
-        f"const theta_couple_curve_t CODOMAIN = {to_theta_couple_curve(E3.a(), E4.a())};"
-    )
+    # Printing values for the C tests
+    print(f"\t\t.length = {length},")
+    print(f"\t\t.domain = {to_theta_couple_curve(E1.a(), E2.a())},")
+    print(f"\t\t.kernel = {to_theta_kernel_couple_point(chl_basis, aux_basis)},")
+    print(f"\t\t.codomain = {to_theta_couple_curve(E3.a(), E4.a())},")
 
     # Compute the point coordinates on the KummerLines
     image_points = []
