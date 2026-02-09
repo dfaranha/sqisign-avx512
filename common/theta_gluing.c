@@ -2,19 +2,18 @@
 #include "fp2_lvl3.h"
 #include "theta_gluing.h"
 #include "theta_middle.h" // TODO: move had, sqr, mul to theta.h? Since they are "core" functions.
+#include "intrinsics_avx512.h"
 
 #include <assert.h>
 #include "utils.h"
 #include "sqi_test_extras.h"
 
-//TODO improve implementation, remove the need to unvectorize.
+// Done (TODO delete this comment) from 11654 to 2008 cycles.
 void gluing_compute_matrix_4x2x1(
     __m512i* g1, __m512i* h1, __m512i* g2, __m512i* h2, __m512i* pi,
     __m512i* x_4, __m512i* z_4, __m512i* u, __m512i* w, __m512i* det
 )
 {
-    // TODO: Copy comment on how this comp is performed.
-
     __m512i z_sqr[8], a[8], b[8], c[8], d[8];
     fp2_t a_un[4], b_un[4], c_un[4], d_un[4], out_un[4];
 
@@ -29,21 +28,33 @@ void gluing_compute_matrix_4x2x1(
     // Observe that this doesn't depend on the previous computation:
     fp2_mul_4x2x1(pi, z_4, det);
 
-    fp2_4x2x1_to_unvectorized(a_un, a);
-    fp2_4x2x1_to_unvectorized(b_un, b);
-    fp2_4x2x1_to_unvectorized(c_un, c);
-    fp2_4x2x1_to_unvectorized(d_un, d);
+    // Compute transpose:
+    __m512i idx_lo = _mm512_set_epi64(13, 12, 5, 4, 9, 8, 1, 0);    
+    __m512i idx_hi = _mm512_set_epi64(15, 14, 7, 6, 11, 10, 3, 2);
+    __m512i ab_lo, ab_hi, cd_lo, cd_hi;
 
-    out_un[0] = a_un[0]; out_un[1] = b_un[0]; out_un[2] = c_un[0]; out_un[3] = d_un[0];
-    fp2_unvectorized_to_4x2x1(g1, out_un);
-    out_un[0] = a_un[1]; out_un[1] = b_un[1]; out_un[2] = c_un[1]; out_un[3] = d_un[1];
-    fp2_unvectorized_to_4x2x1(h1, out_un);
-    out_un[0] = a_un[2]; out_un[1] = b_un[2]; out_un[2] = c_un[2]; out_un[3] = d_un[2];
-    fp2_unvectorized_to_4x2x1(g2, out_un);
-    out_un[0] = a_un[3]; out_un[1] = b_un[3]; out_un[2] = c_un[3]; out_un[3] = d_un[3];
-    fp2_unvectorized_to_4x2x1(h2, out_un);
+    for (int i = 0; i < 8; i++) {
+        // Step 1: 
+        // lo: (a0, b0, a2, b2)
+        // hi: (a1, b1, a3, b3)
+        ab_lo = VBLENDPERM(idx_lo, a[i], b[i]);
+        ab_hi = VBLENDPERM(idx_hi, a[i], b[i]);
+        cd_lo = VBLENDPERM(idx_lo, c[i], d[i]);
+        cd_hi = VBLENDPERM(idx_hi, c[i], d[i]);
+
+        // Step 2:
+        // (a0, b0, c0, d0)
+        g1[i] = VPERM256HALF(ab_lo, cd_lo, 0x44);
+        // (a1, b1, c1, d1)
+        h1[i] = VPERM256HALF(ab_hi, cd_hi, 0x44);
+        // (a2, b2, c2, d2)
+        g2[i] = VPERM256HALF(ab_lo, cd_lo, 0xee);
+        // (a3, b3, c3, d3)
+        h2[i] = VPERM256HALF(ab_hi, cd_hi, 0xee);
+    }
 }
 
+// Done (TODO delete this comment)
 void gluing_action_by_translation_4x2x1(
     __m512i* g1, __m512i* g2, __m512i* h1, __m512i* h2, __m512i* pi,
     __m512i* A24, __m512i* x_4, __m512i* z_4
@@ -679,6 +690,7 @@ void gluing_eval_pair(
     theta_had_pair(res, res);
 }
 
+// Done (TODO delete this comment)
 void gluing_eval_product_to_theta(
     __m512i* res,
     ec_point_t* P1, ec_point_t* P2, __m512i* matrix01, __m512i* matrix23
@@ -698,6 +710,7 @@ void gluing_eval_product_to_theta(
     gluing_apply_matrix(res, matrix01, matrix23, res);
 }
 
+// Done (TODO delete this comment)
 void gluing_eval_product_to_theta_pair(
     __m512i* res,
     ec_point_t* P1, ec_point_t* P2, ec_point_t* Q1, ec_point_t* Q2, 
@@ -706,27 +719,20 @@ void gluing_eval_product_to_theta_pair(
 {
     __m512i t0[16];
     fp2_t unvec0[8], unvec1[8];
-    // PQ = AVX_8x1x1(X1, X1, Z1, Z1, X3, X3, Z3, Z3)
-    unvec0[0] = P1->x; unvec0[1] = P1->x; unvec0[2] = P1->z; unvec0[3] = P1->z;
-    unvec0[4] = Q1->x; unvec0[5] = Q1->x; unvec0[6] = Q1->z; unvec0[7] = Q1->z;
-    // T0 = AVX_8x1x1(X2, Z2, X2, Z2, X4, Z4, X4, Z4)
-    unvec1[0] = P2->x; unvec1[1] = P2->z; unvec1[2] = P2->x; unvec1[3] = P2->z;
-    unvec1[4] = Q2->x; unvec1[5] = Q2->z; unvec1[6] = Q2->x; unvec1[7] = Q2->z;
+    // PQ = AVX_8x1x1(X1, X3, X1, X3, Z1, Z3, Z1, Z3)
+    unvec0[0] = P1->x; unvec0[1] = Q1->x; unvec0[2] = P1->x; unvec0[3] = Q1->x;
+    unvec0[4] = P1->z; unvec0[5] = Q1->z; unvec0[6] = P1->z; unvec0[7] = Q1->z;
+    // T0 = AVX_8x1x1(X2, X4, Z2, Z4, X2, X4, Z2, Z4)
+    unvec1[0] = P2->x; unvec1[1] = Q2->x; unvec1[2] = P2->z; unvec1[3] = Q2->z;
+    unvec1[4] = P2->x; unvec1[5] = Q2->x; unvec1[6] = P2->z; unvec1[7] = Q2->z;
     fp2_unvectorized_to_8x1x1(res, unvec0);
     fp2_unvectorized_to_8x1x1(t0, unvec1);  
     
     fp2_mul_8x1x1(res, res, t0);
-
-    // TODO: Order of fp2 coords is wrong. For now I manually rearrange them
-    fp2_t t_unvec0[8], t_unvec1[8];
-    fp2_8x1x1_to_unvectorized(t_unvec0, res);
-    t_unvec1[0] = t_unvec0[0]; t_unvec1[1] = t_unvec0[4]; t_unvec1[2] = t_unvec0[1]; t_unvec1[3] = t_unvec0[5];
-    t_unvec1[4] = t_unvec0[2]; t_unvec1[5] = t_unvec0[6]; t_unvec1[6] = t_unvec0[3]; t_unvec1[7] = t_unvec0[7];
-    fp2_unvectorized_to_8x1x1(res, t_unvec1);  
-
     gluing_apply_matrix_pair(res, matrix01, matrix23, res);
 }
 
+// Done (TODO delete this comment)
 void gluing_eval_special(
     __m512i* res,
     theta_couple_point_t* P12, __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23
@@ -742,6 +748,7 @@ void gluing_eval_special(
     theta_had_single(res, res);
 }
 
+// Done (TODO delete this comment)
 void gluing_eval_special_pair(
     __m512i* res,
     theta_couple_point_t* P12, theta_couple_point_t* Q12,
@@ -756,12 +763,13 @@ void gluing_eval_special_pair(
     fp2_sqr_8x1x1(res, res);
     theta_had_pair(res, res);
 
-    assert(fp2_is_zero_8x1x1(res) & 0x40); // w1 = 0
-    assert(fp2_is_zero_8x1x1(res) & 0x80); // w2 = 0
+    // w1 = 0 and w2 = 0:
+    assert((fp2_is_zero_8x1x1(res) & 0xc0) == 0xc0 ); 
     theta_mul_pair(res, res, OA_inv);
     theta_had_pair(res, res);
 }
 
+// Done (TODO delete this comment)
 void gluing_eval_special_list_pair(
     __m512i* res_pts, theta_couple_point_t* pts, __m512i* inv, 
     __m512i* matrix01, __m512i* matrix23, const int num_pts

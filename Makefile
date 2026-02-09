@@ -9,7 +9,7 @@ test:
 	./build/test
 
 bench:
-	$(CC) $(FLAGS) common/*.c test/KAT.c bench/*.c sqisign/gf/*.c sqisign/ec/*.c sqisign/gluing/*.c sqisign/gf/*.S sqisign/test/*.c -o build/bench -I include -I bench -I test -I sqisign/ec/include -I sqisign/gf/include -I sqisign/gf/test -I sqisign/gluing/include
+	$(CC) $(FLAGS) common/*.c test/KAT.c bench/*.c sqisign/gf/*.c sqisign/ec/*.c sqisign/gluing/*.c sqisign/gf/*.S sqisign/test/*.c -o build/bench -I include -I bench -I test -I sqisign/ec/include -I sqisign/gf/include -I sqisign/gf/test -I sqisign/gluing/include -I sqisign/test
 	./build/bench
 
 sqifp:

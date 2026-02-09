@@ -559,7 +559,7 @@ void fp2_2x4x1_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2)
             0x0000001100000010, 0x0000001500000014, 0x0000001900000018, 0x0000001d0000001c
         );
     for (int i = 0; i < 8; i++) {
-        res[i] = VBLENDPERM(0xffff, src1[i], src2[i], idx);
+        res[i] = VBLENDPERM32(0xffff, src1[i], src2[i], idx);
     }
 }
 
@@ -580,6 +580,6 @@ void fp2_2x4x1_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2)
 //             0x0000000900000008, 0x0000000d0000000c, 0x0000001900000018, 0x0000001d0000001c
 //         );
 //     for (int i = 0; i < 8; i++) {
-//         res[i] = VBLENDPERM(0xffff, src1[i], src2[i], indices);
+//         res[i] = VBLENDPERM32(0xffff, src1[i], src2[i], indices);
 //     }
 // }

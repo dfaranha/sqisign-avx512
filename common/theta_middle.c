@@ -60,8 +60,8 @@ void theta_precomp(__m512i* c1, __m512i* c2, __m512i* null)
     for (int i = 0; i < 8; i++) {
         c1[i] = VPERM256(t1[i], 0x4e);                      // (y', x', w', z')
         c2[i] = VPERM256(null[i], 0x4e);                    // (y, x, w, z)
-        t2[i] = VBLENDPERM(0xffff, null[i], t1[i], idx2);   // (y', w', y, w)
-        t1[i] = VBLENDPERM(0xffff, null[i], t1[i], idx1);   // (x', z', x, z)
+        t2[i] = VBLENDPERM32(0xffff, null[i], t1[i], idx2);   // (y', w', y, w)
+        t1[i] = VBLENDPERM32(0xffff, null[i], t1[i], idx1);   // (x', z', x, z)
     }
 
     fp2_mul_4x2x1(t2, t1, t2);
@@ -130,7 +130,7 @@ void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i*
     );
     for (int i = 0; i < 8; i++) {
         t2[i] = VPERM256(Q[i], 0x4e);
-        t1[i] = VBLENDPERM(0xffff, P[i], Q[i], idx);
+        t1[i] = VBLENDPERM32(0xffff, P[i], Q[i], idx);
     }
 
     // t1 = (x1 * y2, y1 * x2, z2 * w2, w2 * z2) = (s1, s2, s3, s3)
@@ -440,7 +440,7 @@ void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
     );
     for (int i = 0; i < 8; i++) {
         t2[i] = VPERM256(k_split[i+8], 0x4e);
-        t1[i] = VBLENDPERM(0xffff, k_split[i], k_split[i+8], idx);
+        t1[i] = VBLENDPERM32(0xffff, k_split[i], k_split[i+8], idx);
     }
 
     // t1 = (x1 * y2, y1 * x2, z2 * w2, w2 * z2) = (s1, s2, s3, s3)

@@ -22,6 +22,11 @@ void gluing_compute_matrix_4x2x1(
     __m512i* x_4, __m512i* z_4, __m512i* u, __m512i* w, __m512i* det //inputs
 );
 
+void gluing_compute_matrix_4x2x1_old(
+    __m512i* g1, __m512i* g2, __m512i* h1, __m512i* h2, __m512i* pi, //outputs, name as in change of basis
+    __m512i* x_4, __m512i* z_4, __m512i* u, __m512i* w, __m512i* det //inputs
+);
+
 /**
  * Algorithm 8.36 of the SQISign spec.
  * Compute the translation matrix induced by the generator of our order 4
