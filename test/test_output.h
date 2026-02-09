@@ -1,10 +1,10 @@
 
-struct dim_two_isogeny_test_t {
+typedef struct dim_two_isogeny_test {
     unsigned length;
     theta_couple_curve_t domain;
     theta_kernel_couple_points_t kernel;
     theta_couple_curve_t codomain;
-};
+} dim_two_isogeny_test_t;
 
 const dim_two_isogeny_test_t TESTS[10] = {
 	{

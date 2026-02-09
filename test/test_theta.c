@@ -8,6 +8,7 @@
 #include "theta_middle.h"
 #include "theta_splitting.h"
 #include "utils.h"
+#include "test_output.h"
 
 #include "sqi_ec.h"
 #include "sqi_test_extras.h"
@@ -716,6 +717,24 @@ bool test_theta_KAT(int iterations)
         }
     }
     print_test_res("chain 8x1x1 no torsion", passed);
+    if(passed == 0) {
+        return false;
+    }
+
+    // TODO: Randomize, eval points
+    for (int i = 0; i < 10 && passed; i++) {
+        dim_two_isogeny_test_t test = TESTS[i];
+        bool randomize = false;
+        int num_pts = 0;
+        theta_couple_point_t input_pts[0];
+        theta_isogeny_chain_pair(&E34_actual, res_pts,
+                &test.domain, &test.kernel, input_pts, test.length, num_pts, false);
+        ec_normalize_curve(&E34_actual.E1);
+        ec_normalize_curve(&E34_actual.E2);
+        passed = fp2_is_equal(&test.codomain.E1.A, &E34_actual.E1.A) 
+            & fp2_is_equal(&test.codomain.E2.A, &E34_actual.E2.A);
+    }
+    print_test_res("chain 8x1x1 KAT", passed);
     if(passed == 0) {
         return false;
     }
