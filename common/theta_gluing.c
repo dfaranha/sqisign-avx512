@@ -4,6 +4,8 @@
 #include "theta_middle.h" // TODO: move had, sqr, mul to theta.h? Since they are "core" functions.
 
 #include <assert.h>
+#include "utils.h"
+#include "sqi_test_extras.h"
 
 //TODO improve implementation, remove the need to unvectorize.
 void gluing_compute_matrix_4x2x1(
@@ -82,7 +84,7 @@ void gluing_change_of_basis_4x2x1(
     fp2_t d_prod0[4], d_prod1[4], a0_unvec[4], a1_unvec[4], a2_unvec[4], a3_unvec[4];
     fp2_t t_unvec[4], t_unvec0[4], t_unvec1[4], res_unvec[8];
 
-    gluing_action_by_translation_4x2x1(g1, h1, g2, h2, pi, A24, x_4, z_4);
+    gluing_action_by_translation_4x2x1(g1, g2, h1, h2, pi, A24, x_4, z_4);
 
     // Extract out the projective factors we need to remove all inversions
     // dg1, dh1, dg2, dh2 = pi
@@ -137,7 +139,7 @@ void gluing_change_of_basis_4x2x1(
     // T0 = AVX_4x2x1(g1[1], g1[3], g2[1], g2[3])
     t_unvec0[0] = g1_unvec[1]; t_unvec0[1] = g1_unvec[3]; t_unvec0[2] = g2_unvec[1]; t_unvec0[3] = g2_unvec[3];
     // T1 = AVX_4x2x1(h1[2], h1[2], h2[2], h2[2])
-    t_unvec1[0] = h1_unvec[2]; t_unvec1[1] = h1_unvec[2]; t_unvec1[2] = h2_unvec[2]; t_unvec1[3] = h2_unvec[3];
+    t_unvec1[0] = h1_unvec[2]; t_unvec1[1] = h1_unvec[2]; t_unvec1[2] = h2_unvec[2]; t_unvec1[3] = h2_unvec[2];
     fp2_unvectorized_to_4x2x1(t0, t_unvec0);
     fp2_unvectorized_to_4x2x1(t1, t_unvec1);
     fp2_mul_4x2x1(t2, t0, t1);
@@ -273,14 +275,14 @@ void gluing_change_of_basis_4x2x1(
     fp2_mul_4x2x1(a2, a2, t0);
     fp2_4x2x1_to_unvectorized(a2_unvec, a2);
 
-    // Result:
-    // AVX_8x1x1(a, b, c, d, a1, b1, c1, d1)
-    res_unvec[0] = a0_unvec[0]; res_unvec[1] = a0_unvec[1]; res_unvec[2] = a0_unvec[2]; res_unvec[3] = a0_unvec[3];
-    res_unvec[4] = a1_unvec[0]; res_unvec[5] = a1_unvec[1]; res_unvec[6] = a1_unvec[2]; res_unvec[7] = a1_unvec[3]; 
+    // Result (following the AVX interleaving pattern)
+    // AVX_8x1x1(a0, a1, b0, b1, c0, c1, d0, d1)
+    res_unvec[0] = a0_unvec[0]; res_unvec[1] = a1_unvec[0]; res_unvec[2] = a0_unvec[1]; res_unvec[3] = a1_unvec[1];
+    res_unvec[4] = a0_unvec[2]; res_unvec[5] = a1_unvec[2]; res_unvec[6] = a0_unvec[3]; res_unvec[7] = a1_unvec[3]; 
     fp2_unvectorized_to_8x1x1(res_matrix01, res_unvec);
-    // AVX_8x1x1(a2, b2, c2, d2, a3, b3, c3, d3)
-    res_unvec[0] = a2_unvec[0]; res_unvec[1] = a2_unvec[1]; res_unvec[2] = a2_unvec[2]; res_unvec[3] = a2_unvec[3];
-    res_unvec[4] = a3_unvec[0]; res_unvec[5] = a3_unvec[1]; res_unvec[6] = a3_unvec[2]; res_unvec[7] = a3_unvec[3]; 
+    // AVX_8x1x1(a2, a3, b2, b3, c2, c3, d2, d3)
+    res_unvec[0] = a2_unvec[0]; res_unvec[1] = a3_unvec[0]; res_unvec[2] = a2_unvec[1]; res_unvec[3] = a3_unvec[1];
+    res_unvec[4] = a2_unvec[2]; res_unvec[5] = a3_unvec[2]; res_unvec[6] = a2_unvec[3]; res_unvec[7] = a3_unvec[3]; 
     fp2_unvectorized_to_8x1x1(res_matrix23, res_unvec);
 }
 
@@ -289,9 +291,9 @@ void gluing_internal_sum(__m512i* res_P, __m512i* P0P1, __m512i* P2P3)
     __m512i sum[8], t[8]; //TODO use res as sum
     fp2_t P0P1_unvec[8], P2P3_unvec[8], t_unvec[4];
 
-    // Pa0, Pb0, Pc0, Pd0, Pa1, Pb1, Pc1, Pd1 = A
+    // Pa0, Pa1, Pb0, Pb1, Pc0, Pc1, Pd0, Pd1 = A
     fp2_8x1x1_to_unvectorized(P0P1_unvec, P0P1);
-    // Pa2, Pb2, Pc2, Pd2, Pa3, Pb3, Pc3, Pd3 = B
+    // Pa2, Pa3, Pb2, Pb3, Pc2, Pc3, Pd2, Pd3 = B
     fp2_8x1x1_to_unvectorized(P2P3_unvec, P2P3);
 
     // Compute the sum of the elements for each of the 8x1x1 blobs
@@ -301,20 +303,20 @@ void gluing_internal_sum(__m512i* res_P, __m512i* P0P1, __m512i* P2P3)
     // d = a3 + b3 + c3 + d3
 
     // C = AVX_4x2x1(a0, a1, a2, a3)
-    t_unvec[0] = P0P1_unvec[0]; t_unvec[1] = P0P1_unvec[1]; t_unvec[2] = P0P1_unvec[2]; t_unvec[3] = P0P1_unvec[3];
+    t_unvec[0] = P0P1_unvec[0]; t_unvec[1] = P0P1_unvec[1]; t_unvec[2] = P2P3_unvec[0]; t_unvec[3] = P2P3_unvec[1];
     fp2_unvectorized_to_4x2x1(sum, t_unvec);
     //tmp = AVX_4x2x1(b0, b1, b2, b3)
-    t_unvec[0] = P0P1_unvec[4]; t_unvec[1] = P0P1_unvec[5]; t_unvec[2] = P0P1_unvec[6]; t_unvec[3] = P0P1_unvec[7];
+    t_unvec[0] = P0P1_unvec[2]; t_unvec[1] = P0P1_unvec[3]; t_unvec[2] = P2P3_unvec[2]; t_unvec[3] = P2P3_unvec[3];
     fp2_unvectorized_to_4x2x1(t, t_unvec);
     fp2_add_4x2x1(sum, sum, t);
     
     // tmp = AVX_4x2x1(c0, c1, c2, c3)
-    t_unvec[0] = P2P3_unvec[0]; t_unvec[1] = P2P3_unvec[1]; t_unvec[2] = P2P3_unvec[2]; t_unvec[3] = P2P3_unvec[3];
+    t_unvec[0] = P0P1_unvec[4]; t_unvec[1] = P0P1_unvec[5]; t_unvec[2] = P2P3_unvec[4]; t_unvec[3] = P2P3_unvec[5];
     fp2_unvectorized_to_4x2x1(t, t_unvec);
     fp2_add_4x2x1(sum, sum, t);
 
     // tmp = AVX_4x2x1(d0, d1, d2, d3)
-    t_unvec[0] = P2P3_unvec[4]; t_unvec[1] = P2P3_unvec[5]; t_unvec[2] = P2P3_unvec[6]; t_unvec[3] = P2P3_unvec[7];
+    t_unvec[0] = P0P1_unvec[6]; t_unvec[1] = P0P1_unvec[7]; t_unvec[2] = P2P3_unvec[6]; t_unvec[3] = P2P3_unvec[7];
     fp2_unvectorized_to_4x2x1(t, t_unvec);
     fp2_add_4x2x1(res_P, sum, t);
 }
@@ -327,13 +329,17 @@ void gluing_internal_sum_pair(
     __m512i sum[16], t[16];
     fp2_t P0Q1_unvec[8], Q0P1_unvec[8], P2Q3_unvec[8], Q2P3_unvec[8], t_unvec[8];
 
-    // Pa0, Pb0, Pc0, Pd0, Qa1, Qb1, Qc1, Qd1 = A
+    // Pa0, Qa1, Pb0, Qb1, Pc0, Qc1, Pd0, Qd1 = A
+    // Pa0, Pb0, Pc0, Pd0, Qa1, Qb1, Qc1, Qd1 = A OLD
     fp2_8x1x1_to_unvectorized(P0Q1_unvec, P0Q1);
-    // Qa0, Qb0, Qc0, Qd0, Pa1, Pb1, Pc1, Pd1 = B
+    // Qa0, Pa1, Qb0, Pb1, Qc0, Pc1, Qd0, Pd1 = B
+    // Qa0, Qb0, Qc0, Qd0, Pa1, Pb1, Pc1, Pd1 = B OLD
     fp2_8x1x1_to_unvectorized(Q0P1_unvec, Q0P1);
-    // Pa2, Pb2, Pc2, Pd2, Qa3, Qb3, Qc3, Qd3 = C
+    // Pa2, Qa3, Pb2, Qb3, Pc2, Qc3, Pd2, Qd3 = C
+    // Pa2, Pb2, Pc2, Pd2, Qa3, Qb3, Qc3, Qd3 = C OLD
     fp2_8x1x1_to_unvectorized(P2Q3_unvec, P2Q3);
-    // Qa2, Qb2, Qc2, Qd2, Pa3, Pb3, Pc3, Pd3 = D
+    // Qa2, Pa3, Qb2, Pb3, Qc2, Pc3, Qd2, Pd3 = D
+    // Qa2, Qb2, Qc2, Qd2, Pa3, Pb3, Pc3, Pd3 = D OLD
     fp2_8x1x1_to_unvectorized(Q2P3_unvec, Q2P3);
 
     // Compute the sum of the elements for each of the 8x1x1 blobs
@@ -348,27 +354,34 @@ void gluing_internal_sum_pair(
     //     d = Qa3 + Qb3 + Qc3 + Qd3
 
     // E = AVX_8x1x1(Pa0, Pa1, Pa2, Pa3, Qa0, Qa1, Qa2, Qa3)
-    t_unvec[0] = P0Q1_unvec[0]; t_unvec[1] = P0Q1_unvec[1]; t_unvec[2] = P0Q1_unvec[2]; t_unvec[3] = P0Q1_unvec[3];
-    t_unvec[4] = Q0P1_unvec[0]; t_unvec[5] = Q0P1_unvec[1]; t_unvec[6] = Q0P1_unvec[2]; t_unvec[7] = Q0P1_unvec[3];
+    t_unvec[0] = P0Q1_unvec[0]; t_unvec[1] = Q0P1_unvec[1]; t_unvec[2] = P2Q3_unvec[0]; t_unvec[3] = Q2P3_unvec[1];
+    t_unvec[4] = Q0P1_unvec[0]; t_unvec[5] = P0Q1_unvec[1]; t_unvec[6] = Q2P3_unvec[0]; t_unvec[7] = P2Q3_unvec[1];
     fp2_unvectorized_to_8x1x1(sum, t_unvec);
 
     // tmp = AVX_8x1x1(Pb0, Pb1, Pb2, Pb3, Qb0, Qb1, Qb2, Qb3)
-    t_unvec[0] = Q0P1_unvec[4]; t_unvec[1] = Q0P1_unvec[5]; t_unvec[2] = Q0P1_unvec[6]; t_unvec[3] = Q0P1_unvec[7];
-    t_unvec[4] = P0Q1_unvec[4]; t_unvec[5] = P0Q1_unvec[5]; t_unvec[6] = P0Q1_unvec[6]; t_unvec[7] = P0Q1_unvec[7];
+    t_unvec[0] = P0Q1_unvec[2]; t_unvec[1] = Q0P1_unvec[3]; t_unvec[2] = P2Q3_unvec[2]; t_unvec[3] = Q2P3_unvec[3];
+    t_unvec[4] = Q0P1_unvec[2]; t_unvec[5] = P0Q1_unvec[3]; t_unvec[6] = Q2P3_unvec[2]; t_unvec[7] = P2Q3_unvec[3];
     fp2_unvectorized_to_8x1x1(t, t_unvec);
     fp2_add_8x1x1(sum, sum, t);
 
     // tmp = AVX_8x1x1(Pc0, Pc1, Pc2, Pc3, Qc0, Qc1, Qc2, Qc3)
-    t_unvec[0] = P2Q3_unvec[0]; t_unvec[1] = P2Q3_unvec[1]; t_unvec[2] = P2Q3_unvec[2]; t_unvec[3] = P2Q3_unvec[3];
-    t_unvec[4] = Q2P3_unvec[0]; t_unvec[5] = Q2P3_unvec[1]; t_unvec[6] = Q2P3_unvec[2]; t_unvec[7] = Q2P3_unvec[3];
+    t_unvec[0] = P0Q1_unvec[4]; t_unvec[1] = Q0P1_unvec[5]; t_unvec[2] = P2Q3_unvec[4]; t_unvec[3] = Q2P3_unvec[5];
+    t_unvec[4] = Q0P1_unvec[4]; t_unvec[5] = P0Q1_unvec[5]; t_unvec[6] = Q2P3_unvec[4]; t_unvec[7] = P2Q3_unvec[5];
     fp2_unvectorized_to_8x1x1(t, t_unvec);
     fp2_add_8x1x1(sum, sum, t);
 
     // tmp = AVX_8x1x1(Pd0, Pd1, Pd2, Pd3, Qd0, Qd1, Qd2, Qd3)
-    t_unvec[0] = Q2P3_unvec[4]; t_unvec[1] = Q2P3_unvec[5]; t_unvec[2] = Q2P3_unvec[6]; t_unvec[3] = Q2P3_unvec[7];
-    t_unvec[4] = P2Q3_unvec[4]; t_unvec[5] = P2Q3_unvec[5]; t_unvec[6] = P2Q3_unvec[6]; t_unvec[7] = P2Q3_unvec[7];
+    t_unvec[0] = P0Q1_unvec[6]; t_unvec[1] = Q0P1_unvec[7]; t_unvec[2] = P2Q3_unvec[6]; t_unvec[3] = Q2P3_unvec[7];
+    t_unvec[4] = Q0P1_unvec[6]; t_unvec[5] = P0Q1_unvec[7]; t_unvec[6] = Q2P3_unvec[6]; t_unvec[7] = P2Q3_unvec[7];
     fp2_unvectorized_to_8x1x1(t, t_unvec);
     fp2_add_8x1x1(res_PQ, sum, t);
+
+    // TODO: Order of fp2 coords is wrong. For now I manually rearrange them
+    fp2_t t_unvec0[8], t_unvec1[8];
+    fp2_8x1x1_to_unvectorized(t_unvec0, res_PQ);
+    t_unvec1[0] = t_unvec0[0]; t_unvec1[1] = t_unvec0[4]; t_unvec1[2] = t_unvec0[1]; t_unvec1[3] = t_unvec0[5];
+    t_unvec1[4] = t_unvec0[2]; t_unvec1[5] = t_unvec0[6]; t_unvec1[6] = t_unvec0[3]; t_unvec1[7] = t_unvec0[7];
+    fp2_unvectorized_to_8x1x1(res_PQ, t_unvec1);    
 }
 
 void gluing_apply_matrix(
@@ -380,6 +393,7 @@ void gluing_apply_matrix(
 
     theta_mul_pair(P0P1, matrix01, P);
     theta_mul_pair(P2P3, matrix23, P);
+
     gluing_internal_sum(res_P, P0P1, P2P3);
 }
 
@@ -395,8 +409,8 @@ void gluing_apply_matrix_pair(
 
     // Swap P || Q in a doubled point to Q || P
     fp2_8x1x1_to_unvectorized(PQ_unvec, PQ);
-    t_unvec[0] = PQ_unvec[4]; t_unvec[1] = PQ_unvec[5]; t_unvec[2] = PQ_unvec[6]; t_unvec[3] = PQ_unvec[7];
-    t_unvec[4] = PQ_unvec[0]; t_unvec[5] = PQ_unvec[1]; t_unvec[6] = PQ_unvec[2]; t_unvec[7] = PQ_unvec[3];
+    t_unvec[0] = PQ_unvec[1]; t_unvec[1] = PQ_unvec[0]; t_unvec[2] = PQ_unvec[3]; t_unvec[3] = PQ_unvec[2];
+    t_unvec[4] = PQ_unvec[5]; t_unvec[5] = PQ_unvec[4]; t_unvec[6] = PQ_unvec[7]; t_unvec[7] = PQ_unvec[6];
     fp2_unvectorized_to_8x1x1(QP, t_unvec);
 
     // Compute first row mul P, second row mul Q
@@ -433,7 +447,14 @@ void gluing_product_to_theta_pair(
     t_unvec1[4] = x_unvec[3]; t_unvec1[5] = z_unvec[3]; t_unvec1[6] = x_unvec[3]; t_unvec1[7] = z_unvec[3];
     fp2_unvectorized_to_8x1x1(t1, t_unvec1);
     
-    fp2_mul_4x2x1(res_P12, t0, t1);
+    fp2_mul_8x1x1(res_P12, t0, t1);
+
+    // TODO: Order of fp2 coords is wrong. For now I manually rearrange them
+    fp2_8x1x1_to_unvectorized(t_unvec0, res_P12);
+    t_unvec1[0] = t_unvec0[0]; t_unvec1[1] = t_unvec0[4]; t_unvec1[2] = t_unvec0[1]; t_unvec1[3] = t_unvec0[5];
+    t_unvec1[4] = t_unvec0[2]; t_unvec1[5] = t_unvec0[6]; t_unvec1[6] = t_unvec0[3]; t_unvec1[7] = t_unvec0[7];
+    fp2_unvectorized_to_8x1x1(res_P12, t_unvec1);
+
     gluing_apply_matrix_pair(res_P12, matrix1, matrix2, res_P12);
 }
 
@@ -461,18 +482,17 @@ void gluing_codomain(
     theta_sqr_pair(P12, P12);
     theta_had_pair(P12, P12);
 
-    // X1, Y1, Z1, W1, X2, _, Z2, W2 = P12
+    // X1, X2, Y1, Y2, Z1, Z2, W1, W2 = P12
     fp2_8x1x1_to_unvectorized(P12_unvec, P12);
-    int last_is_zero = fp2_is_zero(P12_unvec+3) 
+    int last_is_not_zero = fp2_is_zero(P12_unvec+6) 
         & fp2_is_zero(P12_unvec+7);
     // TODO: Wrap asserts in #ifdefined, so they don't impact benchmarks
-    assert(last_is_zero);
+    assert(last_is_not_zero);
 
-    // TODO Might consider ~ instead of !, for the sake of constant-timeness?
     // TODO: Why do we not check the other coordinates?
     int projective_factors_not_zero = !(
         fp2_is_zero(P12_unvec) | fp2_is_zero(P12_unvec+1) 
-        | fp2_is_zero(P12_unvec+4) | fp2_is_zero(P12_unvec+6)
+        | fp2_is_zero(P12_unvec+2) | fp2_is_zero(P12_unvec+5)
     );
     assert(projective_factors_not_zero);
 
@@ -498,21 +518,21 @@ void gluing_codomain(
     // ============================================================
 
     // t1 = AVX_4x2x1(X1, Y1, X1, 1)
-    t_unvec[0] = P12_unvec[0]; t_unvec[1] = P12_unvec[1]; t_unvec[2] = P12_unvec[0]; fp2_set_one(t_unvec+3);
+    t_unvec[0] = P12_unvec[0]; t_unvec[1] = P12_unvec[2]; t_unvec[2] = P12_unvec[0]; fp2_set_one(t_unvec+3);
     fp2_unvectorized_to_4x2x1(t0, t_unvec);
     // t2 = AVX_4x2x1(X2, X2, Z2, 1)
-    t_unvec[0] = P12_unvec[4]; t_unvec[1] = P12_unvec[4]; t_unvec[2] = P12_unvec[6]; fp2_set_one(t_unvec+3);
-    fp2_unvectorized_to_4x2x1(t0, t_unvec);
+    t_unvec[0] = P12_unvec[1]; t_unvec[1] = P12_unvec[1]; t_unvec[2] = P12_unvec[5]; fp2_set_one(t_unvec+3);
+    fp2_unvectorized_to_4x2x1(t1, t_unvec);
 
     // A, B, C, _ = pairwise_multiplication_3(t1, t2)
     fp2_mul_4x2x1(t0, t0, t1);
     fp2_4x2x1_to_unvectorized(ABCD_unvec, t0);
 
     // t1 = AVX_4x2x1(Y1, C, B, 1)
-    t_unvec[0] = P12_unvec[1]; t_unvec[1] = ABCD_unvec[2]; t_unvec[2] = ABCD_unvec[1]; fp2_set_one(t_unvec+3);
+    t_unvec[0] = P12_unvec[2]; t_unvec[1] = ABCD_unvec[2]; t_unvec[2] = ABCD_unvec[1]; fp2_set_one(t_unvec+3);
     fp2_unvectorized_to_4x2x1(t0, t_unvec);
     // t2 = AVX_4x2x1(Z2, Y1, Z1, 1)
-    t_unvec[0] = P12_unvec[6]; t_unvec[1] = P12_unvec[1]; t_unvec[2] = P12_unvec[2]; fp2_set_one(t_unvec+3);
+    t_unvec[0] = P12_unvec[5]; t_unvec[1] = P12_unvec[2]; t_unvec[2] = P12_unvec[4]; fp2_set_one(t_unvec+3);
     fp2_unvectorized_to_4x2x1(t1, t_unvec);
     // A_inv, x, y, _ = pairwise_multiplication_3(t1, t2)
     // B_inv = C
@@ -522,9 +542,9 @@ void gluing_codomain(
     
     //if (Y1 * B_inv != x) or (X2 * A_inv != Z2 * C_inv):
     //    raise ValueError("input kernel is not isotropic")
-    fp2_mul(t_unvec, P12_unvec+1, ABCD_unvec+2);
-    fp2_mul(t_unvec+1, P12_unvec+4, inv_unvec);
-    fp2_mul(t_unvec+2, P12_unvec+6, ABCD_unvec+1);
+    fp2_mul(t_unvec, P12_unvec+2, ABCD_unvec+2);
+    fp2_mul(t_unvec+1, P12_unvec+1, inv_unvec);
+    fp2_mul(t_unvec+2, P12_unvec+5, ABCD_unvec+1);
     int ker_is_isotropic = fp2_is_equal(t_unvec, inv_unvec+1) 
         & fp2_is_equal(t_unvec+1, t_unvec+2);
     assert(ker_is_isotropic);
@@ -532,6 +552,7 @@ void gluing_codomain(
     // OA = hadamard(AVX_4x2x1(A, B, C, 0))
     t_unvec[0] = ABCD_unvec[0]; t_unvec[1] = ABCD_unvec[1]; t_unvec[2] = ABCD_unvec[2]; fp2_set_zero(t_unvec+3);
     fp2_unvectorized_to_4x2x1(res_OA, t_unvec);
+    theta_had_single(res_OA, res_OA);
     // OA_dual_inv = AVX_4x2x1(A_inv, B_inv, C_inv, 0)
     t_unvec[0] = inv_unvec[0]; t_unvec[1] = ABCD_unvec[2]; t_unvec[2] = ABCD_unvec[1]; fp2_set_zero(t_unvec+3);
     fp2_unvectorized_to_4x2x1(res_OA_dual_inv, t_unvec);
@@ -577,9 +598,9 @@ void gluing_eval_pair(
 
     // TT0 = AVX_8x1x1(u1, u1, w1, w1, u3, u3, w3, w3)
     t_unvec0[0] = u_unvec[0]; t_unvec0[1] = u_unvec[0]; t_unvec0[2] = w_unvec[0]; t_unvec0[3] = w_unvec[0];
-    t_unvec0[4] = u_unvec[2]; t_unvec0[5] = u_unvec[2]; t_unvec0[6] = w_unvec[2]; t_unvec0[7] = w_unvec[2];
+    t_unvec0[4] = u_unvec[1]; t_unvec0[5] = u_unvec[1]; t_unvec0[6] = w_unvec[1]; t_unvec0[7] = w_unvec[1];
     // TT1 = AVX_8x1x1(u2, w2, u2, w2, u4, w4, u4, w4)
-    t_unvec1[0] = u_unvec[1]; t_unvec1[1] = w_unvec[1]; t_unvec1[2] = u_unvec[1]; t_unvec1[3] = w_unvec[1];
+    t_unvec1[0] = u_unvec[2]; t_unvec1[1] = w_unvec[2]; t_unvec1[2] = u_unvec[2]; t_unvec1[3] = w_unvec[2];
     t_unvec1[4] = u_unvec[3]; t_unvec1[5] = w_unvec[3]; t_unvec1[6] = u_unvec[3]; t_unvec1[7] = w_unvec[3];
     fp2_unvectorized_to_8x1x1(t0, t_unvec0);
     fp2_unvectorized_to_8x1x1(t1, t_unvec1);
@@ -589,9 +610,9 @@ void gluing_eval_pair(
 
     // TT0 = AVX_8x1x1(v1, u1, v1, w1, v3, u3, v3, w3)
     t_unvec0[0] = v_unvec[0]; t_unvec0[1] = u_unvec[0]; t_unvec0[2] = v_unvec[0]; t_unvec0[3] = w_unvec[0];
-    t_unvec0[4] = v_unvec[2]; t_unvec0[5] = u_unvec[2]; t_unvec0[6] = v_unvec[2]; t_unvec0[7] = w_unvec[2];
+    t_unvec0[4] = v_unvec[1]; t_unvec0[5] = u_unvec[1]; t_unvec0[6] = v_unvec[1]; t_unvec0[7] = w_unvec[1];
     // TT1 = AVX_8x1x1(u2, v2, w2, v2, u4, v4, w4, v4)
-    t_unvec1[0] = u_unvec[1]; t_unvec1[1] = v_unvec[1]; t_unvec1[2] = w_unvec[1]; t_unvec1[3] = v_unvec[1];
+    t_unvec1[0] = u_unvec[2]; t_unvec1[1] = v_unvec[2]; t_unvec1[2] = w_unvec[2]; t_unvec1[3] = v_unvec[2];
     t_unvec1[4] = u_unvec[3]; t_unvec1[5] = v_unvec[3]; t_unvec1[6] = w_unvec[3]; t_unvec1[7] = v_unvec[3];
     fp2_unvectorized_to_8x1x1(t0, t_unvec0);
     fp2_unvectorized_to_8x1x1(t1, t_unvec1);
@@ -600,9 +621,9 @@ void gluing_eval_pair(
     fp2_8x1x1_to_unvectorized(mul_unvec1, t0);
 
     // T0 = AVX_4x2x1(v1, v3, 0, 0)
-    t_unvec0[0] = v_unvec[0]; t_unvec0[1] = v_unvec[2]; fp2_set_zero(t_unvec0+2); fp2_set_zero(t_unvec0+3);
+    t_unvec0[0] = v_unvec[0]; t_unvec0[1] = v_unvec[1]; fp2_set_zero(t_unvec0+2); fp2_set_zero(t_unvec0+3);
     // T1 = AVX_4x2x1(v2, v4, 0, 0)
-    t_unvec1[0] = v_unvec[1]; t_unvec1[1] = v_unvec[3]; fp2_set_zero(t_unvec1+2); fp2_set_zero(t_unvec1+3);
+    t_unvec1[0] = v_unvec[2]; t_unvec1[1] = v_unvec[3]; fp2_set_zero(t_unvec1+2); fp2_set_zero(t_unvec1+3);
     fp2_unvectorized_to_4x2x1(t0, t_unvec0);
     fp2_unvectorized_to_4x2x1(t1, t_unvec1);
     //v1v2, v3v4, _, _ = avx_pairwise_mul(T0, T1)  // Two redundant mul here.
@@ -629,6 +650,16 @@ void gluing_eval_pair(
     fp2_unvectorized_to_8x1x1(t0, t_unvec0);
     fp2_unvectorized_to_8x1x1(t1, t_unvec1);
 
+    // TODO: Order of fp2 coords is wrong. For now I manually rearrange them
+    fp2_8x1x1_to_unvectorized(t_unvec0, t0);
+    t_unvec1[0] = t_unvec0[0]; t_unvec1[1] = t_unvec0[4]; t_unvec1[2] = t_unvec0[1]; t_unvec1[3] = t_unvec0[5];
+    t_unvec1[4] = t_unvec0[2]; t_unvec1[5] = t_unvec0[6]; t_unvec1[6] = t_unvec0[3]; t_unvec1[7] = t_unvec0[7];
+    fp2_unvectorized_to_8x1x1(t0, t_unvec1);
+    fp2_8x1x1_to_unvectorized(t_unvec0, t1);
+    t_unvec1[0] = t_unvec0[0]; t_unvec1[1] = t_unvec0[4]; t_unvec1[2] = t_unvec0[1]; t_unvec1[3] = t_unvec0[5];
+    t_unvec1[4] = t_unvec0[2]; t_unvec1[5] = t_unvec0[6]; t_unvec1[6] = t_unvec0[3]; t_unvec1[7] = t_unvec0[7];
+    fp2_unvectorized_to_8x1x1(t1, t_unvec1);
+
     // Apply the isomorphism by N on U1, U2, V1, V2
     gluing_apply_matrix_pair(t0, matrix01, matrix23, t0);
     gluing_apply_matrix_pair(t1, matrix01, matrix23, t1);
@@ -638,10 +669,11 @@ void gluing_eval_pair(
 
     // Hadamard of component wise subtraction of U, V
     fp2_sub_8x1x1(res, t0, t1);
+
     theta_had_pair(res, res);
 
     // Scaling by (y : y : x : x)
-    fp2_mul_8x1x1(res, res, J_prime);
+    theta_mul_pair(res, res, J_prime);
 
     // Final Hadamard
     theta_had_pair(res, res);
@@ -666,7 +698,6 @@ void gluing_eval_product_to_theta(
     gluing_apply_matrix(res, matrix01, matrix23, res);
 }
 
-// TODO: Not sure if the order of the theta coords are correct!!!
 void gluing_eval_product_to_theta_pair(
     __m512i* res,
     ec_point_t* P1, ec_point_t* P2, ec_point_t* Q1, ec_point_t* Q2, 
@@ -682,9 +713,17 @@ void gluing_eval_product_to_theta_pair(
     unvec1[0] = P2->x; unvec1[1] = P2->z; unvec1[2] = P2->x; unvec1[3] = P2->z;
     unvec1[4] = Q2->x; unvec1[5] = Q2->z; unvec1[6] = Q2->x; unvec1[7] = Q2->z;
     fp2_unvectorized_to_8x1x1(res, unvec0);
-    fp2_unvectorized_to_8x1x1(t0, unvec1);
+    fp2_unvectorized_to_8x1x1(t0, unvec1);  
     
     fp2_mul_8x1x1(res, res, t0);
+
+    // TODO: Order of fp2 coords is wrong. For now I manually rearrange them
+    fp2_t t_unvec0[8], t_unvec1[8];
+    fp2_8x1x1_to_unvectorized(t_unvec0, res);
+    t_unvec1[0] = t_unvec0[0]; t_unvec1[1] = t_unvec0[4]; t_unvec1[2] = t_unvec0[1]; t_unvec1[3] = t_unvec0[5];
+    t_unvec1[4] = t_unvec0[2]; t_unvec1[5] = t_unvec0[6]; t_unvec1[6] = t_unvec0[3]; t_unvec1[7] = t_unvec0[7];
+    fp2_unvectorized_to_8x1x1(res, t_unvec1);  
+
     gluing_apply_matrix_pair(res, matrix01, matrix23, res);
 }
 
@@ -717,8 +756,30 @@ void gluing_eval_special_pair(
     fp2_sqr_8x1x1(res, res);
     theta_had_pair(res, res);
 
-    assert(fp2_is_zero_8x1x1(res) & 0x8); // this is the special case we must have
-    assert(fp2_is_zero_8x1x1(res) & 0x80); // this is the special case we must have
+    assert(fp2_is_zero_8x1x1(res) & 0x40); // w1 = 0
+    assert(fp2_is_zero_8x1x1(res) & 0x80); // w2 = 0
     theta_mul_pair(res, res, OA_inv);
     theta_had_pair(res, res);
+}
+
+void gluing_eval_special_list_pair(
+    __m512i* res_pts, theta_couple_point_t* pts, __m512i* inv, 
+    __m512i* matrix01, __m512i* matrix23, const int num_pts
+)
+{
+    bool num_pts_is_odd = num_pts & 0x1;
+    int num_pair_pts = num_pts / 2;
+
+    for (int i = 0; i < num_pair_pts; i++) {
+        gluing_eval_special_pair(
+            res_pts + (16*i), pts + (2*i), pts + (2*i+1), 
+            inv, matrix01, matrix23
+        );
+    }
+    if (num_pts_is_odd) {
+        gluing_eval_special(
+            res_pts + 8*(num_pts-1), pts + (num_pts-1),
+            inv, matrix01, matrix23
+        );
+    }
 }

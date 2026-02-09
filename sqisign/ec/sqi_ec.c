@@ -132,6 +132,29 @@ void ec_dbl_iter(ec_point_t *res, int n, const ec_point_t *P, ec_curve_t *curve)
 }
 
 void
+xADD(ec_point_t *R, const ec_point_t *P, const ec_point_t *Q, const ec_point_t *PQ)
+{ // Differential addition of Montgomery points in projective coordinates (X:Z).
+  // Input: projective Montgomery points P=(XP:ZP) and Q=(XQ:ZQ) such that xP=XP/ZP and xQ=XQ/ZQ, and difference
+  //        PQ=P-Q=(XPQ:ZPQ).
+  // Output: projective Montgomery point R <- P+Q = (XR:ZR) such that x(P+Q)=XR/ZR.
+    fp2_t t0, t1, t2, t3;
+
+    fp2_add(&t0, &P->x, &P->z);
+    fp2_sub(&t1, &P->x, &P->z);
+    fp2_add(&t2, &Q->x, &Q->z);
+    fp2_sub(&t3, &Q->x, &Q->z);
+    fp2_mul(&t0, &t0, &t3);
+    fp2_mul(&t1, &t1, &t2);
+    fp2_add(&t2, &t0, &t1);
+    fp2_sub(&t3, &t0, &t1);
+    fp2_sqr(&t2, &t2);
+    fp2_sqr(&t3, &t3);
+    fp2_mul(&t2, &PQ->z, &t2);
+    fp2_mul(&R->z, &PQ->x, &t3);
+    fp2_copy(&R->x, &t2);
+}
+
+void
 ec_normalize_point(ec_point_t *P)
 {
     fp2_inv(&P->z);

@@ -1,8 +1,10 @@
 #include <stdint.h>
+#include <inttypes.h>
 
 #include "utils.h"
 
 #include "sqi_encoded_sizes_lvl3.h"
+#include "sqi_fp_constants_lvl3.h"
 #include "sqi_test_extras.h"
 
 int cmp_u64(const void *v1, const void *v2)
@@ -31,6 +33,29 @@ void fp2_random_test(fp2_t *a)
 {
     fp_random_test(&(a->re));
     fp_random_test(&(a->im));
+}
+
+void print_fp(const fp_t *a)
+{
+    fp_t coeffs;
+
+    // Convert from Montgomery representation
+    fp_encode(coeffs.arr, a);
+
+    printf("{ ");
+    for (int i = 0; i < NWORDS_FIELD; i++) {
+        printf("0x%" PRIx64, coeffs.arr[i]);
+        if (i != NWORDS_FIELD - 1) {
+            printf(", ");
+        }
+    }
+    printf(" }\n");
+}
+
+void print_fp2(const fp2_t *a) 
+{
+    print_fp(&a->re);
+    print_fp(&a->im);
 }
 
 void ec_random_normalized_test(ec_point_t *P, const ec_curve_t *curve)

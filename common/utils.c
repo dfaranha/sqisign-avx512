@@ -2,6 +2,9 @@
 #include <string.h>
 #include "utils.h"
 
+#include "fp2_lvl3.h"
+#include "sqi_test_extras.h"
+
 // TODO: Might not be cryptographically secure randomness.
 
 void rand_bytes(uint8_t* bytes, int len)
@@ -160,3 +163,20 @@ void rand_fp2_2x4x1(__m512i* res)
     }
 }
 
+void print_fp2_4x2x1(__m512i* a) 
+{
+    fp2_t unvec[4];
+    fp2_4x2x1_to_unvectorized(unvec, a);
+    for(int i = 0; i < 4; i++) {
+        print_fp2(unvec+i);
+    }
+}
+
+void print_fp2_8x1x1(__m512i* a) 
+{
+    fp2_t unvec[8];
+    fp2_8x1x1_to_unvectorized(unvec, a);
+    for(int i = 0; i < 8; i++) {
+        print_fp2(unvec+i);
+    }
+}

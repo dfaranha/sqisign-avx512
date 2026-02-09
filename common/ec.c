@@ -98,6 +98,8 @@ void ec_double_ws_4x2x1(
 {
     __m512i xx[8], aa[8], m[8], s[8], u[8], t0[8], t1[8];
 
+    fp2_mul_4x2x1(t0, y, z); // Moved to start before y potentially overwritten
+    fp2_add_4x2x1(res_z, t0, t0);
     fp2_sqr_4x2x1(xx, x);
     fp2_sqr_4x2x1(t0, y);
     fp2_add_4x2x1(aa, t0, t0);
@@ -116,8 +118,6 @@ void ec_double_ws_4x2x1(
     fp2_sub_4x2x1(t0, s, res_x);
     fp2_mul_4x2x1(t0, t0, m);
     fp2_sub_4x2x1(res_y, t0, u);
-    fp2_mul_4x2x1(t0, y, z);
-    fp2_add_4x2x1(res_z, t0, t0);
     fp2_mul_4x2x1(t0, u, t);
     fp2_add_4x2x1(res_t, t0, t0);
 }

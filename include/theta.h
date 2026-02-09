@@ -21,10 +21,47 @@ int theta_compute_product_doubles(
 );
 
 // ====================================================================
+//  Isogeny chains where we have the 2^(n+2) torsion   
+// ====================================================================
+
+void theta_isogeny_chain_single(
+    theta_couple_curve_t* res_E34, 
+    theta_couple_point_t* res_pts, 
+    theta_couple_curve_t* E12, 
+    theta_kernel_couple_points_t* ker,
+    theta_couple_point_t* pts, 
+    const int n, 
+    const int num_pts, 
+    const bool randomize
+);
+
+void theta_isogeny_chain_pair(
+    theta_couple_curve_t* res_E34, 
+    theta_couple_point_t* res_pts, 
+    theta_couple_curve_t* E12, 
+    theta_kernel_couple_points_t* ker,
+    theta_couple_point_t* pts, 
+    const int n, 
+    const int num_pts, 
+    const bool randomize
+);
+
+// ====================================================================
 //  Isogeny chains where we have the 2^n torsion only (requires sqrts)   
 // ====================================================================
 
-void theta_isogeny_chain_no_torsion_singe(
+void theta_isogeny_chain_no_torsion_single(
+    theta_couple_curve_t* res_E34, 
+    theta_couple_point_t* res_pts, 
+    theta_couple_curve_t* E12, 
+    theta_kernel_couple_points_t* ker,
+    theta_couple_point_t* pts, 
+    const int n, 
+    const int num_pts, 
+    const bool randomize
+);
+
+void theta_isogeny_chain_no_torsion_pair(
     theta_couple_curve_t* res_E34, 
     theta_couple_point_t* res_pts, 
     theta_couple_curve_t* E12, 

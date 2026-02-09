@@ -145,4 +145,9 @@ void gluing_eval_special_pair(
     __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23
 );
 
+void gluing_eval_special_list_pair(
+    __m512i* res_pts, theta_couple_point_t* pts, __m512i* inv, 
+    __m512i* matrix01, __m512i* matrix23, const int num_pts
+);
+
 #endif

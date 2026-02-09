@@ -402,33 +402,68 @@ void splitting_theta_point_to_mont_single(
     theta_couple_point_t* mont_pair, __m512i* theta_point, __m512i* null
 )
 {
-    __m512i t0[8], t1[8], idx0, idx1;
-    fp2_t unvec[4];
-    __mmask8 add_mask;
+    fp2_t OA_unvec[4], P_unvec[4], x1, x2, z1, z2, tmp;
+    fp2_4x2x1_to_unvectorized(OA_unvec, null);
+    fp2_4x2x1_to_unvectorized(P_unvec, theta_point);
+
+    if (fp2_is_zero(P_unvec) && fp2_is_zero(P_unvec+2)) {
+        fp2_mul(&x1, OA_unvec, P_unvec+3);
+        fp2_copy(&z1, &x1);
+        fp2_mul(&tmp, OA_unvec+2, P_unvec+1);
+        fp2_add(&x1, &x1, &tmp);
+        fp2_sub(&z1, &z1, &tmp);
+    } else {
+        fp2_mul(&x1, OA_unvec, P_unvec+2);
+        fp2_copy(&z1, &x1);
+        fp2_mul(&tmp, OA_unvec+2, P_unvec);
+        fp2_add(&x1, &x1, &tmp);
+        fp2_sub(&z1, &z1, &tmp);
+    }
+
+    if (fp2_is_zero(P_unvec) && fp2_is_zero(P_unvec+1)) {
+        fp2_mul(&x2, OA_unvec, P_unvec+3);
+        fp2_copy(&z2, &x2);
+        fp2_mul(&tmp, OA_unvec+1, P_unvec+2);
+        fp2_add(&x2, &x2, &tmp);
+        fp2_sub(&z2, &z2, &tmp);
+    } else {
+        fp2_mul(&x2, OA_unvec, P_unvec+1);
+        fp2_copy(&z2, &x2);
+        fp2_mul(&tmp, OA_unvec+1, P_unvec);
+        fp2_add(&x2, &x2, &tmp);
+        fp2_sub(&z2, &z2, &tmp);
+    }
+    mont_pair->P1.x = x1;
+    mont_pair->P2.x = x2;
+    mont_pair->P1.z = z1;
+    mont_pair->P2.z = z2;
+    // __m512i t0[8], t1[8], idx0, idx1;
+    // fp2_t unvec[4];
+    // __mmask8 add_mask;
     
-    idx0 = VSET(4, 5, 2, 3, 0, 1, 0, 1); // (c, b, a, a)
-    idx1 = VSET(0, 1, 0, 1, 4, 5, 2, 3); // (x, x, z, y)
-    for (int i = 0; i < 8; i++) {
-        t0[i] = VPERM512(idx0, null[i]);
-        t1[i] = VPERM512(idx1, theta_point[i]);
-    }
-    fp2_mul_4x2x1(t1, t1, t0); // (c*x, b*x, a*z, a*y)
+    // idx0 = VSET(4, 5, 2, 3, 0, 1, 0, 1); // (c, b, a, a)
+    // idx1 = VSET(0, 1, 0, 1, 4, 5, 2, 3); // (x, x, z, y)
+    // for (int i = 0; i < 8; i++) {
+    //     t0[i] = VPERM512(idx0, null[i]);
+    //     t1[i] = VPERM512(idx1, theta_point[i]);
+    // }
+    // fp2_mul_4x2x1(t1, t1, t0); // (c*x, b*x, a*z, a*y)
 
-    idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);    // (a*z, a*y, c*x, b*x)
-    for (int i = 0; i < 8; i++) {
-        t0[i] = VPERM512(idx0, t1[i]);
-    }
+    // idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);    // (a*z, a*y, c*x, b*x)
+    // for (int i = 0; i < 8; i++) {
+    //     t0[i] = VPERM512(idx0, t1[i]);
+    // }
 
-    // (a*z + c*x, a*y + b*x, a*x - c*x, a*y - b*x)
-    add_mask = 0x0f;
-    fp2_mixaddsub_4x2x1(t1, t1, t0, add_mask);
+    // // (a*z + c*x, a*y + b*x, a*x - c*x, a*y - b*x)
+    // add_mask = 0x0f;
+    // fp2_mixaddsub_4x2x1(t1, t1, t0, add_mask);
 
-    // Convert to unvectorized 64-bit repr.
-    fp2_4x2x1_to_unvectorized(unvec, t1);
-    mont_pair->P1.x = unvec[0];
-    mont_pair->P2.x = unvec[1];
-    mont_pair->P1.z = unvec[2];
-    mont_pair->P2.z = unvec[3];
+    // // Convert to unvectorized 64-bit repr.
+    // fp2_4x2x1_to_unvectorized(unvec, t1);
+    // mont_pair->P1.x = unvec[0];
+    // mont_pair->P2.x = unvec[1];
+    // mont_pair->P1.z = unvec[2];
+    // mont_pair->P2.z = unvec[3];
 }
 
 void splitting_theta_point_to_mont_list_single(

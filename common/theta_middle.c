@@ -105,18 +105,21 @@ void theta_double_iter_single(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2
 // Warning: Modifies k1 and k2
 void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i* k2, const bool h1, const bool h2) 
 {
-    __m512i t1[16], t2[16], idx, idx2;
+    __m512i t1[16], t2[16], P[8], Q[8], idx, idx2;
+
+    fp2_copy_4x2x1(P, k1);
+    fp2_copy_4x2x1(Q, k2);
 
     //TODO: Would it be more efficient to use the pair operations here?
     if (h1) {
-        theta_had_single(k1, k1);
-        theta_had_single(k2, k2);
+        theta_had_single(P, P);
+        theta_had_single(Q, Q);
     }
 
-    theta_sqr_single(k1, k1);
-    theta_sqr_single(k2, k2);
-    theta_had_single(k1, k1);
-    theta_had_single(k2, k2);
+    theta_sqr_single(P, P);
+    theta_sqr_single(Q, Q);
+    theta_had_single(P, P);
+    theta_had_single(Q, Q);
 
     // Input: ki = (xi, yi, zi, wi) in the 4x2x1 format
     // t1 = (x1, y1, z2, w2)
@@ -126,8 +129,8 @@ void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i*
         0x0000001900000018, 0x0000001b0000001a, 0x0000001d0000001c, 0x0000001f0000001e
     );
     for (int i = 0; i < 8; i++) {
-        t2[i] = VPERM256(k2[i], 0x4e);
-        t1[i] = VBLENDPERM(0xffff, k1[i], k2[i], idx);
+        t2[i] = VPERM256(Q[i], 0x4e);
+        t1[i] = VBLENDPERM(0xffff, P[i], Q[i], idx);
     }
 
     // t1 = (x1 * y2, y1 * x2, z2 * w2, w2 * z2) = (s1, s2, s3, s3)
@@ -141,14 +144,14 @@ void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i*
     }
 
     // res
-    fp2_mul_4x2x1(res, k2, t2);
+    fp2_mul_4x2x1(res, Q, t2);
 
     // res_inv
     fp2_4x2x1_to_2x4x1(t2, t1); // t2[8:15] = (s3, s3)
     idx = VSET(2, 2, 3, 3, 0, 0, 1, 1);
     idx2 = VSET(6, 6, 7, 7, 4, 4, 5, 5);
     for (int i = 0; i < 8; i++) { // t1[0:7] = (y1, x1), t1[8:15] = (w_res, z_res)
-        t1[i] = VPERM512MASKZ(0x55, k1[i], idx);
+        t1[i] = VPERM512MASKZ(0x55, P[i], idx);
         t1[i+8] = VPERM512MASKZ(0x55, res[i], idx2);
     }
     fp2_mul_2x4x1(t1, t1, t2+8);
@@ -163,17 +166,22 @@ void theta_codomain_with_four_torsion(__m512i* res_inv, __m512i* null, __m512i* 
 {
     __m512i t0[8], t1[8], t2[8];
     fp2_t unvec0[4], unvec1[4], unvec2[4], unvec3[4], t_unvec[4], AB, AC;
-    
+
     if (h1) {
-        theta_had_single(ker, ker);
-        theta_had_single(null, null);
+        theta_had_single(t0, ker);
+        theta_sqr_single(t0, t0);
+        theta_had_single(t0, t0);
+
+        theta_had_single(t1, null);
+        theta_sqr_single(t1, t1);
+        theta_had_single(t1, t1);
+    } else {
+        theta_sqr_single(t0, ker);
+        theta_had_single(t0, t0);
+
+        theta_sqr_single(t1, null);
+        theta_had_single(t1, t1);
     }
-
-    fp2_sqr_4x2x1(t0, ker);
-    theta_had_single(t0, t0);
-
-    fp2_sqr_4x2x1(t1, null);
-    theta_had_single(t1, t1);
 
     // TODO: two wasted squarings? Or needed for had?
     //xAB, _, xCD, _ = T0
@@ -222,7 +230,7 @@ void theta_codomain_with_four_torsion(__m512i* res_inv, __m512i* null, __m512i* 
     fp2_4x2x1_to_unvectorized(unvec3, t0);
 
     // OB = AVX_4x2x1(AA, AB, AA, AA)
-    t_unvec[0] = unvec1[0]; t_unvec[1] = AB; t_unvec[2] = unvec1[0]; t_unvec[2] = unvec1[0];
+    t_unvec[0] = unvec1[0]; t_unvec[1] = AB; t_unvec[2] = unvec1[0]; t_unvec[3] = unvec1[0];
     fp2_unvectorized_to_4x2x1(null, t_unvec);
     //T0 = AVX_4x2x1(xABAC, xABAC, xABCC, xCDAB)
     t_unvec[0] = unvec3[0]; t_unvec[1] = unvec3[0]; t_unvec[2] = unvec2[2]; t_unvec[3] = unvec3[2];
@@ -409,19 +417,20 @@ void theta_double_iter_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2, 
 
 void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool h1, const bool h2)
 {
-    __m512i k_split[16], t1[16], t2[16], idx, idx2;
+    __m512i PQ[16], k_split[16], t1[16], t2[16], idx, idx2;
 
-    //TODO: Would it be more efficient to use the pair operations here?
+    fp2_copy_8x1x1(PQ, k);
+
     if (h1) {
-        theta_had_pair(k, k);
+        theta_had_pair(PQ, PQ);
     }
 
-    theta_sqr_pair(k, k);
-    theta_had_pair(k, k);
+    theta_sqr_pair(PQ, PQ);
+    theta_had_pair(PQ, PQ);
 
     // Input: k = (k1, k2) = (xi, yi, zi, wi)_{i=1,2}
     // TODO: Is this necessary?
-    fp2_8x1x1_to_4x2x1(k_split, k_split+8, k);
+    fp2_8x1x1_to_4x2x1(k_split, k_split+8, PQ);
 
     // t1 = (x1, y1, z2, w2)
     // t2 = (y2, x2, w2, z2)

@@ -1,6 +1,7 @@
 from avx_types import AVX_4x2x1, AVX_8x1x1
 from avx_arithmetic import avx_add, avx_wide_add, avx_wide_pairwise_mul
 from theta_structure import pairwise_pair
+from convert import *
 
 
 def deterministic_fp_root(a):
@@ -143,6 +144,14 @@ def apply_isomorphism(P: AVX_4x2x1, M: tuple[AVX_8x1x1, AVX_8x1x1]) -> AVX_4x2x1
 
     # Second and third row multiplied by P
     M23 = pairwise_pair(M23, P)
+    # print("before internal sum")
+    # print("M01")
+    # print_theta_pair(M01)
+    # print("M23")
+    # print_theta_pair(M23)
+
+    # print("internal sum res")
+    # print_fp2_4x2x1(internal_sum(M01, M23))
 
     # Sum up multiplications to compute the four coordinates
     return internal_sum(M01, M23)
@@ -207,3 +216,4 @@ def apply_isomorphism_pair(PQ: AVX_8x1x1, M: tuple[AVX_8x1x1, AVX_8x1x1]) -> AVX
     Q2P3 = avx_wide_pairwise_mul(M23, QP)
 
     return internal_sum_pair(P0Q1, Q0P1, P2Q3, Q2P3)
+

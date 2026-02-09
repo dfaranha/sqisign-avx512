@@ -11,6 +11,9 @@ int cmp_u64(const void *v1, const void *v2);
 void fp_random_test(fp_t *a);
 void fp2_random_test(fp2_t *a);
 
+void print_fp(const fp_t *a);
+void print_fp2(const fp2_t *a);
+
 void ec_random_normalized_test(ec_point_t *P, const ec_curve_t *curve);
 void ec_random_test(ec_point_t *P, const ec_curve_t *curve);
 
