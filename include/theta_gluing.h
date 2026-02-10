@@ -32,6 +32,11 @@ void gluing_action_by_translation_4x2x1(
     __m512i* A24, __m512i* x_4, __m512i* z_4
 );
 
+void gluing_action_by_translation_4x2x1_old(
+    __m512i* g1, __m512i* g2, __m512i* h1, __m512i* h2, __m512i* pi,
+    __m512i* A24, __m512i* x_4, __m512i* z_4
+);
+
 /**
  * Algorithm 8.37 of the SQIsign spec.
  * Compute the change of matrix that transform the standard product

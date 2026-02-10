@@ -23,7 +23,7 @@ void gluing_compute_matrix_4x2x1(
     fp2_4x2x1_to_8x1x1(c_pi, u, det);
     fp2_4x2x1_duplicate_to_8x1x1(t, z_4);
     fp2_mul_8x1x1(c_pi, c_pi, t);
-    fp2_8x1x1_to_4x2x1(c, pi, c_pi); // might fail?
+    fp2_8x1x1_to_4x2x1(c, pi, c_pi);
 
     // Some more operations on c
     fp2_sub_4x2x1(c, c, det);
@@ -71,7 +71,7 @@ void gluing_compute_matrix_4x2x1(
 }
 
 // Done (TODO delete this comment)
-void gluing_action_by_translation_4x2x1(
+void gluing_action_by_translation_4x2x1_old(
     __m512i* g1, __m512i* g2, __m512i* h1, __m512i* h2, __m512i* pi,
     __m512i* A24, __m512i* x_4, __m512i* z_4
 )
@@ -82,6 +82,24 @@ void gluing_action_by_translation_4x2x1(
     fp2_mul_4x2x1(t0, w, x_4);
     fp2_mul_4x2x1(t1, u, z_4);
     fp2_sub_4x2x1(t0, t0, t1); // det
+
+    gluing_compute_matrix_4x2x1(g1, h1, g2, h2, pi, x_4, z_4, u, w, t0);
+}
+
+// Done (TODO delete this comment) 4052 -> 4002 cycles.
+void gluing_action_by_translation_4x2x1(
+    __m512i* g1, __m512i* g2, __m512i* h1, __m512i* h2, __m512i* pi,
+    __m512i* A24, __m512i* x_4, __m512i* z_4
+)
+{
+    __m512i u[8], w[8], t0[16], t1[16];
+
+    ec_double_4x2x1(u, w, A24, x_4, z_4);
+    fp2_4x2x1_to_8x1x1(t0, w, u);
+    fp2_4x2x1_to_8x1x1(t1, x_4, z_4);
+    fp2_mul_8x1x1(t0, t0, t1);
+    fp2_8x1x1_to_4x2x1(t0, t0+8, t0);
+    fp2_sub_4x2x1(t0, t0, t0+8); // det
 
     gluing_compute_matrix_4x2x1(g1, h1, g2, h2, pi, x_4, z_4, u, w, t0);
 }

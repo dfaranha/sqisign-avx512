@@ -35,6 +35,7 @@ void ec_point_4x2x1_to_unvectorized(ec_point_t* res, __m512i* x, __m512i* z);
  * @param z The input z-coordinates
  */
 void ec_double_4x2x1(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, __m512i* z);
+void ec_double_4x2x1_old(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, __m512i* z);
 
 /**
  * Converts each Jacobian x-only point (jac_x, jac_y, jac_z) to its Montgomery representation (x : z).

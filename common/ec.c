@@ -24,7 +24,29 @@ void ec_point_4x2x1_to_unvectorized(ec_point_t* res, __m512i* x, __m512i* z)
     }
 }
 
+// Done (TODO delete this comment) 1582 -> 1530 cycles.
 void ec_double_4x2x1(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, __m512i* z)
+{
+    __m512i t0[8], t1[8], t2[8], t3[8];
+    __m512i s0[16], s1[16];
+
+    fp2_4x2x1_duplicate_to_8x1x1(s0, x);
+    fp2_4x2x1_duplicate_to_8x1x1(s1, z);
+    fp2_mixaddsub_8x1x1(s0, s0, s1, 0x55, 0x55); // s0 = (x+z, x-z, x+z, x-z, ...)
+    fp2_sqr_8x1x1(s0, s0);
+    fp2_8x1x1_to_4x2x1(t0, t1, s0);
+
+    fp2_sub_4x2x1(t2, t0, t1);
+    fp2_mul_4x2x1(t3, t2, A24);
+    fp2_add_4x2x1(t3, t3, t1);
+
+    fp2_4x2x1_to_8x1x1(s0, t0, t3);
+    fp2_4x2x1_to_8x1x1(s1, t1, t2);
+    fp2_mul_8x1x1(s0, s0, s1);
+    fp2_8x1x1_to_4x2x1(res_x, res_z, s0);
+}
+
+void ec_double_4x2x1_old(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, __m512i* z)
 {
     __m512i t0[8], t1[8], t2[8];
     
@@ -98,7 +120,7 @@ void ec_double_ws_4x2x1(
 {
     __m512i xx[8], aa[8], m[8], s[8], u[8], t0[8], t1[8];
 
-    fp2_mul_4x2x1(t0, y, z); // Moved to start before y potentially overwritten
+    fp2_mul_4x2x1(t0, y, z);
     fp2_add_4x2x1(res_z, t0, t0);
     fp2_sqr_4x2x1(xx, x);
     fp2_sqr_4x2x1(t0, y);
