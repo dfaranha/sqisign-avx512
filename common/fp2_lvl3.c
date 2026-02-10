@@ -525,6 +525,19 @@ void fp2_8x1x1_to_4x2x1(__m512i* res1, __m512i* res2, __m512i* src)
     }
 }
 
+// Only extracts first 4x2x1
+void fp2_8x1x1_to_first_4x2x1(__m512i* res, __m512i* src)
+{
+    __m512i re, im;
+
+    for (int i = 0; i < 8; i++) {
+        re = src[i]; // to allow res = src
+        im = src[i+8];
+        im = VSHUFFLE(im, 0x4e);
+        res[i] = VBLEND(0xaa, re, im); 
+    }
+}
+
 void fp2_4x2x1_to_8x1x1(__m512i* res, __m512i* src1, __m512i* src2)
 {
     __m512i s1, s2, t1, t2;
@@ -536,6 +549,18 @@ void fp2_4x2x1_to_8x1x1(__m512i* res, __m512i* src1, __m512i* src2)
         t2 = VSHUFFLE(s2, 0x4e);
         res[i] = VBLEND(0xaa, s1, t2); 
         res[i+8] = VBLEND(0xaa, t1, s2);
+    }
+}
+
+void fp2_4x2x1_duplicate_to_8x1x1(__m512i* res, __m512i* src)
+{
+    __m512i s, t;
+
+    for (int i = 0; i < 8; i++) {
+        s = src[i];
+        t = VSHUFFLE(s, 0x4e); // a, b, c, d, ... -> b, a, d, c, ...
+        res[i] = VBLEND(0xaa, s, t); 
+        res[i+8] = VBLEND(0xaa, t, s);
     }
 }
 

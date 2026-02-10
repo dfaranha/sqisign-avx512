@@ -212,16 +212,6 @@ void bench_theta(int iterations)
 
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        gluing_compute_matrix_4x2x1_old(a, a+8, b, b+8, c, c+8, d, d+8, e, e+8);
-        end = cpucycles();
-        cycles[i] = (end - start);
-    }
-    tmp = fp2_is_equal_4x2x1(a, b);
-    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("gluing_compute_matrix_4x2x1_old", cycles[(N_RUNS/2)-1], tmp);
-
-    for(int i = 0; i < N_RUNS; i++) {
-        start = cpucycles();
         gluing_compute_matrix_4x2x1(a, a+8, b, b+8, c, c+8, d, d+8, e, e+8);
         end = cpucycles();
         cycles[i] = (end - start);

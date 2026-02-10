@@ -8,25 +8,41 @@
 #include "utils.h"
 #include "sqi_test_extras.h"
 
-// Done (TODO delete this comment) from 11654 to 2008 cycles.
+// Done (TODO delete this comment) from 11654 to 1904 cycles.
 void gluing_compute_matrix_4x2x1(
     __m512i* g1, __m512i* h1, __m512i* g2, __m512i* h2, __m512i* pi,
     __m512i* x_4, __m512i* z_4, __m512i* u, __m512i* w, __m512i* det
 )
 {
-    __m512i z_sqr[8], a[8], b[8], c[8], d[8];
-    fp2_t a_un[4], b_un[4], c_un[4], d_un[4], out_un[4];
+    __m512i z_sqr[8], a[8], b[8], c[8], d[8], a_b[16], c_pi[16], t[16];
+    
+    // Instead of computing these separately:
+    // fp2_mul_4x2x1(c, u, z_4);
+    // fp2_mul_4x2x1(pi, det, z_4);
+    // We transform to the 8x1x1 format.
+    fp2_4x2x1_to_8x1x1(c_pi, u, det);
+    fp2_4x2x1_duplicate_to_8x1x1(t, z_4);
+    fp2_mul_8x1x1(c_pi, c_pi, t);
+    fp2_8x1x1_to_4x2x1(c, pi, c_pi); // might fail?
 
-    fp2_sqr_4x2x1(z_sqr, z_4);
-    fp2_mul_4x2x1(d, u, z_sqr);
-    fp2_mul_4x2x1(b, w, z_sqr);
-    fp2_neg_4x2x1(b, b);
-    fp2_mul_4x2x1(c, u, z_4);
+    // Some more operations on c
     fp2_sub_4x2x1(c, c, det);
     fp2_mul_4x2x1(c, c, x_4);
-    fp2_neg_4x2x1(a, d);
-    // Observe that this doesn't depend on the previous computation:
-    fp2_mul_4x2x1(pi, z_4, det);
+
+    fp2_sqr_4x2x1(z_sqr, z_4);
+
+    // Computing these in 8x1x1:
+    // fp2_mul_4x2x1(d, u, z_sqr);
+    // fp2_mul_4x2x1(b, w, z_sqr);
+    // fp2_neg_4x2x1(a, d);
+    // fp2_neg_4x2x1(b, b);
+    
+    fp2_4x2x1_to_8x1x1(a_b, u, w);
+    fp2_4x2x1_duplicate_to_8x1x1(t, z_sqr);
+    fp2_mul_8x1x1(a_b, a_b, t);
+    fp2_8x1x1_to_first_4x2x1(d, a_b); // d = -a
+    fp2_neg_8x1x1(a_b, a_b);
+    fp2_8x1x1_to_4x2x1(a, b, a_b);
 
     // Compute transpose:
     __m512i idx_lo = _mm512_set_epi64(13, 12, 5, 4, 9, 8, 1, 0);    
