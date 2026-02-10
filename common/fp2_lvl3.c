@@ -532,54 +532,47 @@ void fp2_4x2x1_to_unvectorized(fp2_t* res, __m512i* src)
 
 void fp2_8x1x1_to_4x2x1(__m512i* res1, __m512i* res2, __m512i* src)
 {
-    __m512i src_re, src_im, t_re, t_im;
-
+    __m512i re, im;
     for (int i = 0; i < 8; i++) {
-        src_re = src[i]; // to allow res = src
-        src_im = src[i+8];
-        t_re = VSHUFFLE(src_re, 0x4e); // a, b, c, d, ... -> b, a, d, c, ...
-        t_im = VSHUFFLE(src_im, 0x4e);
-        res1[i] = VBLEND(0xaa, src_re, t_im); 
-        res2[i] = VBLEND(0xaa, t_re, src_im);
+        re = src[i];
+        im = src[i+8];
+        res1[i] = VUNPACKLO(re, im);
+        res2[i] = VUNPACKHI(re, im);
     }
 }
 
 // Only extracts first 4x2x1
 void fp2_8x1x1_to_first_4x2x1(__m512i* res, __m512i* src)
 {
-    __m512i re, im;
-
     for (int i = 0; i < 8; i++) {
-        re = src[i]; // to allow res = src
-        im = src[i+8];
-        im = VSHUFFLE(im, 0x4e);
-        res[i] = VBLEND(0xaa, re, im); 
+        res[i] = VUNPACKLO(src[i], src[i+8]);
     }
 }
 
 void fp2_4x2x1_to_8x1x1(__m512i* res, __m512i* src1, __m512i* src2)
 {
-    __m512i s1, s2, t1, t2;
+    __m512i s1, s2;
+    __m512i idx_re = _mm512_set_epi64(14, 6, 12, 4, 10, 2, 8, 0);
+    __m512i idx_im = _mm512_set_epi64(15, 7, 13, 5, 11, 3, 9, 1);
 
     for (int i = 0; i < 8; i++) {
         s1 = src1[i];
         s2 = src2[i];
-        t1 = VSHUFFLE(s1, 0x4e); // a, b, c, d, ... -> b, a, d, c, ...
-        t2 = VSHUFFLE(s2, 0x4e);
-        res[i] = VBLEND(0xaa, s1, t2); 
-        res[i+8] = VBLEND(0xaa, t1, s2);
+        res[i] = VBLENDPERM(idx_re, s1, s2);
+        res[i+8] = VBLENDPERM(idx_im, s1, s2);
     }
 }
 
 void fp2_4x2x1_duplicate_to_8x1x1(__m512i* res, __m512i* src)
 {
-    __m512i s, t;
+    __m512i s;
+    __m512i idx_re = _mm512_set_epi64(14, 6, 12, 4, 10, 2, 8, 0);
+    __m512i idx_im = _mm512_set_epi64(15, 7, 13, 5, 11, 3, 9, 1);
 
     for (int i = 0; i < 8; i++) {
         s = src[i];
-        t = VSHUFFLE(s, 0x4e); // a, b, c, d, ... -> b, a, d, c, ...
-        res[i] = VBLEND(0xaa, s, t); 
-        res[i+8] = VBLEND(0xaa, t, s);
+        res[i] = VBLENDPERM(idx_re, s, s);
+        res[i+8] = VBLENDPERM(idx_im, s, s);
     }
 }
 

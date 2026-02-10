@@ -110,6 +110,7 @@ void ec_ws_to_jac_4x2x1(
     fp2_sub_4x2x1(res_x, x, tmp);
 }
 
+// Done (TODO delete this comment)
 void ec_double_ws_4x2x1(
     __m512i* res_x, __m512i* res_y, __m512i* res_z, __m512i* res_t,
     __m512i* x, __m512i* y, __m512i* z, __m512i* t
@@ -182,6 +183,7 @@ void ec_add_components_4x2x1_old(
     fp2_sub_4x2x1(res_u, t4, t1);
 }
 
+// Done (TODO delete this comment)
 void ec_add_components_4x2x1(
     __m512i* res_u, __m512i* res_v, __m512i* res_w, 
     __m512i* A, __m512i* xP, __m512i* yP, __m512i* zP, 
