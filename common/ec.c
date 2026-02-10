@@ -46,6 +46,7 @@ void ec_double_4x2x1(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, _
     fp2_8x1x1_to_4x2x1(res_x, res_z, s0);
 }
 
+// It could be that this is just as fast with the optimized field arithmetic.
 void ec_double_4x2x1_old(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, __m512i* z)
 {
     __m512i t0[8], t1[8], t2[8];

@@ -9,6 +9,7 @@
 #include "sqi_test_extras.h"
 
 // Done (TODO delete this comment) from 11654 to 1904 cycles.
+// TODO: With the faster field arithmetic, the simpler pure 4x2x1 version might be just as efficient.
 void gluing_compute_matrix_4x2x1(
     __m512i* g1, __m512i* h1, __m512i* g2, __m512i* h2, __m512i* pi,
     __m512i* x_4, __m512i* z_4, __m512i* u, __m512i* w, __m512i* det
@@ -70,7 +71,7 @@ void gluing_compute_matrix_4x2x1(
     }
 }
 
-// Done (TODO delete this comment)
+// With the optimized field arithmetic, this might be just as efficient.
 void gluing_action_by_translation_4x2x1_old(
     __m512i* g1, __m512i* g2, __m512i* h1, __m512i* h2, __m512i* pi,
     __m512i* A24, __m512i* x_4, __m512i* z_4
@@ -105,6 +106,233 @@ void gluing_action_by_translation_4x2x1(
 }
 
 void gluing_change_of_basis_4x2x1(
+    __m512i* res_matrix01, __m512i* res_matrix23, 
+    __m512i* A24, __m512i* x_4, __m512i* z_4
+)
+{
+    /**
+    Giac Notes:
+
+    Computes N projectively which removes 21M + 1I from a batched inversion
+    but costs 4S and 34 multiplications (so swaps one inversion for 13M + 1S)
+
+    For AXV, 34 is not a multiple of four, so this adds 9 calls to avx_pairwise_mul
+    and one call to avx_sqr.
+
+    An interesting thing to explore is `avx_pairwise_mul` where one of the AVX blobs
+    is four copies of the same element. This happens for 6 of the 9 total calls for
+    avx_pairwise_mul.
+    */
+    __m512i g1[8], h1[8], g2[8], h2[8], pi[8];
+    __m512i t[8], t0[8], t1[8], t2[8], t3[8], t4[8];
+    __m512i a0[8], a1[8], a2[8], a3[8];
+    fp2_t g1_unvec[4], h1_unvec[4], g2_unvec[4], h2_unvec[4], pi_unvec[4];
+    fp2_t d_prod0[4], d_prod1[4], a0_unvec[4], a1_unvec[4], a2_unvec[4], a3_unvec[4];
+    fp2_t t_unvec[4], t_unvec0[4], t_unvec1[4], res_unvec[8];
+
+    gluing_action_by_translation_4x2x1(g1, g2, h1, h2, pi, A24, x_4, z_4);
+
+    // Extract out the projective factors we need to remove all inversions
+    // dg1, dh1, dg2, dh2 = pi
+    fp2_4x2x1_to_unvectorized(pi_unvec, pi);
+
+    // Marius: I'll just unvectorize the rest immediately:
+    fp2_4x2x1_to_unvectorized(g1_unvec, g1);
+    fp2_4x2x1_to_unvectorized(h1_unvec, h1);
+    fp2_4x2x1_to_unvectorized(g2_unvec, g2);
+    fp2_4x2x1_to_unvectorized(h2_unvec, h2);
+
+    // Precomputation we need the values for various parts, which doesn't
+    // feel all that nice... Currently consumes 2 avx_pairwise_mul for 6 mul
+    // dg1 * dh1
+    // dg2 * dh2
+    // dg1 * dg2
+    // dh1 * dh2
+    // dg1 * dh2
+    // dg1 * dh1 * dg2 * dh2
+
+    // T0 = AVX_4x2x1(dg1, dg2, dg1, dh1)
+    t_unvec0[0] = pi_unvec[0]; t_unvec0[1] = pi_unvec[2]; t_unvec0[2] = pi_unvec[0]; t_unvec0[3] = pi_unvec[1];
+    // T1 = AVX_4x2x1(dh1, dh2, dg2, dh2)
+    t_unvec1[0] = pi_unvec[1]; t_unvec1[1] = pi_unvec[3]; t_unvec1[2] = pi_unvec[2]; t_unvec1[3] = pi_unvec[3];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec0);
+    fp2_unvectorized_to_4x2x1(t1, t_unvec1);
+    
+    // dg1h1, dg2h2, dg1g2, dh1h2 = avx_pairwise_mul(T0, T1)
+    fp2_mul_4x2x1(t0, t0, t1);
+    fp2_4x2x1_to_unvectorized(d_prod0, t0);
+
+    // TODO: redundant computation here!
+    // T0 = AVX_4x2x1(dg1, dg1h1, 1, 1)
+    t_unvec0[0] = pi_unvec[0]; t_unvec0[1] = d_prod0[0]; fp2_set_one(t_unvec0+2); fp2_set_one(t_unvec0+3);
+    // T1 = AVX_4x2x1(dh2, dg2h2, 1, 1)
+    t_unvec1[0] = pi_unvec[3]; t_unvec1[1] = d_prod0[1]; fp2_set_one(t_unvec1+2); fp2_set_one(t_unvec1+3);
+    fp2_unvectorized_to_4x2x1(t0, t_unvec0);
+    fp2_unvectorized_to_4x2x1(t1, t_unvec1);
+
+    // dg1h2, dg1g2h1h2, _, _ = avx_pairwise_mul(T0, T1)
+    fp2_mul_4x2x1(t0, t0, t1);
+    fp2_4x2x1_to_unvectorized(d_prod1, t0);
+
+    // Compute the numerator of ti as standard
+    // T0 = AVX_4x2x1(g1[0], g1[2], g2[0], g2[2])
+    t_unvec0[0] = g1_unvec[0]; t_unvec0[1] = g1_unvec[2]; t_unvec0[2] = g2_unvec[0]; t_unvec0[3] = g2_unvec[2];
+    // T1 = AVX_4x2x1(h1[0], h1[0], h2[0], h2[0])
+    t_unvec1[0] = h1_unvec[0]; t_unvec1[1] = h1_unvec[0]; t_unvec1[2] = h2_unvec[0]; t_unvec1[3] = h2_unvec[0];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec0);
+    fp2_unvectorized_to_4x2x1(t1, t_unvec1);
+    fp2_mul_4x2x1(t, t0, t1);
+    // T0 = AVX_4x2x1(g1[1], g1[3], g2[1], g2[3])
+    t_unvec0[0] = g1_unvec[1]; t_unvec0[1] = g1_unvec[3]; t_unvec0[2] = g2_unvec[1]; t_unvec0[3] = g2_unvec[3];
+    // T1 = AVX_4x2x1(h1[2], h1[2], h2[2], h2[2])
+    t_unvec1[0] = h1_unvec[2]; t_unvec1[1] = h1_unvec[2]; t_unvec1[2] = h2_unvec[2]; t_unvec1[3] = h2_unvec[2];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec0);
+    fp2_unvectorized_to_4x2x1(t1, t_unvec1);
+    fp2_mul_4x2x1(t2, t0, t1);
+    fp2_add_4x2x1(t, t, t2);
+
+    // Ensure correct projective factor for ti
+    // T2 = AVX_4x2x1(dg2h2, dg2h2, dg1h1, dg1h1)
+    t_unvec0[0] = d_prod0[1]; t_unvec0[1] = d_prod0[1]; t_unvec0[2] = d_prod0[0]; t_unvec0[3] = d_prod0[0];
+    fp2_unvectorized_to_4x2x1(t2, t_unvec0);
+    fp2_mul_4x2x1(t, t, t2);
+    // t1, t2, t3, t4 = T
+    fp2_4x2x1_to_unvectorized(t_unvec, t);
+
+    // Compute A0 = a, b, c, d
+    // We divide out a projective factor of 1 / (dg1 * dh1 * dg2 * dh2)^2
+    // T0 = AVX_4x2x1(g1[0], g1[0], g1[2], g1[2])
+    t_unvec0[0] = g1_unvec[0]; t_unvec0[1] = g1_unvec[0]; t_unvec0[2] = g1_unvec[2]; t_unvec0[3] = g1_unvec[2];
+    // T1 = AVX_4x2x1(g2[0], g2[2], g2[0], g2[2])
+    t_unvec1[0] = g2_unvec[0]; t_unvec1[1] = g2_unvec[2]; t_unvec1[2] = g2_unvec[0]; t_unvec1[3] = g2_unvec[2];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec0);
+    fp2_unvectorized_to_4x2x1(t1, t_unvec1);
+    fp2_mul_4x2x1(a0, t0, t1);
+    // T2 = AVX_4x2x1(dh1h2, dh1h2, dh1h2, dh1h2)
+    t_unvec0[0] = d_prod0[3]; t_unvec0[1] = d_prod0[3]; t_unvec0[2] = d_prod0[3]; t_unvec0[3] = d_prod0[3];
+    fp2_unvectorized_to_4x2x1(t2, t_unvec0);
+    // TODO: every element of T2 is the same, can we use this?
+    fp2_mul_4x2x1(a0, a0, t2);
+
+    // T1 = AVX_4x2x1(h1[0], h1[0], h1[2], h1[2])
+    t_unvec0[0] = h1_unvec[0]; t_unvec0[1] = h1_unvec[0]; t_unvec0[2] = h1_unvec[2]; t_unvec0[3] = h1_unvec[2];
+    // T2 = AVX_4x2x1(h2[0], h2[2], h2[0], h2[2])
+    t_unvec1[0] = h2_unvec[0]; t_unvec1[1] = h2_unvec[2]; t_unvec1[2] = h2_unvec[0]; t_unvec1[3] = h2_unvec[2];
+    fp2_unvectorized_to_4x2x1(t1, t_unvec0); // Marius: why not t0, t1? A: See below "Recall: T0 = ..."
+    fp2_unvectorized_to_4x2x1(t2, t_unvec1);
+    fp2_mul_4x2x1(t3, t1, t2);
+    // T1 = AVX_4x2x1(dg1g2, dg1g2, dg1g2, dg1g2)
+    // TODO: every element of T1 is the same, can we use this?
+    t_unvec0[0] = d_prod0[2]; t_unvec0[1] = d_prod0[2]; t_unvec0[2] = d_prod0[2]; t_unvec0[3] = d_prod0[2];
+    fp2_unvectorized_to_4x2x1(t1, t_unvec0);
+    fp2_mul_4x2x1(t3, t1, t3);
+    fp2_add_4x2x1(a0, a0, t3);
+    
+    // TODO: this could be optimised?
+    // T1 = AVX_4x2x1(dg1g2h1h2, 0, 0, 0)
+    t_unvec0[0] = d_prod1[1]; fp2_set_zero(t_unvec0+1); fp2_set_zero(t_unvec0+2); fp2_set_zero(t_unvec0+3); 
+    fp2_unvectorized_to_4x2x1(t1, t_unvec0);
+    fp2_add_4x2x1(a0, a0, t1);
+    
+    // T1 = AVX_4x2x1(dg1g2h1h2, dg1g2h1h2, dg1g2h1h2, dg1g2h1h2)
+    // TODO: every element of T1 is the same, can we use this?
+    t_unvec0[0] = d_prod1[1]; t_unvec0[1] = d_prod1[1]; t_unvec0[2] = d_prod1[1]; t_unvec0[3] = d_prod1[1];
+    fp2_unvectorized_to_4x2x1(t1, t_unvec0);
+    fp2_mul_4x2x1(a0, a0, t1);
+    
+    // T1 = AVX_4x2x1(t1, t1, t2, t2)
+    t_unvec0[0] = t_unvec[0]; t_unvec0[1] = t_unvec[0]; t_unvec0[2] = t_unvec[1]; t_unvec0[3] = t_unvec[1];
+    // T3 = AVX_4x2x1(t3, t4, t3, t4)
+    t_unvec1[0] = t_unvec[2]; t_unvec1[1] = t_unvec[3]; t_unvec1[2] = t_unvec[2]; t_unvec1[3] = t_unvec[3];
+    fp2_unvectorized_to_4x2x1(t1, t_unvec0);
+    fp2_unvectorized_to_4x2x1(t3, t_unvec1);
+    fp2_mul_4x2x1(t4, t1, t3);
+    fp2_add_4x2x1(a0, a0, t4);
+    // a, b, c, d = A0
+    fp2_4x2x1_to_unvectorized(a0_unvec, a0);
+
+    // Compute A1 = a1, b1, c1, d1
+    // We divide out a projective factor of 1 / (dg1 * dh1 * dg2 * dh2)^2 * dh2
+    // A1 = AVX_4x2x1(a, a, c, c)
+    t_unvec0[0] = a0_unvec[0]; t_unvec0[1] = a0_unvec[0]; t_unvec0[2] = a0_unvec[2]; t_unvec0[3] = a0_unvec[2];
+    fp2_unvectorized_to_4x2x1(a1, t_unvec0);
+    fp2_mul_4x2x1(a1, a1, t2); // Recall: T2 = AVX_4x2x1(h2[0], h2[2], h2[0], h2[2])
+    // T1 = AVX_4x2x1(b, b, d, d)
+    t_unvec0[0] = a0_unvec[1]; t_unvec0[1] = a0_unvec[1]; t_unvec0[2] = a0_unvec[3]; t_unvec0[3] = a0_unvec[3];
+    // T2 = AVX_4x2x1(h2[1], h2[3], h2[1], h2[3])
+    t_unvec1[0] = h2_unvec[1]; t_unvec1[1] = h2_unvec[3]; t_unvec1[2] = h2_unvec[1]; t_unvec1[3] = h2_unvec[3];
+    fp2_unvectorized_to_4x2x1(t1, t_unvec0);
+    fp2_unvectorized_to_4x2x1(t2, t_unvec1);
+    fp2_mul_4x2x1(t3, t1, t2);
+    fp2_add_4x2x1(a1, a1, t3);
+    // a1, b1, c1, d1 = A1
+    fp2_4x2x1_to_unvectorized(a1_unvec, a1);
+
+    // Compute A2 = a2, b2, c2, d2
+    // We divide out a projective factor of 1 / (dg1 * dh1 * dg2 * dh2)^2 * dg1
+    // A2 = AVX_4x2x1(a, b, a, b)
+    t_unvec0[0] = a0_unvec[0]; t_unvec0[1] = a0_unvec[1]; t_unvec0[2] = a0_unvec[0]; t_unvec0[3] = a0_unvec[1];
+    fp2_unvectorized_to_4x2x1(a2, t_unvec0);
+    fp2_mul_4x2x1(a2, a2, t0); // Recall: T0 = AVX_4x2x1(g1[0], g1[0], g1[2], g1[2])
+    // T1 = AVX_4x2x1(g1[1], g1[1], g1[3], g1[3])
+    t_unvec0[0] = g1_unvec[1]; t_unvec0[1] = g1_unvec[1]; t_unvec0[2] = g1_unvec[3]; t_unvec0[3] = g1_unvec[3];
+    // T2 = AVX_4x2x1(c, d, c, d)
+    t_unvec1[0] = a0_unvec[2]; t_unvec1[1] = a0_unvec[3]; t_unvec1[2] = a0_unvec[2]; t_unvec1[3] = a0_unvec[3];
+    fp2_unvectorized_to_4x2x1(t1, t_unvec0);
+    fp2_unvectorized_to_4x2x1(t2, t_unvec1);
+    fp2_mul_4x2x1(t3, t1, t2);
+    fp2_add_4x2x1(a2, a2, t3);
+    // a2, b2, c2, d2 = A2
+    fp2_4x2x1_to_unvectorized(a2_unvec, a2);
+
+    // Compute A3 = a3, b3, c3, d3
+    // We divide out a projective factor of 1 / (dg1 * dh1 * dg2 * dh2)^2 * dg1 * dh2
+    // A3 = AVX_4x2x1(a1, b1, a1, b1)
+    t_unvec0[0] = a1_unvec[0]; t_unvec0[1] = a1_unvec[1]; t_unvec0[2] = a1_unvec[0]; t_unvec0[3] = a1_unvec[1];
+    fp2_unvectorized_to_4x2x1(a3, t_unvec0);
+    fp2_mul_4x2x1(a3, a3, t0); // Recall: T0 = AVX_4x2x1(g1[0], g1[0], g1[2], g1[2])
+    // T2 = AVX_4x2x1(c1, d1, c1, d1)
+    t_unvec0[0] = a1_unvec[2]; t_unvec0[1] = a1_unvec[3]; t_unvec0[2] = a1_unvec[2]; t_unvec0[3] = a1_unvec[3];
+    fp2_unvectorized_to_4x2x1(t2, t_unvec0);
+    fp2_mul_4x2x1(t3, t1, t2); // Recall: T1 = AVX_4x2x1(g1[1], g1[1], g1[3], g1[3])
+    fp2_add_4x2x1(a3, a3, t3);
+    // a3, b3, c3, d3 = A3
+    fp2_4x2x1_to_unvectorized(a3_unvec, a3);
+
+    // We now need to make sure the entire matrix has a projective factor of
+    // 1 / (dg1 * dh1 * dg2 * dh2)^2 * dg1 * dh2
+    // TODO: every element of T0 is the same, can we use this?
+    // T0 = AVX_4x2x1(dg1h2, dg1h2, dg1h2, dg1h2)
+    t_unvec0[0] = d_prod1[0]; t_unvec0[1] = d_prod1[0]; t_unvec0[2] = d_prod1[0]; t_unvec0[3] = d_prod1[0];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec0);
+    // a, b, c, d = avx_pairwise_mul(A0, T0)
+    fp2_mul_4x2x1(a0, a0, t0);
+    fp2_4x2x1_to_unvectorized(a0_unvec, a0);
+    // T0 = AVX_4x2x1(dg1, dg1, dg1, dg1) Again all entries same
+    t_unvec0[0] = pi_unvec[0]; t_unvec0[1] = pi_unvec[0]; t_unvec0[2] = pi_unvec[0]; t_unvec0[3] = pi_unvec[0];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec0);
+    // a1, b1, c1, d1 = avx_pairwise_mul(A1, T0)
+    fp2_mul_4x2x1(a1, a1, t0);
+    fp2_4x2x1_to_unvectorized(a1_unvec, a1);
+    // T0 = AVX_4x2x1(dh2, dh2, dh2, dh2)
+    t_unvec0[0] = pi_unvec[3]; t_unvec0[1] = pi_unvec[3]; t_unvec0[2] = pi_unvec[3]; t_unvec0[3] = pi_unvec[3];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec0);
+    // a2, b2, c2, d2 = avx_pairwise_mul(A2, T0)
+    fp2_mul_4x2x1(a2, a2, t0);
+    fp2_4x2x1_to_unvectorized(a2_unvec, a2);
+
+    // Result (following the AVX interleaving pattern)
+    // AVX_8x1x1(a0, a1, b0, b1, c0, c1, d0, d1)
+    res_unvec[0] = a0_unvec[0]; res_unvec[1] = a1_unvec[0]; res_unvec[2] = a0_unvec[1]; res_unvec[3] = a1_unvec[1];
+    res_unvec[4] = a0_unvec[2]; res_unvec[5] = a1_unvec[2]; res_unvec[6] = a0_unvec[3]; res_unvec[7] = a1_unvec[3]; 
+    fp2_unvectorized_to_8x1x1(res_matrix01, res_unvec);
+    // AVX_8x1x1(a2, a3, b2, b3, c2, c3, d2, d3)
+    res_unvec[0] = a2_unvec[0]; res_unvec[1] = a3_unvec[0]; res_unvec[2] = a2_unvec[1]; res_unvec[3] = a3_unvec[1];
+    res_unvec[4] = a2_unvec[2]; res_unvec[5] = a3_unvec[2]; res_unvec[6] = a2_unvec[3]; res_unvec[7] = a3_unvec[3]; 
+    fp2_unvectorized_to_8x1x1(res_matrix23, res_unvec);
+}
+
+void gluing_change_of_basis_4x2x1_old(
     __m512i* res_matrix01, __m512i* res_matrix23, 
     __m512i* A24, __m512i* x_4, __m512i* z_4
 )
