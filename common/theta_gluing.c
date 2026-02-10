@@ -538,7 +538,7 @@ void gluing_change_of_basis_4x2x1_old(
     fp2_unvectorized_to_8x1x1(res_matrix23, res_unvec);
 }
 
-void gluing_internal_sum(__m512i* res_P, __m512i* P0P1, __m512i* P2P3)
+void gluing_internal_sum_old(__m512i* res_P, __m512i* P0P1, __m512i* P2P3)
 {
     __m512i sum[8], t[8]; //TODO use res as sum
     fp2_t P0P1_unvec[8], P2P3_unvec[8], t_unvec[4];
@@ -571,6 +571,28 @@ void gluing_internal_sum(__m512i* res_P, __m512i* P0P1, __m512i* P2P3)
     t_unvec[0] = P0P1_unvec[6]; t_unvec[1] = P0P1_unvec[7]; t_unvec[2] = P2P3_unvec[6]; t_unvec[3] = P2P3_unvec[7];
     fp2_unvectorized_to_4x2x1(t, t_unvec);
     fp2_add_4x2x1(res_P, sum, t);
+}
+
+// Done (TODO delete this comment) from 9122 to 108 cycles.
+void gluing_internal_sum(__m512i* res_P, __m512i* P0P1, __m512i* P2P3)
+{
+    __m512i t0[16], t1[16];
+
+    // Pa0, Pa1, Pb0, Pb1, Pc0, Pc1, Pd0, Pd1 = P0P1
+    // Pa2, Pa3, Pb2, Pb3, Pc2, Pc3, Pd2, Pd3 = P2P3
+
+    // Pa0 + Pb0, Pc0 + Pd0, ... :
+    __m512i idx0 = VSET(0, 4, 1, 5, 8, 12, 9, 13); //VSET(13, 9, 12, 8, 5, 1, 4, 0);
+    __m512i idx1 = VSET(2, 6, 3, 7, 10, 14, 11, 15); //VSET(15, 11, 14, 10, 7, 3, 6, 2);
+    for (int i = 0; i < 16; i++) {
+        t0[i] = VBLENDPERM(idx0, P0P1[i], P2P3[i]);
+        t1[i] = VBLENDPERM(idx1, P0P1[i], P2P3[i]);
+    }
+    fp2_add_8x1x1(t0, t0, t1);
+
+    // Pa0 + Pb0 + Pc0 + Pd0, Pa1 + Pb1 + Pc1 + Pd1, ...
+    fp2_8x1x1_to_4x2x1(t0, t1, t0);
+    fp2_add_4x2x1(res_P, t0, t1);
 }
 
 void gluing_internal_sum_pair(
