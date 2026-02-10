@@ -84,4 +84,10 @@ void ec_add_components_4x2x1(
     __m512i* xQ, __m512i* yQ, __m512i* zQ
 );
 
+void ec_add_components_4x2x1_old(
+    __m512i* res_u, __m512i* res_v, __m512i* res_w, 
+    __m512i* A, __m512i* xP, __m512i* yP, __m512i* zP, 
+    __m512i* xQ, __m512i* yQ, __m512i* zQ
+);
+
 #endif

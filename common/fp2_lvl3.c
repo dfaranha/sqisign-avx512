@@ -249,6 +249,25 @@ void fp2_sqr_4x2x1(__m512i* res, __m512i* a)
     fp2_mul_4x2x1(res, a, a);
 }
 
+// res1 = a1 * b1, res2 = a2 * b2
+void fp2_mulx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* b1, __m512i* a2, __m512i* b2)
+{
+    __m512i t0[16], t1[16];
+    fp2_4x2x1_to_8x1x1(t0, a1, a2);
+    fp2_4x2x1_to_8x1x1(t1, b1, b2);
+    fp2_mul_8x1x1(t0, t0, t1);
+    fp2_8x1x1_to_4x2x1(res1, res2, t0);
+}
+
+// res1 = a1 * b1, res2 = a2 * b2
+void fp2_sqrx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* a2)
+{
+    __m512i t[16];
+    fp2_4x2x1_to_8x1x1(t, a1, a2);
+    fp2_sqr_8x1x1(t, t);
+    fp2_8x1x1_to_4x2x1(res1, res2, t);
+}
+
 void fp2_div3_4x2x1(__m512i* res, __m512i* src)
 {
     fp_div3_8x1(res, src);

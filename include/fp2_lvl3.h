@@ -137,6 +137,12 @@ void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b);
 
 void fp2_sqr_4x2x1(__m512i* res, __m512i* a);
 
+// res1 = a1 * b1, res2 = a2 * b2
+void fp2_mulx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* b1, __m512i* a2, __m512i* b2);
+
+// res1 = a1 * b1, res2 = a2 * b2
+void fp2_sqrx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* a2);
+
 void fp2_muli_4x2x1(__m512i* res, __m512i* a);
 
 void fp2_div3_4x2x1(__m512i* res, __m512i* src);

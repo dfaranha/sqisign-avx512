@@ -49,4 +49,7 @@
  * The 4 least significant bits determine the index of the 32-bit limb from the src. The 5th bit determines if the src is A (0) or B (1).
  */
 #define VBLENDPERM32(mask, A, B, indices) _mm512_mask_permutex2var_epi32(A, mask, indices, B)   
+#define VUNPACKLO(A, B) _mm512_unpacklo_epi64(A, B) // DST = { a0, b0, a2, b2, a4, b4, a6, b6 }
+#define VUNPACKHI(A, B) _mm512_unpackhi_epi64(A, B) // DST = { a1, b1, a3, b3, a5, b5, a7, b7 }
+
 #endif

@@ -15,35 +15,18 @@ void gluing_compute_matrix_4x2x1(
     __m512i* x_4, __m512i* z_4, __m512i* u, __m512i* w, __m512i* det
 )
 {
-    __m512i z_sqr[8], a[8], b[8], c[8], d[8], a_b[16], c_pi[16], t[16];
+    __m512i z_sqr[8], a[8], b[8], c[8], d[8];
     
-    // Instead of computing these separately:
-    // fp2_mul_4x2x1(c, u, z_4);
-    // fp2_mul_4x2x1(pi, det, z_4);
-    // We transform to the 8x1x1 format.
-    fp2_4x2x1_to_8x1x1(c_pi, u, det);
-    fp2_4x2x1_duplicate_to_8x1x1(t, z_4);
-    fp2_mul_8x1x1(c_pi, c_pi, t);
-    fp2_8x1x1_to_4x2x1(c, pi, c_pi);
+    // TODO: Worth it to use fp2_4x2x1_duplicate_to_8x1x1?
+    fp2_mulx2_4x2x1(c, pi, u, z_4, det, z_4);
 
-    // Some more operations on c
     fp2_sub_4x2x1(c, c, det);
     fp2_mul_4x2x1(c, c, x_4);
-
     fp2_sqr_4x2x1(z_sqr, z_4);
 
-    // Computing these in 8x1x1:
-    // fp2_mul_4x2x1(d, u, z_sqr);
-    // fp2_mul_4x2x1(b, w, z_sqr);
-    // fp2_neg_4x2x1(a, d);
-    // fp2_neg_4x2x1(b, b);
-    
-    fp2_4x2x1_to_8x1x1(a_b, u, w);
-    fp2_4x2x1_duplicate_to_8x1x1(t, z_sqr);
-    fp2_mul_8x1x1(a_b, a_b, t);
-    fp2_8x1x1_to_first_4x2x1(d, a_b); // d = -a
-    fp2_neg_8x1x1(a_b, a_b);
-    fp2_8x1x1_to_4x2x1(a, b, a_b);
+    fp2_mulx2_4x2x1(d, b, u, z_sqr, w, z_sqr);
+    fp2_neg_4x2x1(a, d);
+    fp2_neg_4x2x1(b, b);
 
     // Compute transpose:
     __m512i idx_lo = _mm512_set_epi64(13, 12, 5, 4, 9, 8, 1, 0);    
@@ -93,15 +76,11 @@ void gluing_action_by_translation_4x2x1(
     __m512i* A24, __m512i* x_4, __m512i* z_4
 )
 {
-    __m512i u[8], w[8], t0[16], t1[16];
+    __m512i u[8], w[8], t0[8], t1[8];
 
     ec_double_4x2x1(u, w, A24, x_4, z_4);
-    fp2_4x2x1_to_8x1x1(t0, w, u);
-    fp2_4x2x1_to_8x1x1(t1, x_4, z_4);
-    fp2_mul_8x1x1(t0, t0, t1);
-    fp2_8x1x1_to_4x2x1(t0, t0+8, t0);
-    fp2_sub_4x2x1(t0, t0, t0+8); // det
-
+    fp2_mulx2_4x2x1(t0, t1, w, x_4, u, z_4);
+    fp2_sub_4x2x1(t0, t0, t1); // det
     gluing_compute_matrix_4x2x1(g1, h1, g2, h2, pi, x_4, z_4, u, w, t0);
 }
 
