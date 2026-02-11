@@ -5,7 +5,8 @@ from theta_isogeny_chain import (
     theta_isogeny_chain_with_torsion_4x2x1,
     theta_isogeny_chain_with_torsion_8x1x1,
 )
-from sage.all import GF, proof, EllipticCurve
+from sage.rings.finite_rings.finite_field_constructor import GF
+from sage.all import EllipticCurve
 
 
 def lift_to_curve(A, P):
@@ -45,10 +46,8 @@ def remove_extra_torsion(E1, E2, B1, B2):
     return B1, B2
 
 
-proof.all(False)
-
 p = 65 * 2**376 - 1
-F = GF(p**2, names="i", modulus=[1, 0, 1])
+F = GF((p, 2), names="i", modulus=[1, 0, 1])
 i = F.gen()
 
 # Data copy-pasted from SQIsign KAT tests
