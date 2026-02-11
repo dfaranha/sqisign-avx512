@@ -976,12 +976,14 @@ void theta_isogeny_chain_no_torsion_pair(
     // have the torsion above we require square roots to compute the last
     // two codomains.
     
+    //TODO: We can save 30 cycles by using theta_eval_pair_old here, as we only need OA_inv in 4x2x1.
     fp2_8x1x1_to_4x2x1(strat_theta_pair, strat_theta_pair + 8, strat_theta_pair);
     if (n > 3) {
         fp2_8x1x1_to_first_4x2x1(OA_dual_inv, OA_dual_inv);
         theta_eval_single(strat_theta_pair, strat_theta_pair, OA_dual_inv, h1, h2);
     }
 
+    
     h1 = false; h2 = false;
     theta_codomain_with_four_torsion(OA_dual_inv, OA, strat_theta_pair, h1, h2);
     theta_eval_list_pair_old(eval_pts_theta, OA_dual_inv, h1, h2, num_pts);

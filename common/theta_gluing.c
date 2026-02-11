@@ -54,22 +54,6 @@ void gluing_compute_matrix_4x2x1(
     }
 }
 
-// With the optimized field arithmetic, this might be just as efficient.
-void gluing_action_by_translation_4x2x1_old(
-    __m512i* g1, __m512i* g2, __m512i* h1, __m512i* h2, __m512i* pi,
-    __m512i* A24, __m512i* x_4, __m512i* z_4
-)
-{
-    __m512i u[8], w[8], t0[8], t1[8];
-
-    ec_double_4x2x1(u, w, A24, x_4, z_4);
-    fp2_mul_4x2x1(t0, w, x_4);
-    fp2_mul_4x2x1(t1, u, z_4);
-    fp2_sub_4x2x1(t0, t0, t1); // det
-
-    gluing_compute_matrix_4x2x1(g1, h1, g2, h2, pi, x_4, z_4, u, w, t0);
-}
-
 // Done (TODO delete this comment) 4052 -> 4002 cycles.
 void gluing_action_by_translation_4x2x1(
     __m512i* g1, __m512i* g2, __m512i* h1, __m512i* h2, __m512i* pi,
@@ -538,52 +522,17 @@ void gluing_change_of_basis_4x2x1_old(
     fp2_unvectorized_to_8x1x1(res_matrix23, res_unvec);
 }
 
-void gluing_internal_sum_old(__m512i* res_P, __m512i* P0P1, __m512i* P2P3)
-{
-    __m512i sum[8], t[8]; //TODO use res as sum
-    fp2_t P0P1_unvec[8], P2P3_unvec[8], t_unvec[4];
-
-    // Pa0, Pa1, Pb0, Pb1, Pc0, Pc1, Pd0, Pd1 = A
-    fp2_8x1x1_to_unvectorized(P0P1_unvec, P0P1);
-    // Pa2, Pa3, Pb2, Pb3, Pc2, Pc3, Pd2, Pd3 = B
-    fp2_8x1x1_to_unvectorized(P2P3_unvec, P2P3);
-
-    // Compute the sum of the elements for each of the 8x1x1 blobs
-    // a = a0 + b0 + c0 + d0
-    // b = a1 + b1 + c1 + d1
-    // c = a2 + b2 + c2 + d2
-    // d = a3 + b3 + c3 + d3
-
-    // C = AVX_4x2x1(a0, a1, a2, a3)
-    t_unvec[0] = P0P1_unvec[0]; t_unvec[1] = P0P1_unvec[1]; t_unvec[2] = P2P3_unvec[0]; t_unvec[3] = P2P3_unvec[1];
-    fp2_unvectorized_to_4x2x1(sum, t_unvec);
-    //tmp = AVX_4x2x1(b0, b1, b2, b3)
-    t_unvec[0] = P0P1_unvec[2]; t_unvec[1] = P0P1_unvec[3]; t_unvec[2] = P2P3_unvec[2]; t_unvec[3] = P2P3_unvec[3];
-    fp2_unvectorized_to_4x2x1(t, t_unvec);
-    fp2_add_4x2x1(sum, sum, t);
-    
-    // tmp = AVX_4x2x1(c0, c1, c2, c3)
-    t_unvec[0] = P0P1_unvec[4]; t_unvec[1] = P0P1_unvec[5]; t_unvec[2] = P2P3_unvec[4]; t_unvec[3] = P2P3_unvec[5];
-    fp2_unvectorized_to_4x2x1(t, t_unvec);
-    fp2_add_4x2x1(sum, sum, t);
-
-    // tmp = AVX_4x2x1(d0, d1, d2, d3)
-    t_unvec[0] = P0P1_unvec[6]; t_unvec[1] = P0P1_unvec[7]; t_unvec[2] = P2P3_unvec[6]; t_unvec[3] = P2P3_unvec[7];
-    fp2_unvectorized_to_4x2x1(t, t_unvec);
-    fp2_add_4x2x1(res_P, sum, t);
-}
-
 // Done (TODO delete this comment) from 9122 to 108 cycles.
 void gluing_internal_sum(__m512i* res_P, __m512i* P0P1, __m512i* P2P3)
 {
-    __m512i t0[16], t1[16];
+    __m512i t0[16], t1[16], idx0, idx1;
 
     // Pa0, Pa1, Pb0, Pb1, Pc0, Pc1, Pd0, Pd1 = P0P1
     // Pa2, Pa3, Pb2, Pb3, Pc2, Pc3, Pd2, Pd3 = P2P3
 
-    // Pa0 + Pb0, Pc0 + Pd0, ... :
-    __m512i idx0 = VSET(0, 4, 1, 5, 8, 12, 9, 13); //VSET(13, 9, 12, 8, 5, 1, 4, 0);
-    __m512i idx1 = VSET(2, 6, 3, 7, 10, 14, 11, 15); //VSET(15, 11, 14, 10, 7, 3, 6, 2);
+    // Pa0 + Pb0, Pc0 + Pd0, Pa1 + Pb1, Pc1 + Pd1, ... :
+    idx0 = VSET(0, 4, 1, 5, 8, 12, 9, 13);
+    idx1 = VSET(2, 6, 3, 7, 10, 14, 11, 15);
     for (int i = 0; i < 16; i++) {
         t0[i] = VBLENDPERM(idx0, P0P1[i], P2P3[i]);
         t1[i] = VBLENDPERM(idx1, P0P1[i], P2P3[i]);
@@ -595,69 +544,43 @@ void gluing_internal_sum(__m512i* res_P, __m512i* P0P1, __m512i* P2P3)
     fp2_add_4x2x1(res_P, t0, t1);
 }
 
+// Done (TODO delete this comment)
 void gluing_internal_sum_pair(
     __m512i* res_PQ, 
     __m512i* P0Q1, __m512i* Q0P1, __m512i* P2Q3, __m512i* Q2P3
 )
 {
-    __m512i sum[16], t[16];
-    fp2_t P0Q1_unvec[8], Q0P1_unvec[8], P2Q3_unvec[8], Q2P3_unvec[8], t_unvec[8];
+    __m512i t0[16], t1[16], t2[16], t3[16], idx0, idx1;
+    
+    // Pa0, Qa1, Pb0, Qb1, Pc0, Qc1, Pd0, Qd1 = P0Q1
+    // Qa0, Pa1, Qb0, Pb1, Qc0, Pc1, Qd0, Pd1 = Q0P1
+    // Pa2, Qa3, Pb2, Qb3, Pc2, Qc3, Pd2, Qd3 = P2Q3
+    // Qa2, Pa3, Qb2, Pb3, Qc2, Pc3, Qd2, Pd3 = Q2P3
 
-    // Pa0, Qa1, Pb0, Qb1, Pc0, Qc1, Pd0, Qd1 = A
-    // Pa0, Pb0, Pc0, Pd0, Qa1, Qb1, Qc1, Qd1 = A OLD
-    fp2_8x1x1_to_unvectorized(P0Q1_unvec, P0Q1);
-    // Qa0, Pa1, Qb0, Pb1, Qc0, Pc1, Qd0, Pd1 = B
-    // Qa0, Qb0, Qc0, Qd0, Pa1, Pb1, Pc1, Pd1 = B OLD
-    fp2_8x1x1_to_unvectorized(Q0P1_unvec, Q0P1);
-    // Pa2, Qa3, Pb2, Qb3, Pc2, Qc3, Pd2, Qd3 = C
-    // Pa2, Pb2, Pc2, Pd2, Qa3, Qb3, Qc3, Qd3 = C OLD
-    fp2_8x1x1_to_unvectorized(P2Q3_unvec, P2Q3);
-    // Qa2, Pa3, Qb2, Pb3, Qc2, Pc3, Qd2, Pd3 = D
-    // Qa2, Qb2, Qc2, Qd2, Pa3, Pb3, Pc3, Pd3 = D OLD
-    fp2_8x1x1_to_unvectorized(Q2P3_unvec, Q2P3);
+    // t0 = Pa0 + Pb0, Pc0 + Pd0, Qa0 + Qb0, Qc0 + Qd0, Pa1 + Pb1, ...
+    // t2 = Pa2 + Pb2, Pc2 + Pd2, ...
+    idx0 = VSET(0, 4, 8, 12, 9, 13, 1, 5);
+    idx1 = VSET(2, 6, 10, 14, 11, 15, 3, 7);
+    for (int i = 0; i < 16; i++) {
+        t0[i] = VBLENDPERM(idx0, P0Q1[i], Q0P1[i]);
+        t1[i] = VBLENDPERM(idx1, P0Q1[i], Q0P1[i]);
+        t2[i] = VBLENDPERM(idx0, P2Q3[i], Q2P3[i]);
+        t3[i] = VBLENDPERM(idx1, P2Q3[i], Q2P3[i]);
+    }
+    fp2_add_8x1x1(t0, t0, t1);
+    fp2_add_8x1x1(t2, t2, t3);
 
-    // Compute the sum of the elements for each of the 8x1x1 blobs
-    // P:  a = Pa0 + Pb0 + Pc0 + Pd0
-    //     b = Pa1 + Pb1 + Pc1 + Pd1
-    //     c = Pa2 + Pb2 + Pc2 + Pd2
-    //     d = Pa3 + Pb3 + Pc3 + Pd3
-    //
-    // Q:  a = Qa0 + Qb0 + Qc0 + Qd0
-    //     b = Qa1 + Qb1 + Qc1 + Qd1
-    //     c = Qa2 + Qb2 + Qc2 + Qd2
-    //     d = Qa3 + Qb3 + Qc3 + Qd3
-
-    // E = AVX_8x1x1(Pa0, Pa1, Pa2, Pa3, Qa0, Qa1, Qa2, Qa3)
-    t_unvec[0] = P0Q1_unvec[0]; t_unvec[1] = Q0P1_unvec[1]; t_unvec[2] = P2Q3_unvec[0]; t_unvec[3] = Q2P3_unvec[1];
-    t_unvec[4] = Q0P1_unvec[0]; t_unvec[5] = P0Q1_unvec[1]; t_unvec[6] = Q2P3_unvec[0]; t_unvec[7] = P2Q3_unvec[1];
-    fp2_unvectorized_to_8x1x1(sum, t_unvec);
-
-    // tmp = AVX_8x1x1(Pb0, Pb1, Pb2, Pb3, Qb0, Qb1, Qb2, Qb3)
-    t_unvec[0] = P0Q1_unvec[2]; t_unvec[1] = Q0P1_unvec[3]; t_unvec[2] = P2Q3_unvec[2]; t_unvec[3] = Q2P3_unvec[3];
-    t_unvec[4] = Q0P1_unvec[2]; t_unvec[5] = P0Q1_unvec[3]; t_unvec[6] = Q2P3_unvec[2]; t_unvec[7] = P2Q3_unvec[3];
-    fp2_unvectorized_to_8x1x1(t, t_unvec);
-    fp2_add_8x1x1(sum, sum, t);
-
-    // tmp = AVX_8x1x1(Pc0, Pc1, Pc2, Pc3, Qc0, Qc1, Qc2, Qc3)
-    t_unvec[0] = P0Q1_unvec[4]; t_unvec[1] = Q0P1_unvec[5]; t_unvec[2] = P2Q3_unvec[4]; t_unvec[3] = Q2P3_unvec[5];
-    t_unvec[4] = Q0P1_unvec[4]; t_unvec[5] = P0Q1_unvec[5]; t_unvec[6] = Q2P3_unvec[4]; t_unvec[7] = P2Q3_unvec[5];
-    fp2_unvectorized_to_8x1x1(t, t_unvec);
-    fp2_add_8x1x1(sum, sum, t);
-
-    // tmp = AVX_8x1x1(Pd0, Pd1, Pd2, Pd3, Qd0, Qd1, Qd2, Qd3)
-    t_unvec[0] = P0Q1_unvec[6]; t_unvec[1] = Q0P1_unvec[7]; t_unvec[2] = P2Q3_unvec[6]; t_unvec[3] = Q2P3_unvec[7];
-    t_unvec[4] = Q0P1_unvec[6]; t_unvec[5] = P0Q1_unvec[7]; t_unvec[6] = Q2P3_unvec[6]; t_unvec[7] = P2Q3_unvec[7];
-    fp2_unvectorized_to_8x1x1(t, t_unvec);
-    fp2_add_8x1x1(res_PQ, sum, t);
-
-    // TODO: Order of fp2 coords is wrong. For now I manually rearrange them
-    fp2_t t_unvec0[8], t_unvec1[8];
-    fp2_8x1x1_to_unvectorized(t_unvec0, res_PQ);
-    t_unvec1[0] = t_unvec0[0]; t_unvec1[1] = t_unvec0[4]; t_unvec1[2] = t_unvec0[1]; t_unvec1[3] = t_unvec0[5];
-    t_unvec1[4] = t_unvec0[2]; t_unvec1[5] = t_unvec0[6]; t_unvec1[6] = t_unvec0[3]; t_unvec1[7] = t_unvec0[7];
-    fp2_unvectorized_to_8x1x1(res_PQ, t_unvec1);    
+    // Pa0 + Pb0 + Pc0 + Pd0, Qa0 + Qb0 + Qc0 + Qd0, ...
+    idx0 = VSET(0, 2, 4, 6, 8, 10, 12, 14);
+    idx1 = VSET(1, 3, 5, 7, 9, 11, 13, 15);
+    for (int i = 0; i < 16; i++) {
+        t1[i] = VBLENDPERM(idx0, t0[i], t2[i]);
+        t3[i] = VBLENDPERM(idx1, t0[i], t2[i]);
+    }
+    fp2_add_8x1x1(res_PQ, t1, t3);    
 }
 
+// Done (TODO delete this comment)
 void gluing_apply_matrix(
     __m512i* res_P, 
     __m512i* matrix01, __m512i* matrix23, __m512i* P
@@ -665,27 +588,25 @@ void gluing_apply_matrix(
 {
     __m512i P0P1[16], P2P3[16];
 
-    theta_mul_pair(P0P1, matrix01, P);
-    theta_mul_pair(P2P3, matrix23, P);
+    fp2_4x2x1_duplicate_to_8x1x1(P2P3, P);
+    fp2_mul_8x1x1(P0P1, matrix01, P2P3);
+    fp2_mul_8x1x1(P2P3, matrix23, P2P3);
 
     gluing_internal_sum(res_P, P0P1, P2P3);
 }
 
-// TODO: If we always call this function with 
-// input PQ = the output PQ, maybe we can optimize.
+// Done (TODO delete this comment)
 void gluing_apply_matrix_pair(
     __m512i* res_PQ, 
     __m512i* matrix01, __m512i* matrix23, __m512i* PQ
 )
 {
     __m512i QP[16], P0Q1[16], Q0P1[16], P2Q3[16], Q2P3[16];
-    fp2_t PQ_unvec[8], t_unvec[8];
 
-    // Swap P || Q in a doubled point to Q || P
-    fp2_8x1x1_to_unvectorized(PQ_unvec, PQ);
-    t_unvec[0] = PQ_unvec[1]; t_unvec[1] = PQ_unvec[0]; t_unvec[2] = PQ_unvec[3]; t_unvec[3] = PQ_unvec[2];
-    t_unvec[4] = PQ_unvec[5]; t_unvec[5] = PQ_unvec[4]; t_unvec[6] = PQ_unvec[7]; t_unvec[7] = PQ_unvec[6];
-    fp2_unvectorized_to_8x1x1(QP, t_unvec);
+    // Swap P || Q to Q || P
+    for (int i = 0; i < 16; i++) {
+        QP[i] = VSHUFFLE(PQ[i], 0x4e);
+    }
 
     // Compute first row mul P, second row mul Q
     fp2_mul_8x1x1(P0Q1, matrix01, PQ);
@@ -702,33 +623,29 @@ void gluing_apply_matrix_pair(
     gluing_internal_sum_pair(res_PQ, P0Q1, Q0P1, P2Q3, Q2P3);
 }
 
+// Done (TODO delete this comment)
 void gluing_product_to_theta_pair(
     __m512i* res_P12,
     __m512i* x, __m512i* z, __m512i* matrix1, __m512i* matrix2
 )
 {
-    __m512i t0[16], t1[16];
-    fp2_t x_unvec[4], z_unvec[4], t_unvec0[8], t_unvec1[8];
-    fp2_4x2x1_to_unvectorized(x_unvec, x);
-    fp2_4x2x1_to_unvectorized(z_unvec, z);
+    __m512i t0[16], t1[16], idx0_re, idx0_im, idx1_re, idx1_im;
 
-    // t1 = AVX_8x1x1(X1, X1, Z1, Z1, X2, X2, Z2, Z2)
-    t_unvec0[0] = x_unvec[0]; t_unvec0[1] = x_unvec[0]; t_unvec0[2] = z_unvec[0]; t_unvec0[3] = z_unvec[0];
-    t_unvec0[4] = x_unvec[1]; t_unvec0[5] = x_unvec[1]; t_unvec0[6] = z_unvec[1]; t_unvec0[7] = z_unvec[1];
-    fp2_unvectorized_to_8x1x1(t0, t_unvec0);
-    // t2 = AVX_8x1x1(X3, Z3, X3, Z3, X4, Z4, X4, Z4)
-    t_unvec1[0] = x_unvec[2]; t_unvec1[1] = z_unvec[2]; t_unvec1[2] = x_unvec[2]; t_unvec1[3] = z_unvec[2];
-    t_unvec1[4] = x_unvec[3]; t_unvec1[5] = z_unvec[3]; t_unvec1[6] = x_unvec[3]; t_unvec1[7] = z_unvec[3];
-    fp2_unvectorized_to_8x1x1(t1, t_unvec1);
-    
+    // t0 = AVX_8x1x1(X1, X2, X1, X2, Z1, Z2, Z1, Z2)
+    // t1 = AVX_8x1x1(X3, X4, Z3, Z4, X3, X4, Z3, Z4)
+    idx0_re = VSET(0, 2, 0, 2, 8, 10, 8, 10);
+    idx0_im = VSET(1, 3, 1, 3, 9, 11, 9, 11);
+    idx1_re = VSET(4, 6, 12, 14, 4, 6, 12, 14);
+    idx1_im = VSET(5, 7, 13, 15, 5, 7, 13, 15);
+
+    for (int i = 0; i < 8; i++) {
+        t0[i] = VBLENDPERM(idx0_re, x[i], z[i]);
+        t0[i+8] = VBLENDPERM(idx0_im, x[i], z[i]);
+        t1[i] = VBLENDPERM(idx1_re, x[i], z[i]);
+        t1[i+8] = VBLENDPERM(idx1_im, x[i], z[i]);
+    }
+
     fp2_mul_8x1x1(res_P12, t0, t1);
-
-    // TODO: Order of fp2 coords is wrong. For now I manually rearrange them
-    fp2_8x1x1_to_unvectorized(t_unvec0, res_P12);
-    t_unvec1[0] = t_unvec0[0]; t_unvec1[1] = t_unvec0[4]; t_unvec1[2] = t_unvec0[1]; t_unvec1[3] = t_unvec0[5];
-    t_unvec1[4] = t_unvec0[2]; t_unvec1[5] = t_unvec0[6]; t_unvec1[6] = t_unvec0[3]; t_unvec1[7] = t_unvec0[7];
-    fp2_unvectorized_to_8x1x1(res_P12, t_unvec1);
-
     gluing_apply_matrix_pair(res_P12, matrix1, matrix2, res_P12);
 }
 

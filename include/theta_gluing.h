@@ -56,7 +56,6 @@ void gluing_change_of_basis_4x2x1(
  * Outputs res_P = P0 + P1 + P2 + P3.
  */
 void gluing_internal_sum(__m512i* res_P, __m512i* P0P1, __m512i* P2P3);
-void gluing_internal_sum_old(__m512i* res_P, __m512i* P0P1, __m512i* P2P3);
 
 
 /**
