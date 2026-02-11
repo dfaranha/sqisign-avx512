@@ -166,78 +166,75 @@ def theta_change_of_basis(
     S0 = avx_421_mul(T0, T1)
 
     # Computation of S1
-    # TODO: redundant computation here!
-    T0 = AVX_4x2x1(PI[0], S0[0], 1, 1)
-    T1 = AVX_4x2x1(PI[3], S0[1], 1, 1)
-    S1 = avx_421_mul(T0, T1)
-
-    # Computation of S2
     T0 = AVX_4x2x1(G1[0], G1[2], G2[0], G2[2])
     T1 = AVX_4x2x1(H1[0], H1[0], H2[0], H2[0])
     T2 = AVX_4x2x1(G1[1], G1[3], G2[1], G2[3])
     T3 = AVX_4x2x1(H1[2], H1[2], H2[2], H2[2])
-    S2, T2 = avx_421_pair_mul(T0, T1, T2, T3)
-    S2 = avx_421_add(S2, T2)
+    S1, T2 = avx_421_pair_mul(T0, T1, T2, T3)
+    S1 = avx_421_add(S1, T2)
 
-    # Computation of S2 (continued), S3, S4
+    # Computation of S2 (continued), S2, S3
     T0 = AVX_4x2x1(S0[1], S0[1], S0[0], S0[0])
-    S3 = AVX_4x2x1(G1[0], G1[0], G1[2], G1[2])
+    S2 = AVX_4x2x1(G1[0], G1[0], G1[2], G1[2])
     T1 = AVX_4x2x1(G2[0], G2[2], G2[0], G2[2])
-    S2, S4 = avx_421_pair_mul(S2, T0, S3, T1)
+    S1, S3 = avx_421_pair_mul(S1, T0, S2, T1)
 
-    # Computation of S4 (continued), S5
+    # Computation of S3 (continued), S4
     T0 = AVX_4x2x1(H1[0], H1[0], H1[2], H1[2])
-    S5 = AVX_4x2x1(H2[0], H2[2], H2[0], H2[2])
+    S4 = AVX_4x2x1(H2[0], H2[2], H2[0], H2[2])
     # TODO: every element of T2 is the same, can we use this?
     T1 = AVX_4x2x1(S0[3], S0[3], S0[3], S0[3])
-    S4, T1 = avx_421_pair_mul(S4, T1, T0, S5)
+    S3, T1 = avx_421_pair_mul(S3, T1, T0, S4)
 
-    # TODO: every element of T2 is the same, can we use this?
+    # Computation of S3 (continued), S5
+    # TODO: every element of T0 is the same, can we use this?
     T0 = AVX_4x2x1(S0[2], S0[2], S0[2], S0[2])
-    T1 = avx_421_mul(T1, T0)
-    S4 = avx_421_add(S4, T1)
+    T2 = AVX_4x2x1(PI[0], S0[0], 1, 1)
+    T3 = AVX_4x2x1(PI[3], S0[1], 1, 1)
+    T1, S5 = avx_421_pair_mul(T1, T0, T2, T3)
+    S3 = avx_421_add(S3, T1)
 
     # TODO: this could be optimised as we need only one Fp2 add?
-    T0 = AVX_4x2x1(S1[1], 0, 0, 0)
-    S4 = avx_421_add(S4, T0)
+    T0 = AVX_4x2x1(S5[1], 0, 0, 0)
+    S3 = avx_421_add(S3, T0)
 
     # TODO: every element of T1 is the same, can we use this?
-    T0 = AVX_4x2x1(S1[1], S1[1], S1[1], S1[1])
-    T1 = AVX_4x2x1(S2[0], S2[0], S2[1], S2[1])
-    T2 = AVX_4x2x1(S2[2], S2[3], S2[2], S2[3])
-    S4, T4 = avx_421_pair_mul(S4, T0, T1, T2)
-    S4 = avx_421_add(S4, T4)
+    T0 = AVX_4x2x1(S5[1], S5[1], S5[1], S5[1])
+    T1 = AVX_4x2x1(S1[0], S1[0], S1[1], S1[1])
+    T2 = AVX_4x2x1(S1[2], S1[3], S1[2], S1[3])
+    S3, T4 = avx_421_pair_mul(S3, T0, T1, T2)
+    S3 = avx_421_add(S3, T4)
 
     # Computation of S6
-    S6 = AVX_4x2x1(S4[0], S4[0], S4[2], S4[2])
-    T0 = AVX_4x2x1(S4[1], S4[1], S4[3], S4[3])
+    S6 = AVX_4x2x1(S3[0], S3[0], S3[2], S3[2])
+    T0 = AVX_4x2x1(S3[1], S3[1], S3[3], S3[3])
     T1 = AVX_4x2x1(H2[1], H2[3], H2[1], H2[3])
-    S6, T2 = avx_421_pair_mul(S6, S5, T0, T1)
+    S6, T2 = avx_421_pair_mul(S6, S4, T0, T1)
     S6 = avx_421_add(S6, T2)
 
     # Computation of S7, S8
-    S7 = AVX_4x2x1(S4[0], S4[1], S4[0], S4[1])
+    S7 = AVX_4x2x1(S3[0], S3[1], S3[0], S3[1])
     S8 = AVX_4x2x1(G1[1], G1[1], G1[3], G1[3])
-    T0 = AVX_4x2x1(S4[2], S4[3], S4[2], S4[3])
-    S7, T1 = avx_421_pair_mul(S7, S3, S8, T0)
+    T0 = AVX_4x2x1(S3[2], S3[3], S3[2], S3[3])
+    S7, T1 = avx_421_pair_mul(S7, S2, S8, T0)
     S7 = avx_421_add(S7, T1)
 
     # Computation of S9
     S9 = AVX_4x2x1(S6[0], S6[1], S6[0], S6[1])
     T0 = AVX_4x2x1(S6[2], S6[3], S6[2], S6[3])
-    S9, T1 = avx_421_pair_mul(S9, S3, S8, T0)
+    S9, T1 = avx_421_pair_mul(S9, S2, S8, T0)
     S9 = avx_421_add(S9, T1)
 
     # TODO: every element of T0 is the same, can we use this?
-    T0 = AVX_4x2x1(S1[0], S1[0], S1[0], S1[0])
-    S4 = avx_421_mul(S4, T0)
+    T0 = AVX_4x2x1(S5[0], S5[0], S5[0], S5[0])
+    S3 = avx_421_mul(S3, T0)
 
     T0 = AVX_4x2x1(PI[0], PI[0], PI[0], PI[0])
     T1 = AVX_4x2x1(PI[3], PI[3], PI[3], PI[3])
     S6, S7 = avx_421_pair_mul(S6, T0, S7, T1)
 
     return (
-        AVX_8x1x1(S4[0], S4[1], S4[2], S4[3], S6[0], S6[1], S6[2], S6[3]),
+        AVX_8x1x1(S3[0], S3[1], S3[2], S3[3], S6[0], S6[1], S6[2], S6[3]),
         AVX_8x1x1(S7[0], S7[1], S7[2], S7[3], S9[0], S9[1], S9[2], S9[3]),
     )
 
