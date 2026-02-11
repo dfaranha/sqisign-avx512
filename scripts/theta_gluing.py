@@ -8,6 +8,7 @@ from avx_arithmetic import (
     avx_neg,
     avx_wide_pairwise_mul,
     avx_wide_sub,
+    avx_pairwise_double_mul,
 )
 from theta_structure import (
     squaring,
@@ -64,15 +65,12 @@ def _compute_matrix(
     # We can then return the matrix along with the projective factor.
     # ============================================================================
 
-    Z_sqr = avx_sqr(Z)
-    D = avx_pairwise_mul(U, Z_sqr)
-    B = avx_pairwise_mul(W, Z_sqr)
-    B = avx_neg(B)
-    C = avx_pairwise_mul(U, Z)
+    C, pi = avx_pairwise_double_mul(U, Z, det, Z)
     C = avx_sub(C, det)
-    C = avx_pairwise_mul(X, C)
+    C, Z_sqr = avx_pairwise_double_mul(X, C, Z, Z)  # This is 1M 1S
+    D, B = avx_pairwise_double_mul(U, Z_sqr, W, Z_sqr)
+    B = avx_neg(B)
     A = avx_neg(D)
-    pi = avx_pairwise_mul(Z, det)
 
     # TODO:
     # Memory management from the ai, bi, ci, di to the
@@ -101,9 +99,7 @@ def action_by_translation(
     isotropic basis <(P1,P2)x(Q1,Q2)> in E_1 x E_2.
     """
     U, W = four_double_x(A24, X_4, Z_4)
-
-    t1 = pairwise_multiplication(W, X_4)
-    t2 = pairwise_multiplication(U, Z_4)
+    t1, t2 = avx_pairwise_double_mul(W, X_4, U, Z_4)
     D = avx_sub(t1, t2)
 
     # Compute matrices from points
@@ -166,76 +162,68 @@ def theta_change_of_basis(
     # Compute the numerator of ti as standard
     T0 = AVX_4x2x1(g1[0], g1[2], g2[0], g2[2])
     T1 = AVX_4x2x1(h1[0], h1[0], h2[0], h2[0])
-    T = avx_pairwise_mul(T0, T1)
-    T0 = AVX_4x2x1(g1[1], g1[3], g2[1], g2[3])
-    T1 = AVX_4x2x1(h1[2], h1[2], h2[2], h2[2])
-    T2 = avx_pairwise_mul(T0, T1)
+    T2 = AVX_4x2x1(g1[1], g1[3], g2[1], g2[3])
+    T3 = AVX_4x2x1(h1[2], h1[2], h2[2], h2[2])
+    T, T2 = avx_pairwise_double_mul(T0, T1, T2, T3)
     T = avx_add(T, T2)
 
     # Ensure correct projective factor for ti
-    T2 = AVX_4x2x1(dg2h2, dg2h2, dg1h1, dg1h1)
-    T = avx_pairwise_mul(T, T2)
-    t1, t2, t3, t4 = T
+    # Used when computing T below in the avx_pairwise_double_mul
+    T0 = AVX_4x2x1(dg2h2, dg2h2, dg1h1, dg1h1)
 
     # Compute A0 = a, b, c, d
     # We divide out a projective factor of 1 / (dg1 * dh1 * dg2 * dh2)^2
-    T0 = AVX_4x2x1(g1[0], g1[0], g1[2], g1[2])
+    Q0 = AVX_4x2x1(g1[0], g1[0], g1[2], g1[2])
     T1 = AVX_4x2x1(g2[0], g2[2], g2[0], g2[2])
-    A0 = avx_pairwise_mul(T0, T1)
-    T2 = AVX_4x2x1(dh1h2, dh1h2, dh1h2, dh1h2)
-    A0 = avx_pairwise_mul(
-        A0, T2
-    )  # TODO: every element of T2 is the same, can we use this?
+    T, A0 = avx_pairwise_double_mul(T, T0, Q0, T1)
 
     T1 = AVX_4x2x1(h1[0], h1[0], h1[2], h1[2])
-    T2 = AVX_4x2x1(h2[0], h2[2], h2[0], h2[2])
-    T3 = avx_pairwise_mul(T1, T2)
-    T1 = AVX_4x2x1(dg1g2, dg1g2, dg1g2, dg1g2)
-    T3 = avx_pairwise_mul(
-        T3, T1
-    )  # TODO: every element of T1 is the same, can we use this?
+    Q1 = AVX_4x2x1(h2[0], h2[2], h2[0], h2[2])
+    T2 = AVX_4x2x1(dh1h2, dh1h2, dh1h2, dh1h2)
+    # TODO: every element of T2 is the same, can we use this?
+    A0, T3 = avx_pairwise_double_mul(A0, T2, T1, Q1)
+
+    # TODO: every element of T2 is the same, can we use this?
+    T2 = AVX_4x2x1(dg1g2, dg1g2, dg1g2, dg1g2)
+    T3 = avx_pairwise_mul(T3, T2)
     A0 = avx_add(A0, T3)
 
     T1 = AVX_4x2x1(dg1g2h1h2, 0, 0, 0)
     A0 = avx_add(A0, T1)  # TODO: this could be optimised?
 
+    t1, t2, t3, t4 = T
     T1 = AVX_4x2x1(dg1g2h1h2, dg1g2h1h2, dg1g2h1h2, dg1g2h1h2)
-    A0 = avx_pairwise_mul(
-        A0, T1
-    )  # TODO: every element of T1 is the same, can we use this?
-
-    T1 = AVX_4x2x1(t1, t1, t2, t2)
+    T2 = AVX_4x2x1(t1, t1, t2, t2)
     T3 = AVX_4x2x1(t3, t4, t3, t4)
-    T4 = avx_pairwise_mul(T1, T3)
+    # TODO: every element of T1 is the same, can we use this?
+    A0, T4 = avx_pairwise_double_mul(A0, T1, T2, T3)
+
     A0 = avx_add(A0, T4)
-    a, b, c, d = A0
+    a0, b0, c0, d0 = A0
 
     # Compute A1 = a1, b1, c1, d1
     # We divide out a projective factor of 1 / (dg1 * dh1 * dg2 * dh2)^2 * dh2
-    A1 = AVX_4x2x1(a, a, c, c)
-    A1 = avx_pairwise_mul(A1, T2)  # T2 = AVX_4x2x1(h2[0], h2[2], h2[0], h2[2])
-    T1 = AVX_4x2x1(b, b, d, d)
+    A1 = AVX_4x2x1(a0, a0, c0, c0)
+    T1 = AVX_4x2x1(b0, b0, d0, d0)
     T2 = AVX_4x2x1(h2[1], h2[3], h2[1], h2[3])
-    T3 = avx_pairwise_mul(T1, T2)
+    A1, T3 = avx_pairwise_double_mul(A1, Q1, T1, T2)
     A1 = avx_add(A1, T3)
     a1, b1, c1, d1 = A1
 
     # Compute A2 = a2, b2, c2, d2
     # We divide out a projective factor of 1 / (dg1 * dh1 * dg2 * dh2)^2 * dg1
-    A2 = AVX_4x2x1(a, b, a, b)
-    A2 = avx_pairwise_mul(A2, T0)  # T0 = AVX_4x2x1(g1[0], g1[0], g1[2], g1[2])
-    T1 = AVX_4x2x1(g1[1], g1[1], g1[3], g1[3])
-    T2 = AVX_4x2x1(c, d, c, d)
-    T3 = avx_pairwise_mul(T1, T2)
+    A2 = AVX_4x2x1(a0, b0, a0, b0)
+    Q2 = AVX_4x2x1(g1[1], g1[1], g1[3], g1[3])
+    T2 = AVX_4x2x1(c0, d0, c0, d0)
+    A2, T3 = avx_pairwise_double_mul(A2, Q0, Q2, T2)
     A2 = avx_add(A2, T3)
     a2, b2, c2, d2 = A2
 
     # Compute A3 = a3, b3, c3, d3
     # We divide out a projective factor of 1 / (dg1 * dh1 * dg2 * dh2)^2 * dg1 * dh2
     A3 = AVX_4x2x1(a1, b1, a1, b1)
-    A3 = avx_pairwise_mul(A3, T0)  # T0 = AVX_4x2x1(g1[0], g1[0], g1[2], g1[2])
     T2 = AVX_4x2x1(c1, d1, c1, d1)
-    T3 = avx_pairwise_mul(T1, T2)  # T1 = AVX_4x2x1(g1[1], g1[1], g1[3], g1[3])
+    A3, T3 = avx_pairwise_double_mul(A3, Q0, Q2, T2)
     A3 = avx_add(A3, T3)
     a3, b3, c3, d3 = A3
 
@@ -243,14 +231,16 @@ def theta_change_of_basis(
     # 1 / (dg1 * dh1 * dg2 * dh2)^2 * dg1 * dh2
     # TODO: every element of T0 is the same, can we use this?
     T0 = AVX_4x2x1(dg1h2, dg1h2, dg1h2, dg1h2)
-    a, b, c, d = avx_pairwise_mul(A0, T0)
+    a0, b0, c0, d0 = avx_pairwise_mul(A0, T0)
+
     T0 = AVX_4x2x1(dg1, dg1, dg1, dg1)
-    a1, b1, c1, d1 = avx_pairwise_mul(A1, T0)
-    T0 = AVX_4x2x1(dh2, dh2, dh2, dh2)
-    a2, b2, c2, d2 = avx_pairwise_mul(A2, T0)
+    T1 = AVX_4x2x1(dh2, dh2, dh2, dh2)
+    A1, A2 = avx_pairwise_double_mul(A1, T0, A2, T1)
+    a1, b1, c1, d1 = A1
+    a2, b2, c2, d2 = A2
 
     return (
-        AVX_8x1x1(a, b, c, d, a1, b1, c1, d1),
+        AVX_8x1x1(a0, b0, c0, d0, a1, b1, c1, d1),
         AVX_8x1x1(a2, b2, c2, d2, a3, b3, c3, d3),
     )
 

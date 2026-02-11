@@ -1,6 +1,14 @@
 from elliptic_types import Curve, BasisX, PointJ
 from avx_types import AVX_4x2x1
-from avx_arithmetic import avx_sqr, avx_pairwise_mul, avx_add, avx_sub, avx_dbl
+from avx_arithmetic import (
+    avx_sqr,
+    avx_pairwise_mul,
+    avx_add,
+    avx_sub,
+    avx_dbl,
+    avx_double_sqr,
+    avx_pairwise_double_mul,
+)
 from utilities import sqrt_fp2
 
 # ======================================================================
@@ -67,12 +75,10 @@ def four_double_x(A24: AVX_4x2x1, X: AVX_4x2x1, Z: AVX_4x2x1):
     of P1, Q1 P2, Q2 on E1 x E2 are stored within X (and Z resp.)
     """
     t0 = avx_add(X, Z)
-    t0 = avx_sqr(t0)
     t1 = avx_sub(X, Z)
-    t1 = avx_sqr(t1)
+    t0, t1 = avx_double_sqr(t0, t1)
     t2 = avx_sub(t0, t1)
-    X2 = avx_pairwise_mul(t0, t1)
-    t0 = avx_pairwise_mul(t2, A24)
+    X2, t0 = avx_pairwise_double_mul(t0, t1, t2, A24)
     t0 = avx_add(t0, t1)
     Z2 = avx_pairwise_mul(t0, t2)
 
@@ -92,21 +98,18 @@ def four_jac_to_ws(
 
     # a = 1 - A^2 / 3
     one = AVX_4x2x1(1, 1, 1, 1)
-    a = avx_pairwise_mul(A12, A12_over_3)
+    a, Z2 = avx_pairwise_double_mul(A12, A12_over_3, Z_M, Z_M)  # This is 1M, 1S
     a = avx_sub(one, a)
+    Z4 = avx_sqr(Z2)
 
     # X = X + Z^2 * A/3
     # Y = Y
     # Z = Z
     # T = a * Z^4
-    Z2 = avx_sqr(Z_M)
-    Z4 = avx_sqr(Z2)
-
-    tmp = avx_pairwise_mul(Z2, A12_over_3)
+    tmp, T = avx_pairwise_double_mul(Z2, A12_over_3, Z4, a)
     X = avx_add(X_M, tmp)
     Y = Y_M
     Z = Z_M
-    T = avx_pairwise_mul(Z4, a)
 
     return X, Y, Z, T, A12_over_3
 
@@ -134,28 +137,24 @@ def four_double_ws(
     Simultaneous point doubling of four points on a short weierstrass curve
     with modified Jacobian coordinates
     """
-    XX = avx_sqr(X)
-    t0 = avx_sqr(Y)
+    XX, t0 = avx_double_sqr(X, Y)
     A = avx_dbl(t0)
-    AA = avx_sqr(A)
-    U = avx_dbl(AA)
     t0 = avx_add(X, A)
-    t0 = avx_sqr(t0)
+    t0, AA = avx_double_sqr(t0, A)
+    U = avx_dbl(AA)
     t0 = avx_sub(t0, XX)
     S = avx_sub(t0, AA)
     t0 = avx_dbl(XX)
     t0 = avx_add(t0, XX)
     M = avx_add(t0, T)
-    t0 = avx_sqr(M)
-    t1 = avx_dbl(S)
-    X3 = avx_sub(t0, t1)
+    t0, t1 = avx_pairwise_double_mul(M, M, Y, Z)  # This is 1M, 1S
+    t2 = avx_dbl(S)
+    X3 = avx_sub(t0, t2)
     t0 = avx_sub(S, X3)
-    t0 = avx_pairwise_mul(M, t0)
+    t0, t2 = avx_pairwise_double_mul(M, t0, U, T)
     Y3 = avx_sub(t0, U)
-    t0 = avx_pairwise_mul(Y, Z)
-    Z3 = avx_dbl(t0)
-    t0 = avx_pairwise_mul(U, T)
-    T3 = avx_dbl(t0)
+    Z3 = avx_dbl(t1)
+    T3 = avx_dbl(t2)
 
     return X3, Y3, Z3, T3
 
@@ -181,28 +180,20 @@ def four_add_components(A: AVX_4x2x1, P: tuple[AVX_4x2x1], Q: tuple[AVX_4x2x1]):
     XQ, YQ, ZQ = Q
 
     # Compute the slope dy / dx for the case P != Q
-    t0 = avx_sqr(ZP)
-    t1 = avx_sqr(ZQ)
-    t2 = avx_pairwise_mul(t1, XP)
-    t3 = avx_pairwise_mul(t0, XQ)
-    t4 = avx_pairwise_mul(YP, ZQ)
-    t4 = avx_pairwise_mul(t4, t1)
-    t5 = avx_pairwise_mul(ZP, YQ)
-    t5 = avx_pairwise_mul(t5, t0)
-    t0 = avx_pairwise_mul(t0, t1)
-    t6 = avx_pairwise_mul(t4, t5)
+    t0, t1 = avx_double_sqr(ZP, ZQ)
+    t2, t3 = avx_pairwise_double_mul(t1, XP, t0, XQ)
+    t4, t5 = avx_pairwise_double_mul(YP, ZQ, ZP, YQ)
+    t4, t5 = avx_pairwise_double_mul(t4, t1, t5, t0)
+    t0, t6 = avx_pairwise_double_mul(t0, t1, t4, t5)
     v = avx_dbl(t6)
-    t4 = avx_sqr(t4)
-    t5 = avx_sqr(t5)
+    t4, t5 = avx_double_sqr(t4, t5)
     t4 = avx_add(t4, t5)
     t5 = avx_add(t2, t3)
     t6 = avx_dbl(t3)
     t6 = avx_sub(t5, t6)
-    t6 = avx_sqr(t6)
-    t1 = avx_pairwise_mul(A, t0)
+    t6, t1 = avx_pairwise_double_mul(t6, t6, A, t0)  # This is 1M, 1S
     t1 = avx_add(t5, t1)
-    t1 = avx_pairwise_mul(t1, t6)
+    t1, w = avx_pairwise_double_mul(t1, t6, t6, t0)
     u = avx_sub(t4, t1)
-    w = avx_pairwise_mul(t6, t0)
 
     return (u, v, w)
