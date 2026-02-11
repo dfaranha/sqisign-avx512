@@ -265,17 +265,16 @@ def theta_codomain_8x1x1(
     # Memory management to get the precomputations we need
     xAwB, zAxB, zCwD, _ = t2
     t1 = AVX_4x2x1(xAwB, zAxB, xAwB, zAxB)
+    inv = AVX_4x2x1(xB, xA, 1, 1)
+    t2 = AVX_4x2x1(zCwD, zCwD, 1, 1)
 
-    # Compute the codomain
-    OB = avx_421_mul(t1, OB)
+    # Compute the codomain and computations for the inverse
+    OB, inv = avx_421_pair_mul(t1, OB, inv, t2)
 
     # Memory management to get the values needed for inverse
-    A, B, C, D = OB
-    inv = AVX_4x2x1(xB, xA, D, C)
-    t1 = AVX_4x2x1(zCwD, zCwD, 1, 1)
-
-    # Here we only need two multiplications, we could make a special function
-    inv = avx_421_mul(inv, t1)
+    _, _, C, D = OB
+    A_inv, B_inv, _, _ = inv
+    inv = AVX_4x2x1(A_inv, B_inv, D, C)
 
     if h2:
         OB = hadamard(OB)
