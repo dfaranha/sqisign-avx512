@@ -211,7 +211,7 @@ void theta_isogeny_chain_single(
     int step = 0;
     while (current >= 0 && orders[current] != 0) {
         // Precompute constants for doubling
-        theta_precomp(c1, c2, OA);
+        theta_precomp_single(c1, c2, OA);
         
         while (orders[current] != 1) {
             assert(orders[current] >= 2);
@@ -276,6 +276,179 @@ void theta_isogeny_chain_single(
 }
 
 void theta_isogeny_chain_pair(
+    theta_couple_curve_t* res_E34, 
+    theta_couple_point_t* res_pts, 
+    theta_couple_curve_t* E12, 
+    theta_kernel_couple_points_t* ker,
+    theta_couple_point_t* pts, 
+    const int n, 
+    const int num_pts, 
+    const bool randomize
+)
+{
+    __m512i A_12[8], A24_12[8], ker_x[8], ker_y[8], ker_z[8], OA[8], OA_dual_inv[16];
+    __m512i J[8], matrix01[16], matrix23[16], T8_x[8], T8_y[8], T8_z[8], gluing_eval_res[16];
+    __m512i eval_pts_theta[8*num_pts];
+
+    // TODO: Copied from middle. Which variables can be merged?
+    bool h1, h2;
+    splitting_matrix_t isom_matrix, rand_matrix;
+    __m512i c1[16], c2[16], p1[8], p2[8], k1[8], k2[8];
+
+    fp2_t unvec1[4];
+
+    // TODO: Is it enough to just normalize curves? 
+    theta_normalize_chain_input(E12, ker);   
+
+    // lift the basis
+    theta_couple_jac_point_t xyT1, xyT2;
+    ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
+    ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
+
+    int success = lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1);
+    assert(success);
+    success = lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2);
+    assert(success);
+
+    // We are now in the position to convert from 64 to 51 bit limbs
+    // For the curve we need to pack the Montgomery coefficient for
+    // arithmetic.
+    // A_12 = AVX_4x2x1(E1.A, E1.A, E2.A, E2.A)
+    unvec1[0] = E12->E1.A; unvec1[1] = E12->E1.A; unvec1[2] = E12->E2.A; unvec1[3] = E12->E2.A;
+    fp2_unvectorized_to_4x2x1(A_12, unvec1);
+    // A24_12 = AVX_4x2x1(E1.A24, E1.A24, E2.A24, E2.A24)
+    unvec1[0] = E12->E1.A24.x; unvec1[1] = E12->E1.A24.x; unvec1[2] = E12->E2.A24.x; unvec1[3] = E12->E2.A24.x;
+    fp2_unvectorized_to_4x2x1(A24_12, unvec1);
+
+    // For the Jacobian points, we pack the coordinates into three blobs
+    // ker_X = AVX_4x2x1(P1.X, Q1.X, P2.X, Q2.X)
+    unvec1[0] = xyT1.P1.x; unvec1[1] = xyT2.P1.x; unvec1[2] = xyT1.P2.x; unvec1[3] = xyT2.P2.x;
+    fp2_unvectorized_to_4x2x1(ker_x, unvec1);
+    // ker_Y = AVX_4x2x1(P1.Y, Q1.Y, P2.Y, Q2.Y)
+    unvec1[0] = xyT1.P1.y; unvec1[1] = xyT2.P1.y; unvec1[2] = xyT1.P2.y; unvec1[3] = xyT2.P2.y;
+    fp2_unvectorized_to_4x2x1(ker_y, unvec1);
+    // ker_Z = AVX_4x2x1(P1.Z, Q1.Z, P2.Z, Q2.Z)
+    unvec1[0] = xyT1.P1.z; unvec1[1] = xyT2.P1.z; unvec1[2] = xyT1.P2.z; unvec1[3] = xyT2.P2.z;
+    fp2_unvectorized_to_4x2x1(ker_z, unvec1);
+
+    // Setting up the strategy
+    int space = 1;
+    for (unsigned i = 1; i < n; i *= 2) // n.bit_length + 1
+        ++space;
+
+    uint16_t orders[space];
+    __m512i strat_points_x[8*space], strat_points_y[8*space], strat_points_z[8*space];
+    // TODO: ker_x, ker_y, ker_z never used again, remove copies.
+    orders[0] = n;
+    fp2_copy_4x2x1(strat_points_x, ker_x);
+    fp2_copy_4x2x1(strat_points_y, ker_y);
+    fp2_copy_4x2x1(strat_points_z, ker_z);
+
+    int current = theta_compute_product_doubles(
+        A_12, strat_points_x, strat_points_y, strat_points_z, orders, space
+    );
+
+    gluing_codomain(
+        OA, OA_dual_inv, J, matrix01, matrix23,
+        A24_12, strat_points_x + (8*current), strat_points_z + (8*current)
+    );
+
+    // Package the point we use for translation
+    // T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
+    fp2_4x2x1_to_unvectorized(unvec1, strat_points_x + (8*current));
+    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
+    fp2_unvectorized_to_4x2x1(T8_x, unvec1);
+    // T8_Y = AVX_4x2x1(Y_8[0], Y_8[0], Y_8[2], Y_8[2])
+    fp2_4x2x1_to_unvectorized(unvec1, strat_points_y + (8*current));
+    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
+    fp2_unvectorized_to_4x2x1(T8_y, unvec1);
+    // T8_Z = AVX_4x2x1(Z_8[0], Z_8[0], Z_8[2], Z_8[2])
+    fp2_4x2x1_to_unvectorized(unvec1, strat_points_z + (8*current));
+    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
+    fp2_unvectorized_to_4x2x1(T8_z, unvec1);
+
+    // Push kernel though the gluing isogeny
+    // 4 Jacobian points for the kernel become 2 theta points
+    // TODO: Is current = space-1 here? And even if it is not, is it better to use 8*space?
+    __m512i strat_theta_pair[16*space];
+    for (int i = 0; i < current; i++) {
+        gluing_eval_pair(
+            strat_theta_pair + 16*i, //8x1x1
+            A_12, strat_points_x + (8*i), strat_points_y + (8*i), strat_points_z + (8*i),
+            T8_x, T8_y, T8_z, J, matrix01, matrix23
+        );
+        orders[i]--;
+    }
+    current--;
+
+    gluing_eval_special_list_pair(
+        eval_pts_theta, pts, OA_dual_inv, 
+        matrix01, matrix23, num_pts
+    );
+
+    // Step Two: Compute the rest of the chain
+    int step = 0;
+    while (current >= 0 && orders[current] != 0) {
+        // Precompute constants for doubling
+        theta_precomp_pair(c1, c2, OA);
+        
+        while (orders[current] != 1) {
+            assert(orders[current] >= 2);
+            current++;
+            assert(current < space);
+
+            int num_dbls = orders[current-1] / 2;
+            theta_double_iter_pair(
+                strat_theta_pair + (16*current), 
+                strat_theta_pair + (16*(current-1)), 
+                c1, c2, num_dbls
+            );
+            orders[current] = orders[current-1] - num_dbls;
+        }
+
+        if (step == n - 1) {
+            h1 = true; h2 = false;
+        } else if (step == n - 2) {
+            h1 = false; h2 = false;
+        } else {
+            h1 = false; h2 = true;
+        }
+
+        // Compute the codomain of the kernel
+        theta_codomain_pair(
+            OA, OA_dual_inv, 
+            strat_theta_pair + (16*current), h1, h2
+        );
+
+        // Push the kernel through the images
+        // we have current number of pairs, so 2*current number of points
+        theta_eval_list_pair(strat_theta_pair, OA_dual_inv, h1, h2, 2*current);
+        for (int i = 0; i < current; i++) {
+            orders[i]--;
+        }
+        current--;
+
+        // Eval points
+        theta_eval_list_pair(eval_pts_theta, OA_dual_inv, h1, h2, num_pts);
+        step++;
+    }
+
+    // Step Three: Splitting
+    splitting_isom_matrix(&isom_matrix, OA);
+    splitting_apply_isomorphism_single(OA, OA, &isom_matrix);
+    splitting_apply_isomorphism_list_pair(eval_pts_theta, &isom_matrix, num_pts);
+
+    if (randomize) {
+        splitting_rand_matrix(&rand_matrix);
+        splitting_apply_isomorphism_single(OA, OA, &rand_matrix);
+        splitting_apply_isomorphism_list_pair(eval_pts_theta, &rand_matrix, num_pts);
+    }
+
+    splitting_theta_to_product(res_E34, OA);
+    splitting_theta_point_to_mont_list_pair(res_pts, eval_pts_theta, OA, num_pts);
+}
+
+void theta_isogeny_chain_pair_old(
     theta_couple_curve_t* res_E34, 
     theta_couple_point_t* res_pts, 
     theta_couple_curve_t* E12, 
@@ -390,7 +563,7 @@ void theta_isogeny_chain_pair(
     int step = 0;
     while (current >= 0 && orders[current] != 0) {
         // Precompute constants for doubling
-        theta_precomp(c1, c2, OA);
+        theta_precomp_single(c1, c2, OA);
         
         while (orders[current] != 1) {
             assert(orders[current] >= 2);
@@ -398,7 +571,7 @@ void theta_isogeny_chain_pair(
             assert(current < space);
 
             int num_dbls = orders[current-1] / 2;
-            theta_double_iter_pair(
+            theta_double_iter_pair_old(
                 strat_theta_pair + (16*current), 
                 strat_theta_pair + (16*(current-1)), 
                 c1, c2, num_dbls
@@ -415,21 +588,21 @@ void theta_isogeny_chain_pair(
         }
 
         // Compute the codomain of the kernel
-        theta_codomain_pair(
+        theta_codomain_pair_old(
             OA, OA_dual_inv, 
             strat_theta_pair + (16*current), h1, h2
         );
 
         // Push the kernel through the images
         // we have current number of pairs, so 2*current number of points
-        theta_eval_list_pair(strat_theta_pair, OA_dual_inv, h1, h2, 2*current);
+        theta_eval_list_pair_old(strat_theta_pair, OA_dual_inv, h1, h2, 2*current);
         for (int i = 0; i < current; i++) {
             orders[i]--;
         }
         current--;
 
         // Eval points
-        theta_eval_list_pair(eval_pts_theta, OA_dual_inv, h1, h2, num_pts);
+        theta_eval_list_pair_old(eval_pts_theta, OA_dual_inv, h1, h2, num_pts);
         step++;
     }
 
@@ -575,7 +748,7 @@ void theta_isogeny_chain_no_torsion_single(
     h1 = false; h2 = true;
     while (current >= 0 && orders[current] != 0) {
         // Precompute constants for doubling
-        theta_precomp(c1, c2, OA);
+        theta_precomp_single(c1, c2, OA);
         
         while (orders[current] != 1) {
             assert(orders[current] >= 2);
@@ -658,14 +831,14 @@ void theta_isogeny_chain_no_torsion_pair(
     const bool randomize
 )
 {
-    __m512i A_12[8], A24_12[8], ker_x[8], ker_y[8], ker_z[8], OA[8], OA_dual_inv[8];
+    __m512i A_12[8], A24_12[8], ker_x[8], ker_y[8], ker_z[8], OA[8], OA_dual_inv[16];
     __m512i J[8], matrix01[16], matrix23[16], T8_x[8], T8_y[8], T8_z[8], gluing_eval_res[16];
     __m512i eval_pts_theta[8*num_pts];
 
     // TODO: Copied from middle. Which variables can be merged?
     bool h1, h2;
     splitting_matrix_t isom_matrix, rand_matrix;
-    __m512i c1[8], c2[8], p1[8], p2[8], k1[8], k2[8];
+    __m512i c1[16], c2[16], p1[8], p2[8], k1[8], k2[8];
 
     fp2_t unvec1[4];
 
@@ -763,7 +936,7 @@ void theta_isogeny_chain_no_torsion_pair(
     h1 = false; h2 = true;
     while (current >= 0 && orders[current] != 0) {
         // Precompute constants for doubling
-        theta_precomp(c1, c2, OA);
+        theta_precomp_pair(c1, c2, OA);
         
         while (orders[current] != 1) {
             assert(orders[current] >= 2);
@@ -805,16 +978,17 @@ void theta_isogeny_chain_no_torsion_pair(
     
     fp2_8x1x1_to_4x2x1(strat_theta_pair, strat_theta_pair + 8, strat_theta_pair);
     if (n > 3) {
+        fp2_8x1x1_to_first_4x2x1(OA_dual_inv, OA_dual_inv);
         theta_eval_single(strat_theta_pair, strat_theta_pair, OA_dual_inv, h1, h2);
     }
 
     h1 = false; h2 = false;
     theta_codomain_with_four_torsion(OA_dual_inv, OA, strat_theta_pair, h1, h2);
-    theta_eval_list_pair(eval_pts_theta, OA_dual_inv, h1, h2, num_pts);
+    theta_eval_list_pair_old(eval_pts_theta, OA_dual_inv, h1, h2, num_pts);
 
     h1 = true; h2 = false;
     theta_codomain_with_no_torsion(OA_dual_inv, OA, h1, h2);
-    theta_eval_list_pair(eval_pts_theta, OA_dual_inv, h1, h2, num_pts);
+    theta_eval_list_pair_old(eval_pts_theta, OA_dual_inv, h1, h2, num_pts);
 
 
     // Step Four: Splitting
@@ -856,7 +1030,7 @@ void theta_isogeny_chain_no_gluing_single(__m512i* codom, __m512i* eval_pts, __m
 
     for (int i = 0; i < n; i++) {
         // Precompute constants for doubling
-        theta_precomp(c1, c2, codom_null);
+        theta_precomp_single(c1, c2, codom_null);
 
         // Double the kernel points of order 2^(n+2) to get points of order 2^(1 + 2) = 8
         theta_double_iter_single(k1, p1, c1, c2, n-i-1);
@@ -902,7 +1076,7 @@ void theta_isogeny_chain_no_gluing_pair(__m512i* codom, __m512i* eval_pts, __m51
     __m512i* pts, const int n, const int num_pts, const bool randomize)
 {
     splitting_matrix_t isom_matrix, rand_matrix;
-    __m512i c1[8], c2[8], p[16], k[16], codom_null[8], inv[8];
+    __m512i c1[16], c2[16], p[16], k[16], codom_null[8], inv[16];
     bool h1, h2;
 
     fp2_copy_8x1x1(p, ker);
@@ -913,7 +1087,7 @@ void theta_isogeny_chain_no_gluing_pair(__m512i* codom, __m512i* eval_pts, __m51
 
     for (int i = 0; i < n; i++) {
         // Precompute constants for doubling
-        theta_precomp(c1, c2, codom_null);
+        theta_precomp_pair(c1, c2, codom_null);
 
         // Double the kernel points of order 2^(n+2) to get points of order 2^(1 + 2) = 8
         theta_double_iter_pair(k, p, c1, c2, n-i-1);

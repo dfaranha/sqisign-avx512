@@ -41,7 +41,7 @@ void theta_had_single(__m512i* res, __m512i* a);
 /**
  * Computes the constants c1 and c2 needed for doubling wrt the theta null point.
  */
-void theta_precomp(__m512i* c1, __m512i* c2, __m512i* null);
+void theta_precomp_single(__m512i* c1, __m512i* c2, __m512i* null);
 
 /**
  * Double the theta point a, using the precomputed constants c1 and c2.
@@ -109,15 +109,20 @@ void theta_had_pair(__m512i* res, __m512i* a);
 // This assumes a non-interleaved format
 void theta_had_pair_alt(__m512i* res, __m512i* a);
 
+// Outputs (c1, c1) and (c2, c2) in the 8x1x1 format, where c1 and c2 are the precomputed constants for doubling.
+void theta_precomp_pair(__m512i* c1, __m512i* c2, __m512i* null);
+
 /**
  * Double the pair of theta points in a, using the precomputed constants c1 and c2.
  */
 void theta_double_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2);
+void theta_double_pair_old(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2);
 
 /**
  * Double the pair of theta points n times, using the precomputed constants c1 and c2.
  */
 void theta_double_iter_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2, const int n);
+void theta_double_iter_pair_old(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2, const int n);
 
 /**
  * Compute the dual theta null point of the codomain of the (2,2)-isogeny, as well as its inverse.
@@ -128,6 +133,7 @@ void theta_double_iter_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2, 
  * @param h2 Flag for applying Hadamard to the result at the end.
  */
 void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool h1, const bool h2);
+void theta_codomain_pair_old(__m512i* res, __m512i* res_inv, __m512i* k, const bool h1, const bool h2);
 
 /**
  * Evaluate a pair of theta points through a (2,2)-isogeny given the precomputed constants.
@@ -137,7 +143,9 @@ void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
  * @param h2 Flag for applying Hadamard to the result at the end.
  */
 void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, const bool h1, const bool h2);
+void theta_eval_pair_old(__m512i* res, __m512i* a, __m512i* inv, const bool h1, const bool h2);
 
 void theta_eval_list_pair(__m512i* pts, __m512i* inv, const bool h1, const bool h2, const int num_pts);
+void theta_eval_list_pair_old(__m512i* pts, __m512i* inv, const bool h1, const bool h2, const int num_pts);
 
 #endif
