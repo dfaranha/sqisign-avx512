@@ -1,5 +1,5 @@
 from avx_types import AVX_4x2x1, AVX_8x1x1
-from avx_arithmetic import avx_421_add, avx_811_add, avx_811_mul, avx_811_mul_421
+from avx_arithmetic import avx_421_add, avx_811_add, avx_811_mul, avx_421_to_811
 
 
 def deterministic_fp_root(a):
@@ -137,11 +137,14 @@ def apply_isomorphism(P: AVX_4x2x1, M: tuple[AVX_8x1x1, AVX_8x1x1]) -> AVX_4x2x1
     # First two and last two rows of the 4x4 matrices
     M01, M23 = M
 
+    # Create an 8x1x1 from P | P
+    PP = avx_421_to_811(P, P)
+
     # First and second row multiplied by P
-    M01 = avx_811_mul_421(M01, P)
+    M01 = avx_811_mul(M01, PP)
 
     # Second and third row multiplied by P
-    M23 = avx_811_mul_421(M23, P)
+    M23 = avx_811_mul(M23, PP)
 
     # Sum up multiplications to compute the four coordinates
     return internal_sum(M01, M23)

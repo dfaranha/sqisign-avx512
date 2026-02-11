@@ -91,14 +91,6 @@ def avx_811_mul(P: AVX_8x1x1, Q: AVX_8x1x1) -> AVX_8x1x1:
     return AVX_8x1x1(*[a * b for a, b in zip(P, Q)])
 
 
-def avx_811_mul_421(P: AVX_8x1x1, Q: AVX_4x2x1) -> AVX_8x1x1:
-    """
-    Multiple the first four and last four elements of P by the elements of Q
-    """
-    tmp = AVX_8x1x1(*(Q + Q))
-    return avx_811_mul(P, tmp)
-
-
 def avx_421_pair_mul(A: AVX_4x2x1, B: AVX_4x2x1, C: AVX_4x2x1, D: AVX_4x2x1):
     """
     Compute the pairwise mul of A * B, C * D using 8x1x1 multiplications

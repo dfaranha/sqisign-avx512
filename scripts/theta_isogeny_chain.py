@@ -1,7 +1,7 @@
 from avx_types import AVX_4x2x1
 from elliptic_types import Curve, BasisX, PointX
 
-from avx_arithmetic import avx_811_to_421
+from avx_arithmetic import avx_811_to_421, avx_421_to_811
 from elliptic_arithmetic import (
     lift_normalised_basis_to_jacobian,
     four_jac_to_ws,
@@ -308,8 +308,9 @@ def theta_isogeny_chain_8x1x1(
         orders[i] = orders[i] - 1
 
     # Push other points through gluing isogeny
+    OA_inv_inv = avx_421_to_811(OA_inv, OA_inv)
     eval_pairs = [
-        gluing_eval_special_pair(P1, P2, Q1, Q2, OA_inv, N)
+        gluing_eval_special_pair(P1, P2, Q1, Q2, OA_inv_inv, N)
         for ((P1, P2), (Q1, Q2)) in eval_pairs
     ]
     eval_single = [gluing_eval_special(P1, P2, OA_inv, N) for (P1, P2) in eval_single]
@@ -320,7 +321,7 @@ def theta_isogeny_chain_8x1x1(
     j = 0
     while k >= 0 and orders[k] != 0:
         j = j + 1
-        C1, C2 = theta_precompute(OA)
+        C1, C2 = theta_precompute(OA, use_wide=True)
 
         # Perform the doubling
         while orders[k] != 1:
@@ -339,16 +340,17 @@ def theta_isogeny_chain_8x1x1(
         # Compute the codomain from the kernel
         ker = strat_points[k]
         OA, inv = theta_codomain_8x1x1(ker, h1, h2)
+        inv_inv = avx_421_to_811(inv, inv)
 
         # Push kernel though the gluing isogeny
         for i in range(k):
             P = strat_points[i]
-            strat_points[i] = theta_eval_pair(P, inv, h1, h2)
+            strat_points[i] = theta_eval_pair(P, inv_inv, h1, h2)
             orders[i] = orders[i] - 1
         k = k - 1
 
         # Push the images through the kernel
-        eval_pairs = [theta_eval_pair(P, inv, h1, h2) for P in eval_pairs]
+        eval_pairs = [theta_eval_pair(P, inv_inv, h1, h2) for P in eval_pairs]
         eval_single = [theta_eval(P, inv, h1, h2) for P in eval_single]
 
     # Step Three:
@@ -363,12 +365,14 @@ def theta_isogeny_chain_8x1x1(
 
     h1, h2 = False, False
     OA, inv = theta_codomain_with_four_torsion(ker, OA, h1, h2)
-    eval_pairs = [theta_eval_pair(P, inv, h1, h2) for P in eval_pairs]
+    inv_inv = avx_421_to_811(inv, inv)
+    eval_pairs = [theta_eval_pair(P, inv_inv, h1, h2) for P in eval_pairs]
     eval_single = [theta_eval(P, inv, h1, h2) for P in eval_single]
 
     h1, h2 = True, False
     OA, inv = theta_codomain_with_no_torsion(OA, h1, h2)
-    eval_pairs = [theta_eval_pair(P, inv, h1, h2) for P in eval_pairs]
+    inv_inv = avx_421_to_811(inv, inv)
+    eval_pairs = [theta_eval_pair(P, inv_inv, h1, h2) for P in eval_pairs]
     eval_single = [theta_eval(P, inv, h1, h2) for P in eval_single]
 
     # Step Four:
@@ -596,8 +600,9 @@ def theta_isogeny_chain_with_torsion_8x1x1(
         orders[i] = orders[i] - 1
 
     # Push other points through gluing isogeny
+    OA_inv_inv = avx_421_to_811(OA_inv, OA_inv)
     eval_pairs = [
-        gluing_eval_special_pair(P1, P2, Q1, Q2, OA_inv, N)
+        gluing_eval_special_pair(P1, P2, Q1, Q2, OA_inv_inv, N)
         for ((P1, P2), (Q1, Q2)) in eval_pairs
     ]
     eval_single = [gluing_eval_special(P1, P2, OA_inv, N) for (P1, P2) in eval_single]
@@ -608,7 +613,7 @@ def theta_isogeny_chain_with_torsion_8x1x1(
     j = 0
     while k >= 0 and orders[k] != 0:
         j = j + 1
-        C1, C2 = theta_precompute(OA)
+        C1, C2 = theta_precompute(OA, use_wide=True)
 
         # Perform the doubling
         while orders[k] != 1:
@@ -632,16 +637,17 @@ def theta_isogeny_chain_with_torsion_8x1x1(
         # Compute the codomain from the kernel
         ker = strat_points[k]
         OA, inv = theta_codomain_8x1x1(ker, h1, h2)
+        inv_inv = avx_421_to_811(inv, inv)
 
         # Push kernel though the gluing isogeny
         for i in range(k):
             P = strat_points[i]
-            strat_points[i] = theta_eval_pair(P, inv, h1, h2)
+            strat_points[i] = theta_eval_pair(P, inv_inv, h1, h2)
             orders[i] = orders[i] - 1
         k = k - 1
 
         # Push the images through the kernel
-        eval_pairs = [theta_eval_pair(P, inv, h1, h2) for P in eval_pairs]
+        eval_pairs = [theta_eval_pair(P, inv_inv, h1, h2) for P in eval_pairs]
         eval_single = [theta_eval(P, inv, h1, h2) for P in eval_single]
 
     # Step Three:

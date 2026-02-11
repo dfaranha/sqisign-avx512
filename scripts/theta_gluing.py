@@ -10,7 +10,6 @@ from avx_arithmetic import (
     avx_811_sub,
     avx_421_pair_mul,
     avx_811_sqr,
-    avx_811_mul_421,
 )
 from theta_structure import (
     hadamard,
@@ -265,7 +264,7 @@ def gluing_codomain(
     A24_12: AVX_4x2x1,
     X_8: AVX_4x2x1,
     Z_8: AVX_4x2x1,
-) -> tuple[AVX_4x2x1, AVX_4x2x1, AVX_4x2x1, tuple[AVX_8x1x1, AVX_8x1x1]]:
+) -> tuple[AVX_4x2x1, AVX_4x2x1, AVX_8x1x1, tuple[AVX_8x1x1, AVX_8x1x1]]:
     """
     Algorithm 8.39 of the SQIsign spec.
     """
@@ -327,7 +326,7 @@ def gluing_codomain(
 
     OA = hadamard(AVX_4x2x1(A, B, C, 0))
     OA_dual_inv = AVX_4x2x1(A_inv, B_inv, C_inv, 0)
-    J_prime = AVX_4x2x1(y, y, x, x)
+    J_prime = AVX_8x1x1(y, y, x, x, y, y, x, x)
 
     return OA, OA_dual_inv, J_prime, N
 
@@ -336,7 +335,7 @@ def gluing_eval_pair(
     A_12: AVX_4x2x1,
     P: tuple[AVX_4x2x1],
     T8: tuple[AVX_4x2x1],
-    J_prime: AVX_4x2x1,
+    J_prime: AVX_8x1x1,
     N: tuple[AVX_8x1x1, AVX_8x1x1],
 ) -> AVX_4x2x1:
     """
@@ -395,8 +394,8 @@ def gluing_eval_pair(
     im_PQ = avx_811_sub(U12, V12)
     im_PQ = hadamard_pair(im_PQ)
 
-    # Scaling by (y : y : x : x)
-    im_PQ = avx_811_mul_421(im_PQ, J_prime)
+    # Scaling by (y : y : x : x) | (y : y : x : x)
+    im_PQ = avx_811_mul(im_PQ, J_prime)
 
     # Final Hadamard
     im_PQ = hadamard_pair(im_PQ)
@@ -463,7 +462,7 @@ def gluing_eval_special_pair(
     P2: PointX,
     Q1: PointX,
     Q2: PointX,
-    OA_inv: AVX_4x2x1,
+    OA_inv: AVX_8x1x1,
     N: tuple[AVX_8x1x1],
 ) -> AVX_4x2x1:
     """
@@ -481,7 +480,7 @@ def gluing_eval_special_pair(
     assert PQ.w1.is_zero()  # this is the special case we must have
     assert PQ.w2.is_zero()  # this is the special case we must have
 
-    PQ = avx_811_mul_421(PQ, OA_inv)
+    PQ = avx_811_mul(PQ, OA_inv)
     PQ = hadamard_pair(PQ)
 
     return PQ

@@ -3,11 +3,20 @@ from theta_structure import (
     hadamard,
     hadamard_pair,
 )
-from avx_arithmetic import avx_421_sqr, avx_811_sqr, avx_421_mul, avx_811_mul_421
+from avx_arithmetic import (
+    avx_421_sqr,
+    avx_811_sqr,
+    avx_811_mul,
+    avx_421_mul,
+    avx_421_pair_mul,
+    avx_421_to_811,
+)
 from utilities import sqrt_fp2
 
 
-def theta_precompute(OA: AVX_4x2x1) -> tuple[AVX_4x2x1, AVX_4x2x1]:
+def theta_precompute(
+    OA: AVX_4x2x1, use_wide=False
+) -> tuple[AVX_4x2x1, AVX_4x2x1] | tuple[AVX_8x1x1, AVX_8x1x1]:
     """
     Precompute constants given a theta null point
 
@@ -36,8 +45,13 @@ def theta_precompute(OA: AVX_4x2x1) -> tuple[AVX_4x2x1, AVX_4x2x1]:
     t2 = AVX_4x2x1(cd, cd, ab, ab)
 
     # Compute the arithmetic constants more memory management and two more muls
-    C1 = avx_421_mul(C1, t1)
-    C2 = avx_421_mul(C2, t2)
+    C1, C2 = avx_421_pair_mul(C1, t1, C2, t2)
+
+    # If we are expecting to multiply pairs of points, we convert C1, C2 to
+    # 8x1x1 by repeating them
+    if use_wide:
+        C1 = avx_421_to_811(C1, C1)
+        C2 = avx_421_to_811(C2, C2)
 
     return C1, C2
 
@@ -55,16 +69,16 @@ def theta_double(P: AVX_4x2x1, C1: AVX_4x2x1, C2: AVX_4x2x1) -> AVX_4x2x1:
     return P2
 
 
-def theta_double_pair(P_Q: AVX_8x1x1, C1: AVX_4x2x1, C2: AVX_4x2x1) -> AVX_8x1x1:
+def theta_double_pair(P_Q: AVX_8x1x1, C1: AVX_8x1x1, C2: AVX_8x1x1) -> AVX_8x1x1:
     """
     Double a point provided certain precomputed constants
     """
     P2_Q2 = avx_811_sqr(P_Q)
     P2_Q2 = hadamard_pair(P2_Q2)
     P2_Q2 = avx_811_sqr(P2_Q2)
-    P2_Q2 = avx_811_mul_421(P2_Q2, C1)
+    P2_Q2 = avx_811_mul(P2_Q2, C1)
     P2_Q2 = hadamard_pair(P2_Q2)
-    P2_Q2 = avx_811_mul_421(P2_Q2, C2)
+    P2_Q2 = avx_811_mul(P2_Q2, C2)
     return P2_Q2
 
 
@@ -286,7 +300,7 @@ def theta_eval(P: AVX_4x2x1, inv: AVX_4x2x1, h1: bool, h2: bool) -> AVX_4x2x1:
     return P
 
 
-def theta_eval_pair(P_Q: AVX_8x1x1, inv: AVX_4x2x1, h1: bool, h2: bool):
+def theta_eval_pair(P_Q: AVX_8x1x1, inv: AVX_8x1x1, h1: bool, h2: bool):
     """
     Evaluate a theta point through an isogeny given precomputed constants
     """
@@ -295,7 +309,7 @@ def theta_eval_pair(P_Q: AVX_8x1x1, inv: AVX_4x2x1, h1: bool, h2: bool):
 
     P_Q = avx_811_sqr(P_Q)
     P_Q = hadamard_pair(P_Q)
-    P_Q = avx_811_mul_421(P_Q, inv)
+    P_Q = avx_811_mul(P_Q, inv)
 
     if h2:
         P_Q = hadamard_pair(P_Q)
