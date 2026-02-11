@@ -1,23 +1,20 @@
 from elliptic_types import PointX
 from avx_types import AVX_4x2x1, AVX_8x1x1
 from avx_arithmetic import (
-    avx_sqr,
-    avx_pairwise_mul,
-    avx_add,
-    avx_sub,
-    avx_neg,
-    avx_wide_pairwise_mul,
-    avx_wide_sub,
-    avx_pairwise_double_mul,
+    avx_421_sqr,
+    avx_421_mul,
+    avx_421_add,
+    avx_421_sub,
+    avx_421_neg,
+    avx_811_mul,
+    avx_811_sub,
+    avx_421_pair_mul,
+    avx_811_sqr,
+    avx_811_mul_421,
 )
 from theta_structure import (
-    squaring,
     hadamard,
-    pairwise_multiplication,
-    pairwise_multiplication_3,
-    squaring_pair,
     hadamard_pair,
-    pairwise_pair,
 )
 from utilities import apply_isomorphism, apply_isomorphism_pair
 
@@ -31,7 +28,7 @@ def gluing_kernel_to_x_only(X: AVX_4x2x1, Z: AVX_4x2x1) -> tuple[AVX_4x2x1, AVX_
     Given the kernel as the X, Y, Z coordinates of Jacobian coordinates
     return the x-only coordinates (X : Z)
     """
-    return X, avx_sqr(Z)
+    return X, avx_421_sqr(Z)
 
 
 def _compute_matrix(
@@ -65,12 +62,12 @@ def _compute_matrix(
     # We can then return the matrix along with the projective factor.
     # ============================================================================
 
-    C, pi = avx_pairwise_double_mul(U, Z, det, Z)
-    C = avx_sub(C, det)
-    C, Z_sqr = avx_pairwise_double_mul(X, C, Z, Z)  # This is 1M 1S
-    D, B = avx_pairwise_double_mul(U, Z_sqr, W, Z_sqr)
-    B = avx_neg(B)
-    A = avx_neg(D)
+    C, pi = avx_421_pair_mul(U, Z, det, Z)
+    C = avx_421_sub(C, det)
+    C, Z_sqr = avx_421_pair_mul(X, C, Z, Z)  # This is 1M 1S
+    D, B = avx_421_pair_mul(U, Z_sqr, W, Z_sqr)
+    B = avx_421_neg(B)
+    A = avx_421_neg(D)
 
     # TODO:
     # Memory management from the ai, bi, ci, di to the
@@ -99,8 +96,8 @@ def action_by_translation(
     isotropic basis <(P1,P2)x(Q1,Q2)> in E_1 x E_2.
     """
     U, W = four_double_x(A24, X_4, Z_4)
-    t1, t2 = avx_pairwise_double_mul(W, X_4, U, Z_4)
-    D = avx_sub(t1, t2)
+    t1, t2 = avx_421_pair_mul(W, X_4, U, Z_4)
+    D = avx_421_sub(t1, t2)
 
     # Compute matrices from points
     g1, g2, h1, h2, proj = _compute_matrix(X_4, Z_4, U, W, D)
@@ -152,20 +149,20 @@ def theta_change_of_basis(
 
     T0 = AVX_4x2x1(dg1, dg2, dg1, dh1)
     T1 = AVX_4x2x1(dh1, dh2, dg2, dh2)
-    dg1h1, dg2h2, dg1g2, dh1h2 = avx_pairwise_mul(T0, T1)
+    dg1h1, dg2h2, dg1g2, dh1h2 = avx_421_mul(T0, T1)
 
     # TODO: redundant computation here!
     T0 = AVX_4x2x1(dg1, dg1h1, 1, 1)
     T1 = AVX_4x2x1(dh2, dg2h2, 1, 1)
-    dg1h2, dg1g2h1h2, _, _ = avx_pairwise_mul(T0, T1)
+    dg1h2, dg1g2h1h2, _, _ = avx_421_mul(T0, T1)
 
     # Compute the numerator of ti as standard
     T0 = AVX_4x2x1(g1[0], g1[2], g2[0], g2[2])
     T1 = AVX_4x2x1(h1[0], h1[0], h2[0], h2[0])
     T2 = AVX_4x2x1(g1[1], g1[3], g2[1], g2[3])
     T3 = AVX_4x2x1(h1[2], h1[2], h2[2], h2[2])
-    T, T2 = avx_pairwise_double_mul(T0, T1, T2, T3)
-    T = avx_add(T, T2)
+    T, T2 = avx_421_pair_mul(T0, T1, T2, T3)
+    T = avx_421_add(T, T2)
 
     # Ensure correct projective factor for ti
     # Used when computing T below in the avx_pairwise_double_mul
@@ -175,30 +172,30 @@ def theta_change_of_basis(
     # We divide out a projective factor of 1 / (dg1 * dh1 * dg2 * dh2)^2
     Q0 = AVX_4x2x1(g1[0], g1[0], g1[2], g1[2])
     T1 = AVX_4x2x1(g2[0], g2[2], g2[0], g2[2])
-    T, A0 = avx_pairwise_double_mul(T, T0, Q0, T1)
+    T, A0 = avx_421_pair_mul(T, T0, Q0, T1)
 
     T1 = AVX_4x2x1(h1[0], h1[0], h1[2], h1[2])
     Q1 = AVX_4x2x1(h2[0], h2[2], h2[0], h2[2])
     T2 = AVX_4x2x1(dh1h2, dh1h2, dh1h2, dh1h2)
     # TODO: every element of T2 is the same, can we use this?
-    A0, T3 = avx_pairwise_double_mul(A0, T2, T1, Q1)
+    A0, T3 = avx_421_pair_mul(A0, T2, T1, Q1)
 
     # TODO: every element of T2 is the same, can we use this?
     T2 = AVX_4x2x1(dg1g2, dg1g2, dg1g2, dg1g2)
-    T3 = avx_pairwise_mul(T3, T2)
-    A0 = avx_add(A0, T3)
+    T3 = avx_421_mul(T3, T2)
+    A0 = avx_421_add(A0, T3)
 
     T1 = AVX_4x2x1(dg1g2h1h2, 0, 0, 0)
-    A0 = avx_add(A0, T1)  # TODO: this could be optimised?
+    A0 = avx_421_add(A0, T1)  # TODO: this could be optimised?
 
     t1, t2, t3, t4 = T
     T1 = AVX_4x2x1(dg1g2h1h2, dg1g2h1h2, dg1g2h1h2, dg1g2h1h2)
     T2 = AVX_4x2x1(t1, t1, t2, t2)
     T3 = AVX_4x2x1(t3, t4, t3, t4)
     # TODO: every element of T1 is the same, can we use this?
-    A0, T4 = avx_pairwise_double_mul(A0, T1, T2, T3)
+    A0, T4 = avx_421_pair_mul(A0, T1, T2, T3)
 
-    A0 = avx_add(A0, T4)
+    A0 = avx_421_add(A0, T4)
     a0, b0, c0, d0 = A0
 
     # Compute A1 = a1, b1, c1, d1
@@ -206,8 +203,8 @@ def theta_change_of_basis(
     A1 = AVX_4x2x1(a0, a0, c0, c0)
     T1 = AVX_4x2x1(b0, b0, d0, d0)
     T2 = AVX_4x2x1(h2[1], h2[3], h2[1], h2[3])
-    A1, T3 = avx_pairwise_double_mul(A1, Q1, T1, T2)
-    A1 = avx_add(A1, T3)
+    A1, T3 = avx_421_pair_mul(A1, Q1, T1, T2)
+    A1 = avx_421_add(A1, T3)
     a1, b1, c1, d1 = A1
 
     # Compute A2 = a2, b2, c2, d2
@@ -215,27 +212,27 @@ def theta_change_of_basis(
     A2 = AVX_4x2x1(a0, b0, a0, b0)
     Q2 = AVX_4x2x1(g1[1], g1[1], g1[3], g1[3])
     T2 = AVX_4x2x1(c0, d0, c0, d0)
-    A2, T3 = avx_pairwise_double_mul(A2, Q0, Q2, T2)
-    A2 = avx_add(A2, T3)
+    A2, T3 = avx_421_pair_mul(A2, Q0, Q2, T2)
+    A2 = avx_421_add(A2, T3)
     a2, b2, c2, d2 = A2
 
     # Compute A3 = a3, b3, c3, d3
     # We divide out a projective factor of 1 / (dg1 * dh1 * dg2 * dh2)^2 * dg1 * dh2
     A3 = AVX_4x2x1(a1, b1, a1, b1)
     T2 = AVX_4x2x1(c1, d1, c1, d1)
-    A3, T3 = avx_pairwise_double_mul(A3, Q0, Q2, T2)
-    A3 = avx_add(A3, T3)
+    A3, T3 = avx_421_pair_mul(A3, Q0, Q2, T2)
+    A3 = avx_421_add(A3, T3)
     a3, b3, c3, d3 = A3
 
     # We now need to make sure the entire matrix has a projective factor of
     # 1 / (dg1 * dh1 * dg2 * dh2)^2 * dg1 * dh2
     # TODO: every element of T0 is the same, can we use this?
     T0 = AVX_4x2x1(dg1h2, dg1h2, dg1h2, dg1h2)
-    a0, b0, c0, d0 = avx_pairwise_mul(A0, T0)
+    a0, b0, c0, d0 = avx_421_mul(A0, T0)
 
     T0 = AVX_4x2x1(dg1, dg1, dg1, dg1)
     T1 = AVX_4x2x1(dh2, dh2, dh2, dh2)
-    A1, A2 = avx_pairwise_double_mul(A1, T0, A2, T1)
+    A1, A2 = avx_421_pair_mul(A1, T0, A2, T1)
     a1, b1, c1, d1 = A1
     a2, b2, c2, d2 = A2
 
@@ -257,7 +254,7 @@ def product_to_theta_pair(
 
     t1 = AVX_8x1x1(X1, X1, Z1, Z1, X2, X2, Z2, Z2)
     t2 = AVX_8x1x1(X3, Z3, X3, Z3, X4, Z4, X4, Z4)
-    P12 = avx_wide_pairwise_mul(t1, t2)
+    P12 = avx_811_mul(t1, t2)
 
     P12 = apply_isomorphism_pair(P12, N)
 
@@ -284,7 +281,7 @@ def gluing_codomain(
     P12 = product_to_theta_pair(X_8, Z_8, N)
 
     # compute their dual-image.
-    P12 = squaring_pair(P12)
+    P12 = avx_811_sqr(P12)
     P12 = hadamard_pair(P12)
 
     X1, Y1, Z1, W1, X2, _, Z2, W2 = P12
@@ -317,11 +314,11 @@ def gluing_codomain(
 
     t1 = AVX_4x2x1(X1, Y1, X1, 1)
     t2 = AVX_4x2x1(X2, X2, Z2, 1)
-    A, B, C, _ = pairwise_multiplication_3(t1, t2)
+    A, B, C, _ = avx_421_mul(t1, t2)
 
     t1 = AVX_4x2x1(Y1, C, B, 1)
     t2 = AVX_4x2x1(Z2, Y1, Z1, 1)
-    A_inv, x, y, _ = pairwise_multiplication_3(t1, t2)
+    A_inv, x, y, _ = avx_421_mul(t1, t2)
     B_inv = C
     C_inv = B
 
@@ -370,19 +367,19 @@ def gluing_eval_pair(
 
     TT0 = AVX_8x1x1(u1, u1, w1, w1, u3, u3, w3, w3)
     TT1 = AVX_8x1x1(u2, w2, u2, w2, u4, w4, u4, w4)
-    u1u2, u1w2, w1u2, w1w2, u3u4, u3w4, w3u4, w3w4 = avx_wide_pairwise_mul(TT0, TT1)
+    u1u2, u1w2, w1u2, w1w2, u3u4, u3w4, w3u4, w3w4 = avx_811_mul(TT0, TT1)
 
     TT0 = AVX_8x1x1(v1, u1, v1, w1, v3, u3, v3, w3)
     TT1 = AVX_8x1x1(u2, v2, w2, v2, u4, v4, w4, v4)
-    v1u2, u1v2, v1w2, w1v2, v3u4, u3v4, v3w4, w3v4 = avx_wide_pairwise_mul(TT0, TT1)
+    v1u2, u1v2, v1w2, w1v2, v3u4, u3v4, v3w4, w3v4 = avx_811_mul(TT0, TT1)
 
     T0 = AVX_4x2x1(v1, v3, 0, 0)
     T1 = AVX_4x2x1(v2, v4, 0, 0)
-    v1v2, v3v4, _, _ = avx_pairwise_mul(T0, T1)  # Two redundant mul here.
+    v1v2, v3v4, _, _ = avx_421_mul(T0, T1)  # Two redundant mul here.
 
     T0 = AVX_4x2x1(u1u2, u3u4, v1u2, v3u4)
     T1 = AVX_4x2x1(v1v2, v3v4, u1v2, u3v4)
-    u1u2_v1v2, u3u4_v3v4, v1u2_u1v2, v3u4_u3v4 = avx_add(T0, T1)
+    u1u2_v1v2, u3u4_v3v4, v1u2_u1v2, v3u4_u3v4 = avx_421_add(T0, T1)
 
     U12 = AVX_8x1x1(u1u2_v1v2, u1w2, w1u2, w1w2, u3u4_v3v4, u3w4, w3u4, w3w4)
     V12 = AVX_8x1x1(v1u2_u1v2, v1w2, w1v2, 0, v3u4_u3v4, v3w4, w3v4, 0)
@@ -391,15 +388,15 @@ def gluing_eval_pair(
     U12 = apply_isomorphism_pair(U12, N)
     V12 = apply_isomorphism_pair(V12, N)
 
-    U12 = squaring_pair(U12)
-    V12 = squaring_pair(V12)
+    U12 = avx_811_sqr(U12)
+    V12 = avx_811_sqr(V12)
 
     # Hadamard of component wise subtraction of U, V
-    im_PQ = avx_wide_sub(U12, V12)
+    im_PQ = avx_811_sub(U12, V12)
     im_PQ = hadamard_pair(im_PQ)
 
     # Scaling by (y : y : x : x)
-    im_PQ = pairwise_pair(im_PQ, J_prime)
+    im_PQ = avx_811_mul_421(im_PQ, J_prime)
 
     # Final Hadamard
     im_PQ = hadamard_pair(im_PQ)
@@ -416,7 +413,7 @@ def eval_product_to_theta(P1: PointX, P2: PointX, N: tuple[AVX_8x1x1]):
     X2, Z2 = P2
     P = AVX_4x2x1(X1, X1, Z1, Z1)
     T0 = AVX_4x2x1(X2, Z2, X2, Z2)
-    P = avx_pairwise_mul(P, T0)
+    P = avx_421_mul(P, T0)
 
     return apply_isomorphism(P, N)
 
@@ -435,7 +432,7 @@ def eval_product_to_theta_pair(
 
     PQ = AVX_8x1x1(X1, X1, Z1, Z1, X3, X3, Z3, Z3)
     T0 = AVX_8x1x1(X2, Z2, X2, Z2, X4, Z4, X4, Z4)
-    PQ = avx_wide_pairwise_mul(PQ, T0)
+    PQ = avx_811_mul(PQ, T0)
 
     return apply_isomorphism_pair(PQ, N)
 
@@ -452,10 +449,10 @@ def gluing_eval_special(
     # Here we translate from x-only points with 64 bit limbs to a theta point
     # with 51 bit limbs
     T = eval_product_to_theta(P1, P2, N)
-    T = squaring(T)
+    T = avx_421_sqr(T)
     T = hadamard(T)
     assert T.w.is_zero()  # this is the special case we must have
-    T = pairwise_multiplication(T, OA_inv)
+    T = avx_421_mul(T, OA_inv)
     T = hadamard(T)
 
     return T
@@ -479,12 +476,12 @@ def gluing_eval_special_pair(
     # Here we translate from x-only points with 64 bit limbs to a theta point
     # with 51 bit limbs
     PQ = eval_product_to_theta_pair(P1, P2, Q1, Q2, N)
-    PQ = squaring_pair(PQ)
+    PQ = avx_811_sqr(PQ)
     PQ = hadamard_pair(PQ)
     assert PQ.w1.is_zero()  # this is the special case we must have
     assert PQ.w2.is_zero()  # this is the special case we must have
 
-    PQ = pairwise_pair(PQ, OA_inv)
+    PQ = avx_811_mul_421(PQ, OA_inv)
     PQ = hadamard_pair(PQ)
 
     return PQ
