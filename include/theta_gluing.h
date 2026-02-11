@@ -50,6 +50,10 @@ void gluing_change_of_basis_4x2x1(
     __m512i* res_matrix01, __m512i* res_matrix23, 
     __m512i* A24, __m512i* x_4, __m512i* z_4
 );
+void gluing_change_of_basis_4x2x1_old(
+    __m512i* res_matrix01, __m512i* res_matrix23, 
+    __m512i* A24, __m512i* x_4, __m512i* z_4
+);
 
 /**
  * Internal helper function for matrix multiplication.

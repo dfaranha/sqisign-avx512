@@ -43,6 +43,7 @@
 #define VPERM512MASKZ(mask, A, indices) _mm512_maskz_permutexvar_epi64(mask, indices, A)
 #define VBLEND(mask, A, B) _mm512_mask_blend_epi64(mask, A, B) // If mask[i] = 1, DST[i] = B[i]. Else, DST[i] = A[i].
 #define VBLENDPERM(indices, A, B) _mm512_permutex2var_epi64(A, indices, B) // the 3 lsb of indices[i] determine index, the 4-th bit is 1 if the source is B and 0 if the source is A.
+#define VBLENDPERMMASKZ(mask, A, B, indices) _mm512_maskz_permutex2var_epi64(mask, A, indices, B)
 
 /**
  * Operates on 32-bit limbs. If mask[i] = 0, DST[i] = A[i]. Else, it parses the i-th 32-bit limb of indices. 
