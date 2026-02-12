@@ -580,9 +580,8 @@ void fp2_4x2x1_duplicate_to_8x1x1(__m512i* res, __m512i* src)
 // Maps (a,b,c,d) in 4x2x1 to (a,b) and (c,d) in 2x4x1
 void fp2_4x2x1_to_2x4x1(__m512i* res, __m512i* src)
 {
-    __m512i idx1, idx2;
-    idx1 = VSET(0, 0, 1, 1, 2, 2, 3, 3);
-    idx2 = VSET(4, 4, 5, 5, 6, 6, 7, 7);
+    __m512i idx1 = VSET(0, 0, 1, 1, 2, 2, 3, 3);
+    __m512i idx2 = VSET(4, 4, 5, 5, 6, 6, 7, 7);
     for (int i = 0; i < 8; i++) {
         res[i] = VPERM512MASKZ(0x55, src[i], idx1);
         res[i+8] = VPERM512MASKZ(0x55, src[i], idx2);
@@ -591,12 +590,10 @@ void fp2_4x2x1_to_2x4x1(__m512i* res, __m512i* src)
 
 void fp2_2x4x1_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2)
 {
-    __m512i idx = VSET(
-            0x0000000100000000, 0x0000000500000004, 0x0000000900000008, 0x0000000d0000000c,
-            0x0000001100000010, 0x0000001500000014, 0x0000001900000018, 0x0000001d0000001c
-        );
+    __m512i idx = VSET(0, 2, 4, 6, 8, 10, 12, 14);
+    
     for (int i = 0; i < 8; i++) {
-        res[i] = VBLENDPERM32(0xffff, src1[i], src2[i], idx);
+        res[i] = VBLENDPERM(idx, src1[i], src2[i]);
     }
 }
 

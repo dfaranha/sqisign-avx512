@@ -421,9 +421,7 @@ void gluing_codomain(
 {
     __m512i x_8_[8], z_8_[8], x_4[8], z_4[8], P12[16];
     __m512i t0[8], t1[8], t2[8], t3[8], idx0, idx1, idx2;
-    
     __mmask8 mask;
-    fp2_t P12_unvec[8], ABCD_unvec[4], inv_unvec[4], t_unvec[4];
 
     // X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)
     ec_jac_to_xz_4x2x1(x_8_, z_8_, x_8, z_8);
@@ -457,8 +455,6 @@ void gluing_codomain(
         ((zmask & 0x4) >> 2) &
         ((zmask & 0x20) >> 5);
     assert(projective_factors_not_zero);
-
-    fp2_8x1x1_to_unvectorized(P12_unvec, P12);
 
     // ============================================================
     // Just like in the generic codomain there's a bit of ugliness
@@ -530,6 +526,7 @@ void gluing_codomain(
     theta_had_single(res_OA, res_OA);
 }
 
+// TODO: Haven't investigated the possibility of micro-optimizations.
 void gluing_eval_pair(
     __m512i* res,
     __m512i* A_12,  __m512i* xP, __m512i* yP, __m512i* zP,
@@ -537,9 +534,9 @@ void gluing_eval_pair(
     __m512i* J_prime, __m512i* matrix01, __m512i* matrix23
 )
 {
-    __m512i u[8], v[8], w[8], t0[16], t1[16];
-    fp2_t u_unvec[4], v_unvec[4], w_unvec[4], t_unvec0[8], t_unvec1[8];
-    fp2_t mul_unvec0[8], mul_unvec1[8], mul_unvec2[4], add_unvec[4];
+    __m512i u[8], v[8], w[8], t0[16], t1[16], t2[16];
+    __m512i idx0_re, idx0_im, idx1_re, idx1_im;
+    __mmask8 mask;
 
     // Add components
     // u1, v1, w1 = add_components(E1, P1, T1_8)
@@ -549,85 +546,87 @@ void gluing_eval_pair(
     ec_add_components_4x2x1(u, v, w, A_12, xP, yP, zP, xT_8, yT_8, zT_8);
 
     // ===============================================================
-    // We want to compute four additions and 9 multiplications as best
-    // as we can...
-    //
+    // Given:
+    // u1, u3, u2, u4 = U
+    // v1, v3, v2, v4 = V
+    // w1, w3, w2, w4 = W
+    // 
+    // Compute:
     // U1 = AVX_4x2x1(u1 * u2 + v1 * v2, u1 * w2, w1 * u2, w1 * w2)
     // U2 = AVX_4x2x1(u3 * u4 + v3 * v4, u3 * w4, w3 * u4, w3 * w4)
     // V1 = AVX_4x2x1(v1 * u2 + u1 * v2, v1 * w2, w1 * v2, 0)
     // V2 = AVX_4x2x1(v3 * u4 + u3 * v4, v3 * w4, w3 * v4, 0)
     // ===============================================================
 
-    // u1, u3, u2, u4 = U
-    // v1, v3, v2, v4 = V
-    // w1, w3, w2, w4 = W
-    fp2_4x2x1_to_unvectorized(u_unvec, u);
-    fp2_4x2x1_to_unvectorized(v_unvec, v);
-    fp2_4x2x1_to_unvectorized(w_unvec, w);
-
-    // TT0 = AVX_8x1x1(u1, u1, w1, w1, u3, u3, w3, w3)
-    t_unvec0[0] = u_unvec[0]; t_unvec0[1] = u_unvec[0]; t_unvec0[2] = w_unvec[0]; t_unvec0[3] = w_unvec[0];
-    t_unvec0[4] = u_unvec[1]; t_unvec0[5] = u_unvec[1]; t_unvec0[6] = w_unvec[1]; t_unvec0[7] = w_unvec[1];
-    // TT1 = AVX_8x1x1(u2, w2, u2, w2, u4, w4, u4, w4)
-    t_unvec1[0] = u_unvec[2]; t_unvec1[1] = w_unvec[2]; t_unvec1[2] = u_unvec[2]; t_unvec1[3] = w_unvec[2];
-    t_unvec1[4] = u_unvec[3]; t_unvec1[5] = w_unvec[3]; t_unvec1[6] = u_unvec[3]; t_unvec1[7] = w_unvec[3];
-    fp2_unvectorized_to_8x1x1(t0, t_unvec0);
-    fp2_unvectorized_to_8x1x1(t1, t_unvec1);
-    // u1u2, u1w2, w1u2, w1w2, u3u4, u3w4, w3u4, w3w4 = avx_wide_pairwise_mul(TT0, TT1)
+    // t0 = (u1u2, u3u4, u1w2, u3w4, w1u2, w3u4, w1w2, w3w4)
+    idx0_re = VSET(0, 2, 0, 2, 8, 10, 8, 10); // (u1, u3, u1, u3, w1, w3, w1, w3)
+    idx0_im = VSET(1, 3, 1, 3, 9, 11, 9, 11);
+    idx1_re = VSET(4, 6, 12, 14, 4, 6, 12, 14); // (u2, u4, w2, w4, u2, u4, w2, w4)
+    idx1_im = VSET(5, 7, 13, 15, 5, 7, 13, 15);
+    for (int i = 0; i < 8; i++) {
+        t0[i] = VBLENDPERM(idx0_re, u[i], w[i]);
+        t0[i+8] = VBLENDPERM(idx0_im, u[i], w[i]);
+        t1[i] = VBLENDPERM(idx1_re, u[i], w[i]);
+        t1[i+8] = VBLENDPERM(idx1_im, u[i], w[i]);
+    }
     fp2_mul_8x1x1(t0, t0, t1);
-    fp2_8x1x1_to_unvectorized(mul_unvec0, t0);
 
-    // TT0 = AVX_8x1x1(v1, u1, v1, w1, v3, u3, v3, w3)
-    t_unvec0[0] = v_unvec[0]; t_unvec0[1] = u_unvec[0]; t_unvec0[2] = v_unvec[0]; t_unvec0[3] = w_unvec[0];
-    t_unvec0[4] = v_unvec[1]; t_unvec0[5] = u_unvec[1]; t_unvec0[6] = v_unvec[1]; t_unvec0[7] = w_unvec[1];
-    // TT1 = AVX_8x1x1(u2, v2, w2, v2, u4, v4, w4, v4)
-    t_unvec1[0] = u_unvec[2]; t_unvec1[1] = v_unvec[2]; t_unvec1[2] = w_unvec[2]; t_unvec1[3] = v_unvec[2];
-    t_unvec1[4] = u_unvec[3]; t_unvec1[5] = v_unvec[3]; t_unvec1[6] = w_unvec[3]; t_unvec1[7] = v_unvec[3];
-    fp2_unvectorized_to_8x1x1(t0, t_unvec0);
-    fp2_unvectorized_to_8x1x1(t1, t_unvec1);
-    //v1u2, u1v2, v1w2, w1v2, v3u4, u3v4, v3w4, w3v4 = avx_wide_pairwise_mul(TT0, TT1)
-    fp2_mul_8x1x1(t0, t0, t1);
-    fp2_8x1x1_to_unvectorized(mul_unvec1, t0);
+    // t1 = (v1u2, v3u4, u1v2, u3v4, v1w2, v3w4, w1v2, w3v4)
+    idx0_re = VSET(0, 2, 4, 6, 0, 2, 4, 6); // (v1, v3, v2, v4, v1, v3, v2, v4)
+    idx0_im = VSET(1, 3, 5, 7, 1, 3, 5, 7);
+    idx1_re = VSET(4, 6, 0, 2, 12, 14, 8, 10); // (u2, u4, u1, u3, w2, w4, w1, w3)
+    idx1_im = VSET(5, 7, 1, 3, 13, 15, 9, 11);
+    for (int i = 0; i < 8; i++) {
+        t1[i] = VPERM512(idx0_re, v[i]);
+        t1[i+8] = VPERM512(idx0_im, v[i]);
+        t2[i] = VBLENDPERM(idx1_re, u[i], w[i]);
+        t2[i+8] = VBLENDPERM(idx1_im, u[i], w[i]);
+    }
+    fp2_mul_8x1x1(t1, t1, t2);
 
-    // T0 = AVX_4x2x1(v1, v3, 0, 0)
-    t_unvec0[0] = v_unvec[0]; t_unvec0[1] = v_unvec[1]; fp2_set_zero(t_unvec0+2); fp2_set_zero(t_unvec0+3);
-    // T1 = AVX_4x2x1(v2, v4, 0, 0)
-    t_unvec1[0] = v_unvec[2]; t_unvec1[1] = v_unvec[3]; fp2_set_zero(t_unvec1+2); fp2_set_zero(t_unvec1+3);
-    fp2_unvectorized_to_4x2x1(t0, t_unvec0);
-    fp2_unvectorized_to_4x2x1(t1, t_unvec1);
-    //v1v2, v3v4, _, _ = avx_pairwise_mul(T0, T1)  // Two redundant mul here.
-    fp2_mul_4x2x1(t0, t0, t1);
-    fp2_4x2x1_to_unvectorized(mul_unvec2, t0);
+    // t2[0:7] = (v1v2, v3v4) in 2x4x1
+    idx0_re = VSET(0, 0, 1, 1, 2, 2, 3, 3);
+    idx1_re = VSET(4, 4, 5, 5, 6, 6, 7, 7);
+    mask = 0x55;
+    for (int i = 0; i < 8; i++) {
+        t2[i] = VPERM512MASKZ(mask, v[i], idx0_re);
+        t2[i+8] = VPERM512MASKZ(mask, v[i], idx1_re);
+    }
+    fp2_mul_2x4x1(t2, t2, t2+8);
 
-    // T0 = AVX_4x2x1(u1u2, u3u4, v1u2, v3u4)
-    t_unvec0[0] = mul_unvec0[0]; t_unvec0[1] = mul_unvec0[4]; t_unvec0[2] = mul_unvec1[0]; t_unvec0[3] = mul_unvec1[4];
-    // T1 = AVX_4x2x1(v1v2, v3v4, u1v2, u3v4)
-    t_unvec1[0] = mul_unvec2[0]; t_unvec1[1] = mul_unvec2[1]; t_unvec1[2] = mul_unvec1[1]; t_unvec1[3] = mul_unvec1[5];
-    fp2_unvectorized_to_4x2x1(t0, t_unvec0);
-    fp2_unvectorized_to_4x2x1(t1, t_unvec1);
-    // u1u2_v1v2, u3u4_v3v4, v1u2_u1v2, v3u4_u3v4 = avx_add(T0, T1)
-    fp2_add_4x2x1(t0, t0, t1);
-    fp2_4x2x1_to_unvectorized(add_unvec, t0);
+    //t2[8:15] = (u1u2, u3u4, v1u2, v3u4)
+    idx0_re = VSET(0, 0, 1, 1, 8, 8, 9, 9); // (u1u2, u3u4, v1u2, v3u4)
+    idx0_im = VSET(0, 8, 2, 9, 4, 5, 6, 7); // for im of u1u2 & u3u4
+    idx1_im = VSET(0, 1, 2, 3, 4, 8, 6, 9); // for im of v1u2 & v3u4
+    for (int i = 0; i < 8; i++) {
+        t2[i+8] = VBLENDPERM(idx0_re, t0[i], t1[i]);
+        t2[i+8] = VBLENDPERM(idx0_im, t2[i+8], t0[i+8]);
+        t2[i+8] = VBLENDPERM(idx1_im, t2[i+8], t1[i+8]);
+    }
+    // t2[0:7] = (v1v2, v3v4, u1v2, u3v4)
+    idx0_re = VSET(0, 2, 4, 6, 10, 10, 11, 11); // (v1v2, v3v4, re(u1v2), re(u3v4))
+    idx0_im = VSET(0, 1, 2, 3, 4, 10, 6, 11); // (v1v2, v3v4, u1v2, u3v4)
+    for (int i = 0; i < 8; i++) {
+        t2[i] = VBLENDPERM(idx0_re, t2[i], t1[i]);
+        t2[i] = VBLENDPERM(idx0_im, t2[i], t1[i+8]);
+    }
 
-    // TODO: See the ipad notes for an overview of which values are not needed at this point (the inputs to the previous add are no longer needed)
-    // U12 = AVX_8x1x1(u1u2_v1v2, u1w2, w1u2, w1w2, u3u4_v3v4, u3w4, w3u4, w3w4)
-    t_unvec0[0] = add_unvec[0]; t_unvec0[1] = mul_unvec0[1]; t_unvec0[2] = mul_unvec0[2]; t_unvec0[3] = mul_unvec0[3];
-    t_unvec0[4] = add_unvec[1]; t_unvec0[5] = mul_unvec0[5]; t_unvec0[6] = mul_unvec0[6]; t_unvec0[7] = mul_unvec0[7];
-    // V12 = AVX_8x1x1(v1u2_u1v2, v1w2, w1v2, 0, v3u4_u3v4, v3w4, w3v4, 0)
-    t_unvec1[0] = add_unvec[2]; t_unvec1[1] = mul_unvec1[2]; t_unvec1[2] = mul_unvec1[3]; fp2_set_zero(t_unvec1+3);
-    t_unvec1[4] = add_unvec[3]; t_unvec1[5] = mul_unvec1[6]; t_unvec1[6] = mul_unvec1[7]; fp2_set_zero(t_unvec1+7);
-    fp2_unvectorized_to_8x1x1(t0, t_unvec0);
-    fp2_unvectorized_to_8x1x1(t1, t_unvec1);
+    // t2[0:7] = (u1u2+v1v2, u3u4+v3v4, v1u2+u1v2, v3u4+u3v4)
+    fp2_add_4x2x1(t2, t2, t2+8);
 
-    // TODO: Order of fp2 coords is wrong. For now I manually rearrange them
-    fp2_8x1x1_to_unvectorized(t_unvec0, t0);
-    t_unvec1[0] = t_unvec0[0]; t_unvec1[1] = t_unvec0[4]; t_unvec1[2] = t_unvec0[1]; t_unvec1[3] = t_unvec0[5];
-    t_unvec1[4] = t_unvec0[2]; t_unvec1[5] = t_unvec0[6]; t_unvec1[6] = t_unvec0[3]; t_unvec1[7] = t_unvec0[7];
-    fp2_unvectorized_to_8x1x1(t0, t_unvec1);
-    fp2_8x1x1_to_unvectorized(t_unvec0, t1);
-    t_unvec1[0] = t_unvec0[0]; t_unvec1[1] = t_unvec0[4]; t_unvec1[2] = t_unvec0[1]; t_unvec1[3] = t_unvec0[5];
-    t_unvec1[4] = t_unvec0[2]; t_unvec1[5] = t_unvec0[6]; t_unvec1[6] = t_unvec0[3]; t_unvec1[7] = t_unvec0[7];
-    fp2_unvectorized_to_8x1x1(t1, t_unvec1);
+    // U12 = (u1u2+v1v2, u3u4+v3v4, u1w2, u3w4, w1u2, w3u4, w1w2, w3w4)
+    // V12 = (v1u2+u1v2, v3u4+u3v4, v1w2, v3w4, w1v2, w3v4, 0, 0)
+    idx0_re = VSET(8, 10, 2, 3, 4, 5, 6, 7);
+    idx0_im = VSET(9, 11, 2, 3, 4, 5, 6, 7);
+    idx1_re = VSET(12, 14, 4, 5, 6, 7, 0, 0);
+    idx1_im = VSET(13, 15, 4, 5, 6, 7, 0, 0);
+    mask = 0x3f;
+    for (int i = 0; i < 8; i++) {
+        t0[i] = VBLENDPERM(idx0_re, t0[i], t2[i]);
+        t0[i+8] = VBLENDPERM(idx0_im, t0[i+8], t2[i]);
+        t1[i] = VBLENDPERMMASKZ(mask, t1[i], t2[i], idx1_re);
+        t1[i+8] = VBLENDPERMMASKZ(mask, t1[i+8], t2[i], idx1_im);
+    }
 
     // Apply the isomorphism by N on U1, U2, V1, V2
     gluing_apply_matrix_pair(t0, matrix01, matrix23, t0);
