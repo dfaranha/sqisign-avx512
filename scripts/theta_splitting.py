@@ -1,6 +1,12 @@
 from os import urandom
 from avx_types import AVX_8x1x1, AVX_4x2x1
-from avx_arithmetic import avx_421_mul, avx_421_sub, avx_421_all_zero, avx_421_any_zero
+from avx_arithmetic import (
+    avx_421_mul,
+    avx_421_sub,
+    avx_421_all_zero,
+    avx_421_any_zero,
+    avx_421_eq,
+)
 from utilities import apply_isomorphism
 
 EVEN_INDICES = [
@@ -146,9 +152,7 @@ def theta_to_product(OA: AVX_4x2x1, verify: bool = False):
 
         T1 = AVX_4x2x1(T3[0], 0, 0, 0)
         T2 = AVX_4x2x1(T3[1], 0, 0, 0)
-        T1 = avx_421_sub(T1, T2)
-
-        if not avx_421_all_zero(T1):
+        if not avx_421_eq(T1, T2):
             raise ValueError("OA does not come from a product theta structure")
 
     # TODO:
@@ -197,9 +201,8 @@ def theta_product_point_to_montgomery(
 
         T1 = AVX_4x2x1(T3[0], T3[2], 0, 0)
         T2 = AVX_4x2x1(T3[1], T3[3], 0, 0)
-        T1 = avx_421_sub(T1, T2)
 
-        if not avx_421_all_zero(T1):
+        if not avx_421_eq(T1, T2):
             raise ValueError("OA or P does not come from a product theta structure")
 
     a, b, c, d = OA

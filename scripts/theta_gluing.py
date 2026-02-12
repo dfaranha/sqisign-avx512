@@ -12,6 +12,7 @@ from avx_arithmetic import (
     avx_811_sqr,
     avx_421_all_zero,
     avx_421_any_zero,
+    avx_421_eq,
 )
 from theta_structure import (
     hadamard,
@@ -332,8 +333,7 @@ def gluing_codomain(
 
         T1 = AVX_4x2x1(T3[0], T3[1], 0, 0)
         T2 = AVX_4x2x1(x, T3[2], 0, 0)
-        T1 = avx_421_sub(T1, T2)
-        if not avx_421_all_zero(T1):
+        if not avx_421_eq(T1, T2):
             raise ValueError("input kernel is not isotropic")
 
     OA = hadamard(AVX_4x2x1(A, B, C, 0))

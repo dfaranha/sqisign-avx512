@@ -24,6 +24,14 @@ def avx_421_all_zero(A: AVX_4x2x1) -> bool:
     return all(a == 0 for a in A)
 
 
+def avx_421_eq(A: AVX_4x2x1, B: AVX_4x2x1) -> bool:
+    """
+    Return True if A and B are equal, and False otherwise
+    """
+    T = avx_421_sub(A, B)
+    return avx_421_all_zero(T)
+
+
 def avx_421_any_zero(A: AVX_4x2x1) -> bool:
     """
     Return True if any elements of A are zero and False otherwise

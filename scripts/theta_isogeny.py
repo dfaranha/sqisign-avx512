@@ -5,14 +5,13 @@ from theta_structure import (
 )
 from avx_arithmetic import (
     avx_421_sqr,
-    avx_421_sub,
     avx_811_sqr,
     avx_811_mul,
     avx_421_mul,
     avx_421_pair_mul,
     avx_421_to_811,
     avx_811_any_zero,
-    avx_421_all_zero,
+    avx_421_eq,
 )
 from utilities import sqrt_fp2
 
@@ -29,8 +28,7 @@ def check_isotropic(P: AVX_4x2x1, Q: AVX_4x2x1, inv: AVX_4x2x1):
 
     S1 = AVX_4x2x1(T1[0], T1[2], T1[4], T1[6])
     S2 = AVX_4x2x1(T1[1], T1[3], T1[5], T1[7])
-    S1 = avx_421_sub(S1, S2)
-    return avx_421_all_zero(S1)
+    return avx_421_eq(S1, S2)
 
 
 def theta_precompute(
