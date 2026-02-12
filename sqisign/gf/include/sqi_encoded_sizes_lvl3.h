@@ -1,3 +1,6 @@
+#ifndef SQI_ENCODED_SIZES_H
+#define SQI_ENCODED_SIZES_H
+
 #define SECURITY_BITS 192
 #define SQIsign_response_length 192
 #define HASH_ITERATIONS 256
@@ -9,3 +12,5 @@
 #define PUBLICKEY_BYTES 97
 #define SECRETKEY_BYTES 529
 #define SIGNATURE_BYTES 224
+
+#endif

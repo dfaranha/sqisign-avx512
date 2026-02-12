@@ -10,6 +10,7 @@
 #include "fp_lvl3.h"
 #include "intrinsics_avx512.h"
 
+void rand_bytes(uint8_t* bytes, int len);
 uint64_t rand_uint64();
 
 // Samples uniformly from [min, max].
@@ -28,5 +29,7 @@ void print_512i(__m512i a);
 void print_512i_array(__m512i* a, int n, char* name);
 void print_fp_8x1_index(__m512i* a, int index);
 void print_fp_4x2_index(__m512i* a, int index);
+void print_fp2_4x2x1(__m512i* a);
+void print_fp2_8x1x1(__m512i* a);
 
 #endif

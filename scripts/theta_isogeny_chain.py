@@ -491,9 +491,9 @@ def theta_isogeny_chain_with_torsion_4x2x1(
 
         # For the ultimate and penultimate steps we do extra / less Hadamards
         # to avoid zeros from the product structure
-        if i == length - 1:
+        if j == length:
             h1, h2 = True, False
-        elif i == length - 2:
+        elif j == length - 1:
             h1, h2 = False, False
         else:
             h1, h2 = False, True
@@ -627,9 +627,9 @@ def theta_isogeny_chain_with_torsion_8x1x1(
 
         # For the ultimate and penultimate steps we do extra / less Hadamards
         # to avoid zeros from the product structure
-        if i == length - 1:
+        if j == length:
             h1, h2 = True, False
-        elif i == length - 2:
+        elif j == length - 1:
             h1, h2 = False, False
         else:
             h1, h2 = False, True

@@ -5,6 +5,7 @@ from theta_isogeny_chain import (
     theta_isogeny_chain_with_torsion_4x2x1,
     theta_isogeny_chain_with_torsion_8x1x1,
 )
+
 from sage.rings.finite_rings.finite_field_constructor import GF
 from sage.all import EllipticCurve
 
@@ -27,15 +28,15 @@ def double_double_torsion(E, B):
     Q = E.lift_x(B.QX / B.QZ)
     PmQ = E.lift_x(B.PmQX / B.PmQZ)
 
-    if (P - Q).x() != PmQ.x():
+    if (P - Q).xy()[0] != PmQ.xy()[0]:
         Q = -Q
-    assert (P - Q).x() == PmQ.x()
+    assert (P - Q).xy()[0] == PmQ.xy()[0]
 
     P = 4 * P
     Q = 4 * Q
     PmQ = P - Q
 
-    return BasisX(P.x(), F.one(), Q.x(), F.one(), PmQ.x(), F.one())
+    return BasisX(P.xy()[0], F.one(), Q.xy()[0], F.one(), PmQ.xy()[0], F.one())
 
 
 def remove_extra_torsion(E1, E2, B1, B2):
@@ -53,6 +54,7 @@ i = F.gen()
 # Data copy-pasted from SQIsign KAT tests
 # fmt: off
 length = 188
+
 A1 = 4131683057790482110951497386599752287803860405993903650417773614549990742009360322364695736152114176383922791261639*i + 8503291677713416569822955266222010049348627477532219342395465583570033228745845284418181896141039121263649927888552
 A2 = 6253684468565606625292677311255235609002017613670453471516513226370375649996976861958837858465107705058220117148379*i + 6731855965225326514093968679167145095444193536580881406291761977017399546433758259957980669587221923602436019152904
 
@@ -76,6 +78,7 @@ PmQZ2 = 138156544361628890195298909508694983781952049729102796016743612099513819
 
 A3_check = 7699111961201068875849057075735030638265049383663167904054184008166045870455306615734693307616905183192906059307645*i + 9801039118747212051005256821753249426960743982360077995689684836765623897948660990779357718377949839193289861524986
 A4_check = 7102836603142932653148826753844949958196416261810681428739598437629750431518654746535245934059526424912893545183695*i + 2215256555090867642327107655771932802458346873251863327744315389546767808956358139976578364706094247219284838985038
+
 # fmt: on
 
 # Create the Curve types (Has A and A24)
@@ -94,13 +97,13 @@ exact_kernel = remove_extra_torsion(E1, E2, B1, B2)
 # Ensure the orders of the kernel match what we expect
 EE1 = EllipticCurve([0, E1.A / E1.C, 0, 1, 0])
 EE2 = EllipticCurve([0, E2.A / E2.C, 0, 1, 0])
-assert EE1.lift_x(B1.PX / B1.PZ) * 2 ** (length) != EE1.zero()
-assert EE2.lift_x(B2.PX / B2.PZ) * 2 ** (length) != EE2.zero()
-assert EE1.lift_x(B1.PX / B1.PZ) * 2 ** (length + 2) == EE1.zero()
-assert EE2.lift_x(B2.PX / B2.PZ) * 2 ** (length + 2) == EE2.zero()
+assert EE1.lift_x(B1.PX / B1.PZ) * 2 ** (length) != EE1(0)
+assert EE2.lift_x(B2.PX / B2.PZ) * 2 ** (length) != EE2(0)
+assert EE1.lift_x(B1.PX / B1.PZ) * 2 ** (length + 2) == EE1(0)
+assert EE2.lift_x(B2.PX / B2.PZ) * 2 ** (length + 2) == EE2(0)
 _B1, _B2 = exact_kernel
-assert EE1.lift_x(_B1.PX / _B1.PZ) * 2 ** (length) == EE1.zero()
-assert EE2.lift_x(_B2.PX / _B2.PZ) * 2 ** (length) == EE2.zero()
+assert EE1.lift_x(_B1.PX / _B1.PZ) * 2 ** (length) == EE1(0)
+assert EE2.lift_x(_B2.PX / _B2.PZ) * 2 ** (length) == EE2(0)
 
 xP1 = PointX(PX1, PZ1)
 xQ1 = PointX(QX1, QZ1)
@@ -173,8 +176,8 @@ for isogeny_algorithm in [
                 R3 = lift_to_curve(A3 / C3, xR3)
                 R4 = lift_to_curve(A4 / C4, xR4)
 
-                assert R3.x() in [(P3 - Q3).x(), (P3 + Q3).x()]
-                assert R4.x() in [(P4 - Q4).x(), (P4 + Q4).x()]
+                assert R3.xy()[0] in [(P3 - Q3).xy()[0], (P3 + Q3).xy()[0]]
+                assert R4.xy()[0] in [(P4 - Q4).xy()[0], (P4 + Q4).xy()[0]]
 
             print(f"test {isogeny_algorithm.__name__} passed")
 

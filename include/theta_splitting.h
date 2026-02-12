@@ -2,6 +2,7 @@
 #define THETA_SPLITTING_H
 
 #include "intrinsics_avx512.h"
+#include "sqi_hd.h"
 
 #define NUM_EVEN_PAIRS 10
 static const int EVEN_I[NUM_EVEN_PAIRS] = { 0, 0, 0, 0, 1, 1, 2, 2, 3, 3 };
@@ -153,9 +154,15 @@ void splitting_rand_matrix(splitting_matrix_t* matrix);
 
 void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, const splitting_matrix_t* matrix);
 
+void splitting_apply_isomorphism_list_single(__m512i* pts, const splitting_matrix_t* matrix, const int num_pts);
+
 void splitting_apply_isomorphism_pair(__m512i* res, __m512i* point, const splitting_matrix_t* matrix);
 
-void splitting_theta_to_product(__m512i* product, __m512i* null);
+void splitting_apply_isomorphism_list_pair(__m512i* pts, const splitting_matrix_t* matrix, const int num_pts);
+
+void splitting_theta_to_product_old(__m512i* product, __m512i* null);
+
+// TODO: Remove when no longer needed:
 
 /**
  * Given a theta null point OA in a compatible form with splitting, compute
@@ -165,7 +172,9 @@ void splitting_theta_to_product(__m512i* product, __m512i* null);
  * @param theta_point The theta point in the 4x2x1 format
  * @param null The theta null point
  */
-void splitting_theta_point_to_mont_single(__m512i* mont_points, __m512i* theta_point, __m512i* null);
+void splitting_theta_point_to_mont_single_old(__m512i* mont_points, __m512i* theta_point, __m512i* null);
+
+void splitting_theta_point_to_mont_list_single_old(__m512i* pts, __m512i* null, const int num_pts);
 
 /**
  * Given a theta null point OA in a compatible form with splitting, compute
@@ -179,8 +188,29 @@ void splitting_theta_point_to_mont_single(__m512i* mont_points, __m512i* theta_p
                       in the 8x1x1 format.
  * @param null The theta null point
  */
-void splitting_theta_point_to_mont_pair(__m512i* mont_points, __m512i* theta_point, __m512i* null);
+void splitting_theta_point_to_mont_pair_old(__m512i* mont_points, __m512i* theta_point, __m512i* null);
 
+void splitting_theta_point_to_mont_list_pair_old(__m512i* pts, __m512i* null, const int num_pts);
+
+
+
+void splitting_theta_to_product(theta_couple_curve_t* res, __m512i* null);
+
+void splitting_theta_point_to_mont_single(
+    theta_couple_point_t* mont_pair, __m512i* theta_point, __m512i* null
+);
+void splitting_theta_point_to_mont_list_single(
+    theta_couple_point_t* mont_pts, __m512i* theta_pts, 
+    __m512i* null, const int num_pts
+);
+void splitting_theta_point_to_mont_pair(
+    theta_couple_point_t* mont_pair1, theta_couple_point_t* mont_pair2, 
+    __m512i* theta_pair, __m512i* null
+);
+void splitting_theta_point_to_mont_list_pair(
+    theta_couple_point_t* mont_pts, __m512i* theta_pts, 
+    __m512i* null, const int num_pts
+);
 
 // Internal functions
 void splitting_duplicate_pair_in_array(__m512i* res, __m512i* point, const int index, const int arraylen);

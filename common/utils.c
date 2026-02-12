@@ -2,13 +2,28 @@
 #include <string.h>
 #include "utils.h"
 
+#include "fp2_lvl3.h"
+#include "sqi_test_extras.h"
+
 // TODO: Might not be cryptographically secure randomness.
+
+void rand_bytes(uint8_t* bytes, int len)
+{
+    for (int i = 0; i < len; i++) {
+        bytes[i] = 0;
+        for (int j = 0; j < 8; j++) {
+            bytes[i] *= 2;
+            bytes[i] += rand()%2;
+        }
+    }
+}
 
 uint64_t rand_uint64() 
 {
 	uint64_t r = 0;
 	for (int i=0; i<64; i++) {
-		r = r*2 + rand()%2;
+		r *= 2;
+        r += rand() % 2;
 	}
 	return r;
 }
@@ -131,7 +146,7 @@ void rand_fp2_4x1x2(__m512i* res)
 
 void rand_fp2_4x2x1(__m512i* res)
 {
-    rand_fp2_8x1x1(res);
+    rand_fp_8x1(res);
 }
 
 void rand_fp2_2x2x2(__m512i* res)
@@ -145,5 +160,23 @@ void rand_fp2_2x4x1(__m512i* res)
     __m512i zero = VZERO();
     for(int i = 0; i < 8; i++) {
         res[i] = VBLEND(0x55, zero, res[i]);
+    }
+}
+
+void print_fp2_4x2x1(__m512i* a) 
+{
+    fp2_t unvec[4];
+    fp2_4x2x1_to_unvectorized(unvec, a);
+    for(int i = 0; i < 4; i++) {
+        print_fp2(unvec+i);
+    }
+}
+
+void print_fp2_8x1x1(__m512i* a) 
+{
+    fp2_t unvec[8];
+    fp2_8x1x1_to_unvectorized(unvec, a);
+    for(int i = 0; i < 8; i++) {
+        print_fp2(unvec+i);
     }
 }

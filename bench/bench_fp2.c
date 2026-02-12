@@ -356,58 +356,6 @@ void bench_fp2(int iterations)
 
     printf("Fp2 lvl3 conversion benchmarks:\n");
 
-    // array to 8x1x1
-    for(int i = 0; i < N_RUNS; i++) {
-        start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
-            fp2_array_to_8x1x1(c, arr);
-        }
-        end = cpucycles();
-        cycles[i] = (end - start)/iterations;
-    }
-    tmp = fp2_is_equal_8x1x1(c, a);
-    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("8x1x1 <- array", cycles[(N_RUNS/2) -1], tmp);
-
-    // 8x1x1 to array
-    for(int i = 0; i < N_RUNS; i++) {
-        start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
-            fp2_8x1x1_to_array(arr, c);
-        }
-        end = cpucycles();
-        cycles[i] = (end - start)/iterations;
-    }
-    tmp = fp2_is_equal_8x1x1(c, a);
-    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("8x1x1 -> array", cycles[(N_RUNS/2) -1], tmp);
-
-    // array to 4x2x1
-    for(int i = 0; i < N_RUNS; i++) {
-        start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
-            fp2_array_to_4x2x1(c, arr);
-        }
-        end = cpucycles();
-        cycles[i] = (end - start)/iterations;
-    }
-    tmp = fp2_is_equal_4x2x1(c, a);
-    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("4x2x1 <- array", cycles[(N_RUNS/2) -1], tmp);
-
-    // 4x2x1 to array
-    for(int i = 0; i < N_RUNS; i++) {
-        start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
-            fp2_4x2x1_to_array(arr, c);
-        }
-        end = cpucycles();
-        cycles[i] = (end - start)/iterations;
-    }
-    tmp = fp2_is_equal_4x2x1(c, a);
-    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("4x2x1 -> array", cycles[(N_RUNS/2) -1], tmp);
-
     // unvec to 8x1x1
     fp2_t unvec[8];
     for(int i = 0; i < N_RUNS; i++) {
@@ -465,7 +413,7 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int i = 0; i < iterations; i++) {
-            fp2_8x1x1_to_4x2x1(c, a);
+            fp2_8x1x1_to_4x2x1(c, c+8, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;

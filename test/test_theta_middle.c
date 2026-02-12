@@ -108,7 +108,7 @@ bool test_theta_middle(int iterations)
 
         // Pair matches single
         theta_had_pair(d, a);
-        fp2_8x1x1_to_4x2x1(e, a);
+        fp2_8x1x1_to_4x2x1(e, e+8, a);
         theta_had_single(e, e);
         theta_had_single(e+8, e+8);
         fp2_4x2x1_to_8x1x1(f, e, e+8);
@@ -130,7 +130,7 @@ bool test_theta_middle(int iterations)
 
         // Pair matches single
         theta_mul_pair(d, a, b);
-        fp2_8x1x1_to_4x2x1(e, a);
+        fp2_8x1x1_to_4x2x1(e, e+8, a);
         theta_mul_single(f, e, b);
         theta_mul_single(f+8, e+8, b);
         fp2_4x2x1_to_8x1x1(e, f, f+8);
@@ -152,7 +152,7 @@ bool test_theta_middle(int iterations)
 
         // Pair matches single
         theta_double_pair(d, a, b, c);
-        fp2_8x1x1_to_4x2x1(e, a);
+        fp2_8x1x1_to_4x2x1(e, e+8, a);
         theta_double_single(f, e, b, c);
         theta_double_single(f+8, e+8, b, c);
         fp2_4x2x1_to_8x1x1(e, f, f+8);
@@ -176,7 +176,7 @@ bool test_theta_middle(int iterations)
 
         // Pair matches single
         theta_eval_pair(d, a, b, h1, h2);
-        fp2_8x1x1_to_4x2x1(e, a);
+        fp2_8x1x1_to_4x2x1(e, e+8, a);
         theta_eval_single(f, e, b, h1, h2);
         theta_eval_single(f+8, e+8, b, h1, h2);
         fp2_4x2x1_to_8x1x1(e, f, f+8);

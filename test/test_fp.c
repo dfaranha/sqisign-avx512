@@ -4,9 +4,12 @@
 #include "test.h"
 #include "utils.h"
 
+#include "sqi_test_extras.h"
+
 bool test_fp(int iterations)
 {
     __m512i a[8], b[8], c[8], d[8], e[8], f[8], zero[8], one[8], t;
+    fp_t unvec1[8], unvec2[8];
     fp_setzero_8x1(zero);
     fp_setzero_8x1(one);
     one[0] = VSETALL(1);
@@ -740,6 +743,105 @@ bool test_fp(int iterations)
     }
 
     print_test_res("squaring", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Division by 3
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_8x1(a);
+        fp_copy_8x1(b, a);
+
+        fp_div3_8x1(b, b);
+        fp_add_8x1(c, b, b);
+        fp_add_8x1(c, c, b);
+
+        if (fp_is_equal_8x1(a, c) != 0xff) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 3", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // 8x1 <-> unvectorized
+    for (int i = 0; i < iterations; i++) {
+        for (int j = 0; j < 8; j++) {
+            fp_random_test(unvec1+j);
+        }
+        rand_fp_8x1(a);
+
+        // Converting back and forth does nothin
+        fp_unvectorized_to_8x1(d, unvec1);
+        fp_8x1_to_unvectorized(unvec2, d);
+
+        for (int j = 0; j < 8; j++) {
+            if (fp_is_equal(unvec1+j, unvec2+j) == 0) { passed = 0; }
+        }
+        if (passed == 0) {
+            break;
+        }
+
+        fp_8x1_to_unvectorized(unvec2, a);
+        fp_unvectorized_to_8x1(d, unvec2);
+
+        if (fp_is_equal_8x1(a, d) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // Top 13 bits of each AVX limb is 0
+        t = VSETALL(0xfff8000000000000);
+        fp_unvectorized_to_8x1(d, unvec1);
+        for (int j = 0; j < 8; j++) {
+            e[j] = VAND(d[j], t);
+        }
+        if (fp_is_zero_8x1(e) != 0xff) {
+            passed = 0;
+            break;
+        }
+        
+        // Conversion commutes with arithmetic
+        rand_fp_8x1(a);
+        rand_fp_8x1(b);
+        fp_mul_8x1(c, a, b);
+
+        fp_8x1_to_unvectorized(unvec1, a);
+        fp_8x1_to_unvectorized(unvec2, b);
+        for (int j = 0; j < 8; j++) {
+            fp_mul(unvec1+j, unvec1+j, unvec2+j);
+        }
+        fp_unvectorized_to_8x1(d, unvec1);
+
+        if (fp_is_equal_8x1(c, d) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        for (int j = 0; j < 8; j++) {
+            fp_random_test(unvec1+j);
+            fp_random_test(unvec2+j);
+        }
+
+        fp_unvectorized_to_8x1(d, unvec1);
+        fp_unvectorized_to_8x1(e, unvec2);
+
+        for (int j = 0; j < 8; j++) {
+            fp_mul(unvec1+j, unvec1+j, unvec2+j);
+        }
+        fp_mul_8x1(f, d, e);
+        fp_8x1_to_unvectorized(unvec2, f);
+        
+        for (int j = 0; j < 8; j++) {
+            if (fp_is_equal(unvec1+j, unvec2+j) == 0) {
+                passed = 0;
+                break;
+            }
+        }
+    }
+    print_test_res("unvectorized <-> 8x1", passed);
     if (passed == 0) {
         return false;
     }
