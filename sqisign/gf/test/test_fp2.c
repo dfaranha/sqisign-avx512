@@ -2,7 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
-#include "test_utils.h"
+
+#include "sqi_test_extras.h"
 // #include <rng.h>
 // #include <bench_test_arguments.h>
 
@@ -303,7 +304,7 @@ fp2_test(int iterations)
     passed = 1;
     for (n = 0; n < iterations; n++) {
         fp2_random_test(&a);
-        fp2_muli(&b, &a);
+        fp2_mul_i(&b, &a, 1);
         fp2_mul(&c, &a, &i);
         if (fp2_is_equal(&b, &c) == 0) {
             passed = 0;

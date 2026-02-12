@@ -80,6 +80,10 @@ typedef struct ec_curve_t
  * @{
  */
 
+// Initalisation for curves and points
+void ec_curve_init(ec_curve_t *E);
+void ec_point_init(ec_point_t *P);
+
 /**
  * @brief Point equality
  *
@@ -161,6 +165,10 @@ void ec_dbl(ec_point_t *res, const ec_point_t *P, const ec_curve_t *curve);
  * @param curve the curve on which P lays
  */
 void ec_dbl_iter(ec_point_t *res, int n, const ec_point_t *P, ec_curve_t *curve);
+
+void xDBL_A24(ec_point_t *Q, const ec_point_t *P, const ec_point_t *A24, const bool A24_normalized);
+
+void xADD(ec_point_t *R, const ec_point_t *P, const ec_point_t *Q, const ec_point_t *PQ);
 
 /**
  * @brief Reduce Z-coordinate of point in place
@@ -270,6 +278,28 @@ static int test_point_order_twof(const ec_point_t *P, const ec_curve_t *E, int t
         return 0;
     // Ensure [2^t] P = 0
     ec_dbl(&test, &test, &curve);
+    return ec_is_zero(&test);
+}
+
+/**
+ * @brief Check if a [2^t] * (X : Z) = 0
+ *
+ * @param P: a point
+ * @param E: an elliptic curve
+ * @param t: an integer
+ *
+ * @return 0xFFFFFFFF if the order is correct, 0 otherwise
+ */
+static int test_point_torsion_twof(const ec_point_t *P, const ec_curve_t *E, int t)
+{
+    ec_point_t test;
+    ec_curve_t curve;
+    test = *P;
+    copy_curve(&curve, E);
+
+    // Scale point by 2^(t-1)
+    ec_dbl_iter(&test, t, &test, &curve);
+    // If it's zero now, it doesnt have order 2^t
     return ec_is_zero(&test);
 }
 

@@ -50,6 +50,8 @@ void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b);
 
 void fp2_sqr_8x1x1(__m512i* res, __m512i* a);
 
+void fp2_div3_8x1x1(__m512i* res, __m512i* src);
+
 /**
  * Multipication by i.
  */
@@ -133,9 +135,17 @@ void fp2_mixaddsub_4x2x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 ad
 
 void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b);
 
+void fp2_sqr_4x2x1(__m512i* res, __m512i* a);
+
+// res1 = a1 * b1, res2 = a2 * b2
+void fp2_mulx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* b1, __m512i* a2, __m512i* b2);
+
+// res1 = a1 * b1, res2 = a2 * b2
+void fp2_sqrx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* a2);
+
 void fp2_muli_4x2x1(__m512i* res, __m512i* a);
 
-void fp2_sqr_4x2x1(__m512i* res, __m512i* a);
+void fp2_div3_4x2x1(__m512i* res, __m512i* src);
 
 void fp2_tomont_4x2x1(__m512i* res, __m512i* a);
 
@@ -225,17 +235,6 @@ void fp2_frommont_2x4x1(__m512i* res, __m512i* a);
 //                                      Conversions between representations
 // ======================================================================================================
 
-/**
- * Converts between the array representation and the vectorized representations.
- * In the array representation, we store the Fp2 elements one after the other, in one big array.
- * Each Fp2 element is stored in twelve 64-bit integers, with the first six storing the real coefficient.
- */
-void fp2_array_to_8x1x1(__m512i* res, uint64_t* src);
-void fp2_array_to_4x2x1(__m512i* res, uint64_t* src);
-
-void fp2_8x1x1_to_array(uint64_t* res, __m512i* src);
-void fp2_4x2x1_to_array(uint64_t* res, __m512i* src);
-
 void fp2_unvectorized_to_8x1x1(__m512i* res, fp2_t* src);
 void fp2_unvectorized_to_4x2x1(__m512i* res, fp2_t* src);
 void fp2_8x1x1_to_unvectorized(fp2_t* res, __m512i* src);
@@ -244,9 +243,9 @@ void fp2_4x2x1_to_unvectorized(fp2_t* res, __m512i* src);
 /**
  * Converts an Fp2 8x1x1 to two 4x2x1's.
  * src = (x_1, x_2, y_1, y_2, ...)
- * res = ((x_1, y_1, ...), (x_2, y_2, ...))
+ * res1 = (x_1, y_1, ...), res2 = (x_2, y_2, ...)
  */
-void fp2_8x1x1_to_4x2x1(__m512i* res, __m512i* src);
+void fp2_8x1x1_to_4x2x1(__m512i* res1, __m512i* res2, __m512i* src);
 
 /**
  * Converts two Fp2 4x2x1's to an 8x1x1.
@@ -254,6 +253,15 @@ void fp2_8x1x1_to_4x2x1(__m512i* res, __m512i* src);
  * res = (x_1, x_2, y_1, y_2, ...)
  */
 void fp2_4x2x1_to_8x1x1(__m512i* res, __m512i* src1, __m512i* src2);
+
+// More specialized conversion functions:
+// TODO: Go through vectorized code and see if we can use these.
+
+// Given a in 4x2x1, outputs (a, a) in 8x1x1.
+void fp2_4x2x1_duplicate_to_8x1x1(__m512i* res, __m512i* src);
+// Only extracts first 4x2x1
+void fp2_8x1x1_to_first_4x2x1(__m512i* res, __m512i* src);
+
 
 void fp2_4x2x1_to_2x4x1(__m512i* res, __m512i* src);
 void fp2_2x4x1_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2);
