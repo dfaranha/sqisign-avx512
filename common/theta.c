@@ -104,7 +104,7 @@ bool theta_isogeny_chain_single(
 {
     __m512i A_12[8], A24_12[8], ker_x[8], ker_y[8], ker_z[8], OA[8], OA_dual_inv[8];
     __m512i J[8], matrix01[16], matrix23[16], T8_x[8], T8_y[8], T8_z[8], gluing_eval_res[16];
-    __m512i eval_pts_theta[8*num_pts];
+    __m512i eval_pts_theta[8*num_pts], idx;
 
     // TODO: Copied from middle. Which variables can be merged?
     bool h1, h2, success = true;
@@ -170,17 +170,15 @@ bool theta_isogeny_chain_single(
 
     // Package the point we use for translation
     // T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_x + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_x, unvec1);
     // T8_Y = AVX_4x2x1(Y_8[0], Y_8[0], Y_8[2], Y_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_y + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_y, unvec1);
     // T8_Z = AVX_4x2x1(Z_8[0], Z_8[0], Z_8[2], Z_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_z + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_z, unvec1);
+    idx = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    for (int i = 0; i <  8; i++) {
+        int j = 8*current + i;
+        T8_x[i] = VPERM512(idx, strat_points_x[j]);
+        T8_y[i] = VPERM512(idx, strat_points_y[j]);
+        T8_z[i] = VPERM512(idx, strat_points_z[j]);
+    }
 
     // Push kernel though the gluing isogeny
     // 4 Jacobian points for the kernel become 2 theta points
@@ -289,7 +287,7 @@ bool theta_isogeny_chain_pair(
 {
     __m512i A_12[8], A24_12[8], ker_x[8], ker_y[8], ker_z[8], OA[8], OA_dual_inv[16];
     __m512i J[8], matrix01[16], matrix23[16], T8_x[8], T8_y[8], T8_z[8], gluing_eval_res[16];
-    __m512i eval_pts_theta[8*num_pts];
+    __m512i eval_pts_theta[8*num_pts], idx;
 
     // TODO: Copied from middle. Which variables can be merged?
     bool h1, h2, success = true;
@@ -355,17 +353,15 @@ bool theta_isogeny_chain_pair(
 
     // Package the point we use for translation
     // T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_x + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_x, unvec1);
     // T8_Y = AVX_4x2x1(Y_8[0], Y_8[0], Y_8[2], Y_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_y + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_y, unvec1);
     // T8_Z = AVX_4x2x1(Z_8[0], Z_8[0], Z_8[2], Z_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_z + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_z, unvec1);
+    idx = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    for (int i = 0; i <  8; i++) {
+        int j = 8*current + i;
+        T8_x[i] = VPERM512(idx, strat_points_x[j]);
+        T8_y[i] = VPERM512(idx, strat_points_y[j]);
+        T8_z[i] = VPERM512(idx, strat_points_z[j]);
+    }
 
     // Push kernel though the gluing isogeny
     // 4 Jacobian points for the kernel become 2 theta points
@@ -483,7 +479,7 @@ bool theta_isogeny_chain_no_torsion_single(
 {
     __m512i A_12[8], A24_12[8], ker_x[8], ker_y[8], ker_z[8], OA[8], OA_dual_inv[8];
     __m512i J[8], matrix01[16], matrix23[16], T8_x[8], T8_y[8], T8_z[8], gluing_eval_res[16];
-    __m512i eval_pts_theta[8*num_pts];
+    __m512i eval_pts_theta[8*num_pts], idx;
 
     // TODO: Copied from middle. Which variables can be merged?
     bool h1, h2, success = true;
@@ -550,17 +546,15 @@ bool theta_isogeny_chain_no_torsion_single(
 
     // Package the point we use for translation
     // T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_x + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_x, unvec1);
     // T8_Y = AVX_4x2x1(Y_8[0], Y_8[0], Y_8[2], Y_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_y + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_y, unvec1);
     // T8_Z = AVX_4x2x1(Z_8[0], Z_8[0], Z_8[2], Z_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_z + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_z, unvec1);
+    idx = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    for (int i = 0; i <  8; i++) {
+        int j = 8*current + i;
+        T8_x[i] = VPERM512(idx, strat_points_x[j]);
+        T8_y[i] = VPERM512(idx, strat_points_y[j]);
+        T8_z[i] = VPERM512(idx, strat_points_z[j]);
+    }
 
     // Push kernel though the gluing isogeny
     // 4 Jacobian points for the kernel become 2 theta points
@@ -678,7 +672,7 @@ bool theta_isogeny_chain_no_torsion_pair(
 {
     __m512i A_12[8], A24_12[8], ker_x[8], ker_y[8], ker_z[8], OA[8], OA_dual_inv[16];
     __m512i J[8], matrix01[16], matrix23[16], T8_x[8], T8_y[8], T8_z[8], gluing_eval_res[16];
-    __m512i eval_pts_theta[8*num_pts];
+    __m512i eval_pts_theta[8*num_pts], idx;
 
     // TODO: Copied from middle. Which variables can be merged?
     bool h1, h2, success = true;
@@ -744,17 +738,15 @@ bool theta_isogeny_chain_no_torsion_pair(
 
     // Package the point we use for translation
     // T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_x + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_x, unvec1);
     // T8_Y = AVX_4x2x1(Y_8[0], Y_8[0], Y_8[2], Y_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_y + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_y, unvec1);
     // T8_Z = AVX_4x2x1(Z_8[0], Z_8[0], Z_8[2], Z_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_z + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_z, unvec1);
+    idx = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    for (int i = 0; i <  8; i++) {
+        int j = 8*current + i;
+        T8_x[i] = VPERM512(idx, strat_points_x[j]);
+        T8_y[i] = VPERM512(idx, strat_points_y[j]);
+        T8_z[i] = VPERM512(idx, strat_points_z[j]);
+    }
 
     // Push kernel though the gluing isogeny
     // 4 Jacobian points for the kernel become 2 theta points
