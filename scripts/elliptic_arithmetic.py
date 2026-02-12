@@ -1,4 +1,6 @@
-from elliptic_types import Curve, BasisX, PointJ
+from sage.rings.integer_ring import ZZ
+
+from elliptic_types import Curve, BasisX, PointX, PointJ
 from avx_types import AVX_4x2x1
 from avx_arithmetic import (
     avx_421_sqr,
@@ -14,6 +16,32 @@ from utilities import sqrt_fp2
 # ======================================================================
 # 64 bit operations
 # ======================================================================
+
+
+def j_invariant(E: Curve):
+    raise NotImplementedError
+
+
+def ladder_3_pt(E: Curve, basis: BasisX, scalar: ZZ):
+    raise NotImplementedError
+
+
+def double_x(E: Curve, P: PointX) -> PointX:
+    raise NotImplementedError
+
+
+def double_x_n(E: Curve, P: PointX, n: int) -> PointX:
+    for _ in range(n):
+        P = double_x(E, P)
+    return P
+
+
+def ladder_biscalar(E: Curve, basis: BasisX, a: ZZ, b: ZZ):
+    raise NotImplementedError
+
+
+def torsion_basis_from_hint(E: Curve, hint: ZZ, order: ZZ) -> BasisX:
+    raise NotImplementedError
 
 
 def lift_normalised_basis_to_jacobian(E: Curve, basis: BasisX) -> tuple[PointJ, PointJ]:
