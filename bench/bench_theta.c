@@ -102,22 +102,6 @@ void bench_theta(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("eval (h1, h2 = 0, 1)", cycles[(N_RUNS/2) -1], tmp);
 
-    // chain
-    fp2_tomont_4x2x1(KAT_OA, KAT_OA);
-    fp2_tomont_4x2x1(KAT_KER_P1, KAT_KER_P1);
-    fp2_tomont_4x2x1(KAT_KER_P2, KAT_KER_P2);
-
-    int n = 188 - 1;
-    for(int i = 0; i < N_RUNS; i++) {
-        start = cpucycles();
-        theta_isogeny_chain_no_gluing_single(a, b, KAT_OA, KAT_KER_P1, KAT_KER_P2, c, n, 0, true);
-        end = cpucycles();
-        cycles[i] = (end - start);
-    }
-    tmp = fp2_is_equal_4x2x1(a, b);
-    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("chain n = 187, num_points = 0, 10 runs", cycles[(N_RUNS/2)-1], tmp);
-
     printf("Theta pair benchmarks:\n");
 
     // Hadamard
@@ -197,24 +181,7 @@ void bench_theta(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("eval (h1, h2 = 0, 1)", cycles[(N_RUNS/2) -1], tmp);
 
-    // chain
-    __m512i KAT_KER[16];
-    fp2_4x2x1_to_8x1x1(KAT_KER, KAT_KER_P1, KAT_KER_P2);
-
-    for(int i = 0; i < N_RUNS; i++) {
-        start = cpucycles();
-        theta_isogeny_chain_no_gluing_pair(a, b, KAT_OA, KAT_KER, c, n, 0, true);
-        end = cpucycles();
-        cycles[i] = (end - start);
-    }
-    tmp = fp2_is_equal_4x2x1(a, b);
-    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("chain n = 187, num_points = 0, 10 runs", cycles[(N_RUNS/2)-1], tmp);
-
     int length = 188;
-    int num_pts = 0;
-    bool randomize = false;
-    theta_couple_point_t input_pts[0], res_pts[0];
     theta_couple_curve_t E12, E34;
     theta_kernel_couple_points_t ker_extra;
     ec_curve_init(&E12.E1);
@@ -308,12 +275,11 @@ void bench_theta(int iterations)
 
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        theta_isogeny_chain_pair(&E34, res_pts,
-                &E12, &ker_extra, input_pts, length, num_pts, randomize);
+        theta_isogeny_chain_ver(&E34, &E12, &ker_extra, length);
         end = cpucycles();
         cycles[i] = (end - start);
     }
     tmp = fp2_is_equal(&E34.E1.A, &E12.E1.A);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("theta_isogeny_chain_pair", cycles[(N_RUNS/2)-1], tmp);
+    print_bench_res("theta_isogeny_chain_ver", cycles[(N_RUNS/2)-1], tmp);
 }

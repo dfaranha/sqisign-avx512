@@ -536,7 +536,27 @@ void theta_codomain_pair_old(__m512i* res, __m512i* res_inv, __m512i* k, const b
     }
 }
 
-void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool h1, const bool h2)
+bool check_isotropic_pair(__m512i* PQ, __m512i* inv)
+{
+    __m512i t0[16], t1[16];
+
+    // PQ = (P0, Q0, P1, Q1, P2, Q2, P3, Q3)
+    // t0 = (inv0, inv0, inv1, inv1, inv2, inv2, inv3, inv3)
+    fp2_mul_8x1x1(t0, PQ, inv);
+
+    // assert t0[0] == t0[2] & t0[4] == t0[6] & 
+    //        t0[1] == t0[5] & t0[3] == t0[7]
+    __m512i idx0 = VSET(0, 8, 4, 12, 1, 9, 3, 11);
+    __m512i idx1 = VSET(2, 10, 6, 14, 5, 13, 7, 15);
+    for (int i = 0; i < 8; i++) {
+        t1[i] = VBLENDPERM(idx0, t0[i], t0[i+8]);
+        t1[i+8] = VBLENDPERM(idx1, t0[i], t0[i+8]);
+    }
+    
+    return fp2_is_equal_4x2x1(t1, t1+8) == 0xf;
+}
+
+bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool h1, const bool h2, const bool verify)
 {
     __m512i PQ[16], k_split[16], t1[16], t2[16], idx1, idx2, idx3;
 
@@ -549,15 +569,23 @@ void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
     theta_sqr_pair(PQ, PQ);
     theta_had_pair(PQ, PQ);
 
-    // t1 = (x1, y1, z2, w2)
-    // t2 = (y2, x2, w2, z2)
-    idx1 = VSET(0, 8, 2, 10, 4, 12, 6, 15);
-    idx2 = VSET(3, 11, 1, 9, 7, 15, 5, 13);
-    idx3 = VSET(0, 1, 2, 3, 14, 15, 12, 13);
+    if (verify) {
+        // xA, xB, yC, yD = ker_P
+        // zA, wB, zC, wD = ker_Q
+        // assert all but yC and yD are nonzero
+        int nz_mask = ~fp2_is_zero_8x1x1(PQ);
+        if (nz_mask & 0xaf != 0xaf) {
+            return false;
+        }
+    }
+
+    // t1 = (x1, x2, z2, z2)
+    // t2 = (y2, y1, w2, w2)
+    idx1 = VSET(0, 8, 1, 9, 5, 13, 5, 13);
+    idx2 = VSET(3, 11, 2, 10, 7, 15, 7, 15);
     for (int i = 0; i < 8; i++) {
         t1[i] = VBLENDPERM(idx1, PQ[i], PQ[i+8]);
         t2[i] = VBLENDPERM(idx2, PQ[i], PQ[i+8]);
-        t1[i] = VBLENDPERM(idx3, t1[i], t2[i]);
     }
 
     // t1 = (x1 * y2, y1 * x2, z2 * w2, w2 * z2) = (s1, s2, s3, s3)
@@ -584,9 +612,17 @@ void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
         res_inv[i] = VPERM512(idx1, t1[i]);
     }
 
+    if (verify) {
+        bool is_isotropic = check_isotropic_pair(PQ, res_inv);
+        if (!is_isotropic) {
+            return false;
+        }
+    }
+
     if (h2) {
         theta_had_single(res, res);
     }
+    return true;
 }
 
 void theta_eval_pair_old(__m512i* res, __m512i* a, __m512i* inv, const bool h1, const bool h2)

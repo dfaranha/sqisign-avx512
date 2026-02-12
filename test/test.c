@@ -62,13 +62,6 @@ int main()
     // {
     //     return 0;
     // }
-    // Tests the chain without gluing.
-    // TODO: The 8x1x1 test fails for some reason, need to fix at some point
-    // passed = test_theta(n_tests);
-    // if(!passed)
-    // {
-    //     return 0;
-    // }
     passed = test_theta_KAT(n_tests);
     if(!passed)
     {

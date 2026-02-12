@@ -242,10 +242,11 @@ void jac_to_xz_add_components(add_components_t *uvw, const jac_point_t *P, const
  * @param Q: a point
  * @param B: a basis
  * @param E: an elliptic curve
+ * @param verify: if true, it checks if the lift was successful.
  *
  * @return 0xFFFFFFFF if there was no error, 0 otherwise
  */
-uint32_t lift_basis(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E);
+uint32_t lift_basis(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E, const bool verify);
 
 /*
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *

@@ -4,7 +4,6 @@
 #include "theta_middle.h" // TODO: move had, sqr, mul to theta.h? Since they are "core" functions.
 #include "intrinsics_avx512.h"
 
-#include <assert.h>
 #include "utils.h"
 #include "sqi_test_extras.h"
 
@@ -412,11 +411,10 @@ void gluing_product_to_theta_pair(
     gluing_apply_matrix_pair(res_P12, matrix1, matrix2, res_P12);
 }
 
-// TODO: Decide how to implement last assert.
 // TODO: Output (OA_inv, OA_inv) in 8x1x1 for special eval.
-void gluing_codomain(
+bool gluing_codomain(
     __m512i* res_OA, __m512i* res_OA_dual_inv, __m512i* res_J_prime, __m512i* res_matrix01, __m512i* res_matrix23,
-    __m512i* A24_12, __m512i* x_8, __m512i* z_8
+    __m512i* A24_12, __m512i* x_8, __m512i* z_8, const bool verify
 )
 {
     __m512i x_8_[8], z_8_[8], x_4[8], z_4[8], P12[16];
@@ -439,22 +437,23 @@ void gluing_codomain(
     theta_sqr_pair(P12, P12);
     theta_had_pair(P12, P12);
 
-    // X1, X2, Y1, Y2, Z1, Z2, W1, W2 = P12
-    // TODO: Wrap asserts in #ifdefined, so they don't impact benchmarks
-    int zmask = fp2_is_zero_8x1x1(P12);
+    if (verify) {
+        // X1, X2, Y1, Y2, Z1, Z2, W1, W2 = P12
+        int zmask = fp2_is_zero_8x1x1(P12);
 
-    // assert that W1 = 0 and W2 = 0;
-    int last_is_zero = ((zmask & 0x40) >> 6) & ((zmask & 0x80) >> 7);
-    assert(last_is_zero);
+        // assert that W1 = 0 and W2 = 0;
+        int last_is_zero = ((zmask & 0x40) >> 6) & ((zmask & 0x80) >> 7);
+        if (!last_is_zero) { return false; }
 
-    // assert that x1, x2, y1, z2 != 0
-    zmask = ~zmask;
-    int projective_factors_not_zero = 
-        (zmask & 0x1) &
-        ((zmask & 0x2) >> 1) &
-        ((zmask & 0x4) >> 2) &
-        ((zmask & 0x20) >> 5);
-    assert(projective_factors_not_zero);
+        // assert that x1, x2, y1, z2 != 0
+        zmask = ~zmask;
+        int projective_factors_not_zero = 
+            (zmask & 0x1) &
+            ((zmask & 0x2) >> 1) &
+            ((zmask & 0x4) >> 2) &
+            ((zmask & 0x20) >> 5);
+        if (!projective_factors_not_zero) { return false; }
+    }
 
     // ============================================================
     // Just like in the generic codomain there's a bit of ugliness
@@ -501,15 +500,25 @@ void gluing_codomain(
     }
     fp2_mul_4x2x1(t0, t0, t3); // t0 = (A, A_inv, x, y)
 
-    // TODO: Needed?
-    // if (Y1 * B_inv != x) or (X2 * A_inv != Z2 * C_inv):
-    //    raise ValueError("input kernel is not isotropic")
-    // fp2_mul(t_unvec, P12_unvec+2, ABCD_unvec+2);
-    // fp2_mul(t_unvec+1, P12_unvec+1, inv_unvec);
-    // fp2_mul(t_unvec+2, P12_unvec+5, ABCD_unvec+1);
-    // int ker_is_isotropic = fp2_is_equal(t_unvec, inv_unvec+1) 
-    //     & fp2_is_equal(t_unvec+1, t_unvec+2);
-    // assert(ker_is_isotropic);
+    if (verify) {
+        // if (Y1 * B_inv != x) or (X2 * A_inv != Z2 * C_inv):
+        //    raise ValueError("input kernel is not isotropic")
+        idx0 = VSET(2, 10, 1, 9, 5, 13, 0, 0); // (Y1, X2, Z2, -)
+        idx1 = VSET(12, 14, 2, 3, 8, 10, 0, 0); // (C, A_inv, B, -)
+        for (int i = 0; i < 8; i++) {
+            t1[i] = VBLENDPERM(idx0, P12[i], P12[i+8]);
+            t3[i] = VBLENDPERM(idx1, t0[i], t2[i]);
+        }
+        fp2_mul_4x2x1(t1, t1, t3); // ( Y1 * C, X2 * A_inv, Z2 * B, -)
+        idx0 = VSET(4, 5, 12, 13, 0, 0, 0, 0); // (Z2 * B, x, -, -)
+        for(int i = 0; i < 8; i++) {
+            t3[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        }
+        int eqmask = fp2_is_equal_4x2x1(t1, t3);
+        int ker_is_isotropic = ((eqmask & 0x2) >> 1) & eqmask;
+        
+        if (!ker_is_isotropic) { return false; }
+    }
 
     // OA = hadamard(AVX_4x2x1(A, B, C, 0))
     idx0 = VSET(0, 1, 8, 10, 12, 14, 0, 0);
@@ -524,6 +533,8 @@ void gluing_codomain(
         res_J_prime[i] = VPERM512(idx2, t0[i]);
     }
     theta_had_single(res_OA, res_OA);
+
+    return true;
 }
 
 // TODO: Haven't investigated the possibility of micro-optimizations.
@@ -690,61 +701,84 @@ void gluing_eval_product_to_theta_pair(
 }
 
 // Done (TODO delete this comment)
-void gluing_eval_special(
+bool gluing_eval_special(
     __m512i* res,
-    theta_couple_point_t* P12, __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23
+    theta_couple_point_t* P12, __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23, const bool verify
 )
 {
-    assert(fp2_is_zero(&P12->P1.z) || fp2_is_zero(&P12->P2.z));
+    // Check that the points are of the form (P1, 0) or (0, P2)
+    if (verify) {
+        if (!fp2_is_zero(&P12->P1.z) && !fp2_is_zero(&P12->P2.z)) {
+            return false;
+        }
+    }
     gluing_eval_product_to_theta(res, &P12->P1, &P12->P2, matrix01, matrix23);
     fp2_sqr_4x2x1(res, res);
     theta_had_single(res, res);
 
-    assert(fp2_is_zero_4x2x1(res) & 0x8); // this is the special case we must have
+    // check that w = 0
+    if (verify) {
+        if (fp2_is_zero_4x2x1(res) & 0x8 != 0x8) { return false; }
+    }
     fp2_mul_4x2x1(res, res, OA_inv);
     theta_had_single(res, res);
+
+    return true;
 }
 
 // Done (TODO delete this comment)
-void gluing_eval_special_pair(
+bool gluing_eval_special_pair(
     __m512i* res,
     theta_couple_point_t* P12, theta_couple_point_t* Q12,
-    __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23
+    __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23, const bool verify
 )
 {
-    assert(fp2_is_zero(&P12->P1.z) || fp2_is_zero(&P12->P2.z));
-    assert(fp2_is_zero(&Q12->P1.z) || fp2_is_zero(&Q12->P2.z));
+    // check that pair of points are of the form (P1, 0) or (0, P2)
+    if (verify) {
+        if (!fp2_is_zero(&P12->P1.z) && !fp2_is_zero(&P12->P2.z)) {
+            return false;
+        }
+        if (!fp2_is_zero(&Q12->P1.z) && !fp2_is_zero(&Q12->P2.z)) {
+            return false;
+        }
+    }
     gluing_eval_product_to_theta_pair(
         res, &P12->P1, &P12->P2, &Q12->P1, &Q12->P2, matrix01, matrix23
     );
     fp2_sqr_8x1x1(res, res);
     theta_had_pair(res, res);
 
-    // w1 = 0 and w2 = 0:
-    assert((fp2_is_zero_8x1x1(res) & 0xc0) == 0xc0 ); 
+    // check that w1 = 0 and w2 = 0:
+    if (verify) {
+        if (fp2_is_zero_8x1x1(res) & 0xc0 != 0xc0) { return false; }
+    }
     theta_mul_pair(res, res, OA_inv);
     theta_had_pair(res, res);
+
+    return true;
 }
 
 // Done (TODO delete this comment)
-void gluing_eval_special_list_pair(
+bool gluing_eval_special_list_pair(
     __m512i* res_pts, theta_couple_point_t* pts, __m512i* inv, 
-    __m512i* matrix01, __m512i* matrix23, const int num_pts
+    __m512i* matrix01, __m512i* matrix23, const int num_pts, const bool verify
 )
 {
+    bool success = true;
     bool num_pts_is_odd = num_pts & 0x1;
     int num_pair_pts = num_pts / 2;
 
     for (int i = 0; i < num_pair_pts; i++) {
-        gluing_eval_special_pair(
+        success &= gluing_eval_special_pair(
             res_pts + (16*i), pts + (2*i), pts + (2*i+1), 
-            inv, matrix01, matrix23
+            inv, matrix01, matrix23, verify
         );
     }
     if (num_pts_is_odd) {
-        gluing_eval_special(
+        success &= gluing_eval_special(
             res_pts + 8*(num_pts-1), pts + (num_pts-1),
-            inv, matrix01, matrix23
+            inv, matrix01, matrix23, verify
         );
     }
+    return success;
 }

@@ -1,6 +1,6 @@
 #include "sqi_ec.h"
 
-uint32_t ec_recover_y(fp2_t *y, const fp2_t *Px, const ec_curve_t *curve)
+uint32_t ec_recover_y(fp2_t *y, const fp2_t *Px, const ec_curve_t *curve, const bool verify)
 { // Recover y-coordinate of a point on the Montgomery curve y^2 = x^3 + Ax^2 + x
     fp2_add(y, Px, &curve->A); // A + x
     fp2_mul(y, y, Px);         // x^2 + Ax
@@ -8,12 +8,16 @@ uint32_t ec_recover_y(fp2_t *y, const fp2_t *Px, const ec_curve_t *curve)
     fp2_mul(y, y, Px);         // x^3 + Ax^2 + x
     // This is required, because we do not yet know that our curves are
     // supersingular so our points live on the twist with B = 1.
-    return fp2_sqrt_verify(y);
+    if (verify) {
+        return fp2_sqrt_verify(y);
+    }
+    fp2_sqrt(y);
+    return 1;
 }
 
 // Lifts a basis x(P), x(Q), x(P-Q) assuming the curve has (A/C : 1) and the point
 // P = (X/Z : 1). For generic implementation see lift_basis()
-uint32_t lift_basis_normalized(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E)
+uint32_t lift_basis_normalized(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E, const bool verify)
 {
     assert(fp2_is_one(&B->P.z));
     assert(fp2_is_one(&E->C));
@@ -22,7 +26,7 @@ uint32_t lift_basis_normalized(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec
     fp2_copy(&Q->x, &B->Q.x);
     fp2_copy(&Q->z, &B->Q.z);
     fp2_set_one(&P->z);
-    uint32_t ret = ec_recover_y(&P->y, &P->x, E);
+    uint32_t ret = ec_recover_y(&P->y, &P->x, E, verify);
 
     // Algorithm of Okeya-Sakurai to recover y.Q in the montgomery model
     fp2_t v1, v2, v3, v4;
@@ -54,7 +58,7 @@ uint32_t lift_basis_normalized(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec
     return ret;
 }
 
-uint32_t lift_basis(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E)
+uint32_t lift_basis(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E, const bool verify)
 {
     // Normalise the curve E such that (A : C) is (A/C : 1)
     // and the point x(P) = (X/Z : 1).
@@ -70,7 +74,7 @@ uint32_t lift_basis(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E
     fp2_mul(&E->A, &E->A, &inverses[1]);
 
     // Lift the basis to Jacobian points P, Q
-    return lift_basis_normalized(P, Q, B, E);
+    return lift_basis_normalized(P, Q, B, E, verify);
 }
 
 // Given an x-coordinate, determines if this is a valid

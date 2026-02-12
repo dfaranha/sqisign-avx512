@@ -90,7 +90,7 @@ int theta_compute_product_doubles(
 //  Isogeny chains where we have the 2^(n+2) torsion    
 // ====================================================================
 
-void theta_isogeny_chain_single(
+bool theta_isogeny_chain_single(
     theta_couple_curve_t* res_E34, 
     theta_couple_point_t* res_pts, 
     theta_couple_curve_t* E12, 
@@ -98,7 +98,8 @@ void theta_isogeny_chain_single(
     theta_couple_point_t* pts, 
     const int n, 
     const int num_pts, 
-    const bool randomize
+    const bool randomize,
+    const bool verify
 )
 {
     __m512i A_12[8], A24_12[8], ker_x[8], ker_y[8], ker_z[8], OA[8], OA_dual_inv[8];
@@ -106,7 +107,7 @@ void theta_isogeny_chain_single(
     __m512i eval_pts_theta[8*num_pts];
 
     // TODO: Copied from middle. Which variables can be merged?
-    bool h1, h2;
+    bool h1, h2, success = true;
     splitting_matrix_t isom_matrix, rand_matrix;
     __m512i c1[8], c2[8], p1[8], p2[8], k1[8], k2[8];
 
@@ -120,10 +121,8 @@ void theta_isogeny_chain_single(
     ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
     ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
 
-    int success = lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1);
-    assert(success);
-    success = lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2);
-    assert(success);
+    success &= lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
+    success &= lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
 
     // We are now in the position to convert from 64 to 51 bit limbs
     // For the curve we need to pack the Montgomery coefficient for
@@ -163,9 +162,10 @@ void theta_isogeny_chain_single(
         A_12, strat_points_x, strat_points_y, strat_points_z, orders, space
     );
 
-    gluing_codomain(
+    success &= gluing_codomain(
         OA, OA_dual_inv, J, matrix01, matrix23,
-        A24_12, strat_points_x + (8*current), strat_points_z + (8*current)
+        A24_12, strat_points_x + (8*current), strat_points_z + (8*current),
+        verify
     );
 
     // Package the point we use for translation
@@ -201,9 +201,9 @@ void theta_isogeny_chain_single(
 
     // Push other points through gluing isogeny
     for (int i = 0; i < num_pts; i++) {
-        gluing_eval_special(
+        success &= gluing_eval_special(
             eval_pts_theta + (8*i),
-            pts + i, OA_dual_inv, matrix01, matrix23
+            pts + i, OA_dual_inv, matrix01, matrix23, verify
         );
     }
 
@@ -214,9 +214,7 @@ void theta_isogeny_chain_single(
         theta_precomp_single(c1, c2, OA);
         
         while (orders[current] != 1) {
-            assert(orders[current] >= 2);
             current++;
-            assert(current < space);
 
             int num_dbls = orders[current-1] / 2;
             theta_double_iter_single(
@@ -271,11 +269,13 @@ void theta_isogeny_chain_single(
         splitting_apply_isomorphism_list_single(eval_pts_theta, &rand_matrix, num_pts);
     }
 
-    splitting_theta_to_product(res_E34, OA);
-    splitting_theta_point_to_mont_list_single(res_pts, eval_pts_theta, OA, num_pts);
+    success &= splitting_theta_to_product(res_E34, OA, verify);
+    success &= splitting_theta_point_to_mont_list_single(res_pts, eval_pts_theta, OA, num_pts, verify);
+
+    return success;
 }
 
-void theta_isogeny_chain_pair(
+bool theta_isogeny_chain_pair(
     theta_couple_curve_t* res_E34, 
     theta_couple_point_t* res_pts, 
     theta_couple_curve_t* E12, 
@@ -283,7 +283,8 @@ void theta_isogeny_chain_pair(
     theta_couple_point_t* pts, 
     const int n, 
     const int num_pts, 
-    const bool randomize
+    const bool randomize,
+    const bool verify
 )
 {
     __m512i A_12[8], A24_12[8], ker_x[8], ker_y[8], ker_z[8], OA[8], OA_dual_inv[16];
@@ -291,7 +292,7 @@ void theta_isogeny_chain_pair(
     __m512i eval_pts_theta[8*num_pts];
 
     // TODO: Copied from middle. Which variables can be merged?
-    bool h1, h2;
+    bool h1, h2, success = true;
     splitting_matrix_t isom_matrix, rand_matrix;
     __m512i c1[16], c2[16], p1[8], p2[8], k1[8], k2[8];
 
@@ -305,10 +306,8 @@ void theta_isogeny_chain_pair(
     ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
     ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
 
-    int success = lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1);
-    assert(success);
-    success = lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2);
-    assert(success);
+    success &= lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
+    success &= lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
 
     // We are now in the position to convert from 64 to 51 bit limbs
     // For the curve we need to pack the Montgomery coefficient for
@@ -348,9 +347,10 @@ void theta_isogeny_chain_pair(
         A_12, strat_points_x, strat_points_y, strat_points_z, orders, space
     );
 
-    gluing_codomain(
-        OA, OA_dual_inv, J, matrix01, matrix23,
-        A24_12, strat_points_x + (8*current), strat_points_z + (8*current)
+    success &= gluing_codomain(
+        OA, OA_dual_inv, J, matrix01, matrix23, A24_12, 
+        strat_points_x + (8*current), strat_points_z + (8*current),
+        verify
     );
 
     // Package the point we use for translation
@@ -381,21 +381,20 @@ void theta_isogeny_chain_pair(
     }
     current--;
 
-    gluing_eval_special_list_pair(
+    success &= gluing_eval_special_list_pair(
         eval_pts_theta, pts, OA_dual_inv, 
-        matrix01, matrix23, num_pts
+        matrix01, matrix23, num_pts, verify
     );
 
     // Step Two: Compute the rest of the chain
     int step = 0;
+    bool codom_verify = verify;
     while (current >= 0 && orders[current] != 0) {
         // Precompute constants for doubling
         theta_precomp_pair(c1, c2, OA);
         
         while (orders[current] != 1) {
-            assert(orders[current] >= 2);
             current++;
-            assert(current < space);
 
             int num_dbls = orders[current-1] / 2;
             theta_double_iter_pair(
@@ -406,18 +405,19 @@ void theta_isogeny_chain_pair(
             orders[current] = orders[current-1] - num_dbls;
         }
 
-        if (step == n - 1) {
+        if (step == n - 2) {
             h1 = true; h2 = false;
-        } else if (step == n - 2) {
+            codom_verify = false;
+        } else if (step == n - 3) {
             h1 = false; h2 = false;
         } else {
             h1 = false; h2 = true;
         }
-
+        
         // Compute the codomain of the kernel
-        theta_codomain_pair(
-            OA, OA_dual_inv, 
-            strat_theta_pair + (16*current), h1, h2
+        success &= theta_codomain_pair(
+            OA, OA_dual_inv, strat_theta_pair + (16*current), 
+            h1, h2, codom_verify
         );
 
         // Push the kernel through the images
@@ -444,188 +444,32 @@ void theta_isogeny_chain_pair(
         splitting_apply_isomorphism_list_pair(eval_pts_theta, &rand_matrix, num_pts);
     }
 
-    splitting_theta_to_product(res_E34, OA);
-    splitting_theta_point_to_mont_list_pair(res_pts, eval_pts_theta, OA, num_pts);
+    success &= splitting_theta_to_product(res_E34, OA, verify);
+    success &= splitting_theta_point_to_mont_list_pair(res_pts, eval_pts_theta, OA, num_pts, verify);
+
+    return success;
 }
 
-void theta_isogeny_chain_pair_old(
+bool theta_isogeny_chain_ver(
     theta_couple_curve_t* res_E34, 
-    theta_couple_point_t* res_pts, 
     theta_couple_curve_t* E12, 
     theta_kernel_couple_points_t* ker,
-    theta_couple_point_t* pts, 
-    const int n, 
-    const int num_pts, 
-    const bool randomize
+    const int n
 )
 {
-    __m512i A_12[8], A24_12[8], ker_x[8], ker_y[8], ker_z[8], OA[8], OA_dual_inv[8];
-    __m512i J[8], matrix01[16], matrix23[16], T8_x[8], T8_y[8], T8_z[8], gluing_eval_res[16];
-    __m512i eval_pts_theta[8*num_pts];
-
-    // TODO: Copied from middle. Which variables can be merged?
-    bool h1, h2;
-    splitting_matrix_t isom_matrix, rand_matrix;
-    __m512i c1[8], c2[8], p1[8], p2[8], k1[8], k2[8];
-
-    fp2_t unvec1[4];
-
-    // TODO: Is it enough to just normalize curves? 
-    theta_normalize_chain_input(E12, ker);   
-
-    // lift the basis
-    theta_couple_jac_point_t xyT1, xyT2;
-    ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
-    ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
-
-    int success = lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1);
-    assert(success);
-    success = lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2);
-    assert(success);
-
-    // We are now in the position to convert from 64 to 51 bit limbs
-    // For the curve we need to pack the Montgomery coefficient for
-    // arithmetic.
-    // A_12 = AVX_4x2x1(E1.A, E1.A, E2.A, E2.A)
-    unvec1[0] = E12->E1.A; unvec1[1] = E12->E1.A; unvec1[2] = E12->E2.A; unvec1[3] = E12->E2.A;
-    fp2_unvectorized_to_4x2x1(A_12, unvec1);
-    // A24_12 = AVX_4x2x1(E1.A24, E1.A24, E2.A24, E2.A24)
-    unvec1[0] = E12->E1.A24.x; unvec1[1] = E12->E1.A24.x; unvec1[2] = E12->E2.A24.x; unvec1[3] = E12->E2.A24.x;
-    fp2_unvectorized_to_4x2x1(A24_12, unvec1);
-
-    // For the Jacobian points, we pack the coordinates into three blobs
-    // ker_X = AVX_4x2x1(P1.X, Q1.X, P2.X, Q2.X)
-    unvec1[0] = xyT1.P1.x; unvec1[1] = xyT2.P1.x; unvec1[2] = xyT1.P2.x; unvec1[3] = xyT2.P2.x;
-    fp2_unvectorized_to_4x2x1(ker_x, unvec1);
-    // ker_Y = AVX_4x2x1(P1.Y, Q1.Y, P2.Y, Q2.Y)
-    unvec1[0] = xyT1.P1.y; unvec1[1] = xyT2.P1.y; unvec1[2] = xyT1.P2.y; unvec1[3] = xyT2.P2.y;
-    fp2_unvectorized_to_4x2x1(ker_y, unvec1);
-    // ker_Z = AVX_4x2x1(P1.Z, Q1.Z, P2.Z, Q2.Z)
-    unvec1[0] = xyT1.P1.z; unvec1[1] = xyT2.P1.z; unvec1[2] = xyT1.P2.z; unvec1[3] = xyT2.P2.z;
-    fp2_unvectorized_to_4x2x1(ker_z, unvec1);
-
-    // Setting up the strategy
-    int space = 1;
-    for (unsigned i = 1; i < n; i *= 2) // n.bit_length + 1
-        ++space;
-
-    uint16_t orders[space];
-    __m512i strat_points_x[8*space], strat_points_y[8*space], strat_points_z[8*space];
-    // TODO: ker_x, ker_y, ker_z never used again, remove copies.
-    orders[0] = n;
-    fp2_copy_4x2x1(strat_points_x, ker_x);
-    fp2_copy_4x2x1(strat_points_y, ker_y);
-    fp2_copy_4x2x1(strat_points_z, ker_z);
-
-    int current = theta_compute_product_doubles(
-        A_12, strat_points_x, strat_points_y, strat_points_z, orders, space
+    theta_couple_point_t pts[0], res_pts[0];
+    int num_pts = 0;
+    bool randomize = false, verify = true;
+    return theta_isogeny_chain_pair(
+        res_E34, res_pts, E12, ker, pts, n, num_pts, randomize, verify
     );
-
-    gluing_codomain(
-        OA, OA_dual_inv, J, matrix01, matrix23,
-        A24_12, strat_points_x + (8*current), strat_points_z + (8*current)
-    );
-
-    // Package the point we use for translation
-    // T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_x + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_x, unvec1);
-    // T8_Y = AVX_4x2x1(Y_8[0], Y_8[0], Y_8[2], Y_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_y + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_y, unvec1);
-    // T8_Z = AVX_4x2x1(Z_8[0], Z_8[0], Z_8[2], Z_8[2])
-    fp2_4x2x1_to_unvectorized(unvec1, strat_points_z + (8*current));
-    unvec1[1] = unvec1[0]; unvec1[3] = unvec1[2];
-    fp2_unvectorized_to_4x2x1(T8_z, unvec1);
-
-    // Push kernel though the gluing isogeny
-    // 4 Jacobian points for the kernel become 2 theta points
-    // TODO: Is current = space-1 here? And even if it is not, is it better to use 8*space?
-    __m512i strat_theta_pair[16*space];
-    for (int i = 0; i < current; i++) {
-        gluing_eval_pair(
-            strat_theta_pair + 16*i, //8x1x1
-            A_12, strat_points_x + (8*i), strat_points_y + (8*i), strat_points_z + (8*i),
-            T8_x, T8_y, T8_z, J, matrix01, matrix23
-        );
-        orders[i]--;
-    }
-    current--;
-
-    gluing_eval_special_list_pair(
-        eval_pts_theta, pts, OA_dual_inv, 
-        matrix01, matrix23, num_pts
-    );
-
-    // Step Two: Compute the rest of the chain
-    int step = 0;
-    while (current >= 0 && orders[current] != 0) {
-        // Precompute constants for doubling
-        theta_precomp_single(c1, c2, OA);
-        
-        while (orders[current] != 1) {
-            assert(orders[current] >= 2);
-            current++;
-            assert(current < space);
-
-            int num_dbls = orders[current-1] / 2;
-            theta_double_iter_pair_old(
-                strat_theta_pair + (16*current), 
-                strat_theta_pair + (16*(current-1)), 
-                c1, c2, num_dbls
-            );
-            orders[current] = orders[current-1] - num_dbls;
-        }
-
-        if (step == n - 1) {
-            h1 = true; h2 = false;
-        } else if (step == n - 2) {
-            h1 = false; h2 = false;
-        } else {
-            h1 = false; h2 = true;
-        }
-
-        // Compute the codomain of the kernel
-        theta_codomain_pair_old(
-            OA, OA_dual_inv, 
-            strat_theta_pair + (16*current), h1, h2
-        );
-
-        // Push the kernel through the images
-        // we have current number of pairs, so 2*current number of points
-        theta_eval_list_pair_old(strat_theta_pair, OA_dual_inv, h1, h2, 2*current);
-        for (int i = 0; i < current; i++) {
-            orders[i]--;
-        }
-        current--;
-
-        // Eval points
-        theta_eval_list_pair_old(eval_pts_theta, OA_dual_inv, h1, h2, num_pts);
-        step++;
-    }
-
-    // Step Three: Splitting
-    splitting_isom_matrix(&isom_matrix, OA);
-    splitting_apply_isomorphism_single(OA, OA, &isom_matrix);
-    splitting_apply_isomorphism_list_pair(eval_pts_theta, &isom_matrix, num_pts);
-
-    if (randomize) {
-        splitting_rand_matrix(&rand_matrix);
-        splitting_apply_isomorphism_single(OA, OA, &rand_matrix);
-        splitting_apply_isomorphism_list_pair(eval_pts_theta, &rand_matrix, num_pts);
-    }
-
-    splitting_theta_to_product(res_E34, OA);
-    splitting_theta_point_to_mont_list_pair(res_pts, eval_pts_theta, OA, num_pts);
 }
 
 // ====================================================================
 //  Isogeny chains where we have the 2^n torsion only (requires sqrts)   
 // ====================================================================
 
-void theta_isogeny_chain_no_torsion_single(
+bool theta_isogeny_chain_no_torsion_single(
     theta_couple_curve_t* res_E34, 
     theta_couple_point_t* res_pts, 
     theta_couple_curve_t* E12, 
@@ -633,7 +477,8 @@ void theta_isogeny_chain_no_torsion_single(
     theta_couple_point_t* pts, 
     const int n, 
     const int num_pts, 
-    const bool randomize
+    const bool randomize,
+    const bool verify
 )
 {
     __m512i A_12[8], A24_12[8], ker_x[8], ker_y[8], ker_z[8], OA[8], OA_dual_inv[8];
@@ -641,7 +486,7 @@ void theta_isogeny_chain_no_torsion_single(
     __m512i eval_pts_theta[8*num_pts];
 
     // TODO: Copied from middle. Which variables can be merged?
-    bool h1, h2;
+    bool h1, h2, success = true;
     splitting_matrix_t isom_matrix, rand_matrix;
     __m512i c1[8], c2[8], p1[8], p2[8], k1[8], k2[8];
     fp2_t unvec1[4];
@@ -655,10 +500,8 @@ void theta_isogeny_chain_no_torsion_single(
     ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
     ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
     
-    int success = lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1);
-    assert(success);
-    success = lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2);
-    assert(success);
+    success &= lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
+    success &= lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
 
     // We are now in the position to convert from 64 to 51 bit limbs
     // For the curve we need to pack the Montgomery coefficient for
@@ -699,9 +542,10 @@ void theta_isogeny_chain_no_torsion_single(
     );
 
     // Compute the gluing codomain
-    gluing_codomain(
-        OA, OA_dual_inv, J, matrix01, matrix23,
-        A24_12, strat_points_x + (8*current), strat_points_z + (8*current)
+    success &= gluing_codomain(
+        OA, OA_dual_inv, J, matrix01, matrix23, A24_12, 
+        strat_points_x + (8*current), strat_points_z + (8*current),
+        verify
     );
 
     // Package the point we use for translation
@@ -736,9 +580,9 @@ void theta_isogeny_chain_no_torsion_single(
 
     // Push other points through gluing isogeny
     for (int i = 0; i < num_pts; i++) {
-        gluing_eval_special(
+        success &= gluing_eval_special(
             eval_pts_theta + (8*i),
-            pts + i, OA_dual_inv, matrix01, matrix23
+            pts + i, OA_dual_inv, matrix01, matrix23, verify
         );
     }
     current--;
@@ -751,9 +595,7 @@ void theta_isogeny_chain_no_torsion_single(
         theta_precomp_single(c1, c2, OA);
         
         while (orders[current] != 1) {
-            assert(orders[current] >= 2);
             current++;
-            assert(current < space);
 
             int num_dbls = orders[current-1] / 2;
             theta_double_iter_single(
@@ -816,11 +658,13 @@ void theta_isogeny_chain_no_torsion_single(
         splitting_apply_isomorphism_list_single(eval_pts_theta, &rand_matrix, num_pts);
     }
 
-    splitting_theta_to_product(res_E34, OA);
-    splitting_theta_point_to_mont_list_single(res_pts, eval_pts_theta, OA, num_pts);
+    success &= splitting_theta_to_product(res_E34, OA, verify);
+    success &= splitting_theta_point_to_mont_list_single(res_pts, eval_pts_theta, OA, num_pts, verify);
+
+    return success;
 }
 
-void theta_isogeny_chain_no_torsion_pair(
+bool theta_isogeny_chain_no_torsion_pair(
     theta_couple_curve_t* res_E34, 
     theta_couple_point_t* res_pts, 
     theta_couple_curve_t* E12, 
@@ -828,7 +672,8 @@ void theta_isogeny_chain_no_torsion_pair(
     theta_couple_point_t* pts, 
     const int n, 
     const int num_pts, 
-    const bool randomize
+    const bool randomize,
+    const bool verify
 )
 {
     __m512i A_12[8], A24_12[8], ker_x[8], ker_y[8], ker_z[8], OA[8], OA_dual_inv[16];
@@ -836,7 +681,7 @@ void theta_isogeny_chain_no_torsion_pair(
     __m512i eval_pts_theta[8*num_pts];
 
     // TODO: Copied from middle. Which variables can be merged?
-    bool h1, h2;
+    bool h1, h2, success = true;
     splitting_matrix_t isom_matrix, rand_matrix;
     __m512i c1[16], c2[16], p1[8], p2[8], k1[8], k2[8];
 
@@ -850,10 +695,8 @@ void theta_isogeny_chain_no_torsion_pair(
     ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
     ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
 
-    int success = lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1);
-    assert(success);
-    success = lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2);
-    assert(success);
+    success &= lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
+    success &= lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
 
     // We are now in the position to convert from 64 to 51 bit limbs
     // For the curve we need to pack the Montgomery coefficient for
@@ -893,9 +736,10 @@ void theta_isogeny_chain_no_torsion_pair(
         A_12, strat_points_x, strat_points_y, strat_points_z, orders, space
     );
 
-    gluing_codomain(
-        OA, OA_dual_inv, J, matrix01, matrix23,
-        A24_12, strat_points_x + (8*current), strat_points_z + (8*current)
+    success &= gluing_codomain(
+        OA, OA_dual_inv, J, matrix01, matrix23, A24_12, 
+        strat_points_x + (8*current), strat_points_z + (8*current),
+        verify
     );
 
     // Package the point we use for translation
@@ -926,9 +770,9 @@ void theta_isogeny_chain_no_torsion_pair(
     }
     current--;
 
-    gluing_eval_special_list_pair(
+    success &= gluing_eval_special_list_pair(
         eval_pts_theta, pts, OA_dual_inv, 
-        matrix01, matrix23, num_pts
+        matrix01, matrix23, num_pts, verify
     );
 
     // Step Two: Compute the rest of the chain
@@ -939,9 +783,7 @@ void theta_isogeny_chain_no_torsion_pair(
         theta_precomp_pair(c1, c2, OA);
         
         while (orders[current] != 1) {
-            assert(orders[current] >= 2);
             current++;
-            assert(current < space);
 
             int num_dbls = orders[current-1] / 2;
             theta_double_iter_pair(
@@ -953,9 +795,9 @@ void theta_isogeny_chain_no_torsion_pair(
         }
 
         // Compute the codomain of the kernel
-        theta_codomain_pair(
-            OA, OA_dual_inv, 
-            strat_theta_pair + (16*current), h1, h2
+        success &= theta_codomain_pair(
+            OA, OA_dual_inv, strat_theta_pair + (16*current), 
+            h1, h2, verify
         );
 
         // Push the kernel through the images
@@ -1004,128 +846,8 @@ void theta_isogeny_chain_no_torsion_pair(
         splitting_apply_isomorphism_list_pair(eval_pts_theta, &rand_matrix, num_pts);
     }
 
-    splitting_theta_to_product(res_E34, OA);
-    splitting_theta_point_to_mont_list_pair(res_pts, eval_pts_theta, OA, num_pts);
-}
+    success &= splitting_theta_to_product(res_E34, OA, verify);
+    success &= splitting_theta_point_to_mont_list_pair(res_pts, eval_pts_theta, OA, num_pts, verify);
 
-// ====================================================================
-//                 Chains without gluing    
-// ==================================================================== 
-
-void theta_isogeny_chain_no_gluing_single(__m512i* codom, __m512i* eval_pts, __m512i* null, 
-    __m512i* ker_a, __m512i* ker_b, __m512i* pts, const int n, const int num_pts, 
-    const bool randomize)
-{
-    bool h1, h2;
-    //int isom_matrix[16];
-    splitting_matrix_t isom_matrix, rand_matrix;
-    __m512i c1[8], c2[8], p1[8], p2[8], k1[8], k2[8], codom_null[8], inv[8];
-    fp2_copy_4x2x1(p1, ker_a);
-    fp2_copy_4x2x1(p2, ker_b);
-    fp2_copy_4x2x1(codom_null, null);
-
-    // Initialize eval_pts. 8 is the number of __m512i vectors in a fp2 4x2x1 element.
-    // TODO: copy impl might be inefficient.
-    for (int i = 0; i < num_pts; i++) {
-        fp2_copy_4x2x1(eval_pts+8*i, pts+8*i);
-    }
-
-    for (int i = 0; i < n; i++) {
-        // Precompute constants for doubling
-        theta_precomp_single(c1, c2, codom_null);
-
-        // Double the kernel points of order 2^(n+2) to get points of order 2^(1 + 2) = 8
-        theta_double_iter_single(k1, p1, c1, c2, n-i-1);
-        theta_double_iter_single(k2, p2, c1, c2, n-i-1);
-
-        // For the ultimate and penultimate steps we do extra / less Hadamards
-        // to avoid zeros from the product structure.
-        if (i == n-1) {
-            h1 = true; h2 = false;
-        } else if (i == n-2) {
-            h1 = false; h2 = false;
-        } else {
-            h1 = false; h2 = true;
-        }
-        
-        // Compute the codomain of the kernel
-        theta_codomain_single(codom_null, inv, k1, k2, h1, h2);
-
-        // Push the kernel through the images
-        theta_eval_single(p1, p1, inv, h1, h2);
-        theta_eval_single(p2, p2, inv, h1, h2);
-
-        // Eval points
-        theta_eval_list_single(eval_pts, inv, h1, h2, num_pts);
-    }
-
-    // Splitting
-    splitting_isom_matrix(&isom_matrix, codom_null);
-    splitting_apply_isomorphism_single(codom_null, codom_null, &isom_matrix);
-    splitting_apply_isomorphism_list_single(eval_pts, &isom_matrix, num_pts);
-
-    if (randomize) {
-        splitting_rand_matrix(&rand_matrix);
-        splitting_apply_isomorphism_single(codom_null, codom_null, &rand_matrix);
-        splitting_apply_isomorphism_list_single(eval_pts, &rand_matrix, num_pts);
-    }
-
-    splitting_theta_to_product_old(codom, codom_null);
-    splitting_theta_point_to_mont_list_single_old(eval_pts, codom_null, num_pts);
-}
-
-void theta_isogeny_chain_no_gluing_pair(__m512i* codom, __m512i* eval_pts, __m512i* null, __m512i* ker, 
-    __m512i* pts, const int n, const int num_pts, const bool randomize)
-{
-    splitting_matrix_t isom_matrix, rand_matrix;
-    __m512i c1[16], c2[16], p[16], k[16], codom_null[8], inv[16];
-    bool h1, h2;
-
-    fp2_copy_8x1x1(p, ker);
-    fp2_copy_4x2x1(codom_null, null);
-    for (int i = 0; i < num_pts; i++) {
-        fp2_copy_4x2x1(eval_pts+8*i, pts+8*i);
-    }
-
-    for (int i = 0; i < n; i++) {
-        // Precompute constants for doubling
-        theta_precomp_pair(c1, c2, codom_null);
-
-        // Double the kernel points of order 2^(n+2) to get points of order 2^(1 + 2) = 8
-        theta_double_iter_pair(k, p, c1, c2, n-i-1);
-
-        // For the ultimate and penultimate steps we do extra / less Hadamards
-        // to avoid zeros from the product structure.
-        if (i == n-1) {
-            h1 = true; h2 = false;
-        } else if (i == n-2) {
-            h1 = false; h2 = false;
-        } else {
-            
-        }
-        
-        // Compute the codomain of the kernel
-        theta_codomain_pair(codom_null, inv, k, h1, h2);
-
-        // Push the kernel through the images
-        theta_eval_pair(p, p, inv, h1, h2);
-
-        // Eval points
-        theta_eval_list_pair(eval_pts, inv, h1, h2, num_pts);
-    }
-
-    // Splitting
-    splitting_isom_matrix(&isom_matrix, codom_null);
-    // TODO: Could it be worth it to merge codom_null with eval_pts?
-    splitting_apply_isomorphism_single(codom_null, codom_null, &isom_matrix);
-    splitting_apply_isomorphism_list_pair(eval_pts, &isom_matrix, num_pts);
-
-    if (randomize) {
-        splitting_rand_matrix(&rand_matrix);
-        splitting_apply_isomorphism_single(codom_null, codom_null, &rand_matrix);
-        splitting_apply_isomorphism_list_pair(eval_pts, &rand_matrix, num_pts);
-    }
-
-    splitting_theta_to_product_old(codom, codom_null);
-    splitting_theta_point_to_mont_list_pair_old(eval_pts, codom_null, num_pts);
+    return success;
 }

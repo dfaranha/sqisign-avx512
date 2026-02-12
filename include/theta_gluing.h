@@ -93,9 +93,9 @@ void gluing_product_to_theta_pair(
  * Algorithm 8.39 of the SQIsign spec.
  * Everything except matrix is in 4x2x1.
  */
-void gluing_codomain(
+bool gluing_codomain(
     __m512i* res_OA, __m512i* res_OA_dual_inv, __m512i* res_J_prime, __m512i* res_matrix01, __m512i* res_matrix23,
-    __m512i* A24_12, __m512i* x_8, __m512i* z_8
+    __m512i* A24_12, __m512i* x_8, __m512i* z_8, const bool verify
 );
 
 /**
@@ -131,24 +131,24 @@ void gluing_eval_product_to_theta_pair(
  * Evaluation of couple points of the form (P1, 0) or (0, P2)
  * which are the only forms needed for SQIsign.
  */
-void gluing_eval_special(
+bool gluing_eval_special(
     __m512i* res,
-    theta_couple_point_t* P12, __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23
+    theta_couple_point_t* P12, __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23, const bool verify
 );
 
 /**
  * Evaluation of couple points of the form (P1, 0) or (0, P2)
  * which are the only forms needed for SQIsign.
  */
-void gluing_eval_special_pair(
+bool gluing_eval_special_pair(
     __m512i* res,
     theta_couple_point_t* P12, theta_couple_point_t* Q12,
-    __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23
+    __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23, const bool verify
 );
 
-void gluing_eval_special_list_pair(
+bool gluing_eval_special_list_pair(
     __m512i* res_pts, theta_couple_point_t* pts, __m512i* inv, 
-    __m512i* matrix01, __m512i* matrix23, const int num_pts
+    __m512i* matrix01, __m512i* matrix23, const int num_pts, const bool verify
 );
 
 #endif

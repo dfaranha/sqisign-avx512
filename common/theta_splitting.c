@@ -247,43 +247,32 @@ void splitting_apply_isomorphism_list_pair(__m512i* pts, const splitting_matrix_
     }
 }
 
-void splitting_theta_to_product_old(__m512i* product, __m512i* null) 
-{    
-    __m512i tmp[8], idx1, idx2;
-    __mmask8 mask = 0x0f;
-    
-    // x = a^4, y = b^4, z = c^4
-    // TODO: Wastes one squaring, can we make use of it? I think the answer is no...
-    fp2_sqr_4x2x1(tmp, null);
-    fp2_sqr_4x2x1(tmp, tmp);
-
-    // (x, x, x, x)
-    idx1 = VSET(0, 1, 0, 1, 0, 1, 0, 1);
-    // (z, y, z, y)
-    idx2 = VSET(4, 5, 2, 3, 4, 5, 2, 3);
-    for (int i = 0; i < 8; i++) {
-        product[i] = VPERM512(idx1, tmp[i]);
-        tmp[i] = VPERM512(idx2, tmp[i]);
-    }
-    
-    // (x+z, x+y, x-z, x-y)
-    fp2_mixaddsub_4x2x1(product, product, tmp, mask);
-
-    // (-2*(x+y), -2*(x+y), -, -)
-    fp2_add_4x2x1(tmp, product, product);
-    fp2_neg_4x2x1(tmp, tmp);
-    
-    // (-2*(x+y), -2*(x+y), x-z, x-y)
-    for (int i = 0; i < 8; i++) {
-        product[i] = VBLEND(mask, product[i], tmp[i]);
-    }
-}
-
-void splitting_theta_to_product(theta_couple_curve_t* res, __m512i* null) 
+bool splitting_theta_to_product(theta_couple_curve_t* res, __m512i* null, const bool verify) 
 {    
     __m512i t0[8], t1[8], idx0, idx1;
     fp2_t unvec[4];
-    __mmask8 mask = 0x0f;
+    __mmask8 mask;
+
+    // assert a * d == b * c
+    if (verify) {
+        idx0 = VSET(0, 0, 1, 1, 2, 2, 3, 3); // (a, b)
+        idx1 = VSET(6, 6, 7, 7, 4, 4, 5, 5); // (d, c)
+        mask = 0x55;
+        for (int i = 0; i < 8; i++) {
+            t0[i] = VPERM512MASKZ(mask, null[i], idx0);
+            t1[i] = VPERM512MASKZ(mask, null[i], idx1);
+        }
+        fp2_mul_2x4x1(t0, t0, t1);
+        idx1 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+        idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+        for (int i = 0; i < 8; i++) {
+            t1[i] = VPERM512(idx1, t0[i]);
+            t0[i] = VPERM512(idx0, t0[i]);
+        }
+        
+        bool equal = fp2_is_equal_2x4x1(t0, t1) == 0x3;
+        if (!equal) { return false; }
+    }
     
     // x = a^4, y = b^4, z = c^4
     // TODO: Wastes one squaring, can we make use of it? I think the answer is no...
@@ -300,6 +289,7 @@ void splitting_theta_to_product(theta_couple_curve_t* res, __m512i* null)
     }
     
     // (x+z, x+y, x-z, x-y)
+    mask = 0x0f;
     fp2_mixaddsub_4x2x1(t1, t1, t0, mask);
 
     // (-2*(x+z), -2*(x+y), -, -)
@@ -310,6 +300,14 @@ void splitting_theta_to_product(theta_couple_curve_t* res, __m512i* null)
     for (int i = 0; i < 8; i++) {
         t0[i] = VBLEND(mask, t1[i], t0[i]);
     }
+
+    // check that C1 and C2 != 0
+    if (verify) {
+        int nz_mask = ~fp2_is_zero_4x2x1(t0);
+        if (nz_mask & 0xc != 0xc) {
+            return false;
+        }
+    }
     
     // Finally, we convert to the unvectorized 64-bit repr.
     fp2_4x2x1_to_unvectorized(unvec, t0);
@@ -319,92 +317,44 @@ void splitting_theta_to_product(theta_couple_curve_t* res, __m512i* null)
     res->E2.A = unvec[1];
     res->E1.C = unvec[2];
     res->E2.C = unvec[3];
-}
 
-void splitting_theta_point_to_mont_single_old(__m512i* mont_points, __m512i* theta_point, __m512i* null)
-{
-    __m512i tmp[8], idx1, idx2;
-    __mmask8 add_mask;
-    
-    idx1 = VSET(4, 5, 2, 3, 0, 1, 0, 1); // (c, b, a, a)
-    idx2 = VSET(0, 1, 0, 1, 4, 5, 2, 3); // (x, x, z, y)
-    for (int i = 0; i < 8; i++) {
-        tmp[i] = VPERM512(idx1, null[i]);
-        mont_points[i] = VPERM512(idx2, theta_point[i]);
-    }
-    fp2_mul_4x2x1(mont_points, mont_points, tmp); // (c*x, b*x, a*z, a*y)
-
-    idx1 = VSET(4, 5, 6, 7, 0, 1, 2, 3);    // (a*z, a*y, c*x, b*x)
-    for (int i = 0; i < 8; i++) {
-        tmp[i] = VPERM512(idx1, mont_points[i]);
-    }
-
-    // (a*z + c*x, a*y + b*x, a*x - c*x, a*y - b*x)
-    add_mask = 0x0f;
-    fp2_mixaddsub_4x2x1(mont_points, mont_points, tmp, add_mask);
-}
-
-void splitting_theta_point_to_mont_list_single_old(__m512i* pts, __m512i* null, const int num_pts)
-{
-    for (int i = 0; i < num_pts; i++) {
-        splitting_theta_point_to_mont_single_old(pts + 8*i, pts + 8*i, null);
-    }
-}
-
-void splitting_theta_point_to_mont_pair_old(__m512i* mont_points, __m512i* theta_points, __m512i* null)
-{
-    __m512i tmp[16], idx;
-    __mmask8 add_mask;
-
-    idx = VSET(4, 5, 2, 3, 0, 1, 0, 1); // (c, c, b, a)
-    for (int i = 0; i < 8; i++) {
-        tmp[i] = VPERM512(idx, null[i]);
-    }
-    fp2_4x2x1_to_8x1x1(tmp, tmp, tmp); // (c, c, c, c, b, b, a, a)
-    
-    idx = VSET(0, 1, 0, 1, 4, 5, 2, 3); // (x, x', x, x' z, z', y, y')
-    for (int i = 0; i < 16; i++) {
-        mont_points[i] = VPERM512(idx, theta_points[i]);
-    }
-
-    // (c*x, c*x', b*x, b*x', a*z, a*z', a*y, a*y')
-    fp2_mul_8x1x1(mont_points, mont_points, tmp); 
-
-    // (a*z, a*z', a*y, a*y', c*x, c*x', b*x, b*x')
-    idx = VSET(4, 5, 6, 7, 0, 1, 2, 3);    
-    for (int i = 0; i < 16; i++) {
-        tmp[i] = VPERM512(idx, mont_points[i]);
-    }
-
-    // (a*z + c*x, a*z' + c*x', a*y + b*x, a*y' + b*x', 
-    //  a*x - c*x, a*x' - c*x', a*y - b*x, a*y' - b*x')
-    add_mask = 0x0f;
-    fp2_mixaddsub_8x1x1(mont_points, mont_points, tmp, add_mask, add_mask);
-}
-
-void splitting_theta_point_to_mont_list_pair_old(__m512i* pts, __m512i* null, const int num_pts)
-{
-    bool num_pts_is_odd = (num_pts & 0x1);
-    int num_pair_pts = num_pts / 2;
-
-    for (int i = 0; i < num_pair_pts; i++) {
-        splitting_theta_point_to_mont_pair_old(pts + 16*i, pts + 16*i, null);
-    }
-    if (num_pts_is_odd) {
-        splitting_theta_point_to_mont_single_old(
-            pts+8*(num_pts-1), pts+8*(num_pts-1), null
-        );
-    }
+    return true;
 }
 
 // TODO: The python script has additional cases not handled here
-void splitting_theta_point_to_mont_single(
-    theta_couple_point_t* mont_pair, __m512i* theta_point, __m512i* null
+bool splitting_theta_point_to_mont_single(
+    theta_couple_point_t* mont_pair, __m512i* theta_point, __m512i* null, const bool verify
 )
 {
+    __m512i t0[8], t1[8], idx0, idx1;
+    __mmask8 mask;
     fp2_t OA_unvec[4], P_unvec[4], x1, x2, z1, z2, tmp;
     fp2_4x2x1_to_unvectorized(OA_unvec, null);
     fp2_4x2x1_to_unvectorized(P_unvec, theta_point);
+
+    // Check P != (0, 0, 0, 0) and x * w == y * z
+    if (verify) {
+        int zmask = fp2_is_zero_4x2x1(theta_point);
+        if (zmask == 0xf) { return false; }
+
+        idx0 = VSET(0, 0, 1, 1, 2, 2, 3, 3);
+        idx1 = VSET(6, 6, 7, 7, 4, 4, 5, 5);
+        mask = 0x55;
+        for (int i = 0; i < 8; i++) {
+            t0[i] = VPERM512(idx0, theta_point[i]);
+            t1[i] = VPERM512(idx1, theta_point[i]);
+        }
+        fp2_mul_2x4x1(t0, t0, t1);
+        idx1 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+        idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+        for (int i = 0; i < 8; i++) {
+            t1[i] = VPERM512(idx1, t0[i]);
+            t0[i] = VPERM512(idx0, t0[i]);
+        }
+        
+        bool equal = fp2_is_equal_2x4x1(t0, t1) == 0x3;
+        if (!equal) { return false; }
+    }
 
     if (fp2_is_zero(P_unvec) && fp2_is_zero(P_unvec+2)) {
         fp2_mul(&x1, OA_unvec, P_unvec+3);
@@ -437,6 +387,8 @@ void splitting_theta_point_to_mont_single(
     mont_pair->P2.x = x2;
     mont_pair->P1.z = z1;
     mont_pair->P2.z = z2;
+
+    return true;
     // __m512i t0[8], t1[8], idx0, idx1;
     // fp2_t unvec[4];
     // __mmask8 add_mask;
@@ -466,49 +418,77 @@ void splitting_theta_point_to_mont_single(
     // mont_pair->P2.z = unvec[3];
 }
 
-void splitting_theta_point_to_mont_list_single(
+bool splitting_theta_point_to_mont_list_single(
     theta_couple_point_t* mont_pts, __m512i* theta_pts, 
-    __m512i* null, const int num_pts
+    __m512i* null, const int num_pts, const bool verify
 )
 {
+    bool success = true;
     for (int i = 0; i < num_pts; i++) {
-        splitting_theta_point_to_mont_single(mont_pts + i, theta_pts + 8*i, null);
+        success &= splitting_theta_point_to_mont_single(mont_pts + i, theta_pts + 8*i, null, verify);
     }
+    return success;
 }
 
-void splitting_theta_point_to_mont_pair(
+// TODO: Handle edge cases like in single version
+bool splitting_theta_point_to_mont_pair(
     theta_couple_point_t* mont_pair1, theta_couple_point_t* mont_pair2, 
-    __m512i* theta_pair, __m512i* null
+    __m512i* theta_pair, __m512i* null, const bool verify
 )
 {
-    __m512i t0[16], t1[16], idx;
+    __m512i t0[16], t1[16], idx0, idx1;
     fp2_t unvec[8];
-    __mmask8 add_mask;
+    __mmask8 mask;
 
-    idx = VSET(4, 5, 2, 3, 0, 1, 0, 1); // (c, c, b, a)
+    // check that points are not zero and that xi * wi == yi * zi
+    if (verify) {
+        int zmask = fp2_is_zero_8x1x1(theta_pair);
+        bool P_zero = zmask & 0x55 == 0x55;
+        bool Q_zero = zmask & 0xaa == 0xaa;
+        if (P_zero || Q_zero) {
+            return false;
+        }
+
+        idx0 = VSET(0, 8, 1, 9, 2, 10, 3, 11);
+        idx1 = VSET(6, 14, 7, 15, 4, 12, 5, 13);
+        for (int i = 0; i < 8; i++) {
+            t0[i] = VBLENDPERM(idx0, theta_pair[i], theta_pair[i+8]);
+            t1[i] = VBLENDPERM(idx1, theta_pair[i], theta_pair[i+8]);
+        }
+        fp2_mul_4x2x1(t0, t0, t1);
+        idx0 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+        idx1 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+        for (int i = 0; i < 8; i++) {
+            t1[i] = VPERM512(idx1, t0[i]);
+            t0[i] = VPERM512(idx0, t0[i]);
+        }
+        if (fp2_is_equal_4x2x1(t0, t1) != 0xf) { return false; }
+    }
+
+    idx0 = VSET(4, 5, 2, 3, 0, 1, 0, 1); // (c, c, b, a)
     for (int i = 0; i < 8; i++) {
-        t0[i] = VPERM512(idx, null[i]);
+        t0[i] = VPERM512(idx0, null[i]);
     }
     fp2_4x2x1_to_8x1x1(t0, t0, t0); // (c, c, c, c, b, b, a, a)
     
-    idx = VSET(0, 1, 0, 1, 4, 5, 2, 3); // (x, x', x, x' z, z', y, y')
+    idx0 = VSET(0, 1, 0, 1, 4, 5, 2, 3); // (x, x', x, x' z, z', y, y')
     for (int i = 0; i < 16; i++) {
-        t1[i] = VPERM512(idx, theta_pair[i]);
+        t1[i] = VPERM512(idx0, theta_pair[i]);
     }
 
     // (c*x, c*x', b*x, b*x', a*z, a*z', a*y, a*y')
     fp2_mul_8x1x1(t1, t1, t0); 
 
     // (a*z, a*z', a*y, a*y', c*x, c*x', b*x, b*x')
-    idx = VSET(4, 5, 6, 7, 0, 1, 2, 3);    
+    idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);    
     for (int i = 0; i < 16; i++) {
-        t0[i] = VPERM512(idx, t1[i]);
+        t0[i] = VPERM512(idx0, t1[i]);
     }
 
     // (a*z + c*x, a*z' + c*x', a*y + b*x, a*y' + b*x', 
     //  a*x - c*x, a*x' - c*x', a*y - b*x, a*y' - b*x')
-    add_mask = 0x0f;
-    fp2_mixaddsub_8x1x1(t1, t1, t0, add_mask, add_mask);
+    mask = 0x0f;
+    fp2_mixaddsub_8x1x1(t1, t1, t0, mask, mask);
 
     // Convert to 64-bit unvectorized repr.
     fp2_8x1x1_to_unvectorized(unvec, t1);
@@ -520,24 +500,28 @@ void splitting_theta_point_to_mont_pair(
     mont_pair2->P1.z = unvec[5];
     mont_pair1->P2.z = unvec[6];
     mont_pair2->P2.z = unvec[7];
+
+    return true;
 }
 
-void splitting_theta_point_to_mont_list_pair(
+bool splitting_theta_point_to_mont_list_pair(
     theta_couple_point_t* mont_pts, __m512i* theta_pts, 
-    __m512i* null, const int num_pts
+    __m512i* null, const int num_pts, const bool verify
 )
 {
+    bool success = true;
     bool num_pts_is_odd = (num_pts & 0x1);
     int num_pair_pts = num_pts / 2;
 
     for (int i = 0; i < num_pair_pts; i++) {
-        splitting_theta_point_to_mont_pair(
-            mont_pts + 2*i, mont_pts + 2*i+1, theta_pts + 16*i, null
+        success &= splitting_theta_point_to_mont_pair(
+            mont_pts + 2*i, mont_pts + 2*i+1, theta_pts + 16*i, null, verify
         );
     }
     if (num_pts_is_odd) {
-        splitting_theta_point_to_mont_single(
-            mont_pts + (num_pts-1), theta_pts+8*(num_pts-1), null
+        success &= splitting_theta_point_to_mont_single(
+            mont_pts + (num_pts-1), theta_pts+8*(num_pts-1), null, verify
         );
     }
+    return success;
 }
