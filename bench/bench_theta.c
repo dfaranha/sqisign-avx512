@@ -308,17 +308,6 @@ void bench_theta(int iterations)
 
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        theta_isogeny_chain_pair_old(&E34, res_pts,
-                &E12, &ker_extra, input_pts, length, num_pts, randomize);
-        end = cpucycles();
-        cycles[i] = (end - start);
-    }
-    tmp = fp2_is_equal(&E34.E1.A, &E12.E1.A);
-    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("theta_isogeny_chain_pair_old", cycles[(N_RUNS/2)-1], tmp);
-
-    for(int i = 0; i < N_RUNS; i++) {
-        start = cpucycles();
         theta_isogeny_chain_pair(&E34, res_pts,
                 &E12, &ker_extra, input_pts, length, num_pts, randomize);
         end = cpucycles();
