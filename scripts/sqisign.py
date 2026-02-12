@@ -7,10 +7,11 @@ from elliptic_types import Curve, BasisX, PointX
 from elliptic_arithmetic import (
     j_invariant,
     ladder_3_pt,
-    double_x_n,
-    torsion_basis_from_hint,
+    x_double_n,
+    x_basis_double_n,
     ladder_biscalar,
 )
+from torsion_basis import torsion_basis_from_hint
 
 from elliptic_isogeny import two_isogeny_chain_codomain, two_isogeny_chain_small
 from sqisign_parameters import SQISIGN_PARAMETERS, generate_finite_field
@@ -172,7 +173,7 @@ class SQIsign:
         """
         chl_scalar = ZZ.from_bytes(chl, byteorder="little")
         kernel = ladder_3_pt(E_pk, basis_pk, chl_scalar)
-        kernel = double_x_n(E_pk, kernel, n_bt)
+        kernel = x_double_n(E_pk, kernel, n_bt)
 
         return two_isogeny_chain_codomain(E_pk, kernel, self.f - n_bt)
 
@@ -191,13 +192,13 @@ class SQIsign:
             kernel = PointX(basis.PX, basis.PZ)
 
         # Recover the kernel from repeated doubling
-        ker = double_x_n(E, kernel, r + 2)
+        ker = x_double_n(E, kernel, r + 2)
 
         # Compute the isogeny from the kernel and push through xP, xQ xPQ
         return two_isogeny_chain_small(E, ker, len, basis)
 
     @staticmethod
-    def apply_change_of_basis(basis: BasisX, M: Matrix, order: ZZ):
+    def apply_change_of_basis(E: Curve, basis: BasisX, M: Matrix, order: ZZ):
         """
         Evaluate a 2x2 matrix A on the vector of elliptic
         curve points [P, Q] by acting with scalar multiplication
@@ -208,14 +209,14 @@ class SQIsign:
         a00, a01, a10, a11 = M.list()
 
         # Compute the new scaled basis
-        xR = ladder_biscalar(basis, a00, a10)
-        xS = ladder_biscalar(basis, a01, a11)
+        xR = ladder_biscalar(E, basis, a00, a10)
+        xS = ladder_biscalar(E, basis, a01, a11)
 
         # For the difference point we must be careful the result
         # is positive, so we work modulo the point order
         diff_m = (a00 - a01) % order
         diff_n = (a10 - a11) % order
-        xRS = ladder_biscalar(basis, diff_m, diff_n)
+        xRS = ladder_biscalar(E, basis, diff_m, diff_n)
 
         return xR, xS, xRS
 
@@ -234,7 +235,7 @@ class SQIsign:
                 bool: True if the signature is valid, False otherwise.
         """
         # Parse the public key from bytes
-        E_pk, hint_pk = self.__parse_public_key(public_key)
+        E_pk, hint_pk = self._parse_public_key(public_key)
 
         # Parse the signature from bytes
         E_aux, n_bt, r_rsp, M_chl, chl, hint_aux, hint_chl = self._parse_signature(
@@ -268,14 +269,15 @@ class SQIsign:
 
         # Create the torsion basis for the aux curve using the signature hint
         aux_basis = torsion_basis_from_hint(E_aux, hint_aux, self.f)
+        aux_basis = x_basis_double_n(E_aux, aux_basis, self.f - e_rsp_prime - 2)
         aux_basis = [2 ** (self.f - e_rsp_prime - 2) * X for X in aux_basis]
 
         # Create the torsion basis for the challenge curve using the signature hint
         chl_basis = torsion_basis_from_hint(E_chl, hint_chl, self.f)
-        chl_basis = [2 ** (self.f - e_rsp_prime - r_rsp - 2) * X for X in chl_basis]
+        chl_basis = x_basis_double_n(E_chl, chl_basis, self.f - e_rsp_prime - r_rsp - 2)
 
         # Apply the change of basis matrix
-        chl_basis = self.apply_change_of_basis(chl_basis, M_chl, chl_order)
+        chl_basis = self.apply_change_of_basis(E_chl, chl_basis, M_chl, chl_order)
 
         # Compute the short 2^r_rsp isogeny and push through points
         if r_rsp > 0:

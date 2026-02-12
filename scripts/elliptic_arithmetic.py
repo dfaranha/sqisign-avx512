@@ -19,28 +19,172 @@ from utilities import sqrt_fp2
 
 
 def j_invariant(E: Curve):
-    raise NotImplementedError
+    """
+    Compute the j-invariant of the curve
+    """
+    A, C = E.A, E.C
+    j_num = 256 * (A**2 - 3 * C**2) ** 3
+    j_den = C**4 * (A**2 - 4 * C**2)
+    return j_num / j_den
 
 
-def ladder_3_pt(E: Curve, basis: BasisX, scalar: ZZ):
-    raise NotImplementedError
+def x_double(X, Z, A24, C24):
+    """
+    Algorithm 8.3 of the SQISign spec.
+
+    Montgomery doubling with projective curve constant
+
+    Input:  projective point P = (X:Z), curve constants (A24 : C24)
+    Output: projective point [2]P = (X2 : Z2)
+
+    Cost: 4M + 2S + 4a
+    """
+    t0 = X + Z
+    t0 = t0 * t0
+    t1 = X - Z
+    t1 = t1 * t1
+    t2 = t0 - t1
+    t1 = t1 * C24
+    X2 = t0 * t1
+    t0 = t2 * A24
+    t0 = t0 + t1
+    Z2 = t0 * t2
+
+    return X2, Z2
 
 
-def double_x(E: Curve, P: PointX) -> PointX:
-    raise NotImplementedError
-
-
-def double_x_n(E: Curve, P: PointX, n: int) -> PointX:
+def x_double_n(E: Curve, P: PointX, n: int) -> PointX:
+    """
+    Compute [2^n]P using repeated doublings
+    """
+    PX, PZ = P
+    A24, C24 = E.A24, E.C24
     for _ in range(n):
-        P = double_x(E, P)
-    return P
+        PX, PZ = x_double(PX, PZ, A24, C24)
+    return PointX(PX, PZ)
+
+
+def x_basis_double_n(E: Curve, B: BasisX, n) -> BasisX:
+    """
+    Compute [2^n](P, Q, PmQ) using repeated doublings
+    """
+    PX, PZ, QX, QZ, PmQZ, PmQZ = B
+    A24, C24 = E.A24, E.C24
+    for _ in range(n):
+        PX, PZ = x_double(PX, PZ, A24, C24)
+        QX, QZ = x_double(QX, QZ, A24, C24)
+        PmQZ, PmQZ = x_double(PmQZ, PmQZ, A24, C24)
+    return BasisX(PX, PZ, QX, QZ, PmQZ, PmQZ)
+
+
+def x_double_add(XP, ZP, XQ, ZQ, xPQ, zPQ, A24, C24):
+    """
+    Algorithm 8.5 of the SQISign spec.
+
+    Montgomery ladder for simultaneous doubling and differential
+    addition
+
+    Input: projective coordinates P=(XP:ZP) and Q=(XQ:ZQ),
+           projective difference P-Q=(xPQ:zPQ) and
+           curve constant A24/C24=(A+2C)/4C.
+    Output: projective coordinates of 2P=(X2P:Z2P)
+            and Q+P=(XQP:ZQP)
+
+    Cost: 8M + 4S + 8a
+    """
+
+    t0 = XP + ZP
+    t1 = XP - ZP
+    X2P = t0 * t0
+    t2 = XQ - ZQ
+    XQP = XQ + ZQ
+    t0 = t0 * t2
+    Z2P = t1 * t1
+    t1 = t1 * XQP
+    t2 = X2P - Z2P
+    Z2P = Z2P * C24
+    X2P = X2P * Z2P
+    XQP = A24 * t2
+    ZQP = t0 - t1
+    Z2P = XQP + Z2P
+    XQP = t0 + t1
+    Z2P = Z2P * t2
+    ZQP = ZQP * ZQP
+    XQP = XQP * XQP
+    ZQP = xPQ * ZQP
+    XQP = XQP * zPQ
+
+    return X2P, Z2P, XQP, ZQP
+
+
+def x_mul(E: Curve, P: PointX, m: ZZ) -> PointX:
+    try:
+        m = ZZ(m)
+    except TypeError:
+        raise TypeError(f"Cannot coerce input scalar {m = } to an integer")
+
+    # If m is zero, return identity
+    R = E.A.parent()
+    if not m:
+        return PointX(R.zero(), R.zero())
+
+    # [m]P = [-m]P for x-only
+    m = abs(m)
+
+    # Initialise for loop
+    XP, ZP = P
+    X0, Z0 = R.one(), R.zero()
+    X1, Z1 = XP, ZP
+
+    # Extract out A24 and C24 from parent curve
+    A24, C24 = E.A24, E.C24
+
+    # Montgomery-ladder
+    for bit in bin(m)[2:]:
+        if bit == "1":
+            X1, Z1, X0, Z0 = x_double_add(X1, Z1, X0, Z0, XP, ZP, A24, C24)
+        else:
+            X0, Z0, X1, Z1 = x_double_add(X0, Z0, X1, Z1, XP, ZP, A24, C24)
+
+    return PointX(X0, Z0)
+
+
+def ladder_3_pt(E: Curve, basis: BasisX, m: ZZ):
+    """
+    Algorithm 8.7 of the SQISign spec.
+
+    Compute xP + [m]xQ using x-only arithmetic.
+    """
+    try:
+        m = ZZ(m)
+    except TypeError:
+        raise TypeError(f"Cannot coerce input scalar {m = } to an integer")
+
+    # If m is zero, return xP
+    if not m:
+        return PointX(basis.PX, basis.PZ)
+
+    # [m]P = [-m]P for x-only
+    m = abs(m)
+
+    # Converting parameters for projective DBLADD -> (A24:C24)=(A+2C:4C)
+    A24, C24 = E.A24, E.C24
+
+    # Extract out coordinates
+    X0, Z0 = basis.PX, basis.PZ
+    X1, Z1 = basis.QX, basis.QZ
+    X2, Z2 = basis.PmQX, basis.PmQZ
+
+    # Montgomery-ladder
+    for bit in bin(m)[:1:-1]:
+        if bit == "1":
+            X1, Z1, X0, Z0 = x_double_add(X1, Z1, X0, Z0, X2, Z2, A24, C24)
+        else:
+            X1, Z1, X2, Z2 = x_double_add(X1, Z1, X2, Z2, X0, Z0, A24, C24)
+    return PointX(X0, Z0)
 
 
 def ladder_biscalar(E: Curve, basis: BasisX, a: ZZ, b: ZZ):
-    raise NotImplementedError
-
-
-def torsion_basis_from_hint(E: Curve, hint: ZZ, order: ZZ) -> BasisX:
     raise NotImplementedError
 
 
