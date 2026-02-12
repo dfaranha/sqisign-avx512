@@ -10,8 +10,25 @@ from avx_arithmetic import (
     avx_421_mul,
     avx_421_pair_mul,
     avx_421_to_811,
+    avx_811_any_zero,
+    avx_421_eq,
 )
 from utilities import sqrt_fp2
+
+
+def check_isotropic(P: AVX_4x2x1, Q: AVX_4x2x1, inv: AVX_4x2x1):
+    """
+    Algorithm 8.32 of the SQISign spec.
+
+    Return a boolean indicating whether the 4-torsion points are isotropic
+    """
+    T1 = AVX_8x1x1(P[0], P[1], P[2], P[3], Q[0], Q[2], Q[1], Q[3])
+    T2 = AVX_8x1x1(inv[0], inv[1], inv[2], inv[3], inv[0], inv[2], inv[1], inv[3])
+    T1 = avx_811_mul(T1, T2)
+
+    S1 = AVX_4x2x1(T1[0], T1[2], T1[4], T1[6])
+    S2 = AVX_4x2x1(T1[1], T1[3], T1[5], T1[7])
+    return avx_421_eq(S1, S2)
 
 
 def theta_precompute(
@@ -246,7 +263,7 @@ def theta_codomain_with_no_torsion(
 
 
 def theta_codomain_8x1x1(
-    ker: AVX_8x1x1, h1: bool, h2: bool
+    ker: AVX_8x1x1, h1: bool, h2: bool, verify: bool = False
 ) -> tuple[AVX_4x2x1, AVX_4x2x1]:
     if h1:
         ker = hadamard_pair(ker)
@@ -254,10 +271,16 @@ def theta_codomain_8x1x1(
     ker = hadamard_pair(ker)
 
     # Memory management of kernel data to make two temp blobs
-    xA, xB, _, _, zA, wB, zC, wD = ker
+    xA, xB, yC, yD, zA, wB, zC, wD = ker
     OB = AVX_4x2x1(zA, wB, zC, wD)
     t1 = AVX_4x2x1(xA, zA, zC, 1)
     t2 = AVX_4x2x1(wB, xB, wD, 1)
+
+    # Verification check: ensure there is no zero in the following data
+    if verify:
+        no_zero = AVX_8x1x1(xA, xB, zA, wB, zC, wD, 1, 1)
+        if avx_811_any_zero(no_zero):
+            raise ValueError("Unexpected splitting")
 
     # Here we only need three multiplications, we could make a special function
     t2 = avx_421_mul(t1, t2)
@@ -275,6 +298,12 @@ def theta_codomain_8x1x1(
     _, _, C, D = OB
     A_inv, B_inv, _, _ = inv
     inv = AVX_4x2x1(A_inv, B_inv, D, C)
+
+    if verify:
+        P = AVX_4x2x1(xA, xB, yC, yD)
+        Q = AVX_4x2x1(zA, wB, zC, wD)
+        if not check_isotropic(P, Q, inv):
+            raise ValueError("P, Q are not isotropic")
 
     if h2:
         OB = hadamard(OB)

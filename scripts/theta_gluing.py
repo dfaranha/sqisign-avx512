@@ -10,6 +10,9 @@ from avx_arithmetic import (
     avx_811_sub,
     avx_421_pair_mul,
     avx_811_sqr,
+    avx_421_all_zero,
+    avx_421_any_zero,
+    avx_421_eq,
 )
 from theta_structure import (
     hadamard,
@@ -259,9 +262,7 @@ def product_to_theta_pair(
 
 
 def gluing_codomain(
-    A24_12: AVX_4x2x1,
-    X_8: AVX_4x2x1,
-    Z_8: AVX_4x2x1,
+    A24_12: AVX_4x2x1, X_8: AVX_4x2x1, Z_8: AVX_4x2x1, verify: bool = False
 ) -> tuple[AVX_4x2x1, AVX_4x2x1, AVX_8x1x1, tuple[AVX_8x1x1, AVX_8x1x1]]:
     """
     Algorithm 8.39 of the SQIsign spec.
@@ -282,11 +283,16 @@ def gluing_codomain(
     P12 = hadamard_pair(P12)
 
     X1, Y1, Z1, W1, X2, _, Z2, W2 = P12
-    if not (W1.is_zero() and W2.is_zero()):
-        raise ValueError("last coordinate is not zero")
 
-    if any(x.is_zero() for x in [X1, X2, Y1, Z2]):
-        raise ValueError("projective factors are zero")
+    if verify:
+        all_zero = AVX_4x2x1(W1, W2, W1, W2)
+        no_zero = AVX_4x2x1(X1, X2, Y1, Z2)
+
+        if not avx_421_all_zero(all_zero):
+            raise ValueError("last coordinate is not zero")
+
+        if avx_421_any_zero(no_zero):
+            raise ValueError("projective factors are zero")
 
     # ============================================================
     # Just like in the generic codomain there's a bit of ugliness
@@ -319,8 +325,16 @@ def gluing_codomain(
     B_inv = C
     C_inv = B
 
-    if (Y1 * B_inv != x) or (X2 * A_inv != Z2 * C_inv):
-        raise ValueError("input kernel is not isotropic")
+    # Ensure that Y1 * B_inv == x and X2 * A_inv == Z2 * C_inv
+    if verify:
+        T1 = AVX_4x2x1(Y1, X2, Z2, 1)
+        T2 = AVX_4x2x1(B_inv, A_inv, C_inv, 1)
+        T3 = avx_421_mul(T1, T2)
+
+        T1 = AVX_4x2x1(T3[0], T3[1], 0, 0)
+        T2 = AVX_4x2x1(x, T3[2], 0, 0)
+        if not avx_421_eq(T1, T2):
+            raise ValueError("input kernel is not isotropic")
 
     OA = hadamard(AVX_4x2x1(A, B, C, 0))
     OA_dual_inv = AVX_4x2x1(A_inv, B_inv, C_inv, 0)

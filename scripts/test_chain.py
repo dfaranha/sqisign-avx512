@@ -4,6 +4,7 @@ from theta_isogeny_chain import (
     theta_isogeny_chain_8x1x1,
     theta_isogeny_chain_with_torsion_4x2x1,
     theta_isogeny_chain_with_torsion_8x1x1,
+    theta_isogeny_chain_verification_8x1x1,
 )
 
 from sage.rings.finite_rings.finite_field_constructor import GF
@@ -119,6 +120,7 @@ for isogeny_algorithm in [
     theta_isogeny_chain_8x1x1,
     theta_isogeny_chain_with_torsion_4x2x1,
     theta_isogeny_chain_with_torsion_8x1x1,
+    theta_isogeny_chain_verification_8x1x1,
 ]:
     for randomise in [True, False]:
         for input_images in [input_images_two, input_images_three]:
@@ -127,10 +129,28 @@ for isogeny_algorithm in [
             else:
                 kernel = exact_kernel
 
-            (A3, C3), (A4, C4), images = isogeny_algorithm(
-                domain, kernel, length, input_images, randomise
-            )
-            if "with_torsion" in isogeny_algorithm.__name__:
+            # Handle different input and output for verification
+            if "verification" in isogeny_algorithm.__name__:
+                # We don't use randomise or images in verification
+                if randomise or len(input_images) == 2:
+                    continue
+                (A3, C3), (A4, C4) = isogeny_algorithm(domain, extra_kernel, length)
+                images = []
+            else:
+                (A3, C3), (A4, C4), images = isogeny_algorithm(
+                    domain, kernel, length, input_images, randomise
+                )
+
+            # Ensure codomain matches
+            if "verification" in isogeny_algorithm.__name__:
+                E3 = EllipticCurve(F, [0, A3 / C3, 0, 1, 0])
+                E3_check = EllipticCurve(F, [0, A3_check, 0, 1, 0])
+                assert E3.j_invariant() == E3_check.j_invariant()
+
+                E4 = EllipticCurve(F, [0, A4 / C4, 0, 1, 0])
+                E4_check = EllipticCurve(F, [0, A4_check, 0, 1, 0])
+                assert E4.j_invariant() == E4_check.j_invariant()
+            elif "with_torsion" in isogeny_algorithm.__name__:
                 if not randomise:
                     assert A3 / C3 == A3_check
                     assert A4 / C4 == A4_check
@@ -155,7 +175,11 @@ for isogeny_algorithm in [
                 assert E3.j_invariant() in j_check
                 assert E4.j_invariant() in j_check
 
-            if len(input_images) == 2:
+            # No images to check
+            if "verification" in isogeny_algorithm.__name__:
+                pass
+
+            elif len(input_images) == 2:
                 (xP3, xP4), (xQ3, xQ4) = images
 
                 P3 = lift_to_curve(A3 / C3, xP3)
