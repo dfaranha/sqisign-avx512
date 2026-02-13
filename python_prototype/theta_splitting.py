@@ -2,7 +2,6 @@ from os import urandom
 from avx_types import AVX_8x1x1, AVX_4x2x1
 from avx_arithmetic import (
     avx_421_mul,
-    avx_421_sub,
     avx_421_all_zero,
     avx_421_any_zero,
     avx_421_eq,
