@@ -206,6 +206,7 @@ def two_isogeny_chain(
 
     # Create the Kummer Line from the constants
     codomain = curve_from_AC24(A24, C24)
+    points = [PointX(XQ, ZQ) for (XQ, ZQ) in points]
 
     return codomain, points
 
@@ -233,52 +234,45 @@ def two_isogeny_chain_small(
     function also allows the computation of a so-called singular isogeny
     with kernel (0 : 1) which can occur during signing.
     """
-    raise NotImplementedError
-    # # Extract out constants from domain and kernel
-    # A24, C24 = domain.AC24()
-    # XK, ZK = kernel.XZ()
+    # Extract out constants from domain and kernel
+    A24, C24 = domain.A24, domain.C24
+    XK, ZK = kernel
 
-    # # Parse list of points to list of coefficients
-    # points = [P.XZ() for P in points]
+    # Main loop, we compute the isogeny one step at a time
+    for i in range(length):
+        # Create point of order two for isogeny
+        XP, ZP = XK, ZK
+        for _ in range(length - i - 1):
+            XP, ZP = x_double(XP, ZP, A24, C24)
 
-    # # Main loop, we compute the isogeny one step at a time
-    # for i in range(length):
-    #     # Create point of order two for isogeny
-    #     XP, ZP = XK, ZK
-    #     for _ in range(length - i - 1):
-    #         XP, ZP = kernel.xDBL(XP, ZP, A24, C24)
+        # For the first step, we ensure the point has full order and handle singular isogenies if allowed
+        if i == 0:
+            _, Z_test = x_double(XP, ZP, A24, C24)
+            if not Z_test.is_zero():
+                raise ValueError("kernel does not have order 2^length")
 
-    #     # For the first step, we ensure the point has full order and handle singular isogenies if allowed
-    #     if i == 0:
-    #         _, Z_test = kernel.xDBL(XP, ZP, A24, C24)
-    #         if not Z_test.is_zero():
-    #             raise ValueError("kernel does not have order 2^length")
+            # The point of order two is (0 : 1) which means we need singular isogenies
+            if XP.is_zero():
+                if not allow_singular:
+                    raise ValueError("unexpected singular 2-isogeny")
 
-    #         # The point of order two is (0 : 1) which means we need singular isogenies
-    #         if XP.is_zero():
-    #             if not allow_singular:
-    #                 raise ValueError("unexpected singular 2-isogeny")
+                # Compute the codomain
+                (A24, C24), (c0, c1) = two_isogeny_codomain_singular(A24, C24)
 
-    #             # Compute the codomain
-    #             (A24, C24), (c0, c1) = two_isogeny_codomain_singular(A24, C24)
+                # Push through the kernel and any other points
+                XK, ZK = two_isogeny_eval_singular(XK, ZK, c0, c1)
+                points = [
+                    two_isogeny_eval_singular(XP, ZP, c0, c1) for (XP, ZP) in points
+                ]
 
-    #             # Push through the kernel and any other points
-    #             XK, ZK = two_isogeny_eval_singular(XK, ZK, c0, c1)
-    #             points = [
-    #                 two_isogeny_eval_singular(XP, ZP, c0, c1) for (XP, ZP) in points
-    #             ]
+                # Go to the next step of the loop and skip the code below
+                continue
 
-    #             # Go to the next step of the loop and skip the code below
-    #             continue
+        A24, C24 = two_isogeny_codomain(XP, ZP)
+        XK, ZK = two_isogeny_eval(XP, ZP, XK, ZK)
+        points = [two_isogeny_eval(XP, ZP, XQ, ZQ) for (XQ, ZQ) in points]
 
-    #     A24, C24 = two_isogeny_codomain(XP, ZP)
-    #     XK, ZK = two_isogeny_eval(XP, ZP, XK, ZK)
-    #     points = [two_isogeny_eval(XP, ZP, XQ, ZQ) for (XQ, ZQ) in points]
+    codomain = curve_from_AC24(A24, C24)
+    points = [PointX(XQ, ZQ) for (XQ, ZQ) in points]
 
-    # # Create the Kummer Line from the constants
-    # codomain = __kummer_line_from_AC24(A24, C24)
-
-    # # Create points of type KummerPoint from the tuples
-    # points = [codomain(P) for P in points]
-
-    # return codomain, points
+    return codomain, points

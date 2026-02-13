@@ -28,6 +28,35 @@ def j_invariant(E: Curve):
     return j_num / j_den
 
 
+def x_diff_add(XP, ZP, XQ, ZQ, xPQ, zPQ):
+    """
+    Algorithm 8.4 of the SQISign spec.
+
+    Montgomery differential addition
+
+    Input:  projective coordinates P = (XP : ZP),
+            Q=(XQ : ZQ), and their difference
+            x(P-Q) = (xPQ : zPQ)
+    Output: coordinates of sum P + Q = (XQP : ZQP)
+
+    Cost: 4M + 2S + 6a
+    """
+    t0 = XP + ZP
+    t1 = XP - ZP
+    t2 = XQ + ZQ
+    t3 = XQ - ZQ
+    t0 = t0 * t3
+    t1 = t1 * t2
+    t2 = t0 + t1
+    t3 = t0 - t1
+    t2 = t2 * t2
+    t3 = t3 * t3
+    XPQ = zPQ * t2
+    ZPQ = xPQ * t3
+
+    return XPQ, ZPQ
+
+
 def x_double(X, Z, A24, C24):
     """
     Algorithm 8.3 of the SQISign spec.
@@ -68,13 +97,13 @@ def x_basis_double_n(E: Curve, B: BasisX, n) -> BasisX:
     """
     Compute [2^n](P, Q, PmQ) using repeated doublings
     """
-    PX, PZ, QX, QZ, PmQZ, PmQZ = B
+    PX, PZ, QX, QZ, PmQX, PmQZ = B
     A24, C24 = E.A24, E.C24
     for _ in range(n):
         PX, PZ = x_double(PX, PZ, A24, C24)
         QX, QZ = x_double(QX, QZ, A24, C24)
-        PmQZ, PmQZ = x_double(PmQZ, PmQZ, A24, C24)
-    return BasisX(PX, PZ, QX, QZ, PmQZ, PmQZ)
+        PmQX, PmQZ = x_double(PmQX, PmQZ, A24, C24)
+    return BasisX(PX, PZ, QX, QZ, PmQX, PmQZ)
 
 
 def x_double_add(XP, ZP, XQ, ZQ, xPQ, zPQ, A24, C24):
@@ -185,7 +214,47 @@ def ladder_3_pt(E: Curve, basis: BasisX, m: ZZ):
 
 
 def ladder_biscalar(E: Curve, basis: BasisX, a: ZZ, b: ZZ):
-    raise NotImplementedError
+    s0 = a
+    s1 = b
+
+    A24, C24 = E.A24, E.C24
+    X0, Z0 = basis.PX, basis.PZ
+    X1, Z1 = basis.QX, basis.QZ
+    XD, ZD = basis.PmQX, basis.PmQZ
+
+    while s0 != 0:
+        if s1 < s0:
+            s0, s1 = s1, s0
+            X0, Z0, X1, Z1 = X1, Z1, X0, Z0
+
+        assert s1 >= s0
+
+        if s1 <= 4 * s0:
+            s1 = s1 - s0
+            R0, S0 = x_diff_add(X1, Z1, X0, Z0, XD, ZD)
+            X0, Z0, XD, ZD = R0, S0, X0, Z0
+
+        elif s0 % 2 == s1 % 2:
+            s1 = (s1 - s0) // 2
+            R0, S0, R1, S1 = x_double_add(X1, Z1, X0, Z0, XD, ZD, A24, C24)
+            X0, Z0, X1, Z1 = R1, S1, R0, S0
+
+        elif s1 % 2 == 0:
+            s1 = s1 // 2
+            R0, S0, R1, S1 = x_double_add(X1, Z1, XD, ZD, X0, Z0, A24, C24)
+            X1, Z1, XD, ZD = R0, S0, R1, S1
+        else:
+            assert s0 % 2 == 0
+            s0 = s0 // 2
+            R0, S0, R1, S1 = x_double_add(X0, Z0, XD, ZD, X1, Z1, A24, C24)
+            X0, Z0, XD, ZD = R0, S0, R1, S1
+
+    while s1 & 1 == 0:
+        s1 //= 2
+        X1, Z1 = x_double(X1, Z1, A24, C24)
+
+    res = PointX(X1, Z1)
+    return x_mul(E, res, s1)
 
 
 def lift_normalised_basis_to_jacobian(E: Curve, basis: BasisX) -> tuple[PointJ, PointJ]:

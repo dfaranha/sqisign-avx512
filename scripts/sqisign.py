@@ -55,7 +55,6 @@ class SQIsign:
         self.sk_len = parameters["sk_len"]
         self.sig_len = parameters["sig_len"]
 
-    # TODO: type of curve
     def _curve_from_bytes(self, curve_bytes: bytes) -> Curve:
         """
         Given bytes representing the Montgomery coefficient A
@@ -67,7 +66,6 @@ class SQIsign:
         A = self.Fq([A_re, A_im])
         return Curve(A, self.Fq.one(), (A + 2) / 4, self.Fq.one())
 
-    # TODO: type of curve
     def _parse_public_key(self, public_key: bytes) -> tuple[Curve, int]:
         """
         Parse bytes interpreted as a SQIsign public key to extract
@@ -182,9 +180,6 @@ class SQIsign:
         """
         Compute a short 2-isogeny chain given a basis and matrix from which to chose a kernel
         """
-        # Extract points from basis
-        xP, xQ, _ = basis
-
         # Compute the kernel depending on the change of basis M
         if M[0][0] % 2 == 0 and M[1][0] % 2 == 0:
             kernel = PointX(basis.QX, basis.QZ)
@@ -195,7 +190,18 @@ class SQIsign:
         ker = x_double_n(E, kernel, r + 2)
 
         # Compute the isogeny from the kernel and push through xP, xQ xPQ
-        return two_isogeny_chain_small(E, ker, len, basis)
+        basis_points = [
+            PointX(basis.PX, basis.PZ),
+            PointX(basis.QX, basis.QZ),
+            PointX(basis.PmQX, basis.PmQZ),
+        ]
+        codomain, evaluated_basis = two_isogeny_chain_small(E, ker, len, basis_points)
+
+        # Ensure the basis is the correct type after eval
+        P, Q, PmQ = evaluated_basis
+        evaluated_basis = BasisX(P.X, P.Z, Q.X, Q.Z, PmQ.X, PmQ.Z)
+
+        return codomain, evaluated_basis
 
     @staticmethod
     def apply_change_of_basis(E: Curve, basis: BasisX, M: Matrix, order: ZZ):
@@ -218,7 +224,7 @@ class SQIsign:
         diff_n = (a10 - a11) % order
         xRS = ladder_biscalar(E, basis, diff_m, diff_n)
 
-        return xR, xS, xRS
+        return BasisX(xR.X, xR.Z, xS.X, xS.Z, xRS.X, xRS.Z)
 
     def verify(self, message: bytes, signature: bytes, public_key: bytes) -> bool:
         """
@@ -270,7 +276,6 @@ class SQIsign:
         # Create the torsion basis for the aux curve using the signature hint
         aux_basis = torsion_basis_from_hint(E_aux, hint_aux, self.f)
         aux_basis = x_basis_double_n(E_aux, aux_basis, self.f - e_rsp_prime - 2)
-        aux_basis = [2 ** (self.f - e_rsp_prime - 2) * X for X in aux_basis]
 
         # Create the torsion basis for the challenge curve using the signature hint
         chl_basis = torsion_basis_from_hint(E_chl, hint_chl, self.f)
@@ -282,12 +287,13 @@ class SQIsign:
         # Compute the short 2^r_rsp isogeny and push through points
         if r_rsp > 0:
             try:
-                E_chl, chl_basis = self.__compute_short_two_isogeny(
+                E_chl, chl_basis = self._compute_short_two_isogeny(
                     E_chl, chl_basis, M_chl, r_rsp, e_rsp_prime
                 )
             # For bad signatures, the chain may be malformed, if an error is triggered,
             # the signature is rejected.
-            except ValueError:
+            except ValueError as e:
+                print(f"{e = }")
                 return False
 
         # In the very rare case, all of the isogeny was handled here and we skip the (2,2) chain
@@ -299,7 +305,7 @@ class SQIsign:
         # curve E3
         try:
             E3, _ = theta_isogeny_chain_verification_8x1x1(
-                (chl_basis, aux_basis), e_rsp_prime
+                (E_chl, E_aux), (chl_basis, aux_basis), e_rsp_prime
             )
         except ValueError as e:
             print(f"{e = }")
