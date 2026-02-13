@@ -34,7 +34,7 @@ def parse_kat_file(filename):
 def generic_KAT_test(level=1):
     sqisign = SQIsign(level)
     kat_tests = parse_kat_file(
-        f"assets/PQCsignKAT_{sqisign.sk_len}_SQIsign_lvl{level}.rsp"
+        f"../assets/PQCsignKAT_{sqisign.sk_len}_SQIsign_lvl{level}.rsp"
     )
 
     print(
