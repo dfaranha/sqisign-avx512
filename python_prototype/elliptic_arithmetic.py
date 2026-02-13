@@ -1,7 +1,7 @@
 from sage.rings.integer_ring import ZZ
 
 from elliptic_types import Curve, BasisX, PointX, PointJ
-from avx_types import AVX_4x2x1
+from avx_types import AVX_8x1x1, AVX_4x2x1, AVX_2x4x1
 from avx_arithmetic import (
     avx_421_sqr,
     avx_421_mul,
@@ -10,6 +10,10 @@ from avx_arithmetic import (
     avx_421_dbl,
     avx_421_pair_sqr,
     avx_421_pair_mul,
+    avx_241_add_sub,
+    avx_241_mul,
+    avx_241_sqr,
+    avx_241_add,
 )
 from utilities import sqrt_fp2
 
@@ -91,19 +95,6 @@ def x_double_n(E: Curve, P: PointX, n: int) -> PointX:
     for _ in range(n):
         PX, PZ = x_double(PX, PZ, A24, C24)
     return PointX(PX, PZ)
-
-
-def x_basis_double_n(E: Curve, B: BasisX, n) -> BasisX:
-    """
-    Compute [2^n](P, Q, PmQ) using repeated doublings
-    """
-    PX, PZ, QX, QZ, PmQX, PmQZ = B
-    A24, C24 = E.A24, E.C24
-    for _ in range(n):
-        PX, PZ = x_double(PX, PZ, A24, C24)
-        QX, QZ = x_double(QX, QZ, A24, C24)
-        PmQX, PmQZ = x_double(PmQX, PmQZ, A24, C24)
-    return BasisX(PX, PZ, QX, QZ, PmQX, PmQZ)
 
 
 def x_double_add(XP, ZP, XQ, ZQ, xPQ, zPQ, A24, C24):
@@ -310,10 +301,48 @@ def lift_normalised_basis_to_jacobian(E: Curve, basis: BasisX) -> tuple[PointJ, 
 # ======================================================================
 
 
-def four_double_x(A24: AVX_4x2x1, X: AVX_4x2x1, Z: AVX_4x2x1):
+def x_double_1x2x4x1(A24: AVX_2x4x1, P: AVX_2x4x1) -> AVX_2x4x1:
+    """
+    Double a single x-only point using 2x4x1 multiplications
+    """
+    T0 = AVX_2x4x1(P[0], P[0])
+    T1 = AVX_2x4x1(P[1], P[1])
+    t0_s0 = avx_241_add_sub(T0, T1)
+    t1_s1 = avx_241_sqr(t0_s0)
+
+    T0 = AVX_2x4x1(t1_s1[0], t1_s1[0])
+    T1 = AVX_2x4x1(t1_s1[1], t1_s1[1])
+    t0_s0 = avx_241_add_sub(T0, T1)
+
+    T0 = AVX_2x4x1(A24[1], A24[0])
+    T1 = AVX_2x4x1(t1_s1[1], t0_s0[1])
+    t2_s2 = avx_241_mul(T0, T1)
+
+    T0 = AVX_2x4x1(t2_s2[0], 0)
+    T1 = AVX_2x4x1(t2_s2[1], 0)
+    t3_00 = avx_241_add(T0, T1)
+
+    T0 = AVX_2x4x1(t2_s2[0], t3_00[0])
+    T1 = AVX_2x4x1(t1_s1[0], t0_s0[1])
+    P_dbl = avx_241_mul(T0, T1)
+
+    return P_dbl
+
+
+def x_double_n_1x2x4x1(A24: AVX_2x4x1, P: AVX_2x4x1, n: int) -> AVX_2x4x1:
+    """
+    Repeated doubling of a point in AVX_2x4x1 representation
+    """
+    for _ in range(n):
+        P = x_double_1x2x4x1(A24, P)
+    return P
+
+
+def x_double_4x4x2x1(A24: AVX_4x2x1, X: AVX_4x2x1, Z: AVX_4x2x1):
     """
     Simultaneously double four X-only points where the X-coordinates
     of P1, Q1 P2, Q2 on E1 x E2 are stored within X (and Z resp.)
+    Here we assume C24 = 1
     """
     t0 = avx_421_add(X, Z)
     t1 = avx_421_sub(X, Z)
@@ -324,6 +353,21 @@ def four_double_x(A24: AVX_4x2x1, X: AVX_4x2x1, Z: AVX_4x2x1):
     Z2 = avx_421_mul(t0, t2)
 
     return X2, Z2
+
+
+def x_basis_double_n_avx(
+    A24: AVX_4x2x1, B: tuple[AVX_2x4x1], n: int
+) -> tuple[AVX_2x4x1]:
+    """
+    Compute [2^n](P, Q, PmQ) using repeated doublings
+    """
+    P, Q, PmQ = B
+    # TODO: should we batch these together using 8x1x1 multiplications instead?
+    for _ in range(n):
+        P = x_double_1x2x4x1(A24, P)
+        Q = x_double_1x2x4x1(A24, Q)
+        PmQ = x_double_1x2x4x1(A24, PmQ)
+    return P, Q, PmQ
 
 
 def four_jac_to_ws(

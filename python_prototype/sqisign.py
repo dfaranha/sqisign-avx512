@@ -8,11 +8,15 @@ from elliptic_arithmetic import (
     j_invariant,
     ladder_3_pt,
     x_double_n,
-    x_basis_double_n,
+    x_basis_double_n_avx,
     ladder_biscalar,
 )
+from limb_conversion import (
+    basis_from_64_to_51_bit,
+    basis_from_51_to_64_bit,
+    curve_to_2x4x1_data,
+)
 from torsion_basis import torsion_basis_from_hint
-
 from elliptic_isogeny import two_isogeny_chain_codomain, two_isogeny_chain_small
 from sqisign_parameters import SQISIGN_PARAMETERS, generate_finite_field
 from theta_isogeny_chain import theta_isogeny_chain_verification_8x1x1
@@ -275,11 +279,31 @@ class SQIsign:
 
         # Create the torsion basis for the aux curve using the signature hint
         aux_basis = torsion_basis_from_hint(E_aux, hint_aux, self.f)
-        aux_basis = x_basis_double_n(E_aux, aux_basis, self.f - e_rsp_prime - 2)
 
         # Create the torsion basis for the challenge curve using the signature hint
         chl_basis = torsion_basis_from_hint(E_chl, hint_chl, self.f)
-        chl_basis = x_basis_double_n(E_chl, chl_basis, self.f - e_rsp_prime - r_rsp - 2)
+
+        # ================================================================================
+        # NOTE: CONVERSION TO AND FROM 64 TO 51 BIT HERE.
+        # Convert this basis from 64 bit to 51 bit before doubling and the change of basis
+        # computation
+        # ================================================================================
+
+        _, A24_aux = curve_to_2x4x1_data(E_aux)
+        _, A24_chl = curve_to_2x4x1_data(E_chl)
+
+        aux_basis = basis_from_64_to_51_bit(aux_basis)
+        chl_basis = basis_from_64_to_51_bit(chl_basis)
+
+        aux_basis = x_basis_double_n_avx(A24_aux, aux_basis, self.f - e_rsp_prime - 2)
+        chl_basis = x_basis_double_n_avx(
+            A24_chl, chl_basis, self.f - e_rsp_prime - r_rsp - 2
+        )
+
+        aux_basis = basis_from_51_to_64_bit(aux_basis)
+        chl_basis = basis_from_51_to_64_bit(chl_basis)
+
+        # ==================================================================================
 
         # Apply the change of basis matrix
         chl_basis = self.apply_change_of_basis(E_chl, chl_basis, M_chl, chl_order)

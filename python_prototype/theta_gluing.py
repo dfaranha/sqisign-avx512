@@ -20,7 +20,7 @@ from theta_structure import (
 )
 from utilities import apply_isomorphism, apply_isomorphism_pair
 
-from elliptic_arithmetic import four_double_x, four_add_components
+from elliptic_arithmetic import x_double_4x4x2x1, four_add_components
 
 
 def gluing_kernel_to_x_only(X: AVX_4x2x1, Z: AVX_4x2x1) -> tuple[AVX_4x2x1, AVX_4x2x1]:
@@ -97,7 +97,7 @@ def action_by_translation(
     Compute the translation matrix induced by the generator of our order 4
     isotropic basis <(P1,P2)x(Q1,Q2)> in E_1 x E_2.
     """
-    U, W = four_double_x(A24, X_4, Z_4)
+    U, W = x_double_4x4x2x1(A24, X_4, Z_4)
     t1, t2 = avx_421_pair_mul(W, X_4, U, Z_4)
     D = avx_421_sub(t1, t2)
 
@@ -270,7 +270,7 @@ def gluing_codomain(
     X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)
 
     # Double points to recover 4-torsion for change of basis
-    X_4, Z_4 = four_double_x(A24_12, X_8, Z_8)
+    X_4, Z_4 = x_double_4x4x2x1(A24_12, X_8, Z_8)
 
     # Compute the change of basis for our theta structure
     N = theta_change_of_basis(A24_12, X_4, Z_4)
