@@ -516,6 +516,31 @@ def x_mul_1x2x4x1(A24: AVX_2x4x1, P: AVX_2x4x1, m: ZZ) -> PointX:
     return x0
 
 
+def ladder_3pt_1x2x4x1(A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], m: ZZ) -> PointX:
+    try:
+        m = ZZ(m)
+    except TypeError:
+        raise TypeError(f"Cannot coerce input scalar {m = } to an integer")
+
+    # [m]P = [-m]P for x-only
+    m = abs(m)
+
+    # Unpack the basis
+    x0, x1, xd = basis
+
+    # If m is zero, return xP
+    if not m:
+        return x0
+
+    # Montgomery-ladder
+    for bit in bin(m)[:1:-1]:
+        if bit == "1":
+            x1, x0 = x_double_add_1x2x4x1(A24, x1, x0, xd)
+        else:
+            x1, xd = x_double_add_1x2x4x1(A24, x1, xd, x0)
+    return x0
+
+
 def ladder_biscalar_1x2x4x1(
     A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], a: ZZ, b: ZZ
 ) -> AVX_2x4x1:
