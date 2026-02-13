@@ -53,19 +53,20 @@ def generic_KAT_test(level=1, num_tests=100):
     print(f" level {level} tests passed!")
 
 
-def test_level_1():
-    generic_KAT_test(1, 5)
+def test_level_1(num_tests):
+    generic_KAT_test(1, num_tests)
 
 
-def test_level_3():
-    generic_KAT_test(3, 5)
+def test_level_3(num_tests):
+    generic_KAT_test(3, num_tests)
 
 
-def test_level_5():
-    generic_KAT_test(5, 5)
+def test_level_5(num_tests):
+    generic_KAT_test(5, num_tests)
 
 
 if __name__ == "__main__":
-    # test_level_1()
-    test_level_3()
-    # test_level_5()
+    num_tests = 1
+    # test_level_1(num_tests)
+    test_level_3(num_tests)
+    # test_level_5(num_tests)

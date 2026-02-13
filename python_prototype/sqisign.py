@@ -18,7 +18,7 @@ from limb_conversion import (
     curve_to_2x4x1_data,
 )
 from torsion_basis import torsion_basis_from_hint
-from elliptic_isogeny import two_isogeny_chain_codomain, two_isogeny_chain_small
+from elliptic_isogeny import two_isogeny_chain, two_isogeny_chain_codomain
 from sqisign_parameters import SQISIGN_PARAMETERS, generate_finite_field
 from theta_isogeny_chain import theta_isogeny_chain_verification_8x1x1
 
@@ -200,7 +200,7 @@ class SQIsign:
             PointX(basis.QX, basis.QZ),
             PointX(basis.PmQX, basis.PmQZ),
         ]
-        codomain, evaluated_basis = two_isogeny_chain_small(E, ker, len, basis_points)
+        codomain, evaluated_basis = two_isogeny_chain(E, ker, len, basis_points)
 
         # Ensure the basis is the correct type after eval
         P, Q, PmQ = evaluated_basis

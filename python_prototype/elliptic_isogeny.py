@@ -1,6 +1,5 @@
 from elliptic_types import Curve, PointX
 from elliptic_arithmetic import x_double
-from utilities import sqrt_fp2
 
 
 def curve_from_AC24(A24, C24):
@@ -50,45 +49,6 @@ def two_isogeny_eval(XP, ZP, XQ, ZQ):
     ZQ_prime = ZQ * t3
 
     return XQ_prime, ZQ_prime
-
-
-def two_isogeny_codomain_singular(A24, C24):
-    """
-    Algorithm 8.22 of the SQISign spec.
-
-    Compute the codomain of the 2-isogeny E -> E/<P> for P = (0 : 1)
-    """
-    t0 = A24 + A24
-    t0 - t0 - C24
-    t0 = t0 + t0
-    t0 = t0 / C24
-    c0 = t0
-    A24_prime = t0 + t0
-    t0 = t0 - 4
-    t0 = sqrt_fp2(t0)
-    c1 = -t0
-    C24_prime = t0 + t0
-    A24_prime = A24_prime + C24_prime
-    C24_prime = C24_prime + C24_prime
-
-    return (A24_prime, C24_prime), (c0, c1)
-
-
-def two_isogeny_eval_singular(XP, ZP, c0, c1):
-    """
-    Algorithm 8.23 of the SQISign spec.
-
-    Evaluate a point P (XP : ZP) under the action of the 2-isogeny E -> E/<P>
-    """
-    t0 = XP * ZP
-    t1 = c0 * ZP
-    t1 = t1 + XP
-    t1 = t1 * XP
-    XQ = ZP * ZP
-    XQ = XQ + t1
-    ZQ = t0 * c1
-
-    return XQ, ZQ
 
 
 def four_isogeny_codomain(XP, ZP):
@@ -217,62 +177,3 @@ def two_isogeny_chain_codomain(domain: Curve, kernel: PointX, length: int):
     """
     codomain, _ = two_isogeny_chain(domain, kernel, length)
     return codomain
-
-
-def two_isogeny_chain_small(
-    domain: Curve,
-    kernel: PointX,
-    length: int,
-    points: list[Curve],
-    allow_singular: bool = False,
-):
-    """
-    Algorithm 8.27 of the SQISign spec.
-
-    Compute a 2-isogeny chain with a naive approach and optionally evaluate
-    this isogeny on a given list of points. Unlike the faster chain, this
-    function also allows the computation of a so-called singular isogeny
-    with kernel (0 : 1) which can occur during signing.
-    """
-    # Extract out constants from domain and kernel
-    A24, C24 = domain.A24, domain.C24
-    XK, ZK = kernel
-
-    # Main loop, we compute the isogeny one step at a time
-    for i in range(length):
-        # Create point of order two for isogeny
-        XP, ZP = XK, ZK
-        for _ in range(length - i - 1):
-            XP, ZP = x_double(XP, ZP, A24, C24)
-
-        # For the first step, we ensure the point has full order and handle singular isogenies if allowed
-        if i == 0:
-            _, Z_test = x_double(XP, ZP, A24, C24)
-            if not Z_test.is_zero():
-                raise ValueError("kernel does not have order 2^length")
-
-            # The point of order two is (0 : 1) which means we need singular isogenies
-            if XP.is_zero():
-                if not allow_singular:
-                    raise ValueError("unexpected singular 2-isogeny")
-
-                # Compute the codomain
-                (A24, C24), (c0, c1) = two_isogeny_codomain_singular(A24, C24)
-
-                # Push through the kernel and any other points
-                XK, ZK = two_isogeny_eval_singular(XK, ZK, c0, c1)
-                points = [
-                    two_isogeny_eval_singular(XP, ZP, c0, c1) for (XP, ZP) in points
-                ]
-
-                # Go to the next step of the loop and skip the code below
-                continue
-
-        A24, C24 = two_isogeny_codomain(XP, ZP)
-        XK, ZK = two_isogeny_eval(XP, ZP, XK, ZK)
-        points = [two_isogeny_eval(XP, ZP, XQ, ZQ) for (XQ, ZQ) in points]
-
-    codomain = curve_from_AC24(A24, C24)
-    points = [PointX(XQ, ZQ) for (XQ, ZQ) in points]
-
-    return codomain, points

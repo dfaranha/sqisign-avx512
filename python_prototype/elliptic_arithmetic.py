@@ -444,7 +444,6 @@ def x_diff_add_1x2x4x1(P: AVX_2x4x1, Q: AVX_2x4x1, PmQ: AVX_2x4x1) -> AVX_2x4x1:
 def x_double_add_1x2x4x1(
     A24: AVX_2x4x1, P: AVX_2x4x1, Q: AVX_2x4x1, PmQ: AVX_2x4x1
 ) -> tuple[AVX_2x4x1]:
-
     # Convert points from 2x4x1 to 4x2x1 -- potentially this should be done
     # before the function call.
     P_Q = avx_241_to_421(P, Q)
