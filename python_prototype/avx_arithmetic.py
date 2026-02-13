@@ -21,6 +21,22 @@ def avx_421_to_811(A: AVX_4x2x1, B: AVX_4x2x1) -> AVX_8x1x1:
     return AVX_8x1x1(*(A + B))
 
 
+def avx_421_to_241(P: AVX_4x2x1) -> tuple[AVX_2x4x1]:
+    """
+    Convert a pair of points within a AVX_4x2x1 to two AVX_2x4x1
+    """
+    A = AVX_2x4x1(*P[:2])
+    B = AVX_2x4x1(*P[2:])
+    return A, B
+
+
+def avx_241_to_421(A: AVX_2x4x1, B: AVX_2x4x1) -> AVX_4x2x1:
+    """
+    Convert a pair of AVX_4x2x1 points to a single AVX_4x2x1
+    """
+    return AVX_4x2x1(*(A + B))
+
+
 # ======================================================
 # AVX 2x4x1 Arithmetic
 # ======================================================
@@ -107,6 +123,13 @@ def avx_421_sub(A: AVX_4x2x1, B: AVX_4x2x1) -> AVX_4x2x1:
     Sub components of two AVX blobs
     """
     return AVX_4x2x1(*[a - b for a, b in zip(A, B)])
+
+
+def avx_421_add_sub(A: AVX_2x4x1, B: AVX_2x4x1) -> AVX_2x4x1:
+    """
+    Add the first and subtract the second components
+    """
+    return AVX_4x2x1(A[0] + B[0], A[1] + B[1], A[2] - B[2], A[3] - B[3])
 
 
 def avx_421_dbl(

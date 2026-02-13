@@ -3,13 +3,14 @@ from sage.rings.integer_ring import ZZ
 
 from hashlib import shake_256
 
+from avx_types import AVX_2x4x1
 from elliptic_types import Curve, BasisX, PointX
 from elliptic_arithmetic import (
     j_invariant,
     ladder_3_pt,
     x_double_n,
-    x_basis_double_n_avx,
-    ladder_biscalar,
+    x_basis_double_n_1x2x4x1,
+    ladder_biscalar_1x2x4x1,
 )
 from limb_conversion import (
     basis_from_64_to_51_bit,
@@ -208,7 +209,9 @@ class SQIsign:
         return codomain, evaluated_basis
 
     @staticmethod
-    def apply_change_of_basis(E: Curve, basis: BasisX, M: Matrix, order: ZZ):
+    def apply_change_of_basis(
+        A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], M: Matrix, order: ZZ
+    ):
         """
         Evaluate a 2x2 matrix A on the vector of elliptic
         curve points [P, Q] by acting with scalar multiplication
@@ -219,16 +222,16 @@ class SQIsign:
         a00, a01, a10, a11 = M.list()
 
         # Compute the new scaled basis
-        xR = ladder_biscalar(E, basis, a00, a10)
-        xS = ladder_biscalar(E, basis, a01, a11)
+        xR = ladder_biscalar_1x2x4x1(A24, basis, a00, a10)
+        xS = ladder_biscalar_1x2x4x1(A24, basis, a01, a11)
 
         # For the difference point we must be careful the result
         # is positive, so we work modulo the point order
         diff_m = (a00 - a01) % order
         diff_n = (a10 - a11) % order
-        xRS = ladder_biscalar(E, basis, diff_m, diff_n)
+        xRS = ladder_biscalar_1x2x4x1(A24, basis, diff_m, diff_n)
 
-        return BasisX(xR.X, xR.Z, xS.X, xS.Z, xRS.X, xRS.Z)
+        return xR, xS, xRS
 
     def verify(self, message: bytes, signature: bytes, public_key: bytes) -> bool:
         """
@@ -295,18 +298,20 @@ class SQIsign:
         aux_basis = basis_from_64_to_51_bit(aux_basis)
         chl_basis = basis_from_64_to_51_bit(chl_basis)
 
-        aux_basis = x_basis_double_n_avx(A24_aux, aux_basis, self.f - e_rsp_prime - 2)
-        chl_basis = x_basis_double_n_avx(
+        aux_basis = x_basis_double_n_1x2x4x1(
+            A24_aux, aux_basis, self.f - e_rsp_prime - 2
+        )
+        chl_basis = x_basis_double_n_1x2x4x1(
             A24_chl, chl_basis, self.f - e_rsp_prime - r_rsp - 2
         )
+
+        # Apply the change of basis matrix
+        chl_basis = self.apply_change_of_basis(A24_chl, chl_basis, M_chl, chl_order)
 
         aux_basis = basis_from_51_to_64_bit(aux_basis)
         chl_basis = basis_from_51_to_64_bit(chl_basis)
 
         # ==================================================================================
-
-        # Apply the change of basis matrix
-        chl_basis = self.apply_change_of_basis(E_chl, chl_basis, M_chl, chl_order)
 
         # Compute the short 2^r_rsp isogeny and push through points
         if r_rsp > 0:

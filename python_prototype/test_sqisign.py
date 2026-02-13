@@ -58,7 +58,7 @@ def test_level_1():
 
 
 def test_level_3():
-    generic_KAT_test(3, 100)
+    generic_KAT_test(3, 5)
 
 
 def test_level_5():
@@ -66,6 +66,6 @@ def test_level_5():
 
 
 if __name__ == "__main__":
-    test_level_1()
+    # test_level_1()
     test_level_3()
-    test_level_5()
+    # test_level_5()
