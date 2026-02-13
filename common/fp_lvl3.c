@@ -355,7 +355,11 @@ void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     res[7] = t[7];
 }
 
-void fp_mul_8x1_school(__m512i* res, __m512i* a, __m512i* b)
+void fp_mul_8x1_school(__m512i* res, __m512i* a, __m512i* b) {
+    fp_mul_8x1(res, a, b);
+}
+
+void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
     //Likely not needed to use t15, but for now we keep things simple:
     __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15; 
@@ -1350,7 +1354,7 @@ res[6] = r14;
 res[7] = r15;
 }
 
-void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
+void fp_mul_8x1_buggy(__m512i* res, __m512i* a, __m512i* b)
 {
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     __m512i t[16];
@@ -1450,6 +1454,48 @@ void fp_51_to_64_bit_limbs_8x1(fp_t* res, __m512i* src)
     }
 }
 
+void fp_51_to_64_bit_limbs_8x1_only_even_idx(fp_t* res, __m512i* src)
+{
+    uint64_t t[8];
+    VSTORE(t, src[0]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[0] = t[2*i];
+    } 
+    VSTORE(t, src[1]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[0] |= (t[2*i] & 0x1fff) << 51;
+        (res+i)->arr[1] = (t[2*i] >> 13) & 0x3fffffffff;
+    } 
+    VSTORE(t, src[2]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[1] |= (t[2*i] & 0x3ffffff) << 38;
+        (res+i)->arr[2] = (t[2*i] >> 26) & 0x1ffffff;
+    }
+    VSTORE(t, src[3]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[2] |= (t[2*i] & 0x7fffffffff) << 25;
+        (res+i)->arr[3] = (t[2*i] >> 39) & 0xfff;
+    }
+    VSTORE(t, src[4]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[3] |= t[2*i] << 12;
+    }
+    VSTORE(t, src[5]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[3] |= (t[2*i] & 0x1) << 63;
+        (res+i)->arr[4] = (t[2*i] >> 1) & 0x3ffffffffffff;
+    }
+    VSTORE(t, src[6]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[4] |= (t[2*i] & 0x3fff) << 50;
+        (res+i)->arr[5] = (t[2*i] >> 14) & 0x1fffffffff;
+    }
+    VSTORE(t, src[7]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[5] |= t[2*i] << 37;
+    }
+}
+
 void fp_unvectorized_to_8x1(__m512i* res, fp_t* src)
 {
     fp_t coeffs[8];
@@ -1499,6 +1545,44 @@ void fp_64_to_51_bit_limbs_8x1(__m512i* res, fp_t* src)
         t[i] = ((src+i)->arr[5] >> 37) & 0x7ffffff;
     }
     res[7] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+}
+
+void fp_64_to_51_bit_limbs_8x1_only_even_idx(__m512i* res, fp_t* src)
+{
+    uint64_t t[4];
+
+    for (int i = 0; i < 4; i++) {
+        t[i] = (src+i)->arr[0] & LIMB_MASK;
+    }
+    res[0] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
+    for (int i = 0; i < 4; i++) {
+        t[i] = (((src+i)->arr[0] >> 51) & 0x1ffff) | (((src+i)->arr[1] & 0x3fffffffff) << 13); 
+    }
+    res[1] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
+    for (int i = 0; i < 4; i++) {
+        t[i] = (((src+i)->arr[1] >> 38) & 0x3ffffff) | (((src+i)->arr[2] & 0x1ffffff) << 26); 
+    }
+    res[2] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
+    for (int i = 0; i < 4; i++) {
+        t[i] = (((src+i)->arr[2] >> 25) & 0x7fffffffff) | (((src+i)->arr[3] & 0xfff) << 39); 
+    }
+    res[3] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
+    for (int i = 0; i < 4; i++) {
+        t[i] = ((src+i)->arr[3] >> 12) & LIMB_MASK;
+    }
+    res[4] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
+    for (int i = 0; i < 4; i++) {
+        t[i] = (((src+i)->arr[3] >> 63) & 0x1) | (((src+i)->arr[4] & 0x3ffffffffffff) << 1); 
+    }
+    res[5] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
+    for (int i = 0; i < 4; i++) {
+        t[i] = (((src+i)->arr[4] >> 50) & 0x3fff) | (((src+i)->arr[5] & 0x1fffffffff) << 14); 
+    }
+    res[6] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
+    for (int i = 0; i < 4; i++) {
+        t[i] = ((src+i)->arr[5] >> 37) & 0x7ffffff;
+    }
+    res[7] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
 }
 
 // ======================================================================================================

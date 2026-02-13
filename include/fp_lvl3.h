@@ -111,10 +111,12 @@ void fp_frommont_8x1(__m512i* res, __m512i* a);
 void fp_8x1_to_unvectorized(fp_t* res, __m512i* src);
 // helper function, also used in fp2 conversions.
 void fp_51_to_64_bit_limbs_8x1(fp_t* res, __m512i* src);
+void fp_51_to_64_bit_limbs_8x1_only_even_idx(fp_t* res, __m512i* src);
 
 void fp_unvectorized_to_8x1(__m512i* res, fp_t* src);
 // helper function, also used in fp2 conversions.
 void fp_64_to_51_bit_limbs_8x1(__m512i* res, fp_t* src);
+void fp_64_to_51_bit_limbs_8x1_only_even_idx(__m512i* res, fp_t* src);
 
 /**
  *  res = a + b, multiprecision addition, no correction, no carry propagation

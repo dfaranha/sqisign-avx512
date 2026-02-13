@@ -1,7 +1,7 @@
 #include "ec.h"
 #include "fp2_lvl3.h"
 
-void ec_point_unvectorized_to_4x2x1(__m512i* res_x, __m512i* res_z, ec_point_t* src)
+void ec_point_unvectorized_to_4x4x2x1(__m512i* res_x, __m512i* res_z, ec_point_t* src)
 {
     fp2_t unvec_x[4], unvec_z[4];
     for (int i = 0; i < 4; i++) {
@@ -13,7 +13,7 @@ void ec_point_unvectorized_to_4x2x1(__m512i* res_x, __m512i* res_z, ec_point_t* 
 }
 
 
-void ec_point_4x2x1_to_unvectorized(ec_point_t* res, __m512i* x, __m512i* z)
+void ec_point_4x4x2x1_to_unvectorized(ec_point_t* res, __m512i* x, __m512i* z)
 {
     fp2_t unvec_x[4], unvec_z[4];
     fp2_4x2x1_to_unvectorized(unvec_x, x);
@@ -24,8 +24,8 @@ void ec_point_4x2x1_to_unvectorized(ec_point_t* res, __m512i* x, __m512i* z)
     }
 }
 
-// Done (TODO delete this comment) 1582 -> 1530 cycles.
-void ec_double_4x2x1(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, __m512i* z)
+// Assumes A24 is normalized.
+void ec_double_4x4x2x1(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, __m512i* z)
 {
     __m512i t0[8], t1[8], t2[8], t3[8];
     __m512i s0[16], s1[16];
@@ -43,30 +43,14 @@ void ec_double_4x2x1(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, _
     fp2_mulx2_4x2x1(res_x, res_z, t0, t1, t2, t3);
 }
 
-// It could be that this is just as fast with the optimized field arithmetic.
-void ec_double_4x2x1_old(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, __m512i* z)
-{
-    __m512i t0[8], t1[8], t2[8];
-    
-    fp2_add_4x2x1(t0, x, z);
-    fp2_sqr_4x2x1(t0, t0);
-    fp2_sub_4x2x1(t1, x, z);
-    fp2_sqr_4x2x1(t1, t1);
-    fp2_sub_4x2x1(t2, t0, t1);
-    fp2_mul_4x2x1(res_x, t0, t1);
-    fp2_mul_4x2x1(t0, t2, A24);
-    fp2_add_4x2x1(t0, t0, t1);
-    fp2_mul_4x2x1(res_z, t0, t2);
-}
-
 // TODO: in SQIsign jac_to_xz has more code to handle the point at infty
-void ec_jac_to_xz_4x2x1(__m512i* x, __m512i* z, __m512i* jac_x, __m512i* jac_z)
+void ec_jac_to_xz_4x4x2x1(__m512i* x, __m512i* z, __m512i* jac_x, __m512i* jac_z)
 {
     fp2_copy_4x2x1(x, jac_x);
     fp2_sqr_4x2x1(z, jac_z);
 }
 
-void ec_jac_to_ws_4x2x1(
+void ec_jac_to_ws_4x4x2x1(
     __m512i* res_x, __m512i* res_y, __m512i* res_z, __m512i* res_t, __m512i* res_A12_over_3,
     __m512i* x, __m512i* y, __m512i* z, __m512i* A12
 )
@@ -95,7 +79,7 @@ void ec_jac_to_ws_4x2x1(
     fp2_mul_4x2x1(res_t, a, tmp1);
 }
 
-void ec_ws_to_jac_4x2x1(
+void ec_ws_to_jac_4x4x2x1(
     __m512i* res_x, __m512i* res_y, __m512i* res_z,
     __m512i* x, __m512i* y, __m512i* z, __m512i* A12_over_3
 )
@@ -111,7 +95,7 @@ void ec_ws_to_jac_4x2x1(
 }
 
 // Done (TODO delete this comment)
-void ec_double_ws_4x2x1(
+void ec_double_ws_4x4x2x1(
     __m512i* res_x, __m512i* res_y, __m512i* res_z, __m512i* res_t,
     __m512i* x, __m512i* y, __m512i* z, __m512i* t
 )
@@ -138,7 +122,7 @@ void ec_double_ws_4x2x1(
     fp2_sub_4x2x1(res_y, t0, u);
     fp2_add_4x2x1(res_t, t1, t1);
 }
-void ec_double_ws_iter_4x2x1(
+void ec_double_ws_iter_4x4x2x1(
     __m512i* res_x, __m512i* res_y, __m512i* res_z, __m512i* res_t,
     __m512i* x, __m512i* y, __m512i* z, __m512i* t, const int n
 )
@@ -151,40 +135,14 @@ void ec_double_ws_iter_4x2x1(
         return;
     }
     
-    ec_double_ws_4x2x1(res_x, res_y, res_z, res_t, x, y, z, t);
+    ec_double_ws_4x4x2x1(res_x, res_y, res_z, res_t, x, y, z, t);
     for (int i = 0; i < n-1; i++) {
-        ec_double_ws_4x2x1(res_x, res_y, res_z, res_t, res_x, res_y, res_z, res_t);
+        ec_double_ws_4x4x2x1(res_x, res_y, res_z, res_t, res_x, res_y, res_z, res_t);
     }
 }
 
-void ec_add_components_4x2x1_old(
-    __m512i* res_u, __m512i* res_v, __m512i* res_w, 
-    __m512i* A, __m512i* xP, __m512i* yP, __m512i* zP, 
-    __m512i* xQ, __m512i* yQ, __m512i* zQ
-)
-{
-    __m512i t0[8], t1[8], t2[8], t3[8], t4[8], t5[8], t6[8];
-
-    // Compute the slope dy / dx for the case P != Q
-    fp2_sqrx2_4x2x1(t0, t1, zP, zQ);
-    fp2_mulx2_4x2x1(t2, t3, t1, xP, t0, xQ);
-    fp2_mulx2_4x2x1(t4, t5, yP, zQ, zP, yQ);
-    fp2_mulx2_4x2x1(t4, t5, t4, t1, t5, t0);
-    fp2_mulx2_4x2x1(t0, t6, t0, t1, t4, t5);
-    fp2_add_4x2x1(res_v, t6, t6);
-    fp2_sqrx2_4x2x1(t4, t5, t4, t5);
-    fp2_add_4x2x1(t4, t4, t5);
-    fp2_add_4x2x1(t5, t2, t3);
-    fp2_add_4x2x1(t6, t3, t3);
-    fp2_sub_4x2x1(t6, t5, t6);
-    fp2_mulx2_4x2x1(t6, t1, t6, t6, A, t0);
-    fp2_add_4x2x1(t1, t1, t5);
-    fp2_mulx2_4x2x1(t1, res_w, t1, t6, t6, t0);
-    fp2_sub_4x2x1(res_u, t4, t1);
-}
-
 // Done (TODO delete this comment)
-void ec_add_components_4x2x1(
+void ec_add_components_4x4x2x1(
     __m512i* res_u, __m512i* res_v, __m512i* res_w, 
     __m512i* A, __m512i* xP, __m512i* yP, __m512i* zP, 
     __m512i* xQ, __m512i* yQ, __m512i* zQ
@@ -223,4 +181,126 @@ void ec_add_components_4x2x1(
     // TODO: Worth it to use fp2_4x2x1_duplicate_to_8x1x1 with t2_t3?
     fp2_mulx2_4x2x1(t1_t0, res_w, t1_t0, t2_t3, t2_t3, t1_t0+8);
     fp2_sub_4x2x1(res_u, t4_t5, t1_t0);
+}
+
+void ec_point_unvec_to_1x2x4x1(__m512i* res, ec_point_t* P)
+{
+    fp2_t xz[2] = { P->x, P->z };
+    fp2_unvectorized_to_2x4x1(res, xz);
+}
+
+void ec_point_1x2x4x1_to_unvec(ec_point_t* res, __m512i* P)
+{
+    fp2_t xz[2];
+    fp2_2x4x1_to_unvectorized(xz, P);
+    fp2_copy(&res->x, xz);
+    fp2_copy(&res->z, xz+1);
+}
+
+// TODO: Might be that 2x2x2 is faster?
+// TODO: Can we not use this algorithm to create a 8x1x1 algorithm
+//       for doubling 4 points in theta isog?
+// Does not assume A24 has been normalized.
+void ec_double_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24)
+{
+    __m512i t0[8], t1[8], t2[8], t3[8], idx0, idx1;
+    __mmask8 mask;
+
+    // t0 = (X, X), t1 = (Z, Z)
+    idx0 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    idx1 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    for (int i = 0; i < 8; i++) {
+        t0[i] = VPERM512(idx0, P[i]);
+        t1[i] = VPERM512(idx1, P[i]);
+    }
+
+    // t0 = (X + Z, X - Z)
+    // t1 = t0^2
+    mask = 0xf;
+    fp2_mixaddsub_2x4x1(t0, t0, t1, mask);
+    fp2_sqr_2x4x1(t1, t0);
+
+    // t0 = (t1[0] + t1[1], t1[0] - t1[1])
+    for (int i = 0; i < 8; i++) {
+        t0[i] = VPERM512(idx0, t1[i]);
+        t2[i] = VPERM512(idx1, t1[i]);
+    }
+    fp2_mixaddsub_2x4x1(t0, t0, t2, mask);
+
+    // t2 = (A24 * t0[1], C24 * t1[1])
+    idx0 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+    for (int i = 0; i < 8; i++) {
+        t2[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+    }
+    fp2_mul_2x4x1(t2, t2, A24);
+
+    // TODO: Wasting one addition here.
+    // t3 = (-, t2[0] + t2[1])
+    // Maybe we can implement 1x8x1 Fp2?
+    idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);
+    for (int i = 0; i < 8; i++) {
+        t3[i] = VPERM512(idx0, t2[i]);
+    }
+    fp2_add_2x4x1(t3, t3, t2);
+    
+    // res_X = t1[0] * t2[1], res_Z = t0[1] * t3[1]
+    idx0 = VSET(8, 9, 10, 11, 4, 5, 6, 7);
+    idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+    for (int i = 0; i < 8; i++) {
+        t0[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        t1[i] = VBLENDPERM(idx1, t2[i], t3[i]);
+    }
+    fp2_mul_2x4x1(res, t0, t1);
+}
+
+void ec_double_normA24_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24)
+{
+    __m512i t0[8], t1[8], t2[8], t3[8], idx0, idx1;
+    __mmask8 mask;
+
+    // t0 = (X, X), t1 = (Z, Z)
+    idx0 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    idx1 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    for (int i = 0; i < 8; i++) {
+        t0[i] = VPERM512(idx0, P[i]);
+        t1[i] = VPERM512(idx1, P[i]);
+    }
+
+    // t0 = (X + Z, X - Z)
+    // t1 = t0^2
+    mask = 0xf;
+    fp2_mixaddsub_2x4x1(t0, t0, t1, mask);
+    fp2_sqr_2x4x1(t1, t0);
+
+    // t0 = (t1[0] + t1[1], t1[0] - t1[1])
+    for (int i = 0; i < 8; i++) {
+        t0[i] = VPERM512(idx0, t1[i]);
+        t2[i] = VPERM512(idx1, t1[i]);
+    }
+    fp2_mixaddsub_2x4x1(t0, t0, t2, mask);
+
+    // t2 = (A24 * t0[1], C24 * t1[1])
+    idx0 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+    for (int i = 0; i < 8; i++) {
+        t2[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+    }
+    fp2_mul_2x4x1(t2, t2, A24);
+
+    // TODO: Wasting one addition here.
+    // t3 = (-, t2[0] + t2[1])
+    // Maybe we can implement 1x8x1 Fp2?
+    idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);
+    for (int i = 0; i < 8; i++) {
+        t3[i] = VPERM512(idx0, t2[i]);
+    }
+    fp2_add_2x4x1(t3, t3, t2);
+    
+    // res_X = t1[0] * t2[1], res_Z = t0[1] * t3[1]
+    idx0 = VSET(8, 9, 10, 11, 4, 5, 6, 7);
+    idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+    for (int i = 0; i < 8; i++) {
+        t0[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        t1[i] = VBLENDPERM(idx1, t2[i], t3[i]);
+    }
+    fp2_mul_2x4x1(res, t0, t1);
 }

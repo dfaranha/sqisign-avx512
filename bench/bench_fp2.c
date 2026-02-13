@@ -409,6 +409,33 @@ void bench_fp2(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("4x2x1 -> unvectorized", cycles[(N_RUNS/2) -1], tmp);
 
+    // unvec to 2x4x1
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            fp2_unvectorized_to_2x4x1(c, unvec);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp2_is_equal_2x4x1(c, a);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("2x4x1 <- unvectorized", cycles[(N_RUNS/2) -1], tmp);
+
+    // 2x4x1 to unvec
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int i = 0; i < iterations; i++) {
+            fp2_2x4x1_to_unvectorized(unvec, c);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp2_is_equal_2x4x1(c, a);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("2x4x1 -> unvectorized", cycles[(N_RUNS/2) -1], tmp);
+
+
     // 8x1x1 to 4x2x1
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();

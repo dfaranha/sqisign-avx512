@@ -42,7 +42,7 @@ int theta_compute_product_doubles(
 
     // TODO: This conversion should be possible in place. Double check that it works.
     // TODO: Standardize naming for Montgomery coeff, should be A_12 not A12.
-    ec_jac_to_ws_4x2x1(strat_points_x, strat_points_y, strat_points_z, strat_points_t,
+    ec_jac_to_ws_4x4x2x1(strat_points_x, strat_points_y, strat_points_z, strat_points_t,
         A12_over_3, strat_points_x, strat_points_y, strat_points_z, A_12);
     
     // Now we store within strat_points the Weierstrass coordinates instead.
@@ -62,7 +62,7 @@ int theta_compute_product_doubles(
         if (orders[k - 1] >= 16) { n = orders[k - 1] / 2; }
         else { n = orders[k - 1] - 1; }
             
-        ec_double_ws_iter_4x2x1(
+        ec_double_ws_iter_4x4x2x1(
             strat_points_x + (8*k), strat_points_y + (8*k), 
             strat_points_z + (8*k), strat_points_t + (8*k),
             strat_points_x + (8*(k-1)), strat_points_y + (8*(k-1)),
@@ -76,7 +76,7 @@ int theta_compute_product_doubles(
     // Which is done only on the points we have doubled so far.
     for (int i = 0; i <= k; i++)
     {
-        ec_ws_to_jac_4x2x1(
+        ec_ws_to_jac_4x4x2x1(
             strat_points_x + (8*i), strat_points_y + (8*i), strat_points_z + (8*i),
             strat_points_x + (8*i), strat_points_y + (8*i), strat_points_z + (8*i),
             A12_over_3

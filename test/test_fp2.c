@@ -1731,6 +1731,85 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    for (int i = 0; i < iterations; i++) {
+        for (int j = 0; j < 2; j++) {
+            fp2_random_test(&unvec1[j]);
+        }
+        rand_fp2_2x4x1(a);
+
+        // Converting back and forth does nothin
+        fp2_unvectorized_to_2x4x1(d, unvec1);
+        fp2_2x4x1_to_unvectorized(unvec2, d);
+
+        for (int j = 0; j < 2; j++) {
+            if (fp2_is_equal(&unvec1[j], &unvec2[j]) == 0) { passed = 0; }
+        }
+        if (passed == 0) {
+            break;
+        }
+
+        fp2_2x4x1_to_unvectorized(unvec2, a);
+        fp2_unvectorized_to_2x4x1(d, unvec2);
+
+        if (fp2_is_equal_2x4x1(a, d) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        // Top 13 bits of each AVX limb is 0
+        t = VSETALL(0xfff8000000000000);
+        fp2_unvectorized_to_2x4x1(d, unvec1);
+        for (int j = 0; j < 8; j++) {
+            e[j] = VAND(d[j], t);
+        }
+        if (fp2_is_zero_2x4x1(e) != 0x3) {
+            passed = 0;
+            break;
+        }
+        
+        // Conversion commutes with arithmetic
+        rand_fp2_2x4x1(a);
+        rand_fp2_2x4x1(b);
+        fp2_mul_2x4x1(c, a, b);
+
+        fp2_2x4x1_to_unvectorized(unvec1, a);
+        fp2_2x4x1_to_unvectorized(unvec2, b);
+        for (int i = 0; i < 2; i++) {
+            fp2_mul(&unvec1[i], &unvec1[i], &unvec2[i]);
+        }
+        fp2_unvectorized_to_2x4x1(d, unvec1);
+
+        if (fp2_is_equal_2x4x1(c, d) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        for (int j = 0; j < 2; j++) {
+            fp2_random_test(&unvec1[j]);
+            fp2_random_test(&unvec2[j]);
+        }
+
+        fp2_unvectorized_to_2x4x1(d, unvec1);
+        fp2_unvectorized_to_2x4x1(e, unvec2);
+
+        for (int j = 0; j < 2; j++) {
+            fp2_mul(&unvec1[j], &unvec1[j], &unvec2[j]);
+        }
+        fp2_mul_2x4x1(f, d, e);
+        fp2_2x4x1_to_unvectorized(unvec2, f);
+        
+        for (int j = 0; j < 2; j++) {
+            if (fp2_is_equal(&unvec1[j], &unvec2[j]) == 0) {
+                passed = 0;
+                break;
+            }
+        }
+    }
+    print_test_res("unvectorized <-> 2x4x1", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     for(int i = 0; i < iterations; i++) {
         rand_fp2_8x1x1(a);
         rand_fp2_4x2x1(b);

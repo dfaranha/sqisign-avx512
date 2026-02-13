@@ -61,7 +61,7 @@ void gluing_action_by_translation_4x2x1(
 {
     __m512i u[8], w[8], t0[8], t1[8];
 
-    ec_double_4x2x1(u, w, A24, x_4, z_4);
+    ec_double_4x4x2x1(u, w, A24, x_4, z_4);
     fp2_mulx2_4x2x1(t0, t1, w, x_4, u, z_4);
     fp2_sub_4x2x1(t0, t0, t1); // det
     gluing_compute_matrix_4x2x1(g1, h1, g2, h2, pi, x_4, z_4, u, w, t0);
@@ -422,10 +422,10 @@ bool gluing_codomain(
     __mmask8 mask;
 
     // X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)
-    ec_jac_to_xz_4x2x1(x_8_, z_8_, x_8, z_8);
+    ec_jac_to_xz_4x4x2x1(x_8_, z_8_, x_8, z_8);
 
     // Double points to recover 4-torsion for change of basis
-    ec_double_4x2x1(x_4, z_4, A24_12, x_8_, z_8_);
+    ec_double_4x4x2x1(x_4, z_4, A24_12, x_8_, z_8_);
 
     // Compute the change of basis for our theta structure
     gluing_change_of_basis_4x2x1(res_matrix01, res_matrix23, A24_12, x_4, z_4);
@@ -554,7 +554,7 @@ void gluing_eval_pair(
     // u3, v3, w3 = add_components(E1, Q1, T1_8)
     // u2, v2, w2 = add_components(E2, P2, T2_8)
     // u4, v4, w4 = add_components(E2, Q2, T2_8)
-    ec_add_components_4x2x1(u, v, w, A_12, xP, yP, zP, xT_8, yT_8, zT_8);
+    ec_add_components_4x4x2x1(u, v, w, A_12, xP, yP, zP, xT_8, yT_8, zT_8);
 
     // ===============================================================
     // Given:

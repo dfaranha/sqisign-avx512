@@ -15,7 +15,7 @@
  * @param res_z Output: The z-coordinates in the 4x2x1 format.
  * @param src The four points in the ec_point_t format.
  */
-void ec_point_unvectorized_to_4x2x1(__m512i* res_x, __m512i* res_z, ec_point_t* src);
+void ec_point_unvectorized_to_4x4x2x1(__m512i* res_x, __m512i* res_z, ec_point_t* src);
 
 /**
  * Converts four x-only points in the 4x2x1 format to the ec_point_t type.
@@ -23,7 +23,7 @@ void ec_point_unvectorized_to_4x2x1(__m512i* res_x, __m512i* res_z, ec_point_t* 
  * @param x The x-cooordinates in the 4x2x1 format.
  * @param z The z-coordinates in the 4x2x1 format.
  */
-void ec_point_4x2x1_to_unvectorized(ec_point_t* res, __m512i* x, __m512i* z);
+void ec_point_4x4x2x1_to_unvectorized(ec_point_t* res, __m512i* x, __m512i* z);
 
 
 /**
@@ -34,9 +34,7 @@ void ec_point_4x2x1_to_unvectorized(ec_point_t* res, __m512i* x, __m512i* z);
  * @param x The input x-coordinates
  * @param z The input z-coordinates
  */
-void ec_double_4x2x1(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, __m512i* z);
-void ec_double_4x2x1_old(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, __m512i* z);
-
+void ec_double_4x4x2x1(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, __m512i* z);
 /**
  * Converts each Jacobian x-only point (jac_x, jac_y, jac_z) to its Montgomery representation (x : z).
  *
@@ -48,26 +46,26 @@ void ec_double_4x2x1_old(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* 
  * @param jac_x x coordinate of the 4 input points.
  * @param jac_z z coordinate of the 4 input points.
  */
-void ec_jac_to_xz_4x2x1(__m512i* x, __m512i* z, __m512i* jac_x, __m512i* jac_z);
+void ec_jac_to_xz_4x4x2x1(__m512i* x, __m512i* z, __m512i* jac_x, __m512i* jac_z);
 
 // TODO: Documentation
 
-void ec_jac_to_ws_4x2x1(
+void ec_jac_to_ws_4x4x2x1(
     __m512i* res_x, __m512i* res_y, __m512i* res_z, __m512i* res_t, __m512i* res_A12_over_3,
     __m512i* x, __m512i* y, __m512i* z, __m512i* A12
 );
 
-void ec_ws_to_jac_4x2x1(
+void ec_ws_to_jac_4x4x2x1(
     __m512i* res_x, __m512i* res_y, __m512i* res_z,
     __m512i* x, __m512i* y, __m512i* z, __m512i* A12_over_3
 );
 
-void ec_double_ws_4x2x1(
+void ec_double_ws_4x4x2x1(
     __m512i* res_x, __m512i* res_y, __m512i* res_z, __m512i* res_t,
     __m512i* x, __m512i* y, __m512i* z, __m512i* t
 );
 
-void ec_double_ws_iter_4x2x1(
+void ec_double_ws_iter_4x4x2x1(
     __m512i* res_x, __m512i* res_y, __m512i* res_z, __m512i* res_t,
     __m512i* x, __m512i* y, __m512i* z, __m512i* t, const int n
 );
@@ -78,16 +76,21 @@ void ec_double_ws_iter_4x2x1(
  * compute u, v, w such that x(P + Q) = (u - v : w) and 
  * x(P - Q) = (u + x : w).
  */
-void ec_add_components_4x2x1(
+void ec_add_components_4x4x2x1(
     __m512i* res_u, __m512i* res_v, __m512i* res_w, 
     __m512i* A, __m512i* xP, __m512i* yP, __m512i* zP, 
     __m512i* xQ, __m512i* yQ, __m512i* zQ
 );
 
-void ec_add_components_4x2x1_old(
-    __m512i* res_u, __m512i* res_v, __m512i* res_w, 
-    __m512i* A, __m512i* xP, __m512i* yP, __m512i* zP, 
-    __m512i* xQ, __m512i* yQ, __m512i* zQ
-);
+
+// ==== For 1D isogeny ====
+// TODO: Names might not be consistent. ec_double_4x2x1 doubles 4 points at once,
+// while ec_double_1x2x4x1 doubles only one point.
+
+void ec_point_unvec_to_1x2x4x1(__m512i* res, ec_point_t* P);
+
+void ec_point_1x2x4x1_to_unvec(ec_point_t* res, __m512i* P);
+
+void ec_double_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24);
 
 #endif
