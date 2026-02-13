@@ -78,15 +78,14 @@ def four_isogeny_codomain(P: AVX_2x4x1) -> tuple[AVX_2x4x1]:
     t0_t1 = avx_241_sqr(P)
     A24_C24 = avx_241_sqr(t0_t1)
 
-    T0 = AVX_2x4x1(t0_t1[0], A24_C24[1])
-    T1 = AVX_2x4x1(t0_t1[0], A24_C24[0])
-    t0_A24 = avx_241_add_sub(T0, T1)
+    T0 = AVX_2x4x1(t0_t1[1], A24_C24[1])
+    T1 = AVX_2x4x1(t0_t1[1], A24_C24[0])
+    t1_A24 = avx_241_add_sub(T0, T1)
 
-    T0 = AVX_2x4x1(t0_t1[1], 0)
+    T0 = AVX_2x4x1(t1_A24[0], 0)
     c0_00 = avx_241_add(T0, T0)
-    c0_00 = avx_241_add(c0_00, c0_00)
 
-    A24_prime = AVX_2x4x1(t0_A24[1], A24_C24[1])
+    A24_prime = AVX_2x4x1(t1_A24[1], A24_C24[1])
     C01 = AVX_2x4x1(c0_00[0], c2_c1[1])
     C2 = AVX_2x4x1(c2_c1[0], 0)
 
