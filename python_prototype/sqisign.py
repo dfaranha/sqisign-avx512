@@ -3,17 +3,26 @@ from sage.rings.integer_ring import ZZ
 
 from hashlib import shake_256
 
+from avx_types import AVX_2x4x1
 from elliptic_types import Curve, BasisX, PointX
 from elliptic_arithmetic import (
     j_invariant,
-    ladder_3_pt,
+    ladder_3pt_1x2x4x1,
     x_double_n,
-    x_basis_double_n,
-    ladder_biscalar,
+    x_double_n_1x2x4x1,
+    x_basis_double_n_1x2x4x1,
+    ladder_biscalar_1x2x4x1,
+)
+from limb_conversion import (
+    basis_from_64_to_51_bit,
+    basis_from_51_to_64_bit,
+    curve_to_2x4x1_data,
 )
 from torsion_basis import torsion_basis_from_hint
-
-from elliptic_isogeny import two_isogeny_chain_codomain, two_isogeny_chain_small
+from elliptic_isogeny import (
+    two_isogeny_chain_1x2x4x1,
+    two_isogeny_chain_codomain_1x2x4x1,
+)
 from sqisign_parameters import SQISIGN_PARAMETERS, generate_finite_field
 from theta_isogeny_chain import theta_isogeny_chain_verification_8x1x1
 
@@ -164,47 +173,40 @@ class SQIsign:
         return self._iterative_shake256(j_pk_bytes + j_chl_bytes + message)
 
     def _compute_challenge_from_scalar(
-        self, E_pk: Curve, basis_pk: BasisX, chl: ZZ, n_bt: ZZ
+        self, A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], chl: ZZ, n_bt: ZZ
     ) -> Curve:
         """
         Given the challenge bytes, compute a scalar, then the kernel then the challenge codomain using a 2-isogeny chain
         """
         chl_scalar = ZZ.from_bytes(chl, byteorder="little")
-        kernel = ladder_3_pt(E_pk, basis_pk, chl_scalar)
-        kernel = x_double_n(E_pk, kernel, n_bt)
+        kernel = ladder_3pt_1x2x4x1(A24, basis, chl_scalar)
+        kernel = x_double_n_1x2x4x1(A24, kernel, n_bt)
 
-        return two_isogeny_chain_codomain(E_pk, kernel, self.f - n_bt)
+        return two_isogeny_chain_codomain_1x2x4x1(A24, kernel, self.f - n_bt)
 
     @staticmethod
-    def _compute_short_two_isogeny(E: Curve, basis: PointX, M: Matrix, len: ZZ, r: ZZ):
+    def _compute_short_two_isogeny(
+        A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], M: Matrix, len: ZZ, r: ZZ
+    ):
         """
         Compute a short 2-isogeny chain given a basis and matrix from which to chose a kernel
         """
         # Compute the kernel depending on the change of basis M
         if M[0][0] % 2 == 0 and M[1][0] % 2 == 0:
-            kernel = PointX(basis.QX, basis.QZ)
+            kernel = basis[1]
         else:
-            kernel = PointX(basis.PX, basis.PZ)
+            kernel = basis[0]
 
         # Recover the kernel from repeated doubling
-        ker = x_double_n(E, kernel, r + 2)
-
-        # Compute the isogeny from the kernel and push through xP, xQ xPQ
-        basis_points = [
-            PointX(basis.PX, basis.PZ),
-            PointX(basis.QX, basis.QZ),
-            PointX(basis.PmQX, basis.PmQZ),
-        ]
-        codomain, evaluated_basis = two_isogeny_chain_small(E, ker, len, basis_points)
-
-        # Ensure the basis is the correct type after eval
-        P, Q, PmQ = evaluated_basis
-        evaluated_basis = BasisX(P.X, P.Z, Q.X, Q.Z, PmQ.X, PmQ.Z)
+        ker = x_double_n_1x2x4x1(A24, kernel, r + 2)
+        codomain, evaluated_basis = two_isogeny_chain_1x2x4x1(A24, ker, len, basis)
 
         return codomain, evaluated_basis
 
     @staticmethod
-    def apply_change_of_basis(E: Curve, basis: BasisX, M: Matrix, order: ZZ):
+    def apply_change_of_basis(
+        A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], M: Matrix, order: ZZ
+    ):
         """
         Evaluate a 2x2 matrix A on the vector of elliptic
         curve points [P, Q] by acting with scalar multiplication
@@ -215,16 +217,16 @@ class SQIsign:
         a00, a01, a10, a11 = M.list()
 
         # Compute the new scaled basis
-        xR = ladder_biscalar(E, basis, a00, a10)
-        xS = ladder_biscalar(E, basis, a01, a11)
+        xR = ladder_biscalar_1x2x4x1(A24, basis, a00, a10)
+        xS = ladder_biscalar_1x2x4x1(A24, basis, a01, a11)
 
         # For the difference point we must be careful the result
         # is positive, so we work modulo the point order
         diff_m = (a00 - a01) % order
         diff_n = (a10 - a11) % order
-        xRS = ladder_biscalar(E, basis, diff_m, diff_n)
+        xRS = ladder_biscalar_1x2x4x1(A24, basis, diff_m, diff_n)
 
-        return BasisX(xR.X, xR.Z, xS.X, xS.Z, xRS.X, xRS.Z)
+        return xR, xS, xRS
 
     def verify(self, message: bytes, signature: bytes, public_key: bytes) -> bool:
         """
@@ -265,36 +267,70 @@ class SQIsign:
         # Create the torsion basis for the public key
         pk_basis = torsion_basis_from_hint(E_pk, hint_pk, self.f)
 
+        # ================================================================================
+        # NOTE: CONVERSION TO AND FROM 64 TO 51 BIT HERE.
+        # Convert this basis from 64 bit to 51 bit before doubling and the change of basis
+        # computation
+        # ================================================================================
+
+        _, A24_pk = curve_to_2x4x1_data(E_pk)
+        pk_basis = basis_from_64_to_51_bit(pk_basis)
+
         # Compute the challenge curve with kernel 2^n_bt * (P_pk + [chl] Q_pk)
         try:
-            E_chl = self._compute_challenge_from_scalar(E_pk, pk_basis, chl, n_bt)
+            E_chl = self._compute_challenge_from_scalar(A24_pk, pk_basis, chl, n_bt)
         # For bad signatures, the chain may be maleformed, if an error is triggered,
         # the signature is rejected.
-        except ValueError:
+        except ValueError as e:
+            print(e)
             return False
+
+        # ================================================================================
 
         # Create the torsion basis for the aux curve using the signature hint
         aux_basis = torsion_basis_from_hint(E_aux, hint_aux, self.f)
-        aux_basis = x_basis_double_n(E_aux, aux_basis, self.f - e_rsp_prime - 2)
 
         # Create the torsion basis for the challenge curve using the signature hint
         chl_basis = torsion_basis_from_hint(E_chl, hint_chl, self.f)
-        chl_basis = x_basis_double_n(E_chl, chl_basis, self.f - e_rsp_prime - r_rsp - 2)
+
+        # ================================================================================
+        # NOTE: CONVERSION TO AND FROM 64 TO 51 BIT HERE.
+        # Convert this basis from 64 bit to 51 bit before doubling and the change of basis
+        # computation
+        # ================================================================================
+
+        _, A24_aux = curve_to_2x4x1_data(E_aux)
+        _, A24_chl = curve_to_2x4x1_data(E_chl)
+
+        aux_basis = basis_from_64_to_51_bit(aux_basis)
+        chl_basis = basis_from_64_to_51_bit(chl_basis)
+
+        aux_basis = x_basis_double_n_1x2x4x1(
+            A24_aux, aux_basis, self.f - e_rsp_prime - 2
+        )
+        chl_basis = x_basis_double_n_1x2x4x1(
+            A24_chl, chl_basis, self.f - e_rsp_prime - r_rsp - 2
+        )
 
         # Apply the change of basis matrix
-        chl_basis = self.apply_change_of_basis(E_chl, chl_basis, M_chl, chl_order)
+        chl_basis = self.apply_change_of_basis(A24_chl, chl_basis, M_chl, chl_order)
 
         # Compute the short 2^r_rsp isogeny and push through points
         if r_rsp > 0:
             try:
                 E_chl, chl_basis = self._compute_short_two_isogeny(
-                    E_chl, chl_basis, M_chl, r_rsp, e_rsp_prime
+                    A24_chl, chl_basis, M_chl, r_rsp, e_rsp_prime
                 )
             # For bad signatures, the chain may be malformed, if an error is triggered,
             # the signature is rejected.
             except ValueError as e:
                 print(f"{e = }")
                 return False
+
+        aux_basis = basis_from_51_to_64_bit(aux_basis)
+        chl_basis = basis_from_51_to_64_bit(chl_basis)
+
+        # ==================================================================================
 
         # In the very rare case, all of the isogeny was handled here and we skip the (2,2) chain
         if e_rsp_prime == 0:

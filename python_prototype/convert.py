@@ -50,6 +50,7 @@ def print_fp(x):
     txt += " }"
     print(txt)
 
+
 def print_fp2(x):
     if isinstance(x, int):
         print_fp(x)
@@ -62,11 +63,13 @@ def print_fp2(x):
         else:
             print_fp(coeffs[i])
 
+
 def print_fp2_4x2x1(P):
     print_fp2(P.x)
     print_fp2(P.y)
     print_fp2(P.z)
     print_fp2(P.w)
+
 
 def print_fp2_8x1x1(P):
     print_fp2(P.x1)
@@ -78,6 +81,7 @@ def print_fp2_8x1x1(P):
     print_fp2(P.z2)
     print_fp2(P.w2)
 
+
 def print_theta_pair(P):
     print_fp2(P.x1)
     print_fp2(P.x2)
@@ -87,6 +91,7 @@ def print_theta_pair(P):
     print_fp2(P.z2)
     print_fp2(P.w1)
     print_fp2(P.w2)
+
 
 def theta_to_avx512_4_2_1(P):
     """
