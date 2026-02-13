@@ -70,43 +70,23 @@ def four_isogeny_codomain(P: AVX_2x4x1) -> tuple[AVX_2x4x1]:
 
     Compute the codomain of the 4-isogeny E -> E/<P> such that [2]P != (0 : 1)
     """
-    # From the paper, which is nice but seems to break something?
-    #
-    # XP, ZP = P
-    #
-    # c2 = XP + ZP
-    # c1 = XP - ZP
-    #
-    # t0 = ZP**2
-    # s0 = XP**2
-    #
-    # t0 = t0 + t0
-    # s0 = s0 + s0
-    #
-    # C24_prime = t0**2
-    # A24_prime = s0**2
-    #
-    # c0 = t0 + t0
 
-    # From SQIsign
     T0 = AVX_2x4x1(P[0], P[0])
     T1 = AVX_2x4x1(P[1], P[1])
     c2_c1 = avx_241_add_sub(T0, T1)
 
-    t0_c0 = avx_241_sqr(P)
+    t0_t1 = avx_241_sqr(P)
+    A24_C24 = avx_241_sqr(t0_t1)
 
-    T0 = AVX_2x4x1(t0_c0[1], t0_c0[1])
-    T1 = AVX_2x4x1(t0_c0[0], t0_c0[0])
-    t3_t4 = avx_241_add_sub(T0, T1)
+    T0 = AVX_2x4x1(t0_t1[0], A24_C24[1])
+    T1 = AVX_2x4x1(t0_t1[0], A24_C24[0])
+    t0_A24 = avx_241_add_sub(T0, T1)
 
-    T0 = AVX_2x4x1(t3_t4[0], t0_c0[1])
-    T1 = AVX_2x4x1(t3_t4[1], t0_c0[1])
-    A24_prime = avx_241_mul(T0, T1)
-
-    T0 = AVX_2x4x1(t0_c0[1], 0)
+    T0 = AVX_2x4x1(t0_t1[1], 0)
     c0_00 = avx_241_add(T0, T0)
     c0_00 = avx_241_add(c0_00, c0_00)
 
+    A24_prime = AVX_2x4x1(t0_A24[1], A24_C24[1])
     C01 = AVX_2x4x1(c0_00[0], c2_c1[1])
     C2 = AVX_2x4x1(c2_c1[0], 0)
 
@@ -120,56 +100,33 @@ def four_isogeny_eval(Q: AVX_2x4x1, C01: AVX_2x4x1, C2: AVX_2x4x1) -> AVX_2x4x1:
     Evaluate a point Q (XQ : ZQ) under the action of the 4-isogeny E -> E/<P>
     for [2]P != (0 : 1) using precomputed constants
     """
-    XQ, ZQ = Q
-    c0, c1 = C01
-    c2, _ = C2
+    T0 = AVX_2x4x1(Q[0], Q[0])
+    T1 = AVX_2x4x1(Q[1], Q[1])
+    t0_t1 = avx_241_add_sub(T0, T1)
 
-    # From the paper, which is nice but seems to break something?
-    #
-    # t0 = XQ + ZQ
-    # s0 = XQ - ZQ
+    T0 = AVX_2x4x1(t0_t1[0], t0_t1[0])
+    T1 = AVX_2x4x1(C01[1], t0_t1[1])
+    XQ_t0 = avx_241_mul(T0, T1)
 
-    # t1 = c1 * t0
-    # s1 = t0 * s0
+    T0 = AVX_2x4x1(t0_t1[1], XQ_t0[1])
+    T1 = AVX_2x4x1(C2[0], C01[0])
+    ZQ_t0 = avx_241_mul(T0, T1)
 
-    # t2 = c2 * s0
-    # s2 = c0 * s1
+    T0 = AVX_2x4x1(XQ_t0[0], XQ_t0[0])
+    T1 = AVX_2x4x1(ZQ_t0[0], ZQ_t0[0])
+    t1_ZQ = avx_241_add_sub(T0, T1)
 
-    # t0 = t2 + t1
-    # s0 = s2 - t1
+    t1_ZQ = avx_241_sqr(t1_ZQ)
 
-    # t0 = t0**2
-    # s0 = s0**2
+    T0 = AVX_2x4x1(ZQ_t0[1], ZQ_t0[1])
+    T1 = AVX_2x4x1(t1_ZQ[0], t1_ZQ[1])
+    XQ_t0 = avx_241_add_sub(T0, T1)
 
-    # t1 = t0 + s2
-    # s1 = s0 - s2
+    T0 = AVX_2x4x1(XQ_t0[0], t1_ZQ[1])
+    T1 = AVX_2x4x1(t1_ZQ[0], XQ_t0[1])
+    XQ_ZQ = avx_241_mul(T0, T1)
 
-    # XQ_prime = t1 * t0
-    # ZQ_prime = s1 * s0
-
-    # From SQIsign
-    t0 = XQ + ZQ
-    t1 = XQ - ZQ
-
-    XQ_prime = t0 * c1
-    ZQ_prime = t1 * c2
-
-    t0 = t0 * t1
-    t0 = t0 * c0
-
-    t1 = XQ_prime + ZQ_prime
-    ZQ_prime = XQ_prime - ZQ_prime
-
-    t1 = t1 * t1
-    ZQ_prime = ZQ_prime * ZQ_prime
-
-    XQ_prime = t0 + t1
-    t0 = t0 - ZQ_prime
-
-    XQ_prime = XQ_prime * t1
-    ZQ_prime = ZQ_prime * t0
-
-    return AVX_2x4x1(XQ_prime, ZQ_prime)
+    return XQ_ZQ
 
 
 def two_isogeny_chain_1x2x4x1(
