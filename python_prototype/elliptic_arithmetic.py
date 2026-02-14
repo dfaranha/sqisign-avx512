@@ -1,4 +1,4 @@
-from sage.rings.integer_ring import ZZ
+from sage.all import ZZ
 
 from elliptic_types import Curve, BasisX, PointX, PointJ
 from avx_types import AVX_4x2x1

@@ -148,6 +148,22 @@ AC_to_A24(ec_point_t *A24, const ec_curve_t *E)
 }
 
 /**
+ * @brief Given a curve the point (A+2 : 4C) compute the curve coefficients (A : C)
+ *
+ * @param E a curve to compute
+ * @param A24 the value (A+2 : 4C)
+ */
+static inline void
+A24_to_AC(ec_curve_t *E, const ec_point_t *A24)
+{
+    // (A:C) = ((A+2C)*2-4C : 4C)
+    fp2_add(&E->A, &A24->x, &A24->x);
+    fp2_sub(&E->A, &E->A, &A24->z);
+    fp2_add(&E->A, &E->A, &E->A);
+    fp2_copy(&E->C, &A24->z);
+}
+
+/**
  * @brief Point doubling
  *
  * @param res computed double of P

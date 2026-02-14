@@ -9,7 +9,8 @@ from theta_isogeny_chain import (
 
 from sage.rings.finite_rings.finite_field_constructor import GF
 from sage.all import EllipticCurve
-
+from avx_types import AVX_4x2x1
+from convert import print_fp2_4x2x1
 
 def lift_to_curve(A, P):
     E = EllipticCurve(A.parent(), [0, A, 0, 1, 0])
@@ -51,6 +52,10 @@ def remove_extra_torsion(E1, E2, B1, B2):
 p = 65 * 2**376 - 1
 F = GF((p, 2), names="i", modulus=[1, 0, 1])
 i = F.gen()
+
+A24 = AVX_4x2x1(F(2)/F(4), F(2)/F(4), F(2)/F(4), F(2)/F(4))
+print("A24")
+print_fp2_4x2x1(A24)
 
 # Data copy-pasted from SQIsign KAT tests
 # fmt: off

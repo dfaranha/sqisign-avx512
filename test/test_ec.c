@@ -23,8 +23,8 @@ bool test_ec(int iterations)
     // Working with fixed curve of j-invariant 1728
     ec_curve_t curve;
     ec_curve_init(&curve);
-    fp2_set_small(&(curve.A), 0);
-    fp2_set_small(&(curve.C), 1);
+    fp2_set_zero(&(curve.A));
+    fp2_set_one(&(curve.C));
     ec_curve_normalize_A24(&curve);
 
     for (int i = 0; i < 4; i++) {
