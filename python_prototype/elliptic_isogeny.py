@@ -1,14 +1,23 @@
 from elliptic_types import Curve, PointX
-from elliptic_arithmetic import x_double
-from utilities import sqrt_fp2
+from elliptic_arithmetic import x_double_1x2x4x1, x_double_n_1x2x4x1
+from avx_types import AVX_2x4x1
+from avx_arithmetic import (
+    avx_241_sqr,
+    avx_241_mul,
+    avx_241_sub,
+    avx_241_add_sub,
+    avx_241_add,
+)
 
 
-def curve_from_AC24(A24, C24):
+def curve_from_AC24(domain: AVX_2x4x1) -> Curve:
     """
     Helper function to compute a KummerLine element
 
     Given (A24 : C24) compute (A : C) and from this the Kummer Line
     """
+    A24, C24 = domain
+
     A = A24 + A24
     A = A - C24
     A = A + A
@@ -16,141 +25,118 @@ def curve_from_AC24(A24, C24):
     return Curve(A, C, A24, C24)
 
 
-def two_isogeny_codomain(XP, ZP):
+def two_isogeny_codomain(P: AVX_2x4x1) -> AVX_2x4x1:
     """
     Algorithm 8.20 of the SQISign spec.
 
     Compute the codomain of the 2-isogeny E -> E/<P> for P != (0 : 1)
     of order 2.
     """
-    A24_prime = XP * XP
-    C24_prime = ZP * ZP
-    A24_prime = C24_prime - A24_prime
-    return A24_prime, C24_prime
+    PP = avx_241_sqr(P)
+    T0 = AVX_2x4x1(PP[1], PP[1])
+    T1 = AVX_2x4x1(PP[0], 0)
+    A24 = avx_241_sub(T0, T1)
+    return A24
 
 
-def two_isogeny_eval(XP, ZP, XQ, ZQ):
+def two_isogeny_eval(P: AVX_2x4x1, Q: AVX_2x4x1) -> AVX_2x4x1:
     """
     Algorithm 8.21 of the SQISign spec.
 
     Evaluate a point Q (XQ : ZQ) under the action of the 2-isogeny E -> E/<P>
     for P != (0 : 1) of order 2
     """
-    t0 = XP + ZP
-    t1 = XP - ZP
-    t2 = XQ + ZQ
-    t3 = XQ - ZQ
+    T0 = AVX_2x4x1(P[0], P[0])
+    T1 = AVX_2x4x1(P[1], P[1])
+    t0_t1 = avx_241_add_sub(T0, T1)
 
-    t0 = t0 * t3
-    t1 = t1 * t2
-    t2 = t0 + t1
-    t3 = t0 - t1
+    T0 = AVX_2x4x1(Q[0], Q[0])
+    T1 = AVX_2x4x1(Q[1], Q[1])
+    t2_t3 = avx_241_add_sub(T0, T1)
 
-    XQ_prime = XQ * t2
-    ZQ_prime = ZQ * t3
+    T0 = AVX_2x4x1(t2_t3[1], t2_t3[0])
+    t0_t1 = avx_241_mul(t0_t1, T0)
 
-    return XQ_prime, ZQ_prime
+    T0 = AVX_2x4x1(t0_t1[0], t0_t1[0])
+    T1 = AVX_2x4x1(t0_t1[1], t0_t1[1])
+    t2_t3 = avx_241_add_sub(T0, T1)
 
-
-def two_isogeny_codomain_singular(A24, C24):
-    """
-    Algorithm 8.22 of the SQISign spec.
-
-    Compute the codomain of the 2-isogeny E -> E/<P> for P = (0 : 1)
-    """
-    t0 = A24 + A24
-    t0 - t0 - C24
-    t0 = t0 + t0
-    t0 = t0 / C24
-    c0 = t0
-    A24_prime = t0 + t0
-    t0 = t0 - 4
-    t0 = sqrt_fp2(t0)
-    c1 = -t0
-    C24_prime = t0 + t0
-    A24_prime = A24_prime + C24_prime
-    C24_prime = C24_prime + C24_prime
-
-    return (A24_prime, C24_prime), (c0, c1)
+    return avx_241_mul(Q, t2_t3)
 
 
-def two_isogeny_eval_singular(XP, ZP, c0, c1):
-    """
-    Algorithm 8.23 of the SQISign spec.
-
-    Evaluate a point P (XP : ZP) under the action of the 2-isogeny E -> E/<P>
-    """
-    t0 = XP * ZP
-    t1 = c0 * ZP
-    t1 = t1 + XP
-    t1 = t1 * XP
-    XQ = ZP * ZP
-    XQ = XQ + t1
-    ZQ = t0 * c1
-
-    return XQ, ZQ
-
-
-def four_isogeny_codomain(XP, ZP):
+def four_isogeny_codomain(P: AVX_2x4x1) -> tuple[AVX_2x4x1]:
     """
     Algorithm 8.24 of the SQISign spec.
 
     Compute the codomain of the 4-isogeny E -> E/<P> such that [2]P != (0 : 1)
     """
-    c0 = ZP * ZP
-    c1 = XP - ZP
-    c2 = XP + ZP
-    t0 = XP * XP
-    t3 = c0 + t0
-    t4 = c0 - t0
-    A24_prime = t3 * t4
-    C24_prime = c0 * c0
-    c0 = c0 + c0
-    c0 = c0 + c0
 
-    return (A24_prime, C24_prime), (c0, c1, c2)
+    T0 = AVX_2x4x1(P[0], P[0])
+    T1 = AVX_2x4x1(P[1], P[1])
+    c2_c1 = avx_241_add_sub(T0, T1)
+
+    t0_t1 = avx_241_sqr(P)
+    A24_C24 = avx_241_sqr(t0_t1)
+
+    T0 = AVX_2x4x1(t0_t1[1], A24_C24[1])
+    T1 = AVX_2x4x1(t0_t1[1], A24_C24[0])
+    t1_A24 = avx_241_add_sub(T0, T1)
+
+    T0 = AVX_2x4x1(t1_A24[0], 0)
+    c0_00 = avx_241_add(T0, T0)
+
+    A24_prime = AVX_2x4x1(t1_A24[1], A24_C24[1])
+    C01 = AVX_2x4x1(c0_00[0], c2_c1[1])
+    C2 = AVX_2x4x1(c2_c1[0], 0)
+
+    return A24_prime, C01, C2
 
 
-def four_isogeny_eval(XQ, ZQ, c0, c1, c2):
+def four_isogeny_eval(Q: AVX_2x4x1, C01: AVX_2x4x1, C2: AVX_2x4x1) -> AVX_2x4x1:
     """
     Algorithm 8.25 of the SQISign spec.
 
     Evaluate a point Q (XQ : ZQ) under the action of the 4-isogeny E -> E/<P>
     for [2]P != (0 : 1) using precomputed constants
     """
-    t0 = XQ + ZQ
-    t1 = XQ - ZQ
-    XQ_prime = t0 * c1
-    ZQ_prime = t1 * c2
-    t0 = t0 * t1
-    t0 = t0 * c0
-    t1 = XQ_prime + ZQ_prime
-    ZQ_prime = XQ_prime - ZQ_prime
-    t1 = t1 * t1
-    ZQ_prime = ZQ_prime * ZQ_prime
-    XQ_prime = t0 + t1
-    t0 = t0 - ZQ_prime
-    XQ_prime = XQ_prime * t1
-    ZQ_prime = ZQ_prime * t0
+    T0 = AVX_2x4x1(Q[0], Q[0])
+    T1 = AVX_2x4x1(Q[1], Q[1])
+    t0_t1 = avx_241_add_sub(T0, T1)
 
-    return XQ_prime, ZQ_prime
+    T0 = AVX_2x4x1(t0_t1[0], t0_t1[0])
+    T1 = AVX_2x4x1(C01[1], t0_t1[1])
+    XQ_t0 = avx_241_mul(T0, T1)
+
+    T0 = AVX_2x4x1(t0_t1[1], XQ_t0[1])
+    T1 = AVX_2x4x1(C2[0], C01[0])
+    ZQ_t0 = avx_241_mul(T0, T1)
+
+    T0 = AVX_2x4x1(XQ_t0[0], XQ_t0[0])
+    T1 = AVX_2x4x1(ZQ_t0[0], ZQ_t0[0])
+    t1_ZQ = avx_241_add_sub(T0, T1)
+
+    t1_ZQ = avx_241_sqr(t1_ZQ)
+
+    T0 = AVX_2x4x1(ZQ_t0[1], ZQ_t0[1])
+    T1 = AVX_2x4x1(t1_ZQ[0], t1_ZQ[1])
+    XQ_t0 = avx_241_add_sub(T0, T1)
+
+    T0 = AVX_2x4x1(XQ_t0[0], t1_ZQ[1])
+    T1 = AVX_2x4x1(t1_ZQ[0], XQ_t0[1])
+    XQ_ZQ = avx_241_mul(T0, T1)
+
+    return XQ_ZQ
 
 
-def two_isogeny_chain(
-    domain: Curve, kernel: PointX, length: int, points: list[PointX] = []
+def two_isogeny_chain_1x2x4x1(
+    domain: AVX_2x4x1, kernel: AVX_2x4x1, length: int, points: list[AVX_2x4x1] = []
 ):
-    """
-    Algorithm 8.26 of the SQISign spec.
-
-    Compute a 2-isogeny chain and optionally evaluate this isogeny on a given list of points
-    """
-    # Extract out constants from domain and kernel
-    A24, C24 = domain.A24, domain.C24
-    XK, ZK = kernel
+    # Extract out constants from domain
+    A24 = domain
 
     # Init strategy arrays
     space = length.bit_length()
-    strat_points = [PointX(0, 0)] * space
+    strat_points = [AVX_2x4x1(0, 0)] * space
     orders = [0] * space
 
     strat_points[0] = kernel
@@ -164,115 +150,53 @@ def two_isogeny_chain(
             k = k + 1
             n = 2 * (orders[k - 1] // 4) + (orders[k - 1] % 2)
             orders[k] = orders[k - 1] - n
-            PX, PZ = strat_points[k - 1]
-            for _ in range(n):
-                PX, PZ = x_double(PX, PZ, A24, C24)
-            strat_points[k] = PointX(PX, PZ)
+            strat_points[k] = x_double_n_1x2x4x1(A24, strat_points[k - 1], n)
 
         # Compute a four isogeny with the kth point in the strategy
-        XK, ZK = strat_points[k]
+        ker = strat_points[k]
 
         # For the first step of the isogeny, we check our points have the correct order
         if j == 0:
-            X_test, Z_test = x_double(XK, ZK, A24, C24)
-            if Z_test.is_zero():
-                raise ValueError("chain failed: kernel has wrong order")
-            X_test, Z_test = x_double(X_test, Z_test, A24, C24)
-            if not Z_test.is_zero():
-                raise ValueError("chain failed: kernel has wrong order")
+            tmp = x_double_1x2x4x1(A24, ker)
+            if tmp[1].is_zero():
+                raise ValueError("1, chain failed: kernel has wrong order")
+            tmp = x_double_1x2x4x1(A24, tmp)
+            if not tmp[1].is_zero():
+                raise ValueError("2, chain failed: kernel has wrong order")
 
-        (A24, C24), (c0, c1, c2) = four_isogeny_codomain(XK, ZK)
-        strat_points = [
-            four_isogeny_eval(XQ, ZQ, c0, c1, c2) for (XQ, ZQ) in strat_points
-        ]
+        A24, C01, C2 = four_isogeny_codomain(ker)
+        strat_points = [four_isogeny_eval(Q, C01, C2) for Q in strat_points]
         orders = [m - 2 for m in orders]
         k = k - 1
 
-        points = [four_isogeny_eval(XQ, ZQ, c0, c1, c2) for (XQ, ZQ) in points]
+        points = [four_isogeny_eval(Q, C01, C2) for Q in points]
 
     # Compute a 2-isogeny if the length is odd
     if length % 2:
-        XK, ZK = strat_points[0]
+        ker = strat_points[0]
 
         # Ensure K has order 2 and is not the point (0 : 1)
-        X_test, Z_test = x_double(XK, ZK, A24, C24)
-        if ZK.is_zero() or not Z_test.is_zero():
+        tmp = x_double_1x2x4x1(A24, ker)
+        if ker[1].is_zero() or not tmp[1].is_zero():
             raise ValueError("chain failed: kernel has wrong order")
-        if XK.is_zero():
+        if ker[0].is_zero():
             raise ValueError("chain failed: unexpected singular 2-isogeny")
 
-        A24, C24 = two_isogeny_codomain(XK, ZK)
-        points = [two_isogeny_eval(XK, ZK, XQ, ZQ) for (XQ, ZQ) in points]
+        A24 = two_isogeny_codomain(ker)
+        points = [two_isogeny_eval(ker, Q) for Q in points]
 
     # Create the Kummer Line from the constants
-    codomain = curve_from_AC24(A24, C24)
+    codomain = curve_from_AC24(A24)
     points = [PointX(XQ, ZQ) for (XQ, ZQ) in points]
 
     return codomain, points
 
 
-def two_isogeny_chain_codomain(domain: Curve, kernel: PointX, length: int):
+def two_isogeny_chain_codomain_1x2x4x1(
+    domain: AVX_2x4x1, kernel: AVX_2x4x1, length: int
+):
     """
     Wrapper function which returns only the codomain of an isogeny chain
     """
-    codomain, _ = two_isogeny_chain(domain, kernel, length)
+    codomain, _ = two_isogeny_chain_1x2x4x1(domain, kernel, length)
     return codomain
-
-
-def two_isogeny_chain_small(
-    domain: Curve,
-    kernel: PointX,
-    length: int,
-    points: list[Curve],
-    allow_singular: bool = False,
-):
-    """
-    Algorithm 8.27 of the SQISign spec.
-
-    Compute a 2-isogeny chain with a naive approach and optionally evaluate
-    this isogeny on a given list of points. Unlike the faster chain, this
-    function also allows the computation of a so-called singular isogeny
-    with kernel (0 : 1) which can occur during signing.
-    """
-    # Extract out constants from domain and kernel
-    A24, C24 = domain.A24, domain.C24
-    XK, ZK = kernel
-
-    # Main loop, we compute the isogeny one step at a time
-    for i in range(length):
-        # Create point of order two for isogeny
-        XP, ZP = XK, ZK
-        for _ in range(length - i - 1):
-            XP, ZP = x_double(XP, ZP, A24, C24)
-
-        # For the first step, we ensure the point has full order and handle singular isogenies if allowed
-        if i == 0:
-            _, Z_test = x_double(XP, ZP, A24, C24)
-            if not Z_test.is_zero():
-                raise ValueError("kernel does not have order 2^length")
-
-            # The point of order two is (0 : 1) which means we need singular isogenies
-            if XP.is_zero():
-                if not allow_singular:
-                    raise ValueError("unexpected singular 2-isogeny")
-
-                # Compute the codomain
-                (A24, C24), (c0, c1) = two_isogeny_codomain_singular(A24, C24)
-
-                # Push through the kernel and any other points
-                XK, ZK = two_isogeny_eval_singular(XK, ZK, c0, c1)
-                points = [
-                    two_isogeny_eval_singular(XP, ZP, c0, c1) for (XP, ZP) in points
-                ]
-
-                # Go to the next step of the loop and skip the code below
-                continue
-
-        A24, C24 = two_isogeny_codomain(XP, ZP)
-        XK, ZK = two_isogeny_eval(XP, ZP, XK, ZK)
-        points = [two_isogeny_eval(XP, ZP, XQ, ZQ) for (XQ, ZQ) in points]
-
-    codomain = curve_from_AC24(A24, C24)
-    points = [PointX(XQ, ZQ) for (XQ, ZQ) in points]
-
-    return codomain, points

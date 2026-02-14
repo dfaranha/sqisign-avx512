@@ -209,4 +209,3 @@ def apply_isomorphism_pair(PQ: AVX_8x1x1, M: tuple[AVX_8x1x1, AVX_8x1x1]) -> AVX
     Q2P3 = avx_811_mul(M23, QP)
 
     return internal_sum_pair(P0Q1, Q0P1, P2Q3, Q2P3)
-

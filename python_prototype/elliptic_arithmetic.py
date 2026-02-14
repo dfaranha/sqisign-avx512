@@ -1,7 +1,7 @@
 from sage.all import ZZ
 
 from elliptic_types import Curve, BasisX, PointX, PointJ
-from avx_types import AVX_4x2x1
+from avx_types import AVX_4x2x1, AVX_2x4x1
 from avx_arithmetic import (
     avx_421_sqr,
     avx_421_mul,
@@ -10,6 +10,13 @@ from avx_arithmetic import (
     avx_421_dbl,
     avx_421_pair_sqr,
     avx_421_pair_mul,
+    avx_241_add_sub,
+    avx_241_mul,
+    avx_241_sqr,
+    avx_241_add,
+    avx_421_add_sub,
+    avx_241_to_421,
+    avx_421_to_241,
 )
 from utilities import sqrt_fp2
 
@@ -91,19 +98,6 @@ def x_double_n(E: Curve, P: PointX, n: int) -> PointX:
     for _ in range(n):
         PX, PZ = x_double(PX, PZ, A24, C24)
     return PointX(PX, PZ)
-
-
-def x_basis_double_n(E: Curve, B: BasisX, n) -> BasisX:
-    """
-    Compute [2^n](P, Q, PmQ) using repeated doublings
-    """
-    PX, PZ, QX, QZ, PmQX, PmQZ = B
-    A24, C24 = E.A24, E.C24
-    for _ in range(n):
-        PX, PZ = x_double(PX, PZ, A24, C24)
-        QX, QZ = x_double(QX, QZ, A24, C24)
-        PmQX, PmQZ = x_double(PmQX, PmQZ, A24, C24)
-    return BasisX(PX, PZ, QX, QZ, PmQX, PmQZ)
 
 
 def x_double_add(XP, ZP, XQ, ZQ, xPQ, zPQ, A24, C24):
@@ -310,10 +304,48 @@ def lift_normalised_basis_to_jacobian(E: Curve, basis: BasisX) -> tuple[PointJ, 
 # ======================================================================
 
 
-def four_double_x(A24: AVX_4x2x1, X: AVX_4x2x1, Z: AVX_4x2x1):
+def x_double_1x2x4x1(A24: AVX_2x4x1, P: AVX_2x4x1) -> AVX_2x4x1:
+    """
+    Double a single x-only point using 2x4x1 multiplications
+    """
+    T0 = AVX_2x4x1(P[0], P[0])
+    T1 = AVX_2x4x1(P[1], P[1])
+    t0_s0 = avx_241_add_sub(T0, T1)
+    t1_s1 = avx_241_sqr(t0_s0)
+
+    T0 = AVX_2x4x1(t1_s1[0], t1_s1[0])
+    T1 = AVX_2x4x1(t1_s1[1], t1_s1[1])
+    t0_s0 = avx_241_add_sub(T0, T1)
+
+    T0 = AVX_2x4x1(A24[1], A24[0])
+    T1 = AVX_2x4x1(t1_s1[1], t0_s0[1])
+    t2_s2 = avx_241_mul(T0, T1)
+
+    T0 = AVX_2x4x1(t2_s2[0], 0)
+    T1 = AVX_2x4x1(t2_s2[1], 0)
+    t3_00 = avx_241_add(T0, T1)
+
+    T0 = AVX_2x4x1(t2_s2[0], t3_00[0])
+    T1 = AVX_2x4x1(t1_s1[0], t0_s0[1])
+    P_dbl = avx_241_mul(T0, T1)
+
+    return P_dbl
+
+
+def x_double_n_1x2x4x1(A24: AVX_2x4x1, P: AVX_2x4x1, n: int) -> AVX_2x4x1:
+    """
+    Repeated doubling of a point in AVX_2x4x1 representation
+    """
+    for _ in range(n):
+        P = x_double_1x2x4x1(A24, P)
+    return P
+
+
+def x_double_4x4x2x1(A24: AVX_4x2x1, X: AVX_4x2x1, Z: AVX_4x2x1):
     """
     Simultaneously double four X-only points where the X-coordinates
     of P1, Q1 P2, Q2 on E1 x E2 are stored within X (and Z resp.)
+    Here we assume C24 = 1
     """
     t0 = avx_421_add(X, Z)
     t1 = avx_421_sub(X, Z)
@@ -324,6 +356,232 @@ def four_double_x(A24: AVX_4x2x1, X: AVX_4x2x1, Z: AVX_4x2x1):
     Z2 = avx_421_mul(t0, t2)
 
     return X2, Z2
+
+
+def x_basis_double_n_1x2x4x1(
+    A24: AVX_4x2x1, B: tuple[AVX_2x4x1], n: int
+) -> tuple[AVX_2x4x1]:
+    """
+    Compute [2^n](P, Q, PmQ) using repeated doublings
+    """
+    P, Q, PmQ = B
+    # TODO: should we batch these together using 8x1x1 multiplications instead?
+    for _ in range(n):
+        P = x_double_1x2x4x1(A24, P)
+        Q = x_double_1x2x4x1(A24, Q)
+        PmQ = x_double_1x2x4x1(A24, PmQ)
+    return P, Q, PmQ
+
+
+def x_diff_add_1x2x4x1(P: AVX_2x4x1, Q: AVX_2x4x1, PmQ: AVX_2x4x1) -> AVX_2x4x1:
+    T0 = AVX_2x4x1(P[0], P[0])
+    T1 = AVX_2x4x1(P[1], P[1])
+    t0_t1 = avx_241_add_sub(T0, T1)
+
+    T0 = AVX_2x4x1(Q[0], Q[0])
+    T1 = AVX_2x4x1(Q[1], Q[1])
+    t2_t3 = avx_241_add_sub(T0, T1)
+
+    T0 = AVX_2x4x1(t2_t3[1], t2_t3[0])
+    t0_t1 = avx_241_mul(t0_t1, T0)
+
+    T0 = AVX_2x4x1(t0_t1[0], t0_t1[0])
+    T1 = AVX_2x4x1(t0_t1[1], t0_t1[1])
+    t2_t3 = avx_241_add_sub(T0, T1)
+    t2_t3 = avx_241_sqr(t2_t3)
+
+    T0 = AVX_2x4x1(PmQ[1], PmQ[0])
+    XPQ_ZPQ = avx_241_mul(t2_t3, T0)
+
+    return XPQ_ZPQ
+
+
+# this is an alt 4x2x1 which uses 2M 1S, but uses a normalised A instead of (A24 : C24)
+# def x_double_add_1x2x4x1(
+#     A24: AVX_2x4x1, P: AVX_2x4x1, Q: AVX_2x4x1, PmQ: AVX_2x4x1
+# ) -> tuple[AVX_2x4x1]:
+#     # Requires A and not A24
+#     a24 = A24[0] / A24[1]
+#     a = 4 * a24 - 2
+
+#     X2, Z2 = P
+#     X3, Z3 = Q
+#     X1, Z1 = PmQ
+
+#     A0 = X3 + Z3
+#     B0 = X3 - Z3
+#     C0 = X2 + Z2
+#     D0 = X2 - Z2
+
+#     A1 = A0 * D0
+#     B1 = B0 * C0
+#     C1 = C0 * C0
+#     D1 = D0 * D0
+
+#     A2 = A1 + B1
+#     B2 = A1 - B1
+#     C2 = C1 + D1
+#     D2 = C1 - D1
+
+#     A3 = A2**2
+#     B3 = B2**2
+#     C3 = C2**2
+#     D3 = D2**2
+
+#     A4 = A3 * Z1
+#     B4 = B3 * X1
+#     C4 = C2 * D2
+#     D4 = D3 * a
+
+#     X5 = A4
+#     Z5 = B4
+#     X4 = C3 - D3
+#     Z4 = 2 * C4 + D4
+
+#     return AVX_2x4x1(X4, Z4), AVX_2x4x1(X5, Z5)
+
+
+def x_double_add_1x2x4x1(
+    A24: AVX_2x4x1, P: AVX_2x4x1, Q: AVX_2x4x1, PmQ: AVX_2x4x1
+) -> tuple[AVX_2x4x1]:
+    # Convert points from 2x4x1 to 4x2x1 -- potentially this should be done
+    # before the function call.
+    P_Q = avx_241_to_421(P, Q)
+    PmQ_A24 = avx_241_to_421(PmQ, A24)
+
+    # First double add sub
+    T0 = AVX_4x2x1(P_Q[0], P_Q[2], P_Q[0], P_Q[2])
+    T1 = AVX_4x2x1(P_Q[1], P_Q[3], P_Q[1], P_Q[3])
+    S0 = avx_421_add_sub(T0, T1)
+
+    # 4x2x1 mul with two squares hidden inside
+    T0 = AVX_4x2x1(S0[0], S0[2], S0[0], S0[2])
+    T1 = AVX_4x2x1(S0[0], S0[2], S0[3], S0[1])
+    S1 = avx_421_mul(T0, T1)
+
+    # Second double add sub
+    T0 = AVX_4x2x1(S1[0], S1[2], S1[0], S1[2])
+    T1 = AVX_4x2x1(S1[1], S1[3], S1[1], S1[3])
+    S2 = avx_421_add_sub(T0, T1)
+
+    # 4x2x1 mul with two squares hidden inside
+    T0 = AVX_4x2x1(PmQ_A24[3], PmQ_A24[2], S2[1], S2[3])
+    T1 = AVX_4x2x1(S1[1], S2[2], S2[1], S2[3])
+    S3 = avx_421_mul(T0, T1)
+
+    # Loose end addition which uses a 2x4x1 call
+    t2_s2, _ = avx_421_to_241(S3)
+    T0 = AVX_2x4x1(t2_s2[0], 0)
+    T1 = AVX_2x4x1(t2_s2[1], 0)
+    t3_00 = avx_241_add(T0, T1)
+
+    # Convert back to 4x2x1 after the 2x4x1 addition
+    t3_00_00_00 = AVX_4x2x1(t3_00[0], 0, 0, 0)
+
+    # Final multiplication
+    T0 = AVX_4x2x1(S3[0], t3_00_00_00[0], S3[2], S3[3])
+    T1 = AVX_4x2x1(S1[0], S2[2], PmQ[1], PmQ[0])
+    PP_PQ = avx_421_mul(T0, T1)
+
+    # Split back to two 2x4x1
+    return avx_421_to_241(PP_PQ)
+
+
+def x_mul_1x2x4x1(A24: AVX_2x4x1, P: AVX_2x4x1, m: ZZ) -> PointX:
+    try:
+        m = ZZ(m)
+    except TypeError:
+        raise TypeError(f"Cannot coerce input scalar {m = } to an integer")
+
+    # If m is zero, return identity
+    R = P[0].parent()
+    if not m:
+        return AVX_2x4x1(R.zero(), R.zero())
+
+    # [m]P = [-m]P for x-only
+    m = abs(m)
+
+    # Initialise for loop
+    xp = P
+    x0 = AVX_2x4x1(R.one(), R.zero())
+    x1 = P
+
+    # Montgomery-ladder
+    for bit in bin(m)[2:]:
+        if bit == "1":
+            x1, x0 = x_double_add_1x2x4x1(A24, x1, x0, xp)
+        else:
+            x0, x1 = x_double_add_1x2x4x1(A24, x0, x1, xp)
+
+    return x0
+
+
+def ladder_3pt_1x2x4x1(A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], m: ZZ) -> PointX:
+    try:
+        m = ZZ(m)
+    except TypeError:
+        raise TypeError(f"Cannot coerce input scalar {m = } to an integer")
+
+    # [m]P = [-m]P for x-only
+    m = abs(m)
+
+    # Unpack the basis
+    x0, x1, xd = basis
+
+    # If m is zero, return xP
+    if not m:
+        return x0
+
+    # Montgomery-ladder
+    for bit in bin(m)[:1:-1]:
+        if bit == "1":
+            x1, x0 = x_double_add_1x2x4x1(A24, x1, x0, xd)
+        else:
+            x1, xd = x_double_add_1x2x4x1(A24, x1, xd, x0)
+    return x0
+
+
+def ladder_biscalar_1x2x4x1(
+    A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], a: ZZ, b: ZZ
+) -> AVX_2x4x1:
+    s0 = a
+    s1 = b
+
+    # Parse out points from basis
+    x0, x1, xd = basis
+
+    while s0 != 0:
+        if s1 < s0:
+            s0, s1 = s1, s0
+            x0, x1 = x1, x0
+
+        assert s1 >= s0
+
+        if s1 <= 4 * s0:
+            s1 = s1 - s0
+            r0 = x_diff_add_1x2x4x1(x1, x0, xd)
+            x0, xd = r0, x0
+
+        elif s0 % 2 == s1 % 2:
+            s1 = (s1 - s0) // 2
+            r0, r1 = x_double_add_1x2x4x1(A24, x1, x0, xd)
+            x0, x1 = r1, r0
+
+        elif s1 % 2 == 0:
+            s1 = s1 // 2
+            r0, r1 = x_double_add_1x2x4x1(A24, x1, xd, x0)
+            x1, xd = r0, r1
+        else:
+            assert s0 % 2 == 0
+            s0 = s0 // 2
+            r0, r1 = x_double_add_1x2x4x1(A24, x0, xd, x1)
+            x0, xd = r0, r1
+
+    while s1 & 1 == 0:
+        s1 //= 2
+        x1 = x_double_1x2x4x1(A24, x1)
+
+    return x_mul_1x2x4x1(A24, x1, s1)
 
 
 def four_jac_to_ws(
