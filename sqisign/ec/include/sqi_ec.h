@@ -384,7 +384,7 @@ static int ec_test_is_on_curve(const ec_curve_t *E, const ec_point_t *P)
     return fp2_is_square(&tmp) | fp2_is_zero(&P->z); // point at inf
 }
 
-static void ec_j_inv(fp2_t* j_inv, ec_curve_t* curve) 
+static void ec_j_inv(fp2_t* j_inv, const ec_curve_t* curve) 
 {
     fp2_t nom, denom, tmp;
 

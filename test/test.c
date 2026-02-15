@@ -52,11 +52,11 @@ int main()
     // {
     //     return 0;
     // }
-    // passed = test_theta_middle(n_tests);
-    // if(!passed)
-    // {
-    //     return 0;
-    // }
+    passed = test_theta_middle(n_tests);
+    if(!passed)
+    {
+        return 0;
+    }
     // passed = test_theta_splitting(n_tests);
     // if(!passed)
     // {

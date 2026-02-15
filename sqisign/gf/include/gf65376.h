@@ -10,8 +10,7 @@ extern "C"
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
-
-    typedef uint64_t digit_t; // Datatype for representing field elements
+#include "tutil.h"
 
     /*
      * A gf65376 instance represents an integer modulo q.
