@@ -355,11 +355,7 @@ void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     res[7] = t[7];
 }
 
-void fp_mul_8x1_school(__m512i* res, __m512i* a, __m512i* b) {
-    fp_mul_8x1(res, a, b);
-}
-
-void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
+void fp_mul_8x1_school(__m512i* res, __m512i* a, __m512i* b)
 {
     //Likely not needed to use t15, but for now we keep things simple:
     __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15; 
@@ -1354,7 +1350,7 @@ res[6] = r14;
 res[7] = r15;
 }
 
-void fp_mul_8x1_buggy(__m512i* res, __m512i* a, __m512i* b)
+void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     __m512i t[16];
@@ -1362,22 +1358,22 @@ void fp_mul_8x1_buggy(__m512i* res, __m512i* a, __m512i* b)
 
     mp_mul_8x1_karat(t, a, b);
 
-    // Carry propagation 
+	// Carry propagation 
     t1 = VADD(t[1], VSRA(t[0], LIMB_LEN));
-    t2 = VADD(t[2], VSRA(t[1], LIMB_LEN));
-    t3 = VADD(t[3], VSRA(t[2], LIMB_LEN));
-    t4 = VADD(t[4], VSRA(t[3], LIMB_LEN));
-    t5 = VADD(t[5], VSRA(t[4], LIMB_LEN));
-    t6 = VADD(t[6], VSRA(t[5], LIMB_LEN));
-    t7 = VADD(t[7], VSRA(t[6], LIMB_LEN));
-    t8 = VADD(t[8], VSRA(t[7], LIMB_LEN));
-    t9 = VADD(t[9], VSRA(t[8], LIMB_LEN));
-    t10 = VADD(t[10], VSRA(t[9], LIMB_LEN));
-    t11 = VADD(t[11], VSRA(t[10], LIMB_LEN));
-    t12 = VADD(t[12], VSRA(t[11], LIMB_LEN));
-    t13 = VADD(t[13], VSRA(t[12], LIMB_LEN));
-    t14 = VADD(t[14], VSRA(t[13], LIMB_LEN));
-    t15 = VADD(t[15], VSRA(t[14], LIMB_LEN));
+    t2 = VADD(t[2], VSRA(t1, LIMB_LEN));
+    t3 = VADD(t[3], VSRA(t2, LIMB_LEN));
+    t4 = VADD(t[4], VSRA(t3, LIMB_LEN));
+    t5 = VADD(t[5], VSRA(t4, LIMB_LEN));
+    t6 = VADD(t[6], VSRA(t5, LIMB_LEN));
+    t7 = VADD(t[7], VSRA(t6, LIMB_LEN));
+    t8 = VADD(t[8], VSRA(t7, LIMB_LEN));
+    t9 = VADD(t[9], VSRA(t8, LIMB_LEN));
+    t10 = VADD(t[10], VSRA(t9, LIMB_LEN));
+    t11 = VADD(t[11], VSRA(t10, LIMB_LEN));
+    t12 = VADD(t[12], VSRA(t11, LIMB_LEN));
+    t13 = VADD(t[13], VSRA(t12, LIMB_LEN));
+    t14 = VADD(t[14], VSRA(t13, LIMB_LEN));
+    t15 = VADD(t[15], VSRA(t14, LIMB_LEN));;
     t[0] = VAND(t[0], limb_mask);
     t[1] = VAND(t1, limb_mask);
     t[2] = VAND(t2, limb_mask);
