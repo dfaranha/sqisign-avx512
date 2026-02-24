@@ -542,11 +542,8 @@ def ladder_3pt_1x2x4x1(A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], m: ZZ) -> PointX
 
 
 def ladder_biscalar_1x2x4x1(
-    A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], a: ZZ, b: ZZ
+    A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], s0: ZZ, s1: ZZ
 ) -> AVX_2x4x1:
-    s0 = a
-    s1 = b
-
     # Parse out points from basis
     x0, x1, xd = basis
 
@@ -582,6 +579,99 @@ def ladder_biscalar_1x2x4x1(
         x1 = x_double_1x2x4x1(A24, x1)
 
     return x_mul_1x2x4x1(A24, x1, s1)
+
+
+def ladder_double_biscalar_1x2x4x1(
+    A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], r0: ZZ, r1: ZZ, s0: ZZ, s1: ZZ
+) -> AVX_2x4x1:
+    """
+    Computes the Euclidean loop with 2 way parallelism to use 8x1x1 multiplication
+    but needs to use ladder_biscalar_1x2x4x1 at the end as we can't guarantee s0 = r0
+    at the same time
+
+    As we want to call x_double_add_1x2x4x1 in pairs, we also skip the fibonacci step
+    when s1 <= 4 * s0 as in this case we would have one xADD and one xDBLADD in the
+    generic case which we can't do in parallel.
+    """
+    # Parse out points from basis, we need two copies as we have two distinct
+    # ladders computed for R = [r0] P + [r1] Q and S = [s0] P + [s1] Q
+    x0, x1, xd = basis
+    y0, y1, yd = basis
+
+    # Depending on the bits of r0, r1 and s0 and s1 we need to have switch
+    # cases for the input and output of the various functions
+    r_case = None
+    s_case = None
+
+    while True:
+        if r1 < r0:
+            r0, r1 = r1, r0
+            x0, x1 = x1, x0
+
+        if s1 < s0:
+            s0, s1 = s1, s0
+            y0, y1 = y1, y0
+
+        # Arithmetic for R
+        if r0 % 2 == r1 % 2:
+            r1 = (r1 - r0) // 2
+            r_case = 0
+            P1, Q1, PQ1 = x1, x0, xd
+
+        elif r1 % 2 == 0:
+            r1 = r1 // 2
+            r_case = 1
+            P1, Q1, PQ1 = x1, xd, x0
+
+        else:
+            r0 = r0 // 2
+            r_case = 2
+            P1, Q1, PQ1 = x0, xd, x1
+
+        # Arithmetic for S
+        if s0 % 2 == s1 % 2:
+            s1 = (s1 - s0) // 2
+            s_case = 0
+            P2, Q2, PQ2 = y1, y0, yd
+
+        elif s1 % 2 == 0:
+            s1 = s1 // 2
+            s_case = 1
+            P2, Q2, PQ2 = y1, yd, y0
+        else:
+            s0 = s0 // 2
+            s_case = 2
+            P2, Q2, PQ2 = y0, yd, y1
+
+        P1, Q1 = x_double_add_1x2x4x1(A24, P1, Q1, PQ1)
+        P2, Q2 = x_double_add_1x2x4x1(A24, P2, Q2, PQ2)
+
+        if r_case == 0:
+            x0, x1 = Q1, P1
+        elif r_case == 1:
+            x1, xd = P1, Q1
+        else:
+            x0, xd = P1, Q1
+
+        if s_case == 0:
+            y0, y1 = Q2, P2
+        elif s_case == 1:
+            y1, yd = P2, Q2
+        else:
+            y0, yd = P2, Q2
+
+        # If either s0 or r0 is zero, we must break the chain
+        if s0 == 0 or r0 == 0:
+            break
+
+    # We now know that either r0 or s0 is zero, but potentially not
+    # both, so we finish off the rest of the chain using the single
+    # biscalars (although one will simply be a doubling followed by
+    # x_mul as the euclidean loop is finished)
+    R = ladder_biscalar_1x2x4x1(A24, (x0, x1, xd), r0, r1)
+    S = ladder_biscalar_1x2x4x1(A24, (y0, y1, yd), s0, s1)
+
+    return R, S
 
 
 def four_jac_to_ws(
