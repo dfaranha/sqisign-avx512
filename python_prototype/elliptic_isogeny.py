@@ -271,7 +271,7 @@ def two_isogeny_chain_1x2x4x1(
                 raise ValueError("2, chain failed: kernel has wrong order")
 
         A24, C01, C2 = four_isogeny_codomain(ker)
-        strat_points = four_isogeny_eval_array(strat_points, C01, C2)
+        strat_points[:k] = four_isogeny_eval_array(strat_points[:k], C01, C2)
         orders = [m - 2 for m in orders]
         k = k - 1
 
