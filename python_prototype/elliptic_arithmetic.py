@@ -553,19 +553,25 @@ def x_mul_1x2x4x1(A24: AVX_2x4x1, P: AVX_2x4x1, m: ZZ) -> PointX:
     x0 = AVX_2x4x1(R.one(), R.zero())
     x1 = P
 
-    # TODO: memory management
-    xp_A24 = avx_241_to_421(xp, A24)
+    # TODO: memory management directly from P?
+    X0_X1 = avx_241_to_421(x0, x1)
+    XD_A24 = avx_241_to_421(xp, A24)
 
-    # Montgomery-ladder
+    # Helper function for swapping P, Q inside an AVX4x2x1
+    def swap(PQ):
+        return AVX_4x2x1(PQ[2], PQ[3], PQ[0], PQ[1])
+
+    # Montgomery-ladder, here we only ever have to swap x0, x1
     for bit in bin(m)[2:]:
         if bit == "1":
-            x1_x0 = avx_241_to_421(x1, x0)
-            PP_PQ = x_double_add_1x2x4x1(x1_x0, xp_A24)
-            x1, x0 = avx_421_to_241(PP_PQ)
-        else:
-            x0_x1 = avx_241_to_421(x0, x1)
-            PP_PQ = x_double_add_1x2x4x1(x0_x1, xp_A24)
-            x0, x1 = avx_421_to_241(PP_PQ)
+            X0_X1 = swap(X0_X1)
+
+        X0_X1 = x_double_add_1x2x4x1(X0_X1, XD_A24)
+
+        if bit == "1":
+            X0_X1 = swap(X0_X1)
+
+    x0, x1 = avx_421_to_241(X0_X1)
 
     return x0
 
@@ -586,18 +592,33 @@ def ladder_3pt_1x2x4x1(A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], m: ZZ) -> PointX
     if not m:
         return x0
 
+    # Helper function for swapping P, Q inside an AVX4x2x1
+    def swap(PQ):
+        return [PQ[2], PQ[3], PQ[0], PQ[1]]
+
+    X0_X1 = list(avx_241_to_421(x0, x1))
+    XD_A24 = list(avx_241_to_421(xd, A24))
+
     # Montgomery-ladder
     for bit in bin(m)[:1:-1]:
         if bit == "1":
-            x1_x0 = avx_241_to_421(x1, x0)
-            xd_A24 = avx_241_to_421(xd, A24)
-            PP_PQ = x_double_add_1x2x4x1(x1_x0, xd_A24)
-            x1, x0 = avx_421_to_241(PP_PQ)
+            # We can do this with simple swaps in x0, x1 only
+            X1_X0 = swap(X0_X1)
+            X1_X0 = x_double_add_1x2x4x1(X1_X0, XD_A24)
+            X0_X1 = swap(X1_X0)
         else:
-            x1_xd = avx_241_to_421(x1, xd)
-            x0_A24 = avx_241_to_421(x0, A24)
-            PP_PQ = x_double_add_1x2x4x1(x1_xd, x0_A24)
-            x1, xd = avx_421_to_241(PP_PQ)
+            # Here we use some tmp buffers to store x1, xd and x0 a24
+            # but you could just read in a different order from
+            # x_double_add_1x2x4x1 i suppose...
+            X1_XD = (X0_X1[2], X0_X1[3], XD_A24[0], XD_A24[1])
+            X0_A24 = (X0_X1[0], X0_X1[1], XD_A24[2], XD_A24[3])
+            X1_XD = x_double_add_1x2x4x1(X1_XD, X0_A24)
+
+            # Update X1 and XD from scratch vars
+            X0_X1[2], X0_X1[3] = X1_XD[0], X1_XD[1]
+            XD_A24[0], XD_A24[1] = X1_XD[2], X1_XD[3]
+
+    x0, _ = avx_421_to_241(X0_X1)
     return x0
 
 
@@ -607,38 +628,68 @@ def ladder_biscalar_1x2x4x1(
     # Parse out points from basis
     x0, x1, xd = basis
 
+    X0_X1 = list(avx_241_to_421(x0, x1))
+    XD_A24 = list(avx_241_to_421(xd, A24))
+
+    # Helper function for swapping P, Q inside an AVX4x2x1
+    def swap(PQ):
+        return [PQ[2], PQ[3], PQ[0], PQ[1]]
+
     while s0 != 0:
         if s1 < s0:
             s0, s1 = s1, s0
-            x0, x1 = x1, x0
+            X0_X1 = swap(X0_X1)
 
         assert s1 >= s0
 
         if s1 <= 4 * s0:
             s1 = s1 - s0
+            # The xADD is a 2x4x1 so we need to convert here
+            # Question: does conversion cost mean this is not
+            # worth it and we should never do this stage?
+            x0, x1 = avx_421_to_241(X0_X1)
+            xd, _ = avx_421_to_241(XD_A24)
             r0 = x_diff_add_1x2x4x1(x1, x0, xd)
-            x0, xd = r0, x0
+
+            # Assign output back to 4x2x1 and update vars
+            R0_X0 = avx_241_to_421(r0, x0)
+            X0_X1[0], X0_X1[1] = R0_X0[0], R0_X0[1]
+            XD_A24[0], XD_A24[1] = R0_X0[2], R0_X0[3]
 
         elif s0 % 2 == s1 % 2:
             s1 = (s1 - s0) // 2
-            x1_x0 = avx_241_to_421(x1, x0)
-            xd_A24 = avx_241_to_421(xd, A24)
-            PP_PQ = x_double_add_1x2x4x1(x1_x0, xd_A24)
-            x1, x0 = avx_421_to_241(PP_PQ)
+            # Here we can do everything with swaps
+            X1_X0 = swap(X0_X1)
+            X1_X0 = x_double_add_1x2x4x1(X1_X0, XD_A24)
+            X0_X1 = swap(X1_X0)
 
         elif s1 % 2 == 0:
             s1 = s1 // 2
-            x1_xd = avx_241_to_421(x1, xd)
-            x0_A24 = avx_241_to_421(x0, A24)
-            PP_PQ = x_double_add_1x2x4x1(x1_xd, x0_A24)
-            x1, xd = avx_421_to_241(PP_PQ)
+            # Here we use scratch buffers for the input into
+            # x_double_add_1x2x4x1
+
+            X1_XD = [X0_X1[2], X0_X1[3], XD_A24[0], XD_A24[1]]
+            X0_A24 = [X0_X1[0], X0_X1[1], XD_A24[2], XD_A24[3]]
+            X1_XD = x_double_add_1x2x4x1(X1_XD, X0_A24)
+            X0_X1[2], X0_X1[3] = X1_XD[0], X1_XD[1]
+            XD_A24[0], XD_A24[1] = X1_XD[2], X1_XD[3]
+
         else:
             assert s0 % 2 == 0
             s0 = s0 // 2
-            x0_xd = avx_241_to_421(x0, xd)
-            x1_A24 = avx_241_to_421(x1, A24)
-            PP_PQ = x_double_add_1x2x4x1(x0_xd, x1_A24)
-            x0, xd = avx_421_to_241(PP_PQ)
+            # Here we use scratch buffers for the input into
+            # x_double_add_1x2x4x1
+
+            X0_XD = [X0_X1[0], X0_X1[1], XD_A24[0], XD_A24[1]]
+            X1_A24 = [X0_X1[2], X0_X1[3], XD_A24[2], XD_A24[3]]
+            X0_XD = x_double_add_1x2x4x1(X0_XD, X1_A24)
+            X0_X1[0], X0_X1[1] = X0_XD[0], X0_XD[1]
+            XD_A24[0], XD_A24[1] = X0_XD[2], X0_XD[3]
+
+    # For the end of the biscalar we double in 2x4x1 only then
+    # within x_mul_1x2x4x1 we will convert back to 4x2x1 for more
+    # xdbladds for the odd part of s1
+    _, x1 = avx_421_to_241(X0_X1)
 
     while s1 & 1 == 0:
         s1 //= 2
