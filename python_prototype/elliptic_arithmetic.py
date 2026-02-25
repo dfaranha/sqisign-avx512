@@ -445,14 +445,7 @@ def x_diff_add_1x2x4x1(P: AVX_2x4x1, Q: AVX_2x4x1, PmQ: AVX_2x4x1) -> AVX_2x4x1:
 #     return AVX_2x4x1(X4, Z4), AVX_2x4x1(X5, Z5)
 
 
-def x_double_add_1x2x4x1(
-    A24: AVX_2x4x1, P: AVX_2x4x1, Q: AVX_2x4x1, PmQ: AVX_2x4x1
-) -> tuple[AVX_2x4x1]:
-    # Convert points from 2x4x1 to 4x2x1 -- potentially this should be done
-    # before the function call.
-    P_Q = avx_241_to_421(P, Q)
-    PmQ_A24 = avx_241_to_421(PmQ, A24)
-
+def x_double_add_1x2x4x1(P_Q: AVX_4x2x1, PmQ_A24: AVX_4x2x1) -> AVX_4x2x1:
     # First double add sub
     T0 = AVX_4x2x1(P_Q[0], P_Q[2], P_Q[0], P_Q[2])
     T1 = AVX_4x2x1(P_Q[1], P_Q[3], P_Q[1], P_Q[3])
@@ -474,6 +467,7 @@ def x_double_add_1x2x4x1(
     S3 = avx_421_mul(T0, T1)
 
     # Loose end addition which uses a 2x4x1 call
+    # TODO: should we just do one 4x1x1 add with no conversion?
     t2_s2, _ = avx_421_to_241(S3)
     T0 = AVX_2x4x1(t2_s2[0], 0)
     T1 = AVX_2x4x1(t2_s2[1], 0)
@@ -484,11 +478,10 @@ def x_double_add_1x2x4x1(
 
     # Final multiplication
     T0 = AVX_4x2x1(S3[0], t3_00_00_00[0], S3[2], S3[3])
-    T1 = AVX_4x2x1(S1[0], S2[2], PmQ[1], PmQ[0])
+    T1 = AVX_4x2x1(S1[0], S2[2], PmQ_A24[1], PmQ_A24[0])
     PP_PQ = avx_421_mul(T0, T1)
 
-    # Split back to two 2x4x1
-    return avx_421_to_241(PP_PQ)
+    return PP_PQ
 
 
 def x_double_add_pair_8x1x1(PQDA1: AVX_8x1x1, PQDA2: AVX_8x1x1):
@@ -560,12 +553,19 @@ def x_mul_1x2x4x1(A24: AVX_2x4x1, P: AVX_2x4x1, m: ZZ) -> PointX:
     x0 = AVX_2x4x1(R.one(), R.zero())
     x1 = P
 
+    # TODO: memory management
+    xp_A24 = avx_241_to_421(xp, A24)
+
     # Montgomery-ladder
     for bit in bin(m)[2:]:
         if bit == "1":
-            x1, x0 = x_double_add_1x2x4x1(A24, x1, x0, xp)
+            x1_x0 = avx_241_to_421(x1, x0)
+            PP_PQ = x_double_add_1x2x4x1(x1_x0, xp_A24)
+            x1, x0 = avx_421_to_241(PP_PQ)
         else:
-            x0, x1 = x_double_add_1x2x4x1(A24, x0, x1, xp)
+            x0_x1 = avx_241_to_421(x0, x1)
+            PP_PQ = x_double_add_1x2x4x1(x0_x1, xp_A24)
+            x0, x1 = avx_421_to_241(PP_PQ)
 
     return x0
 
@@ -589,9 +589,15 @@ def ladder_3pt_1x2x4x1(A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], m: ZZ) -> PointX
     # Montgomery-ladder
     for bit in bin(m)[:1:-1]:
         if bit == "1":
-            x1, x0 = x_double_add_1x2x4x1(A24, x1, x0, xd)
+            x1_x0 = avx_241_to_421(x1, x0)
+            xd_A24 = avx_241_to_421(xd, A24)
+            PP_PQ = x_double_add_1x2x4x1(x1_x0, xd_A24)
+            x1, x0 = avx_421_to_241(PP_PQ)
         else:
-            x1, xd = x_double_add_1x2x4x1(A24, x1, xd, x0)
+            x1_xd = avx_241_to_421(x1, xd)
+            x0_A24 = avx_241_to_421(x0, A24)
+            PP_PQ = x_double_add_1x2x4x1(x1_xd, x0_A24)
+            x1, xd = avx_421_to_241(PP_PQ)
     return x0
 
 
@@ -615,18 +621,24 @@ def ladder_biscalar_1x2x4x1(
 
         elif s0 % 2 == s1 % 2:
             s1 = (s1 - s0) // 2
-            r0, r1 = x_double_add_1x2x4x1(A24, x1, x0, xd)
-            x0, x1 = r1, r0
+            x1_x0 = avx_241_to_421(x1, x0)
+            xd_A24 = avx_241_to_421(xd, A24)
+            PP_PQ = x_double_add_1x2x4x1(x1_x0, xd_A24)
+            x1, x0 = avx_421_to_241(PP_PQ)
 
         elif s1 % 2 == 0:
             s1 = s1 // 2
-            r0, r1 = x_double_add_1x2x4x1(A24, x1, xd, x0)
-            x1, xd = r0, r1
+            x1_xd = avx_241_to_421(x1, xd)
+            x0_A24 = avx_241_to_421(x0, A24)
+            PP_PQ = x_double_add_1x2x4x1(x1_xd, x0_A24)
+            x1, xd = avx_421_to_241(PP_PQ)
         else:
             assert s0 % 2 == 0
             s0 = s0 // 2
-            r0, r1 = x_double_add_1x2x4x1(A24, x0, xd, x1)
-            x0, xd = r0, r1
+            x0_xd = avx_241_to_421(x0, xd)
+            x1_A24 = avx_241_to_421(x1, A24)
+            PP_PQ = x_double_add_1x2x4x1(x0_xd, x1_A24)
+            x0, xd = avx_421_to_241(PP_PQ)
 
     while s1 & 1 == 0:
         s1 //= 2
