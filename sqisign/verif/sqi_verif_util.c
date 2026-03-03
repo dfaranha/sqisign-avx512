@@ -26,15 +26,23 @@ hash_to_challenge(scalar_t *scalar,
     // First we encode the public key to bytes and append the j-invariant of
     // the commitment curve. We append the message later directly into SHAKE
     // to avoid having to allocate and copying the message into the buffer. 
-    unsigned char buf[PUBLICKEY_BYTES + FP2_ENCODED_BYTES];
+    // unsigned char buf[PUBLICKEY_BYTES + FP2_ENCODED_BYTES];
+    unsigned char buf[2*FP2_ENCODED_BYTES];
+
 
     // First encode the public key as bytes
-    public_key_to_bytes(buf, pk);
+    // public_key_to_bytes(buf, pk);
+
+
+    // TODO: this is the old version where we compute j for both pk and com
     {
         // Compute the j-invariant and include bytes into buffer 
-        fp2_t j;
-        ec_j_inv(&j, com_curve);
-        fp2_encode(buf + PUBLICKEY_BYTES, &j);
+        fp2_t j_pk, j_com;
+        ec_j_inv(&j_pk, &pk->curve);
+        ec_j_inv(&j_com, com_curve);
+
+        fp2_encode(buf, &j_pk);
+        fp2_encode(buf + FP2_ENCODED_BYTES, &j_com);
     }
 
     {
