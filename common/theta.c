@@ -257,7 +257,7 @@ bool theta_isogeny_chain_single(
     }
 
     // Step Three: Splitting
-    splitting_isom_matrix(&isom_matrix, OA);
+    success &= splitting_isom_matrix(&isom_matrix, OA, verify);
     splitting_apply_isomorphism_single(OA, OA, &isom_matrix);
     splitting_apply_isomorphism_list_single(eval_pts_theta, &isom_matrix, num_pts);
 
@@ -306,7 +306,7 @@ bool theta_isogeny_chain_pair(
 
     success &= lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
     success &= lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
-
+    printf("lift %d\n", success);
     // We are now in the position to convert from 64 to 51 bit limbs
     // For the curve we need to pack the Montgomery coefficient for
     // arithmetic.
@@ -350,6 +350,7 @@ bool theta_isogeny_chain_pair(
         strat_points_x + (8*current), strat_points_z + (8*current),
         verify
     );
+    printf("gluing_codom %d\n", success);
 
     // Package the point we use for translation
     // T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
@@ -381,6 +382,7 @@ bool theta_isogeny_chain_pair(
         eval_pts_theta, pts, OA_dual_inv, 
         matrix01, matrix23, num_pts, verify
     );
+    printf("gluing eval %d\n", success);
 
     // Step Two: Compute the rest of the chain
     int step = 0;
@@ -415,6 +417,7 @@ bool theta_isogeny_chain_pair(
             OA, OA_dual_inv, strat_theta_pair + (16*current), 
             h1, h2, codom_verify
         );
+        printf("%d-th codomain %d\n", step, success);
 
         // Push the kernel through the images
         // we have current number of pairs, so 2*current number of points
@@ -430,7 +433,7 @@ bool theta_isogeny_chain_pair(
     }
 
     // Step Three: Splitting
-    splitting_isom_matrix(&isom_matrix, OA);
+    success &= splitting_isom_matrix(&isom_matrix, OA, verify);
     splitting_apply_isomorphism_single(OA, OA, &isom_matrix);
     splitting_apply_isomorphism_list_pair(eval_pts_theta, &isom_matrix, num_pts);
 
@@ -442,7 +445,7 @@ bool theta_isogeny_chain_pair(
 
     success &= splitting_theta_to_product(res_E34, OA, verify);
     success &= splitting_theta_point_to_mont_list_pair(res_pts, eval_pts_theta, OA, num_pts, verify);
-
+    printf("splitting %d\n", success);
     return success;
 }
 
@@ -456,7 +459,7 @@ bool theta_isogeny_chain_ver(
     theta_couple_point_t pts[0], res_pts[0];
     int num_pts = 0;
     bool randomize = false, verify = true;
-    return theta_isogeny_chain_pair(
+    return theta_isogeny_chain_single(
         res_E34, res_pts, E12, ker, pts, n, num_pts, randomize, verify
     );
 }
@@ -642,7 +645,7 @@ bool theta_isogeny_chain_no_torsion_single(
     theta_eval_list_single(eval_pts_theta, OA_dual_inv, h1, h2, num_pts);
 
     // Step Four: Splitting
-    splitting_isom_matrix(&isom_matrix, OA);
+    success &= splitting_isom_matrix(&isom_matrix, OA, verify);
     splitting_apply_isomorphism_single(OA, OA, &isom_matrix);
     splitting_apply_isomorphism_list_single(eval_pts_theta, &isom_matrix, num_pts);
 
@@ -828,7 +831,7 @@ bool theta_isogeny_chain_no_torsion_pair(
 
 
     // Step Four: Splitting
-    splitting_isom_matrix(&isom_matrix, OA);
+    success &= splitting_isom_matrix(&isom_matrix, OA, verify);
     splitting_apply_isomorphism_single(OA, OA, &isom_matrix);
     splitting_apply_isomorphism_list_pair(eval_pts_theta, &isom_matrix, num_pts);
 

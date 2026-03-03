@@ -279,6 +279,16 @@ typedef struct theta_splitting
 } theta_splitting_t;
 
 /**
+ * @brief Given a bases B1 on E1 and B2 on E2 copies this to create a kernel
+ *         on E1 x E2 as couple points T1, T2 and T1 - T2
+ *
+ * @param ker Output: a kernel for dim_two_isogenies (T1, T2, T1-T2)
+ * @param B1 Input basis on E1
+ * @param B2 Input basis on E2
+ **/
+void copy_bases_to_kernel(theta_kernel_couple_points_t *ker, const ec_basis_t *B1, const ec_basis_t *B2);
+
+/**
  * @brief Compute the double of the theta couple point in on the elliptic product E12
  *
  * @param out Output: the theta_couple_point

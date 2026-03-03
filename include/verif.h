@@ -14,4 +14,10 @@
  */
 int protocols_verify(signature_t* sig, const public_key_t* pk, const unsigned char* m, size_t l);
 
+// Decodes the input and calls protocols_verify
+int verify(const unsigned char *m,
+               unsigned long long mlen,
+               const unsigned char *sig,
+               unsigned long long siglen,
+               const unsigned char *pk);
 #endif

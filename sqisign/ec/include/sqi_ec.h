@@ -74,6 +74,39 @@ typedef struct ec_curve_t
     bool is_A24_computed_and_normalized; // says if A24 has been computed and normalized
 } ec_curve_t;
 
+
+/** @brief An isogeny of degree a power of 2
+ *
+ * @typedef ec_isog_even_t
+ *
+ * @struct ec_isog_even_t
+ */
+typedef struct ec_isog_even_t
+{
+    ec_curve_t curve;  ///< The domain curve
+    ec_point_t kernel; ///< A kernel generator
+    unsigned length;   ///< The length as a 2-isogeny walk
+} ec_isog_even_t;
+
+/** @brief Isomorphism of Montgomery curves
+ *
+ * @typedef ec_isom_t
+ *
+ * @struct ec_isom_t
+ *
+ * The isomorphism is given by the map maps (X:Z) ↦ ( (Nx X + Nz Z) : (D Z) )
+ */
+typedef struct ec_isom_t
+{
+    fp2_t Nx;
+    fp2_t Nz;
+    fp2_t D;
+} ec_isom_t;
+
+// end ec_t
+/** @}
+ */
+
 /** @}
  */
 /** @defgroup ec_point_t Point operations
@@ -83,6 +116,25 @@ typedef struct ec_curve_t
 // Initalisation for curves and points
 void ec_curve_init(ec_curve_t *E);
 void ec_point_init(ec_point_t *P);
+
+/**
+ * @brief Verify that a Montgomery coefficient is valid
+ *
+ * @param A an fp2_t
+ *
+ * @return 0  if curve is invalid, 1 otherwise
+ */
+int ec_curve_verify_A(const fp2_t *A);
+
+/**
+ * @brief Initialize an elliptic curve from a coefficient
+ *
+ * @param A an fp2_t
+ * @param E the elliptic curve to initialize
+ *
+ * @return 0  if curve is invalid, 1 otherwise
+ */
+int ec_curve_init_from_A(ec_curve_t *E, const fp2_t *A);
 
 /**
  * @brief Point equality
@@ -182,8 +234,18 @@ void ec_dbl(ec_point_t *res, const ec_point_t *P, const ec_curve_t *curve);
  */
 void ec_dbl_iter(ec_point_t *res, int n, const ec_point_t *P, ec_curve_t *curve);
 
-void xDBL_A24(ec_point_t *Q, const ec_point_t *P, const ec_point_t *A24, const bool A24_normalized);
+/**
+ * @brief Iterated doubling for a basis P, Q, PmQ
+ *
+ * @param res the computed iterated double of basis B
+ * @param n the number of doubles
+ * @param B the basis to double
+ * @param curve the parent curve of the basis
+ */
+void ec_dbl_iter_basis(ec_basis_t *res, int n, const ec_basis_t *B, ec_curve_t *curve);
 
+void xDBL_E0(ec_point_t *Q, const ec_point_t *P);
+void xDBL_A24(ec_point_t *Q, const ec_point_t *P, const ec_point_t *A24, const bool A24_normalized);
 void xADD(ec_point_t *R, const ec_point_t *P, const ec_point_t *Q, const ec_point_t *PQ);
 
 /**
@@ -206,6 +268,13 @@ void ec_normalize_curve(ec_curve_t *E);
  * @param E a curve
  */
 void ec_curve_normalize_A24(ec_curve_t *E);
+
+/**
+ * @brief Normalise both (A : C) and (A + 2 : 4C) as above, in place
+ *
+ * @param E a curve
+ */
+void ec_normalize_curve_and_A24(ec_curve_t *E);
 
 // Jacobian arithmetic
 
@@ -263,6 +332,157 @@ void jac_to_xz_add_components(add_components_t *uvw, const jac_point_t *P, const
  * @return 0xFFFFFFFF if there was no error, 0 otherwise
  */
 uint32_t lift_basis(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E, const bool verify);
+
+/**
+ * @brief Check if basis points (P, Q) form a full 4-basis
+ *
+ * @param B: a basis
+ * @param E: an elliptic curve
+ *
+ * @return 0xFFFFFFFF if they form a basis, 0 otherwise
+ */
+uint32_t ec_is_basis_four_torsion(const ec_basis_t *B, const ec_curve_t *E);
+
+/**
+ * @brief Two torsion test
+ *
+ * @param P a point
+ * @param E the elliptic curve
+ * @return 0xFFFFFFFF if P is 2-torsion but not zero, zero otherwise
+ */
+uint32_t ec_is_two_torsion(const ec_point_t *P, const ec_curve_t *E);
+
+/**
+ * @brief Four torsion test
+ *
+ * @param P a point
+ * @param E the elliptic curve
+ * @return 0xFFFFFFFF if P is 2-torsion but not zero, zero otherwise
+ */
+uint32_t ec_is_four_torsion(const ec_point_t *P, const ec_curve_t *E);
+
+/**
+ * @brief Generate a 2^f-torsion basis from a Montgomery curve along with a hint
+ *
+ * @param PQ2 an ec_basis_t
+ * @param curve an ec_curve_t
+ * @param f an integer
+ *
+ * @return A hint
+ *
+ * The algorithm is deterministc
+ */
+uint8_t ec_curve_to_basis_2f_to_hint(ec_basis_t *PQ2, ec_curve_t *curve, int f);
+
+/**
+ * @brief Generate a 2^f-torsion basis from a Montgomery curve and a given hint
+ *
+ * @param PQ2 an ec_basis_t
+ * @param curve an ec_curve_t
+ * @param f an integer
+ * @param hint the hint
+ *
+ * @return 1 is the basis is valid, 0 otherwise
+ *
+ * The algorithm is deterministc
+ */
+int ec_curve_to_basis_2f_from_hint(ec_basis_t *PQ2, ec_curve_t *curve, int f, const uint8_t hint);
+
+/**
+ * @brief Point multiplication
+ *
+ * @param res computed scalar * P
+ * @param curve the curve
+ * @param scalar an unsigned multi-precision integer
+ * @param P a point
+ * @param kbits numer of bits of the scalar
+ */
+void ec_mul(ec_point_t *res, const digit_t *scalar, const int kbits, const ec_point_t *P, ec_curve_t *curve);
+
+/**
+ * @brief Combination P+m*Q
+ *
+ * @param R computed P + m * Q
+ * @param curve the curve
+ * @param m an unsigned multi-precision integer
+ * @param P a point
+ * @param Q a point
+ * @param PQ the difference P-Q
+ * @return 0 if there was an error, 1 otherwise
+ */
+int ec_ladder3pt(ec_point_t *R,
+                 const digit_t *m,
+                 const ec_point_t *P,
+                 const ec_point_t *Q,
+                 const ec_point_t *PQ,
+                 const ec_curve_t *curve);
+
+/**
+ * @brief Linear combination of points of a basis
+ *
+ * @param res computed scalarP * P + scalarQ * Q
+ * @param scalarP an unsigned multi-precision integer
+ * @param scalarQ an unsigned multi-precision integer
+ * @param kbits number of bits of the scalars, or n for points of order 2^n
+ * @param PQ a torsion basis consisting of points P and Q
+ * @param curve the curve
+ *
+ * @return 0 if there was an error, 1 otherwise
+ */
+int ec_biscalar_mul(ec_point_t *res,
+                    const digit_t *scalarP,
+                    const digit_t *scalarQ,
+                    const int kbits,
+                    const ec_basis_t *PQ,
+                    const ec_curve_t *curve);
+
+// =========== 1D Isogenies ===================
+
+/**
+ * @brief Isomorphism of elliptic curve
+ * Takes as input two isomorphic Kummer lines in Montgomery form, and output an isomorphism between
+ * them
+ *
+ * @param isom computed isomorphism
+ * @param from domain curve
+ * @param to image curve
+ * @return 0xFFFFFFFF if there was an error during the computation, zero otherwise
+ */
+uint32_t ec_isomorphism(ec_isom_t *isom, const ec_curve_t *from, const ec_curve_t *to);
+
+/**
+ * @brief Evaluate isogeny of even degree on list of points.
+ * Returns 0 if successful and -1 if kernel has the wrong order or includes (0:1).
+ *
+ * @param image computed image curve
+ * @param phi isogeny
+ * @param points a list of points to evaluate the isogeny on, modified in place
+ * @param len_points length of the list points
+ *
+ * @return 0 if there was no error, 0xFFFFFFFF otherwise
+ */
+uint32_t ec_eval_even(ec_curve_t *image, ec_isog_even_t *phi, ec_point_t *points, unsigned len_points);
+
+/**
+ * @brief Multiplicative strategy for a short isogeny chain. Returns 1 if successfull and -1
+ * if kernel has the wrong order or includes (0:1) when special=false.
+ *
+ * @param curve domain curve, to be overwritten by the codomain curve.
+ * @param kernel a kernel generator of order 2^len
+ * @param len the length of t he 2-isogeny chain
+ * @param points a list of points to evaluate the isogeny on, modified in place
+ * @param len_points length of the list points
+ * @param special if true, allow isogenies with (0:1) in the kernel
+ *
+ * @return 0 if there was no error, 0xFFFFFFFF otherwise
+ */
+uint32_t ec_eval_small_chain(ec_curve_t *curve,
+                             const ec_point_t *kernel,
+                             int len,
+                             ec_point_t *points,
+                             unsigned len_points,
+                             bool special);
+
 
 /*
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
@@ -410,6 +630,25 @@ static void ec_j_inv(fp2_t* j_inv, const ec_curve_t* curve)
     // nom / denom
     fp2_inv(&denom);
     fp2_mul(j_inv, &nom, &denom);
+}
+
+/**
+ * @brief Check if basis points (P, Q, PmQ) all have order exactly 2^t
+ *
+ * @param B: a basis
+ * @param E: an elliptic curve
+ * @param t: an integer
+ *
+ * @return 0xFFFFFFFF if the order is correct, 0 otherwise
+ */
+static int
+test_basis_order_twof(const ec_basis_t *B, const ec_curve_t *E, int t)
+{
+    int check_P = test_point_order_twof(&B->P, E, t);
+    int check_Q = test_point_order_twof(&B->Q, E, t);
+    int check_PmQ = test_point_order_twof(&B->PmQ, E, t);
+
+    return check_P & check_Q & check_PmQ;
 }
 
 #endif

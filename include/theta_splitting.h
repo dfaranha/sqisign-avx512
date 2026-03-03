@@ -148,7 +148,7 @@ int splitting_get_index(__m512i* null);
  * @param matrix The output is a 4x4 matrix over Fp2.
  * @param null The theta null point
  */
-void splitting_isom_matrix(splitting_matrix_t* matrix, __m512i* null);
+bool splitting_isom_matrix(splitting_matrix_t* matrix, __m512i* null, bool verify);
 
 void splitting_rand_matrix(splitting_matrix_t* matrix);
 
