@@ -1,7 +1,7 @@
 from sage.all import ZZ
 
 from elliptic_types import Curve, BasisX, PointX, PointJ
-from avx_types import AVX_4x2x1, AVX_2x4x1
+from avx_types import AVX_4x2x1, AVX_2x4x1, AVX_8x1x1
 from avx_arithmetic import (
     avx_421_sqr,
     avx_421_mul,
@@ -17,6 +17,10 @@ from avx_arithmetic import (
     avx_421_add_sub,
     avx_241_to_421,
     avx_421_to_241,
+    avx_241_to_811,
+    avx_811_to_241,
+    avx_811_add_sub,
+    avx_811_mul,
 )
 from utilities import sqrt_fp2
 
@@ -441,14 +445,7 @@ def x_diff_add_1x2x4x1(P: AVX_2x4x1, Q: AVX_2x4x1, PmQ: AVX_2x4x1) -> AVX_2x4x1:
 #     return AVX_2x4x1(X4, Z4), AVX_2x4x1(X5, Z5)
 
 
-def x_double_add_1x2x4x1(
-    A24: AVX_2x4x1, P: AVX_2x4x1, Q: AVX_2x4x1, PmQ: AVX_2x4x1
-) -> tuple[AVX_2x4x1]:
-    # Convert points from 2x4x1 to 4x2x1 -- potentially this should be done
-    # before the function call.
-    P_Q = avx_241_to_421(P, Q)
-    PmQ_A24 = avx_241_to_421(PmQ, A24)
-
+def x_double_add_1x2x4x1(P_Q: AVX_4x2x1, PmQ_A24: AVX_4x2x1) -> AVX_4x2x1:
     # First double add sub
     T0 = AVX_4x2x1(P_Q[0], P_Q[2], P_Q[0], P_Q[2])
     T1 = AVX_4x2x1(P_Q[1], P_Q[3], P_Q[1], P_Q[3])
@@ -470,6 +467,7 @@ def x_double_add_1x2x4x1(
     S3 = avx_421_mul(T0, T1)
 
     # Loose end addition which uses a 2x4x1 call
+    # TODO: should we just do one 4x1x1 add with no conversion?
     t2_s2, _ = avx_421_to_241(S3)
     T0 = AVX_2x4x1(t2_s2[0], 0)
     T1 = AVX_2x4x1(t2_s2[1], 0)
@@ -480,11 +478,60 @@ def x_double_add_1x2x4x1(
 
     # Final multiplication
     T0 = AVX_4x2x1(S3[0], t3_00_00_00[0], S3[2], S3[3])
-    T1 = AVX_4x2x1(S1[0], S2[2], PmQ[1], PmQ[0])
+    T1 = AVX_4x2x1(S1[0], S2[2], PmQ_A24[1], PmQ_A24[0])
     PP_PQ = avx_421_mul(T0, T1)
 
-    # Split back to two 2x4x1
-    return avx_421_to_241(PP_PQ)
+    return PP_PQ
+
+
+def x_double_add_pair_8x1x1(PQDA1: AVX_8x1x1, PQDA2: AVX_8x1x1):
+    # PQDA contains the 8 Fp2 elements
+    # (PX : PZ : QX : QZ : PmQZ : PmQZ : A24 : C24)
+
+    # Redundant info: A24 is at the end of both
+    assert PQDA1[6] == PQDA2[6]
+    assert PQDA1[7] == PQDA2[7]
+
+    # First quad add sub (+ + + + - - - -)
+    T0 = AVX_8x1x1(
+        PQDA1[0], PQDA1[2], PQDA2[0], PQDA2[2], PQDA1[0], PQDA1[2], PQDA2[0], PQDA2[2]
+    )
+    T1 = AVX_8x1x1(
+        PQDA1[1], PQDA1[3], PQDA2[1], PQDA2[3], PQDA1[1], PQDA1[3], PQDA2[1], PQDA2[3]
+    )
+    S0 = avx_811_add_sub(T0, T1)
+
+    # 8x2x1 mul with four squares hidden inside
+    T0 = AVX_8x1x1(S0[0], S0[4], S0[0], S0[4], S0[2], S0[6], S0[2], S0[6])
+    T1 = AVX_8x1x1(S0[0], S0[4], S0[5], S0[1], S0[2], S0[6], S0[7], S0[3])
+    S1 = avx_811_mul(T0, T1)
+
+    # Second quad add sub (+ + + + - - - -)
+    T0 = AVX_8x1x1(S1[0], S1[2], S1[4], S1[6], S1[0], S1[2], S1[4], S1[6])
+    T1 = AVX_8x1x1(S1[1], S1[3], S1[5], S1[7], S1[1], S1[3], S1[5], S1[7])
+    S2 = avx_811_add_sub(T0, T1)
+
+    # 8x1x1 mul with four squares hidden inside
+    T0 = AVX_8x1x1(PQDA1[7], PQDA1[6], S2[1], S2[5], PQDA2[7], PQDA2[6], S2[3], S2[7])
+    T1 = AVX_8x1x1(S1[1], S2[4], S2[1], S2[5], S1[5], S2[6], S2[3], S2[7])
+    S3 = avx_811_mul(T0, T1)
+
+    # Loose end addition which uses a 2x4x1 call
+    # TODO: what's the fastest way to handle this?
+    # maybe we should just do a single 8x1x1 add with
+    # no conversion?
+    A, _, C, _ = avx_811_to_241(S3)
+    T0 = AVX_2x4x1(A[0], C[0])
+    T1 = AVX_2x4x1(A[1], C[1])
+    T0 = avx_241_add(T0, T1)
+    t3 = avx_241_to_811(T0, T0, T0, T0)
+
+    # Final multiplication
+    T0 = AVX_8x1x1(S3[0], t3[0], S3[2], S3[3], S3[4], t3[1], S3[6], S3[7])
+    T1 = AVX_8x1x1(S1[0], S2[4], PQDA1[5], PQDA1[4], S1[4], S2[6], PQDA2[5], PQDA2[4])
+    R1_R2_S1_S2 = avx_811_mul(T0, T1)
+
+    return R1_R2_S1_S2
 
 
 def x_mul_1x2x4x1(A24: AVX_2x4x1, P: AVX_2x4x1, m: ZZ) -> PointX:
@@ -506,12 +553,25 @@ def x_mul_1x2x4x1(A24: AVX_2x4x1, P: AVX_2x4x1, m: ZZ) -> PointX:
     x0 = AVX_2x4x1(R.one(), R.zero())
     x1 = P
 
-    # Montgomery-ladder
+    # TODO: memory management directly from P?
+    X0_X1 = avx_241_to_421(x0, x1)
+    XD_A24 = avx_241_to_421(xp, A24)
+
+    # Helper function for swapping P, Q inside an AVX4x2x1
+    def swap(PQ):
+        return AVX_4x2x1(PQ[2], PQ[3], PQ[0], PQ[1])
+
+    # Montgomery-ladder, here we only ever have to swap x0, x1
     for bit in bin(m)[2:]:
         if bit == "1":
-            x1, x0 = x_double_add_1x2x4x1(A24, x1, x0, xp)
-        else:
-            x0, x1 = x_double_add_1x2x4x1(A24, x0, x1, xp)
+            X0_X1 = swap(X0_X1)
+
+        X0_X1 = x_double_add_1x2x4x1(X0_X1, XD_A24)
+
+        if bit == "1":
+            X0_X1 = swap(X0_X1)
+
+    x0, x1 = avx_421_to_241(X0_X1)
 
     return x0
 
@@ -532,56 +592,265 @@ def ladder_3pt_1x2x4x1(A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], m: ZZ) -> PointX
     if not m:
         return x0
 
+    # Helper function for swapping P, Q inside an AVX4x2x1
+    def swap(PQ):
+        return [PQ[2], PQ[3], PQ[0], PQ[1]]
+
+    X0_X1 = list(avx_241_to_421(x0, x1))
+    XD_A24 = list(avx_241_to_421(xd, A24))
+
     # Montgomery-ladder
     for bit in bin(m)[:1:-1]:
         if bit == "1":
-            x1, x0 = x_double_add_1x2x4x1(A24, x1, x0, xd)
+            # We can do this with simple swaps in x0, x1 only
+            X1_X0 = swap(X0_X1)
+            X1_X0 = x_double_add_1x2x4x1(X1_X0, XD_A24)
+            X0_X1 = swap(X1_X0)
         else:
-            x1, xd = x_double_add_1x2x4x1(A24, x1, xd, x0)
+            # Here we use some tmp buffers to store x1, xd and x0 a24
+            # but you could just read in a different order from
+            # x_double_add_1x2x4x1 i suppose...
+            X1_XD = (X0_X1[2], X0_X1[3], XD_A24[0], XD_A24[1])
+            X0_A24 = (X0_X1[0], X0_X1[1], XD_A24[2], XD_A24[3])
+            X1_XD = x_double_add_1x2x4x1(X1_XD, X0_A24)
+
+            # Update X1 and XD from scratch vars
+            X0_X1[2], X0_X1[3] = X1_XD[0], X1_XD[1]
+            XD_A24[0], XD_A24[1] = X1_XD[2], X1_XD[3]
+
+    x0, _ = avx_421_to_241(X0_X1)
     return x0
 
 
 def ladder_biscalar_1x2x4x1(
-    A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], a: ZZ, b: ZZ
+    A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], s0: ZZ, s1: ZZ
 ) -> AVX_2x4x1:
-    s0 = a
-    s1 = b
-
     # Parse out points from basis
     x0, x1, xd = basis
+
+    X0_X1 = list(avx_241_to_421(x0, x1))
+    XD_A24 = list(avx_241_to_421(xd, A24))
+
+    # Helper function for swapping P, Q inside an AVX4x2x1
+    def swap(PQ):
+        return [PQ[2], PQ[3], PQ[0], PQ[1]]
 
     while s0 != 0:
         if s1 < s0:
             s0, s1 = s1, s0
-            x0, x1 = x1, x0
+            X0_X1 = swap(X0_X1)
 
         assert s1 >= s0
 
         if s1 <= 4 * s0:
             s1 = s1 - s0
+            # The xADD is a 2x4x1 so we need to convert here
+            # Question: does conversion cost mean this is not
+            # worth it and we should never do this stage?
+            x0, x1 = avx_421_to_241(X0_X1)
+            xd, _ = avx_421_to_241(XD_A24)
             r0 = x_diff_add_1x2x4x1(x1, x0, xd)
-            x0, xd = r0, x0
+
+            # Assign output back to 4x2x1 and update vars
+            R0_X0 = avx_241_to_421(r0, x0)
+            X0_X1[0], X0_X1[1] = R0_X0[0], R0_X0[1]
+            XD_A24[0], XD_A24[1] = R0_X0[2], R0_X0[3]
 
         elif s0 % 2 == s1 % 2:
             s1 = (s1 - s0) // 2
-            r0, r1 = x_double_add_1x2x4x1(A24, x1, x0, xd)
-            x0, x1 = r1, r0
+            # Here we can do everything with swaps
+            X1_X0 = swap(X0_X1)
+            X1_X0 = x_double_add_1x2x4x1(X1_X0, XD_A24)
+            X0_X1 = swap(X1_X0)
 
         elif s1 % 2 == 0:
             s1 = s1 // 2
-            r0, r1 = x_double_add_1x2x4x1(A24, x1, xd, x0)
-            x1, xd = r0, r1
+            # Here we use scratch buffers for the input into
+            # x_double_add_1x2x4x1
+
+            X1_XD = [X0_X1[2], X0_X1[3], XD_A24[0], XD_A24[1]]
+            X0_A24 = [X0_X1[0], X0_X1[1], XD_A24[2], XD_A24[3]]
+            X1_XD = x_double_add_1x2x4x1(X1_XD, X0_A24)
+            X0_X1[2], X0_X1[3] = X1_XD[0], X1_XD[1]
+            XD_A24[0], XD_A24[1] = X1_XD[2], X1_XD[3]
+
         else:
             assert s0 % 2 == 0
             s0 = s0 // 2
-            r0, r1 = x_double_add_1x2x4x1(A24, x0, xd, x1)
-            x0, xd = r0, r1
+            # Here we use scratch buffers for the input into
+            # x_double_add_1x2x4x1
+
+            X0_XD = [X0_X1[0], X0_X1[1], XD_A24[0], XD_A24[1]]
+            X1_A24 = [X0_X1[2], X0_X1[3], XD_A24[2], XD_A24[3]]
+            X0_XD = x_double_add_1x2x4x1(X0_XD, X1_A24)
+            X0_X1[0], X0_X1[1] = X0_XD[0], X0_XD[1]
+            XD_A24[0], XD_A24[1] = X0_XD[2], X0_XD[3]
+
+    # For the end of the biscalar we double in 2x4x1 only then
+    # within x_mul_1x2x4x1 we will convert back to 4x2x1 for more
+    # xdbladds for the odd part of s1
+    _, x1 = avx_421_to_241(X0_X1)
 
     while s1 & 1 == 0:
         s1 //= 2
         x1 = x_double_1x2x4x1(A24, x1)
 
     return x_mul_1x2x4x1(A24, x1, s1)
+
+
+def ladder_double_biscalar_1x2x4x1(
+    A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], r0: ZZ, r1: ZZ, s0: ZZ, s1: ZZ
+) -> AVX_2x4x1:
+    """
+    Computes the Euclidean loop with 2 way parallelism to use 8x1x1 multiplication
+    but needs to use ladder_biscalar_1x2x4x1 at the end as we can't guarantee s0 = r0
+    at the same time
+
+    As we want to call x_double_add_1x2x4x1 in pairs, we also skip the fibonacci step
+    when s1 <= 4 * s0 as in this case we would have one xADD and one xDBLADD in the
+    generic case which we can't do in parallel.
+    """
+    # Parse out points from basis, we need two copies as we have two distinct
+    # ladders computed for R = [r0] P + [r1] Q and S = [s0] P + [s1] Q
+    P, Q, PmQ = basis
+
+    # For the Euclidean step of the algorithm we want to work with 8x1x1 data
+    # These two blobs store the values of x0, x1, x0 - x1 as we go down the
+    # Montgomery chain.
+    X0_X1_XD_A24 = list(avx_241_to_811(P, Q, PmQ, A24))
+    Y0_Y1_YD_A24 = list(avx_241_to_811(P, Q, PmQ, A24))
+
+    # We may need less than this, but currently we need three additional
+    # scratch buffers of 8x1x1. Two are for the inputs into xDBLADD_pair
+    # and one is for the output. The output is then written into X0_X1_XD_A24
+    # and Y0_Y1_YD_A24 for the next step of the chain.
+    #
+    # P1_Q1_PQ1_A24 and P2_Q2_PQ2_A24 for the input
+    # R1_R2_S1_S2 is the output which holds [2]P1, P1 + Q1, [2]P2, P2 + Q2
+    P1_Q1_PQ1_A24 = X0_X1_XD_A24[:]
+    P2_Q2_PQ2_A24 = Y0_Y1_YD_A24[:]
+
+    # Depending on the bits of r0, r1 and s0 and s1 we need to have switch
+    # cases for the input and output of the various functions
+    r_case = None
+    s_case = None
+
+    while True:
+        if r1 < r0:
+            r0, r1 = r1, r0
+            # Swap X0, X1
+            X0_X1_XD_A24[0], X0_X1_XD_A24[1], X0_X1_XD_A24[2], X0_X1_XD_A24[3] = (
+                X0_X1_XD_A24[2],
+                X0_X1_XD_A24[3],
+                X0_X1_XD_A24[0],
+                X0_X1_XD_A24[1],
+            )
+
+        if s1 < s0:
+            s0, s1 = s1, s0
+            # Swap Y0, Y1
+            Y0_Y1_YD_A24[0], Y0_Y1_YD_A24[1], Y0_Y1_YD_A24[2], Y0_Y1_YD_A24[3] = (
+                Y0_Y1_YD_A24[2],
+                Y0_Y1_YD_A24[3],
+                Y0_Y1_YD_A24[0],
+                Y0_Y1_YD_A24[1],
+            )
+
+        # Arithmetic for R
+        if r0 % 2 == r1 % 2:
+            r1 = (r1 - r0) // 2
+            r_case = 0
+            # P1, Q1, PQ1 = x1, x0, xd
+            P1_Q1_PQ1_A24[0], P1_Q1_PQ1_A24[1] = X0_X1_XD_A24[2], X0_X1_XD_A24[3]
+            P1_Q1_PQ1_A24[2], P1_Q1_PQ1_A24[3] = X0_X1_XD_A24[0], X0_X1_XD_A24[1]
+            P1_Q1_PQ1_A24[4], P1_Q1_PQ1_A24[5] = X0_X1_XD_A24[4], X0_X1_XD_A24[5]
+
+        elif r1 % 2 == 0:
+            r1 = r1 // 2
+            r_case = 1
+            # P1, Q1, PQ1 = x1, xd, x0
+            P1_Q1_PQ1_A24[0], P1_Q1_PQ1_A24[1] = X0_X1_XD_A24[2], X0_X1_XD_A24[3]
+            P1_Q1_PQ1_A24[2], P1_Q1_PQ1_A24[3] = X0_X1_XD_A24[4], X0_X1_XD_A24[5]
+            P1_Q1_PQ1_A24[4], P1_Q1_PQ1_A24[5] = X0_X1_XD_A24[0], X0_X1_XD_A24[1]
+
+        else:
+            r0 = r0 // 2
+            r_case = 2
+            # P1, Q1, PQ1 = x0, xd, x1
+            P1_Q1_PQ1_A24[0], P1_Q1_PQ1_A24[1] = X0_X1_XD_A24[0], X0_X1_XD_A24[1]
+            P1_Q1_PQ1_A24[2], P1_Q1_PQ1_A24[3] = X0_X1_XD_A24[4], X0_X1_XD_A24[5]
+            P1_Q1_PQ1_A24[4], P1_Q1_PQ1_A24[5] = X0_X1_XD_A24[2], X0_X1_XD_A24[3]
+
+        # Arithmetic for S
+        if s0 % 2 == s1 % 2:
+            s1 = (s1 - s0) // 2
+            s_case = 0
+            # P2, Q2, PQ2 = y1, y0, yd
+            P2_Q2_PQ2_A24[0], P2_Q2_PQ2_A24[1] = Y0_Y1_YD_A24[2], Y0_Y1_YD_A24[3]
+            P2_Q2_PQ2_A24[2], P2_Q2_PQ2_A24[3] = Y0_Y1_YD_A24[0], Y0_Y1_YD_A24[1]
+            P2_Q2_PQ2_A24[4], P2_Q2_PQ2_A24[5] = Y0_Y1_YD_A24[4], Y0_Y1_YD_A24[5]
+
+        elif s1 % 2 == 0:
+            s1 = s1 // 2
+            s_case = 1
+            # P2, Q2, PQ2 = y1, yd, y0
+            P2_Q2_PQ2_A24[0], P2_Q2_PQ2_A24[1] = Y0_Y1_YD_A24[2], Y0_Y1_YD_A24[3]
+            P2_Q2_PQ2_A24[2], P2_Q2_PQ2_A24[3] = Y0_Y1_YD_A24[4], Y0_Y1_YD_A24[5]
+            P2_Q2_PQ2_A24[4], P2_Q2_PQ2_A24[5] = Y0_Y1_YD_A24[0], Y0_Y1_YD_A24[1]
+        else:
+            s0 = s0 // 2
+            s_case = 2
+            # P2, Q2, PQ2 = y0, yd, y1
+            P2_Q2_PQ2_A24[0], P2_Q2_PQ2_A24[1] = Y0_Y1_YD_A24[0], Y0_Y1_YD_A24[1]
+            P2_Q2_PQ2_A24[2], P2_Q2_PQ2_A24[3] = Y0_Y1_YD_A24[4], Y0_Y1_YD_A24[5]
+            P2_Q2_PQ2_A24[4], P2_Q2_PQ2_A24[5] = Y0_Y1_YD_A24[2], Y0_Y1_YD_A24[3]
+
+        # R1, R2 = x_double_add_1x2x4x1(A24, P1, Q1, PQ1)
+        # S1, S2 = x_double_add_1x2x4x1(A24, P2, Q2, PQ2)
+        R1_R2_S1_S2 = x_double_add_pair_8x1x1(P1_Q1_PQ1_A24, P2_Q2_PQ2_A24)
+
+        if r_case == 0:
+            # x0, x1 = R2, R1
+            X0_X1_XD_A24[0], X0_X1_XD_A24[1] = R1_R2_S1_S2[2], R1_R2_S1_S2[3]
+            X0_X1_XD_A24[2], X0_X1_XD_A24[3] = R1_R2_S1_S2[0], R1_R2_S1_S2[1]
+
+        elif r_case == 1:
+            # x1, xd = R1, R2
+            X0_X1_XD_A24[2], X0_X1_XD_A24[3] = R1_R2_S1_S2[0], R1_R2_S1_S2[1]
+            X0_X1_XD_A24[4], X0_X1_XD_A24[5] = R1_R2_S1_S2[2], R1_R2_S1_S2[3]
+        else:
+            # x0, xd = R1, R2
+            X0_X1_XD_A24[0], X0_X1_XD_A24[1] = R1_R2_S1_S2[0], R1_R2_S1_S2[1]
+            X0_X1_XD_A24[4], X0_X1_XD_A24[5] = R1_R2_S1_S2[2], R1_R2_S1_S2[3]
+
+        if s_case == 0:
+            # y0, y1 = S2, S1
+            Y0_Y1_YD_A24[0], Y0_Y1_YD_A24[1] = R1_R2_S1_S2[6], R1_R2_S1_S2[7]
+            Y0_Y1_YD_A24[2], Y0_Y1_YD_A24[3] = R1_R2_S1_S2[4], R1_R2_S1_S2[5]
+        elif s_case == 1:
+            # y1, yd = S1, S2
+            Y0_Y1_YD_A24[2], Y0_Y1_YD_A24[3] = R1_R2_S1_S2[4], R1_R2_S1_S2[5]
+            Y0_Y1_YD_A24[4], Y0_Y1_YD_A24[5] = R1_R2_S1_S2[6], R1_R2_S1_S2[7]
+        else:
+            # y0, yd = S1, S2
+            Y0_Y1_YD_A24[0], Y0_Y1_YD_A24[1] = R1_R2_S1_S2[4], R1_R2_S1_S2[5]
+            Y0_Y1_YD_A24[4], Y0_Y1_YD_A24[5] = R1_R2_S1_S2[6], R1_R2_S1_S2[7]
+
+        # If either s0 or r0 is zero, we must break the chain
+        if s0 == 0 or r0 == 0:
+            break
+
+    # We now know that either r0 or s0 is zero, but potentially not
+    # both, so we finish off the rest of the chain using the single
+    # biscalars (although one will simply be a doubling followed by
+    # x_mul as the euclidean loop is finished)
+
+    x0, x1, xd, _ = avx_811_to_241(X0_X1_XD_A24)
+    y0, y1, yd, _ = avx_811_to_241(Y0_Y1_YD_A24)
+    R = ladder_biscalar_1x2x4x1(A24, (x0, x1, xd), r0, r1)
+    S = ladder_biscalar_1x2x4x1(A24, (y0, y1, yd), s0, s1)
+
+    return R, S
 
 
 def four_jac_to_ws(

@@ -4,14 +4,14 @@ from sage.rings.integer_ring import ZZ
 from hashlib import shake_256
 
 from avx_types import AVX_2x4x1
-from elliptic_types import Curve, BasisX, PointX
+from elliptic_types import Curve
 from elliptic_arithmetic import (
     j_invariant,
     ladder_3pt_1x2x4x1,
-    x_double_n,
     x_double_n_1x2x4x1,
     x_basis_double_n_1x2x4x1,
     ladder_biscalar_1x2x4x1,
+    ladder_double_biscalar_1x2x4x1,
 )
 from limb_conversion import (
     basis_from_64_to_51_bit,
@@ -217,8 +217,9 @@ class SQIsign:
         a00, a01, a10, a11 = M.list()
 
         # Compute the new scaled basis
-        xR = ladder_biscalar_1x2x4x1(A24, basis, a00, a10)
-        xS = ladder_biscalar_1x2x4x1(A24, basis, a01, a11)
+        # xR = ladder_biscalar_1x2x4x1(A24, basis, a00, a10)
+        # xS = ladder_biscalar_1x2x4x1(A24, basis, a01, a11)
+        xR, xS = ladder_double_biscalar_1x2x4x1(A24, basis, a00, a10, a01, a11)
 
         # For the difference point we must be careful the result
         # is positive, so we work modulo the point order
