@@ -334,6 +334,19 @@ void jac_to_xz_add_components(add_components_t *uvw, const jac_point_t *P, const
 uint32_t lift_basis(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E, const bool verify);
 
 /**
+ * @brief Given a basis in x-only, lift to a pair of Jacobian points, assumes x(P) and (A : C) is normalised
+ *
+ * @param P: a point
+ * @param Q: a point
+ * @param B: a basis
+ * @param E: an elliptic curve
+ * @param verify: if true, it checks if the lift was successful.
+ *
+ * @return 0xFFFFFFFF if there was no error, 0 otherwise
+ */
+uint32_t lift_basis_normalized(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec_curve_t *E, const bool verify);
+
+/**
  * @brief Check if basis points (P, Q) form a full 4-basis
  *
  * @param B: a basis
@@ -604,32 +617,27 @@ static int ec_test_is_on_curve(const ec_curve_t *E, const ec_point_t *P)
     return fp2_is_square(&tmp) | fp2_is_zero(&P->z); // point at inf
 }
 
-static void ec_j_inv(fp2_t* j_inv, const ec_curve_t* curve) 
-{
-    fp2_t nom, denom, tmp;
+static void
+ec_j_inv(fp2_t *j_inv, const ec_curve_t *curve)
+{ // j-invariant computation for Montgommery coefficient A2=(A+2C:4C)
+    fp2_t t0, t1;
 
-    fp2_sqr(&tmp, &curve->A);
-    
-    // nom = 3, denom = 4
-    fp2_set_one(&nom);
-    fp2_add(&denom, &nom, &nom);
-    fp2_add(&denom, &denom, &denom);
-    fp2_sub(&nom, &denom, &nom);
-
-    // nom = A^2 - 3, denom = A^2 - 4
-    fp2_sub(&nom, &tmp, &nom);
-    fp2_sub(&denom, &tmp, &denom);
-
-    // nom = 2^8 * (A^2 - 3)^3
-    fp2_sqr(&tmp, &nom);
-    fp2_mul(&nom, &nom, &tmp);
-    for (int i = 0; i < 8; i++) {
-        fp2_add(&nom, &nom, &nom);
-    }
-
-    // nom / denom
-    fp2_inv(&denom);
-    fp2_mul(j_inv, &nom, &denom);
+    fp2_sqr(&t1, &curve->C);
+    fp2_sqr(j_inv, &curve->A);
+    fp2_add(&t0, &t1, &t1);
+    fp2_sub(&t0, j_inv, &t0);
+    fp2_sub(&t0, &t0, &t1);
+    fp2_sub(j_inv, &t0, &t1);
+    fp2_sqr(&t1, &t1);
+    fp2_mul(j_inv, j_inv, &t1);
+    fp2_add(&t0, &t0, &t0);
+    fp2_add(&t0, &t0, &t0);
+    fp2_sqr(&t1, &t0);
+    fp2_mul(&t0, &t0, &t1);
+    fp2_add(&t0, &t0, &t0);
+    fp2_add(&t0, &t0, &t0);
+    fp2_inv(j_inv);
+    fp2_mul(j_inv, &t0, j_inv);
 }
 
 /**

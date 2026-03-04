@@ -215,65 +215,31 @@ compute_commitment_curve_verify(ec_curve_t *E_com,
     copy_bases_to_kernel(&dim_two_ker, B_chall_can, B_aux_can);
 
     // computing the isogeny
-    theta_couple_curve_t codomain;
     int codomain_splits;
-    ec_curve_init(&codomain.E1);
-    ec_curve_init(&codomain.E2);
+    
     // handling the special case where we don't need to perform any dim2 computation
     if (pow_dim2_deg_resp == 0) {
         codomain_splits = 1;
-        copy_curve(&codomain.E1, &EchallxEaux.E1);
-        copy_curve(&codomain.E2, &EchallxEaux.E2);
+        copy_curve(E_com, &EchallxEaux.E1);
+
         // We still need to check that E_chall is supersingular
         // This assumes that HD_extra_torsion == 2
         if (!ec_is_basis_four_torsion(B_chall_can, E_chall)) {
             return 0;
         }
     } else {
-        ec_normalize_point(&dim_two_ker.T1.P1);
-        ec_normalize_point(&dim_two_ker.T1.P2);
-        ec_normalize_point(&dim_two_ker.T2.P1);
-        ec_normalize_point(&dim_two_ker.T2.P2);
-        ec_normalize_point(&dim_two_ker.T1m2.P1);
-        ec_normalize_point(&dim_two_ker.T1m2.P2);
-
-        ec_curve_normalize_A24(&EchallxEaux.E1);
-        ec_curve_normalize_A24(&EchallxEaux.E2);
+        theta_couple_curve_t codomain;
+        ec_curve_init(&codomain.E1);
+        ec_curve_init(&codomain.E2);
 
         codomain_splits = theta_isogeny_chain_ver(
             &codomain, &EchallxEaux, &dim_two_ker, pow_dim2_deg_resp
         );
 
-        // printf("huh?\n");
-        // print_fp2(&codomain.E1.C);
-        ec_normalize_curve(&codomain.E1);
-        // print_fp2(&codomain.E1.C);
-        ec_normalize_curve(&codomain.E2);
-
-        // printf("E1.A\n");
-        // print_fp2(&EchallxEaux.E1.A);
-        // printf("E1.C\n");
-        // print_fp2(&EchallxEaux.E1.C);
-        // printf("E2.A\n");
-        // print_fp2(&EchallxEaux.E2.A);
-        // printf("E2.C\n");
-        // print_fp2(&EchallxEaux.E2.C);
-        // printf("F1.A\n");
-        // print_fp2(&codomain.E1.A);
-        // printf("F1.C\n");
-        // print_fp2(&codomain.E1.C);
-        // printf("F2.A\n");
-        // print_fp2(&codomain.E2.A);
-        // printf("F2.C\n");
-        // print_fp2(&codomain.E2.C);
+        // computing the commitment curve
+        // its always the first one because of our (2^n,2^n)-isogeny formulae
+        copy_curve(E_com, &codomain.E1);
     }
-
-    // computing the commitment curve
-    // its always the first one because of our (2^n,2^n)-isogeny formulae
-    copy_curve(E_com, &codomain.E1);
-
-    // printf("codomain_splits %d\n", codomain_splits);
-
     return codomain_splits;
 }
 
@@ -336,9 +302,8 @@ protocols_verify(signature_t *sig, const public_key_t *pk, const unsigned char *
     if (!compute_commitment_curve_verify(&E_com, &B_chall_can, &B_aux_can, &E_chall, &E_aux, pow_dim2_deg_resp))
         return 0;
 
-    scalar_t chk_chall;
-
     // recomputing the challenge vector
+    scalar_t chk_chall;
     hash_to_challenge(&chk_chall, pk, &E_com, m, l);
 
     // performing the final check
