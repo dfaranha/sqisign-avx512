@@ -68,6 +68,8 @@ static int test_verification_kat_single(int cnt) {
         if (cnt != -1 && cnt != count)
             continue;
 
+        printf(".");
+
         if ( FindMarker(fp_rsp, "mlen = ") ) {
             ret_val = fscanf(fp_rsp, "%lld", &mlen);
         } else {
@@ -106,6 +108,8 @@ static int test_verification_kat_single(int cnt) {
         free(sm_rsp);
 
     } while ( !done );
+
+    printf("\n");
 
     fclose(fp_rsp);
 
