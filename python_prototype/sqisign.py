@@ -161,8 +161,6 @@ class SQIsign:
         """
         Pack bytes and then repeatedly hash to obtain challenge bytes
         """
-        assert len(pk) == self.pk_len, "input has wrong length"
-
         j_chl = j_invariant(E_chl)
         j_chl_bytes_re = j_chl[0].to_bytes(byteorder="little")
         j_chl_bytes_im = j_chl[1].to_bytes(byteorder="little")
@@ -350,12 +348,8 @@ class SQIsign:
         E3 = Curve(A3, C3, (A3 + 2 * C3), 4 * C3)
 
 
-
         # Compute the hash from the codomain
         chl_prime = self._hash_challenge(public_key, E3, message)
-
-        print(list(chl))
-        print(list(chl_prime))
 
         # The signature is valid if we recover chl from the hash of the codomain
         # of the (2,2)-chain computed above
