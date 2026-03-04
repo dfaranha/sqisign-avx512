@@ -28,15 +28,13 @@ static int      test_verification_kat_single(int cnt);
 
 int test_verification_kat() {
     int rc;
-    for (int i = 0; i < 100; i++) {
-        rc = test_verification_kat_single(i);
-        if (rc != KAT_SUCCESS) {
-            printf("KAT failed at count %d\n", i);
-            return rc;
-        }
+    rc = test_verification_kat_single(-1);
+    if (rc == KAT_SUCCESS) {
+        printf("Known Answer Tests PASSED.\n");
+    } else {
+        printf("Known Answer Tests FAILED.\n");
     }
-    printf("Known Answer Tests PASSED. \n");
-    return KAT_SUCCESS;
+    return rc;
 }
 
 static int test_verification_kat_single(int cnt) {
