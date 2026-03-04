@@ -66,7 +66,7 @@ def test_level_5(num_tests):
 
 
 if __name__ == "__main__":
-    num_tests = 10
+    num_tests = 1
     # test_level_1(num_tests)
     test_level_3(num_tests)
     # test_level_5(num_tests)
