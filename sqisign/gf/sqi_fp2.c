@@ -111,26 +111,8 @@ fp2_sqrt(fp2_t *a)
     uint32_t f = fp_is_zero(&t0);
     fp_neg(&t1, &x0);
     fp_copy(&t0, &x1);
-    fp_select(&t0, &t0, &x0, f);
-    fp_select(&t1, &t1, &x1, f);
-
-    // Check if t0 is zero
-    uint32_t t0_is_zero = fp_is_zero(&t0);
-    // Check whether t0, t1 are odd
-    // Note: we encode to ensure canonical representation
-    uint8_t tmp_bytes[FP_ENCODED_BYTES];
-    fp_encode(tmp_bytes, &t0);
-    uint32_t t0_is_odd = -((uint32_t)tmp_bytes[0] & 1);
-    fp_encode(tmp_bytes, &t1);
-    uint32_t t1_is_odd = -((uint32_t)tmp_bytes[0] & 1);
-    // We negate the output if:
-    // t0 is odd, or
-    // t0 is zero and t1 is odd
-    uint32_t negate_output = t0_is_odd | (t0_is_zero & t1_is_odd);
-    fp_neg(&x0, &t0);
-    fp_select(&(a->re), &t0, &x0, negate_output);
-    fp_neg(&x0, &t1);
-    fp_select(&(a->im), &t1, &x0, negate_output);
+    fp_select(&a->re, &t0, &x0, f);
+    fp_select(&a->im, &t1, &x1, f);
 }
 
 uint32_t

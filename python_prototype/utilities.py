@@ -2,29 +2,29 @@ from avx_types import AVX_4x2x1, AVX_8x1x1
 from avx_arithmetic import avx_421_add, avx_811_add, avx_811_mul, avx_421_to_811
 
 
-def deterministic_fp_root(a):
-    """
-    Ensure the square root matches deterministic output
-    """
-    if int(a) & 1:
-        return -a
-    return a
+# def deterministic_fp_root(a):
+#     """
+#     Ensure the square root matches deterministic output
+#     """
+#     if int(a) & 1:
+#         return -a
+#     return a
 
 
-def deterministic_fp2_root(a):
-    """
-    Ensure the square root matches deterministic output
-    """
-    a0, a1 = a.polynomial().list()
+# def deterministic_fp2_root(a):
+#     """
+#     Ensure the square root matches deterministic output
+#     """
+#     a0, a1 = a.polynomial().list()
 
-    a0_is_zero = a0.is_zero()
-    a0_is_odd = int(a0) & 1
-    a1_is_odd = int(a1) & 1
+#     a0_is_zero = a0.is_zero()
+#     a0_is_odd = int(a0) & 1
+#     a1_is_odd = int(a1) & 1
 
-    # if a0 is odd, or a0 = 0 and a1 is odd, negate result
-    if a0_is_odd or (a0_is_zero and a1_is_odd):
-        return -a
-    return a
+#     # if a0 is odd, or a0 = 0 and a1 is odd, negate result
+#     if a0_is_odd or (a0_is_zero and a1_is_odd):
+#         return -a
+#     return a
 
 
 def sqrt_fp(x):
@@ -34,7 +34,7 @@ def sqrt_fp(x):
     p = x.parent().characteristic()
     assert p % 4 == 3
     r = x ** ((p + 1) // 4)
-    return deterministic_fp_root(r)
+    return r
 
 
 def sqrt_fp2(x):
@@ -68,7 +68,7 @@ def sqrt_fp2(x):
         root = F([x1, -x0])
 
     assert root**2 == x
-    return deterministic_fp2_root(root)
+    return root
 
 
 def batched_inversion(*input):
