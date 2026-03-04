@@ -104,7 +104,7 @@ int splitting_get_index(__m512i* null)
     num_found += t;
     index = index*(1-t) + 9*t;
 
-    printf("num_found %d\n", num_found);
+    // printf("num_found %d\n", num_found);
     if (num_found != 1) {
         return -1;
     } 

@@ -67,7 +67,7 @@ int main()
     // {
     //     return 0;
     // }
-    passed = test_verif_KAT();
+    passed = test_verification_kat();
     if(!passed) {
         return 0;
     }

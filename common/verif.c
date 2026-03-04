@@ -240,70 +240,39 @@ compute_commitment_curve_verify(ec_curve_t *E_com,
         ec_curve_normalize_A24(&EchallxEaux.E1);
         ec_curve_normalize_A24(&EchallxEaux.E2);
 
-
-        printf("ker.T1.P1.x\n");
-        print_fp2(&dim_two_ker.T1.P1.x);
-        printf("ker.T1.P1.z\n");
-        print_fp2(&dim_two_ker.T1.P1.z);
-        
-        printf("ker.T1.P2.x\n");
-        print_fp2(&dim_two_ker.T1.P2.x);
-        printf("ker.T1.P2.z\n");
-        print_fp2(&dim_two_ker.T1.P2.z);
-
-        printf("ker.T2.P1.x\n");
-        print_fp2(&dim_two_ker.T2.P1.x);
-        printf("ker.T2.P1.z\n");
-        print_fp2(&dim_two_ker.T2.P1.z);
-
-        printf("ker.T2.P2.x\n");
-        print_fp2(&dim_two_ker.T2.P2.x);
-        printf("ker.T2.P2.z\n");
-        print_fp2(&dim_two_ker.T2.P2.z);
-
-        printf("ker.T1m2.P1.x\n");
-        print_fp2(&dim_two_ker.T1m2.P1.x);
-        printf("ker.T1m2.P1.z\n");
-        print_fp2(&dim_two_ker.T1m2.P1.z);
-
-        printf("ker.T1m2.P2.x\n");
-        print_fp2(&dim_two_ker.T1m2.P2.x);
-        printf("ker.T1m2.P2.z\n");
-        print_fp2(&dim_two_ker.T1m2.P2.z);
-
         codomain_splits = theta_isogeny_chain_ver(
             &codomain, &EchallxEaux, &dim_two_ker, pow_dim2_deg_resp
         );
 
-        printf("huh?\n");
-        print_fp2(&codomain.E1.C);
+        // printf("huh?\n");
+        // print_fp2(&codomain.E1.C);
         ec_normalize_curve(&codomain.E1);
-        print_fp2(&codomain.E1.C);
+        // print_fp2(&codomain.E1.C);
         ec_normalize_curve(&codomain.E2);
 
-        printf("E1.A\n");
-        print_fp2(&EchallxEaux.E1.A);
-        printf("E1.C\n");
-        print_fp2(&EchallxEaux.E1.C);
-        printf("E2.A\n");
-        print_fp2(&EchallxEaux.E2.A);
-        printf("E2.C\n");
-        print_fp2(&EchallxEaux.E2.C);
-        printf("F1.A\n");
-        print_fp2(&codomain.E1.A);
-        printf("F1.C\n");
-        print_fp2(&codomain.E1.C);
-        printf("F2.A\n");
-        print_fp2(&codomain.E2.A);
-        printf("F2.C\n");
-        print_fp2(&codomain.E2.C);
+        // printf("E1.A\n");
+        // print_fp2(&EchallxEaux.E1.A);
+        // printf("E1.C\n");
+        // print_fp2(&EchallxEaux.E1.C);
+        // printf("E2.A\n");
+        // print_fp2(&EchallxEaux.E2.A);
+        // printf("E2.C\n");
+        // print_fp2(&EchallxEaux.E2.C);
+        // printf("F1.A\n");
+        // print_fp2(&codomain.E1.A);
+        // printf("F1.C\n");
+        // print_fp2(&codomain.E1.C);
+        // printf("F2.A\n");
+        // print_fp2(&codomain.E2.A);
+        // printf("F2.C\n");
+        // print_fp2(&codomain.E2.C);
     }
 
     // computing the commitment curve
     // its always the first one because of our (2^n,2^n)-isogeny formulae
     copy_curve(E_com, &codomain.E1);
 
-    printf("codomain_splits %d\n", codomain_splits);
+    // printf("codomain_splits %d\n", codomain_splits);
 
     return codomain_splits;
 }
@@ -369,15 +338,12 @@ protocols_verify(signature_t *sig, const public_key_t *pk, const unsigned char *
 
     scalar_t chk_chall;
 
-    printf("The 2D isogeny was successful\n");
-
     // recomputing the challenge vector
     hash_to_challenge(&chk_chall, pk, &E_com, m, l);
 
     // performing the final check
     verify = mp_compare(sig->chall_coeff, chk_chall, NWORDS_ORDER) == 0;
 
-    printf("verify %d \n", verify);
     return verify;
 }
 

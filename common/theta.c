@@ -306,7 +306,7 @@ bool theta_isogeny_chain_pair(
 
     success &= lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
     success &= lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
-    printf("lift %d\n", success);
+    // printf("lift %d\n", success);
     // We are now in the position to convert from 64 to 51 bit limbs
     // For the curve we need to pack the Montgomery coefficient for
     // arithmetic.
@@ -350,7 +350,7 @@ bool theta_isogeny_chain_pair(
         strat_points_x + (8*current), strat_points_z + (8*current),
         verify
     );
-    printf("gluing_codom %d\n", success);
+    // printf("gluing_codom %d\n", success);
 
     // Package the point we use for translation
     // T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
@@ -382,7 +382,7 @@ bool theta_isogeny_chain_pair(
         eval_pts_theta, pts, OA_dual_inv, 
         matrix01, matrix23, num_pts, verify
     );
-    printf("gluing eval %d\n", success);
+    // printf("gluing eval %d\n", success);
 
     // Step Two: Compute the rest of the chain
     int step = 0;
@@ -417,7 +417,7 @@ bool theta_isogeny_chain_pair(
             OA, OA_dual_inv, strat_theta_pair + (16*current), 
             h1, h2, codom_verify
         );
-        printf("%d-th codomain %d\n", step, success);
+        // printf("%d-th codomain %d\n", step, success);
 
         // Push the kernel through the images
         // we have current number of pairs, so 2*current number of points
@@ -445,7 +445,7 @@ bool theta_isogeny_chain_pair(
 
     success &= splitting_theta_to_product(res_E34, OA, verify);
     success &= splitting_theta_point_to_mont_list_pair(res_pts, eval_pts_theta, OA, num_pts, verify);
-    printf("splitting %d\n", success);
+    // printf("splitting %d\n", success);
     return success;
 }
 
