@@ -4,6 +4,7 @@
 #include "sqi_encoded_sizes_lvl3.h"
 #include "sqi_ec_params_lvl3.h"
 #include <assert.h>
+#include "isog-1d.h"
 #include "theta.h"
 #include "sqi_test_extras.h"
 
@@ -38,30 +39,28 @@ static int
 compute_challenge_verify(ec_curve_t *E_chall, const signature_t *sig, const ec_curve_t *Epk, const uint8_t hint_pk)
 {
     ec_basis_t bas_EA;
-    ec_isog_even_t phi_chall;
+    ec_point_t ker;
+    copy_curve(E_chall, Epk);
 
     // Set domain and length of 2^n isogeny
-    copy_curve(&phi_chall.curve, Epk);
-    phi_chall.length = TORSION_EVEN_POWER - sig->backtracking;
+    int len = TORSION_EVEN_POWER - sig->backtracking;
 
     // Compute the basis from the supplied hint
-    if (!ec_curve_to_basis_2f_from_hint(&bas_EA, &phi_chall.curve, TORSION_EVEN_POWER, hint_pk)) // canonical
+    if (!ec_curve_to_basis_2f_from_hint(&bas_EA, E_chall, TORSION_EVEN_POWER, hint_pk)) // canonical
         return 0;
 
     // recovering the exact challenge
-    {
-        if (!ec_ladder3pt(&phi_chall.kernel, sig->chall_coeff, &bas_EA.P, &bas_EA.Q, &bas_EA.PmQ, &phi_chall.curve)) {
-            return 0;
-        };
-    }
+    if (!ec_ladder3pt(&ker, sig->chall_coeff, &bas_EA.P, &bas_EA.Q, &bas_EA.PmQ, E_chall)) {
+        return 0;
+    };
 
     // Double the kernel until is has the correct order
-    ec_dbl_iter(&phi_chall.kernel, sig->backtracking, &phi_chall.kernel, &phi_chall.curve);
+    ec_dbl_iter(&ker, sig->backtracking, &ker, E_chall);
 
     // Compute the codomain
-    copy_curve(E_chall, &phi_chall.curve);
-    if (ec_eval_even(E_chall, &phi_chall, NULL, 0))
+    if (!isog_chain_1d(E_chall, E_chall, &ker, len, NULL, 0, true)) {
         return 0;
+    }
     return 1;
 }
 
@@ -164,7 +163,7 @@ two_response_isogeny_verify(ec_curve_t *E_chall, ec_basis_t *B_chall_can, const 
         printf("kernel does not have order 2^(two_resp_length)\n");
 #endif
 
-    if (ec_eval_small_chain(E_chall, &ker, sig->two_resp_length, points, 3, false)) {
+    if (!isog_chain_1d(E_chall, E_chall, &ker, sig->two_resp_length, points, 3, true)) {
         return 0;
     }
 
