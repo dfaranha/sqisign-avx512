@@ -1,5 +1,6 @@
 #include "ec.h"
 #include "fp2_lvl3.h"
+#include "sqi_fp_constants_lvl3.h"
 
 void ec_point_unvectorized_to_4x4x2x1(__m512i* res_x, __m512i* res_z, ec_point_t* src)
 {
@@ -253,54 +254,133 @@ void ec_double_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24)
     fp2_mul_2x4x1(res, t0, t1);
 }
 
-void ec_double_normA24_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24)
+// TODO: This is not constant time, but also not used other than verification. Should we change it?
+void ec_double_iter_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const int n)
 {
-    __m512i t0[8], t1[8], t2[8], t3[8], idx0, idx1;
+    if (n == 0) {
+        fp2_copy_2x4x1(res, P);
+        return;
+    }
+    
+    ec_double_1x2x4x1(res, P, A24);
+    for (int i = 0; i < n-1; i++) {
+        ec_double_1x2x4x1(res, res, A24);
+    }   
+}
+
+// TODO: Name is slightly confusing, all operations are 4x2x1
+void ec_double_add_1x2x4x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A24)
+{
+    __m512i t0[8], t1[8], t2[8];
+    __m512i idx0, idx1;
     __mmask8 mask;
 
-    // t0 = (X, X), t1 = (Z, Z)
-    idx0 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
-    idx1 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
-    for (int i = 0; i < 8; i++) {
-        t0[i] = VPERM512(idx0, P[i]);
-        t1[i] = VPERM512(idx1, P[i]);
-    }
-
-    // t0 = (X + Z, X - Z)
-    // t1 = t0^2
+    // t0 = (P.x, Q.x, P.x, Q.x)
+    // t1 = (P.z, Q.z, P.z, Q.z)
+    idx0 = VSET(0, 1, 4, 5, 0, 1, 4, 5);
+    idx1 = VSET(2, 3, 6, 7, 2, 3, 6, 7);
     mask = 0xf;
-    fp2_mixaddsub_2x4x1(t0, t0, t1, mask);
-    fp2_sqr_2x4x1(t1, t0);
-
-    // t0 = (t1[0] + t1[1], t1[0] - t1[1])
     for (int i = 0; i < 8; i++) {
-        t0[i] = VPERM512(idx0, t1[i]);
-        t2[i] = VPERM512(idx1, t1[i]);
+        t0[i] = VPERM512(idx0, P_Q[i]);
+        t1[i] = VPERM512(idx1, P_Q[i]);
     }
-    fp2_mixaddsub_2x4x1(t0, t0, t2, mask);
+    // t0 = (P.x + P.z, Q.x + Q.z, P.x - P.z, Q.x - Q.z)
+    fp2_mixaddsub_4x2x1(t0, t0, t1, mask);
 
-    // t2 = (A24 * t0[1], C24 * t1[1])
-    idx0 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+    // t1 = (t0[0], t0[2], t0[0], t0[2])
+    // t0 = (t0[0], t0[2], t0[3], t0[1])
+    idx1 = VSET(0, 1, 4, 5, 6, 7, 2, 3);
     for (int i = 0; i < 8; i++) {
-        t2[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        t1[i] = VPERM512(idx0, t0[i]);
+        t0[i] = VPERM512(idx1, t0[i]);
     }
-    fp2_mul_2x4x1(t2, t2, A24);
+    fp2_mul_4x2x1(t0, t0, t1);
 
-    // TODO: Wasting one addition here.
-    // t3 = (-, t2[0] + t2[1])
-    // Maybe we can implement 1x8x1 Fp2?
-    idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);
+    // t1 = (t0[0], t0[2], t0[0], t0[2])
+    // t2 = (t0[1], t0[3], t0[1], t0[3])
+    idx1 = VSET(2, 3, 6, 7, 2, 3, 6, 7);
     for (int i = 0; i < 8; i++) {
-        t3[i] = VPERM512(idx0, t2[i]);
+        t1[i] = VPERM512(idx0, t0[i]);
+        t2[i] = VPERM512(idx1, t0[i]);
     }
-    fp2_add_2x4x1(t3, t3, t2);
-    
-    // res_X = t1[0] * t2[1], res_Z = t0[1] * t3[1]
-    idx0 = VSET(8, 9, 10, 11, 4, 5, 6, 7);
-    idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+    fp2_mixaddsub_4x2x1(t1, t1, t2, mask);
+
+    // Moving t0[0], t1[2] to res to free them after the next mul
+    idx0 = VSET(0, 1, 12, 13, 0, 0, 0, 0);
+    idx1 = VSET(0, 1, 2, 3, 10, 11, 8, 9);
+    for (int i = 0; i < 8; i++) {
+        res[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        res[i] = VBLENDPERM(idx1, res[i], PmQ_A24[i]);
+    }
+
+    // t0 = (t0[1], t1[2], t1[1], t1[3])
+    // t1 = (PmQ_A24[3], PmQ_A24[2], t1[1], t1[3])
+    idx0 = VSET(2, 3, 12, 13, 10, 11, 14, 15);
+    idx1 = VSET(14, 15, 12, 13, 2, 3, 6, 7);
     for (int i = 0; i < 8; i++) {
         t0[i] = VBLENDPERM(idx0, t0[i], t1[i]);
-        t1[i] = VBLENDPERM(idx1, t2[i], t3[i]);
+        t1[i] = VBLENDPERM(idx1, t1[i], PmQ_A24[i]);
     }
-    fp2_mul_2x4x1(res, t0, t1);
+    fp2_mul_4x2x1(t0, t0, t1);
+
+    // t1 = (t0[0], t0[0], t0[2], t0[3])
+    // t2 = (0    , t0[1], 0    , 0    )
+    idx0 = VSET(0, 1, 0, 1, 4, 5, 6, 7);
+    idx1 = VSET(0, 0, 2, 3, 0, 0, 0, 0);
+    mask = 0xc;
+    for (int i = 0; i < 8; i++) {
+        t1[i] = VPERM512(idx0, t0[i]);
+        t2[i] = VPERM512MASKZ(mask, t0[i], idx1);
+    }
+    fp2_add_4x2x1(t0, t1, t2);
+
+    fp2_mul_4x2x1(res, res, t0);
+}
+
+bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const digit_t *m)
+{
+    __m512i X0_X1[8], XD_A24[8], X0_XD[8], X1_A24[8];
+    __m512i idx_first1_second2 = VSET(0, 1, 2, 3, 12, 13, 14, 15);
+    __m512i idx_first1_first2 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    __m512i idx_second1_second2 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+
+    // Formulas are not valid if PmQ.x = 0 or PmQ.z = 0
+    if (fp2_is_zero_2x4x1(basis+16)) {
+        return false;
+    }
+
+    // X0 = Q, X1 = P, XD = PmQ
+    fp2_2x4x1_to_4x2x1(X0_X1, basis+8, basis);
+    fp2_2x4x1_to_4x2x1(XD_A24, basis+16, A24);
+
+    digit_t t;
+    for (int i = 0; i < NWORDS_ORDER; i++) {
+        t = 1;
+        for (int j = 0; j < 64; j++) {
+            uint64_t bit_set = (t & m[i]);
+            if (bit_set) {
+                ec_double_add_1x2x4x1(X0_X1, X0_X1, XD_A24);
+            } else {
+                // Swap X1 and XD
+                for (int k = 0; k < 8; k++) {
+                    X0_XD[k] = VBLENDPERM(idx_first1_first2, X0_X1[k], XD_A24[k]);
+                    X1_A24[k] = VBLENDPERM(idx_second1_second2, X0_X1[k], XD_A24[k]);
+                }
+                
+                ec_double_add_1x2x4x1(X0_XD, X0_XD, X1_A24);
+
+                // Update X0 and XD
+                for (int k = 0; k < 8; k++) {
+                    X0_X1[k] = VBLENDPERM(idx_first1_second2, X0_XD[k], X0_X1[k]);
+                    XD_A24[k] = VBLENDPERM(idx_second1_second2, X0_XD[k], XD_A24[k]);
+                }
+            }
+            t <<= 1;
+        }
+    }
+
+    // We output X1 and ignore X0
+    fp2_4x2x1_to_2x4x1(XD_A24, res, X0_X1);
+
+    return true;
 }

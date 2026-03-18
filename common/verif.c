@@ -4,6 +4,7 @@
 #include "sqi_encoded_sizes_lvl3.h"
 #include "sqi_ec_params_lvl3.h"
 #include <assert.h>
+#include "ec.h"
 #include "isog-1d.h"
 #include "theta.h"
 #include "sqi_test_extras.h"
@@ -38,27 +39,38 @@ check_canonical_basis_change_matrix(const signature_t *sig)
 static int
 compute_challenge_verify(ec_curve_t *E_chall, const signature_t *sig, const ec_curve_t *Epk, const uint8_t hint_pk)
 {
-    ec_basis_t bas_EA;
-    ec_point_t ker;
+    ec_basis_t bas_Epk_unvec;
+    ec_point_t ker_unvec;
     copy_curve(E_chall, Epk);
 
     // Set domain and length of 2^n isogeny
     int len = TORSION_EVEN_POWER - sig->backtracking;
 
     // Compute the basis from the supplied hint
-    if (!ec_curve_to_basis_2f_from_hint(&bas_EA, E_chall, TORSION_EVEN_POWER, hint_pk)) // canonical
+    if (!ec_curve_to_basis_2f_from_hint(&bas_Epk_unvec, E_chall, TORSION_EVEN_POWER, hint_pk)) // canonical
         return 0;
 
+    // ============== VECTORIZED ================================================================================
+
+    __m512i ker[8], A24[8], bas_Epk[24];
+    ec_point_unvec_to_1x2x4x1(A24, &E_chall->A24);
+    ec_point_unvec_to_1x2x4x1(bas_Epk, &bas_Epk_unvec.P);
+    ec_point_unvec_to_1x2x4x1(bas_Epk+8, &bas_Epk_unvec.Q);
+    ec_point_unvec_to_1x2x4x1(bas_Epk+16, &bas_Epk_unvec.PmQ);
+    
     // recovering the exact challenge
-    if (!ec_ladder3pt(&ker, sig->chall_coeff, &bas_EA.P, &bas_EA.Q, &bas_EA.PmQ, E_chall)) {
+    if (!ec_ladder_3pt_1x2x4x1(ker, A24, bas_Epk, sig->chall_coeff)) {
         return 0;
-    };
+    }
 
     // Double the kernel until is has the correct order
-    ec_dbl_iter(&ker, sig->backtracking, &ker, E_chall);
+    ec_double_iter_1x2x4x1(ker, ker, A24, sig->backtracking);
+    ec_point_1x2x4x1_to_unvec(&ker_unvec, ker);
+
+    // ============== VECTORIZED ================================================================================
 
     // Compute the codomain
-    if (!isog_chain_1d(E_chall, E_chall, &ker, len, NULL, 0, true)) {
+    if (!isog_chain_1d(E_chall, E_chall, &ker_unvec, len, NULL, 0, true)) {
         return 0;
     }
     return 1;

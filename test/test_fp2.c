@@ -1903,7 +1903,7 @@ bool test_fp2(int iterations)
         rand_fp2_2x4x1(b+8);
 
         // Conversion back and forth is identity
-        fp2_4x2x1_to_2x4x1(d, a);
+        fp2_4x2x1_to_2x4x1(d, d+8, a);
         fp2_2x4x1_to_4x2x1(e, d, d+8);
         if (fp2_is_equal_4x2x1(e, a) != 0xf) {
             passed = 0;
@@ -1911,7 +1911,7 @@ bool test_fp2(int iterations)
         }
 
         fp2_2x4x1_to_4x2x1(f, b, b+8);
-        fp2_4x2x1_to_2x4x1(e, f);
+        fp2_4x2x1_to_2x4x1(e, e+8, f);
         if (fp2_is_equal_2x4x1(e, b) != 0x3 || fp2_is_equal_2x4x1(e+8, b+8) != 0x3) {
             passed = 0;
             break;
@@ -1931,8 +1931,8 @@ bool test_fp2(int iterations)
         // Conversion commutes with arithmetic
         fp2_mul_4x2x1(c, a, b);
 
-        fp2_4x2x1_to_2x4x1(d, a);
-        fp2_4x2x1_to_2x4x1(e, b);
+        fp2_4x2x1_to_2x4x1(d, d+8, a);
+        fp2_4x2x1_to_2x4x1(e, e+8, b);
         fp2_mul_2x4x1(f, d, e);
         fp2_mul_2x4x1(f+8, d+8, e+8);
         fp2_2x4x1_to_4x2x1(f, f, f+8);
@@ -1950,7 +1950,7 @@ bool test_fp2(int iterations)
         fp2_2x4x1_to_4x2x1(d, a, a+8);
         fp2_2x4x1_to_4x2x1(e, b, b+8);
         fp2_mul_4x2x1(f, d, e);
-        fp2_4x2x1_to_2x4x1(e, f);
+        fp2_4x2x1_to_2x4x1(e, e+8, f);
 
         if (fp2_is_equal_2x4x1(c, e) != 0x3 || fp2_is_equal_2x4x1(c+8, e+8) != 0x3) {
             passed = 0;

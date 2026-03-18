@@ -212,9 +212,6 @@ bool isog_chain_1d(
 
         // Evaluate 4-isogeny
         four_isog_codom_1x2x4x1(A24, eval_data, strat + 8*current);
-        ec_point_t ev[2];
-        ec_point_1x2x4x1_to_unvec(ev, eval_data);
-        ec_point_1x2x4x1_to_unvec(ev+1, eval_data+8);
          
         for (int i = 0; i < current; i++) {
             four_isog_eval_1x2x4x1(strat + 8*i, eval_data, strat + 8*i);
