@@ -148,12 +148,13 @@ void four_isog_eval_1x2x4x1(__m512i* Q, __m512i* eval_data, __m512i* P)
     fp2_mul_2x4x1(Q, t0, t1);
 }
 
-bool isog_chain_1d(
-    ec_curve_t* res_E2,
-    ec_curve_t* E1,
-    ec_point_t* ker,
+// Purely in 1x2x4x1
+bool isog_chain_1d_1x2x4x1(
+    __m512i* res_A24,
+    __m512i *A24,
+    __m512i *ker,
     const unsigned int isog_len,
-    ec_point_t* pts,
+    __m512i *pts,
     const unsigned int num_pts,
     const bool verify
 )
@@ -163,15 +164,11 @@ bool isog_chain_1d(
         space++;
     }
 
-    __m512i strat[8*space], pts_vec[8*num_pts], A24[8], eval_data[16], test[8];
+    __m512i strat[8*space], eval_data[16], test[8];
     uint16_t orders[space];
     orders[0] = isog_len;
     int current = 0;
-    ec_point_unvec_to_1x2x4x1(strat, ker);
-    ec_point_unvec_to_1x2x4x1(A24, &E1->A24);
-    for (int i = 0; i < num_pts; i++) {
-        ec_point_unvec_to_1x2x4x1(pts_vec + 8*i, pts+i);
-    }
+    fp2_copy_2x4x1(strat, ker);
     
     for (int j = 0; j < isog_len/2; j++) {
         assert(current >= 0);
@@ -218,7 +215,7 @@ bool isog_chain_1d(
             orders[i] -= 2;
         }
         for (int i = 0; i < num_pts; i++) {
-            four_isog_eval_1x2x4x1(pts_vec + 8*i, eval_data, pts_vec + 8*i);
+            four_isog_eval_1x2x4x1(pts + 8*i, eval_data, pts + 8*i);
         }
         current--;
     }
@@ -238,9 +235,32 @@ bool isog_chain_1d(
 
         two_isog_codom_1x2x4x1(A24, eval_data, strat);
         for (int i = 0; i < num_pts; i++) {
-            two_isog_eval_1x2x4x1(pts_vec+8*i, eval_data, pts_vec+8*i);
+            two_isog_eval_1x2x4x1(pts+8*i, eval_data, pts+8*i);
         }
     }
+
+    return true;
+}
+
+// Does the unvec <--> 1x2x4x1 conversion
+bool isog_chain_1d(
+    ec_curve_t* res_E2,
+    ec_curve_t* E1,
+    ec_point_t* ker,
+    const unsigned int isog_len,
+    ec_point_t* pts,
+    const unsigned int num_pts,
+    const bool verify
+)
+{
+    __m512i A24[8], ker_vec[8], pts_vec[8*num_pts];
+    ec_point_unvec_to_1x2x4x1(A24, &E1->A24);
+    ec_point_unvec_to_1x2x4x1(ker_vec, ker);
+    for (int i = 0; i < num_pts; i++) {
+        ec_point_unvec_to_1x2x4x1(pts_vec + 8*i, pts+i);
+    }
+
+    bool success = isog_chain_1d_1x2x4x1(A24, A24, ker_vec, isog_len, pts_vec, num_pts, verify);
 
     ec_point_1x2x4x1_to_unvec(&res_E2->A24, A24);
     for (int i = 0; i < num_pts; i++) {
@@ -251,5 +271,5 @@ bool isog_chain_1d(
     A24_to_AC(res_E2, &res_E2->A24);
     res_E2->is_A24_computed_and_normalized = false;
 
-    return true;
+    return success;
 }

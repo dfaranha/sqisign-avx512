@@ -384,3 +384,34 @@ bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const dig
 
     return true;
 }
+
+// ========================= Debugging functions =================================================
+
+bool test_point_order_twof_1x2x4x1(__m512i* P, __m512i* A24, unsigned int f)
+{
+    __m512i Q[8];
+    fp2_copy_2x4x1(Q, P);
+
+    int z_is_zero = fp2_is_zero_2x4x1(Q) & 0x2;
+    if (z_is_zero || f == 0) {
+        return f == 0 && z_is_zero;
+    }
+
+    ec_double_iter_1x2x4x1(Q, Q, A24, f-1);
+    z_is_zero = fp2_is_zero_2x4x1(Q) & 0x2;
+    if (z_is_zero) {
+        return false;
+    }
+
+    ec_double_1x2x4x1(Q, Q, A24);
+    z_is_zero = fp2_is_zero_2x4x1(Q) & 0x2;
+    return z_is_zero;
+}
+
+bool test_basis_order_twof_1x2x4x1(__m512i* B, __m512i* A24, unsigned int f)
+{
+    return 
+        test_point_order_twof_1x2x4x1(B, A24, f) &
+        test_point_order_twof_1x2x4x1(B+8, A24, f) &
+        test_point_order_twof_1x2x4x1(B+16, A24, f);
+}

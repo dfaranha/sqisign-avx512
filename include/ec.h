@@ -109,4 +109,9 @@ void ec_double_add_1x2x4x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A24);
  */
 bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const digit_t *m);
 
+// ========================= Debugging functions =================================================
+
+bool test_point_order_twof_1x2x4x1(__m512i* P, __m512i* A24, unsigned int f);
+bool test_basis_order_twof_1x2x4x1(__m512i* B, __m512i* A24, unsigned int f);
+
 #endif

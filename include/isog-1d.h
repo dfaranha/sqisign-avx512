@@ -14,14 +14,23 @@ void two_isog_eval_1x2x4x1(__m512i* Q, __m512i* eval_data, __m512i* P);
 void four_isog_codom_1x2x4x1(__m512i* res_A24, __m512i* res_eval_data, __m512i* ker);
 void four_isog_eval_1x2x4x1(__m512i* Q, __m512i* eval_data, __m512i* P);
 
+bool isog_chain_1d_1x2x4x1(
+    __m512i* res_A24,
+    __m512i *A24,
+    __m512i *ker,
+    const unsigned int isog_len,
+    __m512i *pts,
+    const unsigned int num_pts,
+    const bool verify
+);
 
 bool isog_chain_1d(
     ec_curve_t* res_E2,
     ec_curve_t *E1,
-    ec_point_t *pts,
-    const unsigned int num_pts,
     ec_point_t *ker,
     const unsigned int isog_len,
+    ec_point_t *pts,
+    const unsigned int num_pts,
     const bool verify
 );
 
