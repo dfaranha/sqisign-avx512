@@ -1,7 +1,7 @@
 from avx_types import AVX_4x2x1
 from elliptic_types import Curve, BasisX, PointX
 
-from avx_arithmetic import avx_811_to_421
+from avx_arithmetic import avx_811_to_421, avx_421_to_811
 from elliptic_arithmetic import (
     lift_normalised_basis_to_jacobian,
     four_jac_to_ws,
@@ -308,8 +308,9 @@ def theta_isogeny_chain_8x1x1(
         orders[i] = orders[i] - 1
 
     # Push other points through gluing isogeny
+    OA_inv_inv = avx_421_to_811(OA_inv, OA_inv)
     eval_pairs = [
-        gluing_eval_special_pair(P1, P2, Q1, Q2, OA_inv, N)
+        gluing_eval_special_pair(P1, P2, Q1, Q2, OA_inv_inv, N)
         for ((P1, P2), (Q1, Q2)) in eval_pairs
     ]
     eval_single = [gluing_eval_special(P1, P2, OA_inv, N) for (P1, P2) in eval_single]
@@ -320,7 +321,7 @@ def theta_isogeny_chain_8x1x1(
     j = 0
     while k >= 0 and orders[k] != 0:
         j = j + 1
-        C1, C2 = theta_precompute(OA)
+        C1, C2 = theta_precompute(OA, use_wide=True)
 
         # Perform the doubling
         while orders[k] != 1:
@@ -339,16 +340,17 @@ def theta_isogeny_chain_8x1x1(
         # Compute the codomain from the kernel
         ker = strat_points[k]
         OA, inv = theta_codomain_8x1x1(ker, h1, h2)
+        inv_inv = avx_421_to_811(inv, inv)
 
         # Push kernel though the gluing isogeny
         for i in range(k):
             P = strat_points[i]
-            strat_points[i] = theta_eval_pair(P, inv, h1, h2)
+            strat_points[i] = theta_eval_pair(P, inv_inv, h1, h2)
             orders[i] = orders[i] - 1
         k = k - 1
 
         # Push the images through the kernel
-        eval_pairs = [theta_eval_pair(P, inv, h1, h2) for P in eval_pairs]
+        eval_pairs = [theta_eval_pair(P, inv_inv, h1, h2) for P in eval_pairs]
         eval_single = [theta_eval(P, inv, h1, h2) for P in eval_single]
 
     # Step Three:
@@ -363,12 +365,14 @@ def theta_isogeny_chain_8x1x1(
 
     h1, h2 = False, False
     OA, inv = theta_codomain_with_four_torsion(ker, OA, h1, h2)
-    eval_pairs = [theta_eval_pair(P, inv, h1, h2) for P in eval_pairs]
+    inv_inv = avx_421_to_811(inv, inv)
+    eval_pairs = [theta_eval_pair(P, inv_inv, h1, h2) for P in eval_pairs]
     eval_single = [theta_eval(P, inv, h1, h2) for P in eval_single]
 
     h1, h2 = True, False
     OA, inv = theta_codomain_with_no_torsion(OA, h1, h2)
-    eval_pairs = [theta_eval_pair(P, inv, h1, h2) for P in eval_pairs]
+    inv_inv = avx_421_to_811(inv, inv)
+    eval_pairs = [theta_eval_pair(P, inv_inv, h1, h2) for P in eval_pairs]
     eval_single = [theta_eval(P, inv, h1, h2) for P in eval_single]
 
     # Step Four:
@@ -487,9 +491,9 @@ def theta_isogeny_chain_with_torsion_4x2x1(
 
         # For the ultimate and penultimate steps we do extra / less Hadamards
         # to avoid zeros from the product structure
-        if i == length - 1:
+        if j == length - 1:
             h1, h2 = True, False
-        elif i == length - 2:
+        elif j == length - 2:
             h1, h2 = False, False
         else:
             h1, h2 = False, True
@@ -538,6 +542,7 @@ def theta_isogeny_chain_with_torsion_8x1x1(
     length: int,
     eval_points: list[tuple[PointX, PointX]] = [],
     randomise: bool = False,
+    verify: bool = False,
 ):
     # We normalise points and the curve parameters the below functions stay with
     # 64 bit limbs to make use of the faster(?) sqrt we have available
@@ -580,7 +585,7 @@ def theta_isogeny_chain_with_torsion_8x1x1(
 
     # Compute the gluing codomain
     X_8, Y_8, Z_8 = strat_points[k]
-    OA, OA_inv, J_prime, N = gluing_codomain(A24_12, X_8, Z_8)
+    OA, OA_inv, J_prime, N = gluing_codomain(A24_12, X_8, Z_8, verify)
 
     # Package the point we use for translation
     T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
@@ -596,8 +601,9 @@ def theta_isogeny_chain_with_torsion_8x1x1(
         orders[i] = orders[i] - 1
 
     # Push other points through gluing isogeny
+    OA_inv_inv = avx_421_to_811(OA_inv, OA_inv)
     eval_pairs = [
-        gluing_eval_special_pair(P1, P2, Q1, Q2, OA_inv, N)
+        gluing_eval_special_pair(P1, P2, Q1, Q2, OA_inv_inv, N)
         for ((P1, P2), (Q1, Q2)) in eval_pairs
     ]
     eval_single = [gluing_eval_special(P1, P2, OA_inv, N) for (P1, P2) in eval_single]
@@ -608,7 +614,7 @@ def theta_isogeny_chain_with_torsion_8x1x1(
     j = 0
     while k >= 0 and orders[k] != 0:
         j = j + 1
-        C1, C2 = theta_precompute(OA)
+        C1, C2 = theta_precompute(OA, use_wide=True)
 
         # Perform the doubling
         while orders[k] != 1:
@@ -620,28 +626,36 @@ def theta_isogeny_chain_with_torsion_8x1x1(
             strat_points[k] = ker
             orders[k] = orders[k - 1] - n
 
+        # We cannot perform verification of codomain on the last step
+        # instead we find errors from the splitting isomorphism
+        if j == length - 1:
+            codomain_verify = False
+        else:
+            codomain_verify = verify
+
         # For the ultimate and penultimate steps we do extra / less Hadamards
         # to avoid zeros from the product structure
-        if i == length - 1:
+        if j == length - 1:
             h1, h2 = True, False
-        elif i == length - 2:
+        elif j == length - 2:
             h1, h2 = False, False
         else:
             h1, h2 = False, True
 
         # Compute the codomain from the kernel
         ker = strat_points[k]
-        OA, inv = theta_codomain_8x1x1(ker, h1, h2)
+        OA, inv = theta_codomain_8x1x1(ker, h1, h2, codomain_verify)
+        inv_inv = avx_421_to_811(inv, inv)
 
         # Push kernel though the gluing isogeny
         for i in range(k):
             P = strat_points[i]
-            strat_points[i] = theta_eval_pair(P, inv, h1, h2)
+            strat_points[i] = theta_eval_pair(P, inv_inv, h1, h2)
             orders[i] = orders[i] - 1
         k = k - 1
 
         # Push the images through the kernel
-        eval_pairs = [theta_eval_pair(P, inv, h1, h2) for P in eval_pairs]
+        eval_pairs = [theta_eval_pair(P, inv_inv, h1, h2) for P in eval_pairs]
         eval_single = [theta_eval(P, inv, h1, h2) for P in eval_single]
 
     # Step Three:
@@ -662,17 +676,31 @@ def theta_isogeny_chain_with_torsion_8x1x1(
         eval_single = [apply_isomorphism(P, N) for P in eval_single]
 
     # Split the null point to the Montgomery coefficients
-    (A1, C1), (A2, C2) = theta_to_product(OA)
+    (A1, C1), (A2, C2) = theta_to_product(OA, verify)
 
     # Recreate a list of 4x2x1 theta points to split.
     eval_points = [avx_811_to_421(P) for P in eval_pairs]
     eval_points = [item for tup in eval_points for item in tup]
     if eval_single:
         eval_points.append(eval_single[0])
-
-    # Split the null point to the Montgomery coefficients
-    (A1, C1), (A2, C2) = theta_to_product(OA)
-
-    images = [theta_product_point_to_montgomery(P, OA) for P in eval_points]
+    images = [theta_product_point_to_montgomery(P, OA, verify) for P in eval_points]
 
     return (A1, C1), (A2, C2), images
+
+
+# ================================================================================
+# Isogeny chains where we have the 2^(n + 2) torsion and we verify the chain
+# ================================================================================
+
+
+def theta_isogeny_chain_verification_8x1x1(
+    domain: tuple[Curve], kernel: tuple[BasisX, BasisX], length: int
+):
+    """
+    Specialised (2,2) chain which performs additional checks required
+    by SQIsign and returns only the codomain
+    """
+    (A1, C1), (A2, C2), _ = theta_isogeny_chain_with_torsion_8x1x1(
+        domain, kernel, length, [], randomise=False, verify=True
+    )
+    return (A1, C1), (A2, C2)

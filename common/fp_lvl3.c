@@ -733,6 +733,17 @@ void fp_sqr_8x1(__m512i* res, __m512i* a)
     fp_mul_8x1(res, a, a);
 }
 
+// TODO: Optimize
+void fp_div3_8x1(__m512i* res, __m512i* src)
+{
+    fp_t tmp[8];
+    fp_8x1_to_unvectorized(tmp, src);
+    for (int i = 0; i < 8; i++) {
+        fp_div3(tmp+i, tmp+i);
+    }
+    fp_unvectorized_to_8x1(res, tmp);
+}
+
 void fp_tomont_8x1(__m512i* res, __m512i* a)
 {
     __m512i vR2[8];
@@ -1187,101 +1198,101 @@ void rdc_8x1(__m512i* res, __m512i* a)
     __m512i limb_mask = VSETALL(LIMB_MASK);
     __mmask8 msb_mask;
 
-// Montgomery reduction with R = 2^432
-// low(a) = (a0, a1, ... , a7, a8) is 9*48 = 432 bits
-// m = -p^(-1) mod 2^432 = 65 * 2^376 + 1
-// The output of this reduction is (a + (low(a) * m mod 2^432)*p) / 2^432 = \lfloor (a + (low(a) * m mod 2^432) * 65 * 2^376) / 2^432 \rfloor
+    // Montgomery reduction with R = 2^432
+    // low(a) = (a0, a1, ... , a7, a8) is 9*48 = 432 bits
+    // m = -p^(-1) mod 2^432 = 65 * 2^376 + 1
+    // The output of this reduction is (a + (low(a) * m mod 2^432)*p) / 2^432 = \lfloor (a + (low(a) * m mod 2^432) * 65 * 2^376) / 2^432 \rfloor
 
-// We begin by computing m * low mod 2^432. Note that 376 = 7 * 48 + 40.
-// Then m * low = (a0:a1 * 65 * 2^376) + low mod 2^432.
-// Thus, we only need to update the top two limbs.
-// s0 = a0, s1 = a1, ... , s6 = a6
-cnst = VSETALL((uint64_t)65 << 40);
-s7 = VMULADDL(a7, a0, cnst);
-s8 = VMULADDH(zero, a0, cnst);
-s8 = VADD(a8, VSL(s8, LIMB_ALIGN));
-s8 = VMULADDL(s8, a1, cnst);
-s8 = VADD(s8, VSRA(s7, LIMB_LEN));
-s7 = VAND(s7, limb_mask);
-s8 = VAND(s8, limb_mask);
+    // We begin by computing m * low mod 2^432. Note that 376 = 7 * 48 + 40.
+    // Then m * low = (a0:a1 * 65 * 2^376) + low mod 2^432.
+    // Thus, we only need to update the top two limbs.
+    // s0 = a0, s1 = a1, ... , s6 = a6
+    cnst = VSETALL((uint64_t)65 << 40);
+    s7 = VMULADDL(a7, a0, cnst);
+    s8 = VMULADDH(zero, a0, cnst);
+    s8 = VADD(a8, VSL(s8, LIMB_ALIGN));
+    s8 = VMULADDL(s8, a1, cnst);
+    s8 = VADD(s8, VSRA(s7, LIMB_LEN));
+    s7 = VAND(s7, limb_mask);
+    s8 = VAND(s8, limb_mask);
 
-// r <- s * (p+1)
-r7 = VMULADDL(zero, a0, cnst);
-hi = VMULADDH(zero, a0, cnst);
-hi = VSL(hi, LIMB_ALIGN);
-r8 = VMULADDL(hi, a1, cnst);
-hi = VMULADDH(zero, a1, cnst);
-hi = VSL(hi, LIMB_ALIGN);
-r9 = VMULADDL(hi, a2, cnst);
-hi = VMULADDH(zero, a2, cnst);
-hi = VSL(hi, LIMB_ALIGN);
-r10 = VMULADDL(hi, a3, cnst);
-hi = VMULADDH(zero, a3, cnst);
-hi = VSL(hi, LIMB_ALIGN);
-r11 = VMULADDL(hi, a4, cnst);
-hi = VMULADDH(zero, a4, cnst);
-hi = VSL(hi, LIMB_ALIGN);
-r12 = VMULADDL(hi, a5, cnst);
-hi = VMULADDH(zero, a5, cnst);
-hi = VSL(hi, LIMB_ALIGN);
-r13 = VMULADDL(hi, a6, cnst);
-hi = VMULADDH(zero, a6, cnst);
-hi = VSL(hi, LIMB_ALIGN);
-r14 = VMULADDL(hi, s7, cnst);
-hi = VMULADDH(zero, s7, cnst);
-hi = VSL(hi, LIMB_ALIGN);
-r15 = VMULADDL(hi, s8, cnst);
-r16 = VMULADDH(zero, s8, cnst);
-r16 = VSL(r16, LIMB_ALIGN);
+    // r <- s * (p+1)
+    r7 = VMULADDL(zero, a0, cnst);
+    hi = VMULADDH(zero, a0, cnst);
+    hi = VSL(hi, LIMB_ALIGN);
+    r8 = VMULADDL(hi, a1, cnst);
+    hi = VMULADDH(zero, a1, cnst);
+    hi = VSL(hi, LIMB_ALIGN);
+    r9 = VMULADDL(hi, a2, cnst);
+    hi = VMULADDH(zero, a2, cnst);
+    hi = VSL(hi, LIMB_ALIGN);
+    r10 = VMULADDL(hi, a3, cnst);
+    hi = VMULADDH(zero, a3, cnst);
+    hi = VSL(hi, LIMB_ALIGN);
+    r11 = VMULADDL(hi, a4, cnst);
+    hi = VMULADDH(zero, a4, cnst);
+    hi = VSL(hi, LIMB_ALIGN);
+    r12 = VMULADDL(hi, a5, cnst);
+    hi = VMULADDH(zero, a5, cnst);
+    hi = VSL(hi, LIMB_ALIGN);
+    r13 = VMULADDL(hi, a6, cnst);
+    hi = VMULADDH(zero, a6, cnst);
+    hi = VSL(hi, LIMB_ALIGN);
+    r14 = VMULADDL(hi, s7, cnst);
+    hi = VMULADDH(zero, s7, cnst);
+    hi = VSL(hi, LIMB_ALIGN);
+    r15 = VMULADDL(hi, s8, cnst);
+    r16 = VMULADDH(zero, s8, cnst);
+    r16 = VSL(r16, LIMB_ALIGN);
 
-// r <- a + r
-r7 = VADD(a7, r7);
-r8 = VADD(a8, r8);
-r9 = VADD(a9, r9);
-r10 = VADD(a10, r10);
-r11 = VADD(a11, r11);
-r12 = VADD(a12, r12);
-r13 = VADD(a13, r13);
-r14 = VADD(a14, r14);
-r15 = VADD(a15, r15);
+    // r <- a + r
+    r7 = VADD(a7, r7);
+    r8 = VADD(a8, r8);
+    r9 = VADD(a9, r9);
+    r10 = VADD(a10, r10);
+    r11 = VADD(a11, r11);
+    r12 = VADD(a12, r12);
+    r13 = VADD(a13, r13);
+    r14 = VADD(a14, r14);
+    r15 = VADD(a15, r15);
 
-// Carry propagation
-r8 = VADD(r8, VSRA(r7, LIMB_LEN));
-r9 = VADD(r9, VSRA(r8, LIMB_LEN));
-r10 = VADD(r10, VSRA(r9, LIMB_LEN));
-r11 = VADD(r11, VSRA(r10, LIMB_LEN));
-r12 = VADD(r12, VSRA(r11, LIMB_LEN));
-r13 = VADD(r13, VSRA(r12, LIMB_LEN));
-r14 = VADD(r14, VSRA(r13, LIMB_LEN));
-r15 = VADD(r15, VSRA(r14, LIMB_LEN));
-r16 = VADD(r16, VSRA(r15, LIMB_LEN));
-r9 = VAND(r9, limb_mask);
-r10 = VAND(r10, limb_mask);
-r11 = VAND(r11, limb_mask);
-r12 = VAND(r12, limb_mask);
-r13 = VAND(r13, limb_mask);
-r14 = VAND(r14, limb_mask);
-r15 = VAND(r15, limb_mask);
+    // Carry propagation
+    r8 = VADD(r8, VSRA(r7, LIMB_LEN));
+    r9 = VADD(r9, VSRA(r8, LIMB_LEN));
+    r10 = VADD(r10, VSRA(r9, LIMB_LEN));
+    r11 = VADD(r11, VSRA(r10, LIMB_LEN));
+    r12 = VADD(r12, VSRA(r11, LIMB_LEN));
+    r13 = VADD(r13, VSRA(r12, LIMB_LEN));
+    r14 = VADD(r14, VSRA(r13, LIMB_LEN));
+    r15 = VADD(r15, VSRA(r14, LIMB_LEN));
+    r16 = VADD(r16, VSRA(r15, LIMB_LEN));
+    r9 = VAND(r9, limb_mask);
+    r10 = VAND(r10, limb_mask);
+    r11 = VAND(r11, limb_mask);
+    r12 = VAND(r12, limb_mask);
+    r13 = VAND(r13, limb_mask);
+    r14 = VAND(r14, limb_mask);
+    r15 = VAND(r15, limb_mask);
 
-// The result is in r9:r16 after dividing by R = 2^432
-// Final correction to get the result down to 383 bits:
-// If bit383 = 1 then mask is all 1's, else it's all 0's
-// If bit383 = 1 then subtract by (p + 1) - 1 => r - (65*2^376) + 1 
-hi = VSL(r16, 16);                      // 64 - (384 - (7*48)) = 16
-msb_mask = VSIGN(hi);
-VSUBMASK(r16, msb_mask, r16, cnst);
-VADDMASK(r9, msb_mask, r9, one);
+    // The result is in r9:r16 after dividing by R = 2^432
+    // Final correction to get the result down to 383 bits:
+    // If bit383 = 1 then mask is all 1's, else it's all 0's
+    // If bit383 = 1 then subtract by (p + 1) - 1 => r - (65*2^376) + 1 
+    hi = VSL(r16, 16);                      // 64 - (384 - (7*48)) = 16
+    msb_mask = VSIGN(hi);
+    VSUBMASK(r16, msb_mask, r16, cnst);
+    VADDMASK(r9, msb_mask, r9, one);
 
-// Output result: final carry propagation is left for the final result. 
-//                Bottom limb can have up to 49 bits.
-res[0] = r9;
-res[1] = r10;
-res[2] = r11;
-res[3] = r12;
-res[4] = r13;
-res[5] = r14;
-res[6] = r15;
-res[7] = r16;
+    // Output result: final carry propagation is left for the final result. 
+    //                Bottom limb can have up to 49 bits.
+    res[0] = r9;
+    res[1] = r10;
+    res[2] = r11;
+    res[3] = r12;
+    res[4] = r13;
+    res[5] = r14;
+    res[6] = r15;
+    res[7] = r16;
 }
 
 void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
@@ -1292,22 +1303,22 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
 
     mp_mul_8x1_karat(t, a, b);
 
-    // Carry propagation 
+	// Carry propagation 
     t1 = VADD(t[1], VSRA(t[0], LIMB_LEN));
-    t2 = VADD(t[2], VSRA(t[1], LIMB_LEN));
-    t3 = VADD(t[3], VSRA(t[2], LIMB_LEN));
-    t4 = VADD(t[4], VSRA(t[3], LIMB_LEN));
-    t5 = VADD(t[5], VSRA(t[4], LIMB_LEN));
-    t6 = VADD(t[6], VSRA(t[5], LIMB_LEN));
-    t7 = VADD(t[7], VSRA(t[6], LIMB_LEN));
-    t8 = VADD(t[8], VSRA(t[7], LIMB_LEN));
-    t9 = VADD(t[9], VSRA(t[8], LIMB_LEN));
-    t10 = VADD(t[10], VSRA(t[9], LIMB_LEN));
-    t11 = VADD(t[11], VSRA(t[10], LIMB_LEN));
-    t12 = VADD(t[12], VSRA(t[11], LIMB_LEN));
-    t13 = VADD(t[13], VSRA(t[12], LIMB_LEN));
-    t14 = VADD(t[14], VSRA(t[13], LIMB_LEN));
-    t15 = VADD(t[15], VSRA(t[14], LIMB_LEN));
+    t2 = VADD(t[2], VSRA(t1, LIMB_LEN));
+    t3 = VADD(t[3], VSRA(t2, LIMB_LEN));
+    t4 = VADD(t[4], VSRA(t3, LIMB_LEN));
+    t5 = VADD(t[5], VSRA(t4, LIMB_LEN));
+    t6 = VADD(t[6], VSRA(t5, LIMB_LEN));
+    t7 = VADD(t[7], VSRA(t6, LIMB_LEN));
+    t8 = VADD(t[8], VSRA(t7, LIMB_LEN));
+    t9 = VADD(t[9], VSRA(t8, LIMB_LEN));
+    t10 = VADD(t[10], VSRA(t9, LIMB_LEN));
+    t11 = VADD(t[11], VSRA(t10, LIMB_LEN));
+    t12 = VADD(t[12], VSRA(t11, LIMB_LEN));
+    t13 = VADD(t[13], VSRA(t12, LIMB_LEN));
+    t14 = VADD(t[14], VSRA(t13, LIMB_LEN));
+    t15 = VADD(t[15], VSRA(t14, LIMB_LEN));;
     t[0] = VAND(t[0], limb_mask);
     t[1] = VAND(t1, limb_mask);
     t[2] = VAND(t2, limb_mask);
@@ -1326,6 +1337,193 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
     t[15] = t15;
 
     rdc_8x1(res, t);
+}
+
+void fp_8x1_to_unvectorized(fp_t* res, __m512i* src)
+{
+    fp_t coeffs[8];
+    __m512i src_frommont[8];
+
+    fp_frommont_8x1(src_frommont, src);
+    fp_48_to_64_bit_limbs_8x1(coeffs, src_frommont);
+
+    // Convert to Montgomery representation
+    for (int i = 0; i < 8; i++) {
+        fp_decode(res+i, (const void *) coeffs[i].arr);
+    }
+}
+
+void fp_48_to_64_bit_limbs_8x1(fp_t* res, __m512i* src)
+{
+    uint64_t t[8];
+    VSTORE(t, src[0]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[0] = t[i] & LIMB_MASK;
+    } 
+    VSTORE(t, src[1]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[0] |= (t[i] & 0xffff) << 48;
+        (res+i)->arr[1] = (t[i] >> 16) & 0xffffffffffff;
+    } 
+    VSTORE(t, src[2]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[1] |= (t[i] & 0xffffffff) << 32;
+        (res+i)->arr[2] = (t[i] >> 32) & 0xffffffff;
+    }
+    VSTORE(t, src[3]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[2] |= (t[i] & 0xffffffffffff) << 16;
+        (res+i)->arr[3] = (t[i] >> 48) & 0xffff;
+    }
+    VSTORE(t, src[4]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[3] |= t[i] & 0xffffffffffff;
+    }
+    VSTORE(t, src[5]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[3] |= (t[i] & 0xffff) << 48;
+        (res+i)->arr[4] = (t[i] >> 16) & 0xffffffffffff;
+    }
+    VSTORE(t, src[6]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[4] |= (t[i] & 0xffffffff) << 32;
+        (res+i)->arr[5] = (t[i] >> 32) & 0xffffffff;
+    }
+    VSTORE(t, src[7]);
+    for (int i = 0; i < 8; i++) {
+        (res+i)->arr[5] |= t[i] << 16;
+    }
+}
+
+void fp_48_to_64_bit_limbs_8x1_only_even_idx(fp_t* res, __m512i* src)
+{
+    uint64_t t[8];
+    VSTORE(t, src[0]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[0] = t[2*i] & LIMB_MASK;
+    } 
+    VSTORE(t, src[1]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[0] |= (t[2*i] & 0xffff) << 48;
+        (res+i)->arr[1] = (t[2*i] >> 16) & 0xffffffffffff;
+    } 
+    VSTORE(t, src[2]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[1] |= (t[2*i] & 0xffffffff) << 32;
+        (res+i)->arr[2] = (t[2*i] >> 32) & 0xffffffff;
+    }
+    VSTORE(t, src[3]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[2] |= (t[2*i] & 0xffffffffffff) << 16;
+        (res+i)->arr[3] = (t[2*i] >> 48) & 0xffff;
+    }
+    VSTORE(t, src[4]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[3] |= t[2*i] & 0xffffffffffff;
+    }
+    VSTORE(t, src[5]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[3] |= (t[2*i] & 0xffff) << 48;
+        (res+i)->arr[4] = (t[2*i] >> 16) & 0xffffffffffff;
+    }
+    VSTORE(t, src[6]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[4] |= (t[2*i] & 0xffffffff) << 32;
+        (res+i)->arr[5] = (t[2*i] >> 32) & 0xffffffff;
+    }
+    VSTORE(t, src[7]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[5] |= t[2*i] << 16;
+    }
+}
+
+void fp_unvectorized_to_8x1(__m512i* res, fp_t* src)
+{
+    fp_t coeffs[8];
+
+    // Convert from Montgomery representation
+    for (int i = 0; i < 8; i++) {
+        fp_encode(coeffs[i].arr, src+i);
+    }
+
+    fp_64_to_48_bit_limbs_8x1(res, coeffs);
+    fp_tomont_8x1(res, res);
+}
+
+void fp_64_to_48_bit_limbs_8x1(__m512i* res, fp_t* src)
+{
+    uint64_t t[8];
+
+    for (int i = 0; i < 8; i++) {
+        t[i] = (src+i)->arr[0] & LIMB_MASK;
+    }
+    res[0] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 8; i++) {
+        t[i] = (((src+i)->arr[0] >> 48) & 0xffff) | (((src+i)->arr[1] & 0xffffffff) << 16); 
+    }
+    res[1] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 8; i++) {
+        t[i] = (((src+i)->arr[1] >> 32) & 0xffffffff) | (((src+i)->arr[2] & 0xffff) << 32); 
+    }
+    res[2] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 8; i++) {
+        t[i] = (((src+i)->arr[2] >> 16) & 0xffffffffffff);
+    }
+    res[3] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 8; i++) {
+        t[i] = ((src+i)->arr[3]) & LIMB_MASK;
+    }
+    res[4] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 8; i++) {
+        t[i] = (((src+i)->arr[3] >> 48) & 0xffff) | (((src+i)->arr[4] & 0xffffffff) << 16); 
+    }
+    res[5] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 8; i++) {
+        t[i] = (((src+i)->arr[4] >> 32) & 0xffffffff) | (((src+i)->arr[5] & 0xffff) << 32); 
+    }
+    res[6] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 8; i++) {
+        t[i] = ((src+i)->arr[5] >> 16) & LIMB_MASK;
+    }
+    res[7] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+}
+
+void fp_64_to_48_bit_limbs_8x1_only_even_idx(__m512i* res, fp_t* src)
+{
+    uint64_t t[4];
+
+    for (int i = 0; i < 4; i++) {
+        t[i] = (src+i)->arr[0] & LIMB_MASK;
+    }
+    res[0] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
+    for (int i = 0; i < 4; i++) {
+        t[i] = (((src+i)->arr[0] >> 48) & 0xffff) | (((src+i)->arr[1] & 0xffffffff) << 16); 
+    }
+    res[1] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
+    for (int i = 0; i < 4; i++) {
+        t[i] = (((src+i)->arr[1] >> 32) & 0xffffffff) | (((src+i)->arr[2] & 0xffff) << 32); 
+    }
+    res[2] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
+    for (int i = 0; i < 4; i++) {
+        t[i] = (((src+i)->arr[2] >> 16) & 0xffffffffffff);
+    }
+    res[3] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
+    for (int i = 0; i < 4; i++) {
+        t[i] = ((src+i)->arr[3]) & LIMB_MASK;
+    }
+    res[4] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
+    for (int i = 0; i < 4; i++) {
+        t[i] = (((src+i)->arr[3] >> 48) & 0xffff) | (((src+i)->arr[4] & 0xffffffff) << 16); 
+    }
+    res[5] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
+    for (int i = 0; i < 4; i++) {
+        t[i] = (((src+i)->arr[4] >> 32) & 0xffffffff) | (((src+i)->arr[5] & 0xffff) << 32); 
+    }
+    res[6] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
+    for (int i = 0; i < 4; i++) {
+        t[i] = ((src+i)->arr[5] >> 16) & LIMB_MASK;
+    }
+    res[7] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
 }
 
 // ======================================================================================================
@@ -1643,7 +1841,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     __m512i sl0, sl1, sl2, sl3, sh0, sh1, sh2, sh3;
     __m512i carry, hi, shuf, quo, rem;
     __m512i zero = VZERO();
-    __m512i cnst = VSETALL((uint64_t) 65 << 19); // top limb of (p+1)
+    __m512i cnst = VSETALL((uint64_t) 65 << 40); // top limb of (p+1)
     __m512i limb_mask = VSETALL(LIMB_MASK);
 
 
@@ -1665,14 +1863,14 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     // left i+j = 0 right i+j = 4
     t[0] = VMULADDL(zero, a[0], sl0);
     t[1] = VMULADDH(zero, a[0], sl0);
-    t[1] = VSL(t[1], 1);
+    t[1] = VSL(t[1], LIMB_ALIGN);
 
     // left i+j = 1 
     t[1] = VMULADDL(t[1], a[0], sl1);
     t[2] = VMULADDH(zero, a[0], sl1);
     t[1] = VMULADDL(t[1], a[1], sl0);
     t[2] = VMULADDH(t[2], a[1], sl0);
-    t[2] = VSL(t[2], 1);
+    t[2] = VSL(t[2], LIMB_ALIGN);
 
     // left i+j = 2
     t[2] = VMULADDL(t[2], a[0], sl2);
@@ -1681,7 +1879,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[3] = VMULADDH(t[3], a[1], sl1);
     t[2] = VMULADDL(t[2], a[2], sl0);
     t[3] = VMULADDH(t[3], a[2], sl0);
-    t[3] = VSL(t[3], 1);
+    t[3] = VSL(t[3], LIMB_ALIGN);
 
     // left i+j = 3
     t[3] = VMULADDL(t[3], a[0], sl3);
@@ -1692,7 +1890,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[4] = VMULADDH(t[4], a[2], sl1);
     t[3] = VMULADDL(t[3], a[3], sl0);
     t[4] = VMULADDH(t[4], a[3], sl0);
-    t[4] = VSL(t[4], 1);
+    t[4] = VSL(t[4], LIMB_ALIGN);
 
     // left i+j = 4
     t[4] = VMULADDL(t[4], a[0], sh0);
@@ -1703,7 +1901,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[5] = VMULADDH(t[5], a[2], sl2);
     t[4] = VMULADDL(t[4], a[3], sl1);
     t[5] = VMULADDH(t[5], a[3], sl1);
-    t[5] = VSL(t[5], 1);
+    t[5] = VSL(t[5], LIMB_ALIGN);
 
     // left i+j = 5
     t[5] = VMULADDL(t[5], a[0], sh1);
@@ -1714,7 +1912,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[6] = VMULADDH(t[6], a[2], sl3);
     t[5] = VMULADDL(t[5], a[3], sl2);
     t[6] = VMULADDH(t[6], a[3], sl2);
-    t[6] = VSL(t[6], 1);
+    t[6] = VSL(t[6], LIMB_ALIGN);
 
     // left i+j = 6
     t[6] = VMULADDL(t[6], a[0], sh2);
@@ -1725,7 +1923,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[7] = VMULADDH(t[7], a[2], sh0);
     t[6] = VMULADDL(t[6], a[3], sl3);
     t[7] = VMULADDH(t[7], a[3], sl3);
-    t[7] = VSL(t[7], 1);
+    t[7] = VSL(t[7], LIMB_ALIGN);
 
     // left i+j = 7
     t[7] = VMULADDL(t[7], a[0], sh3);
@@ -1736,7 +1934,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[8] = VMULADDH(t[8], a[2], sh1);
     t[7] = VMULADDL(t[7], a[3], sh0);
     t[8] = VMULADDH(t[8], a[3], sh0);
-    t[8] = VSL(t[8], 1);
+    t[8] = VSL(t[8], LIMB_ALIGN);
 
     // left i+j = 8
     t[8] = VMULADDL(t[8], a[1], sh3);
@@ -1745,37 +1943,35 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[9] = VMULADDH(t[9], a[2], sh2);
     t[8] = VMULADDL(t[8], a[3], sh1);
     t[9] = VMULADDH(t[9], a[3], sh1);
-    t[9] = VSL(t[9], 1);
+    t[9] = VSL(t[9], LIMB_ALIGN);
     
     // left i+j = 9
     t[9] = VMULADDL(t[9], a[2], sh3);
     t[10] = VMULADDH(zero, a[2], sh3);
     t[9] = VMULADDL(t[9], a[3], sh2);
     t[10] = VMULADDH(t[10], a[3], sh2);
-    t[10] = VSL(t[10], 1);
+    t[10] = VSL(t[10], LIMB_ALIGN);
 
     // left i+j = 10
     t[10] = VMULADDL(t[10], a[3], sh3);
     t[11] = VMULADDH(zero, a[3], sh3);
-    t[11] = VSL(t[11], 1);
+    t[11] = VSL(t[11], LIMB_ALIGN);
 
     // Part 2: Montgomery reduction
-    // For now, I follow Algorithm 3 from the same paper.
-    // TODO: Try to implement "one-shot" Montgomery reduction as for 8x1.
 
     for(int i = 0; i < 8; i++) {
-        carry = VSRA(t[i], 51);
-        t[i] = VAND(t[i], limb_mask); // Left slot is u_i = t_i mod 2^51 
+        carry = VSRA(t[i], LIMB_LEN);
+        t[i] = VAND(t[i], limb_mask); // Left slot is u_i = t_i mod 2^48
         t[i+1] = VADD(t[i+1], carry);
 
-        // t = t + u_i * p * 2^(51*i) 
-        // p = (p+1) - 1 = 2^(51*7) * (65 << 19) -1
+        // t = t + u_i * p * 2^(48*i) 
+        // p = (p+1) - 1 = 2^(48*7) * (65 << 40) -1
         shuf = VSHUFFLEMASKZ(0xcccc, t[i], 0x4e); // shuf = {0, u_i, 0, ...}
         t[i+3] = VMULADDL(t[i+3], shuf, cnst);
         hi = VMULADDH(zero, shuf, cnst);
-        hi = VSL(hi, 1);
+        hi = VSL(hi, LIMB_ALIGN);
         t[i+4] = VADD(t[i+4], hi);
-        //t[i] = VSHUFFLEMASKZ(0xcc, t[i], 0xe4); // Would need to do t - 2^(51*i)*u_i, but we will drop vector when dividing, so can skip
+        //t[i] = VSHUFFLEMASKZ(0xcc, t[i], 0xe4); // Would need to do t - 2^(48*i)*u_i, but we will drop vector when dividing, so can skip
         t[i+4] = VADDMASK(t[i+4], 0x55, t[i+4], VSHUFFLE(t[i], 0x4e));
     }
 
@@ -1797,19 +1993,26 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[10] = VAND(t[10], limb_mask);
     t[11] = VANDMASK(t[11], 0x55, t[11], limb_mask);
 
-    // The result is in t8 - t11, and it is 7 * 51 + 27 = 384 bits
+    // Output result
+    res[0] = t[8];
+    res[1] = t[9];
+    res[2] = t[10];
+    res[3] = t[11];
+	return;
+
+    // The result is in t8 - t11, and it is 8 * 48 = 384 bits
     // We do a final reduction step, to get the result down to 383 bits
 
     // Split into an 8-bit top part and 376-bit bottom part
-    hi = VSRAMASKZ(0xaa, t[11], 19); // hi = {0, high part, 0, hight part, ...}
-    uint64_t right_mask = 0x7ffff;
+    hi = VSRAMASKZ(0xaa, t[11], 40); // hi = {0, high part, 0, hight part, ...}
+    uint64_t right_mask = 0xffffffffff;
     cnst = VSET(LIMB_MASK, right_mask, LIMB_MASK, right_mask, LIMB_MASK, right_mask, LIMB_MASK, right_mask);
     t[11] = VAND(t[11], cnst);
 
     // 65 * 2^376 = 1 mod p, hence hi mod p = floor(h/65) + (h mod 65)*2^376
     cnst = VSETALL(0xfc1);
     quo = VMULADDL(zero, hi, cnst);
-    quo = VSRA(quo, 18);
+    quo = VSRA(quo, 39);
     cnst = VSETALL(65); // again suboptimal, not doing -65
     rem = VMULADDL(zero, quo, cnst);
     rem = VSUB(hi, rem);
@@ -1820,7 +2023,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     // Adding this to 376-bit bottom part, we get a result that is at most 383 bits.
     quo = VSHUFFLE(quo, 0x4e);
     t[8] = VADD(t[8], quo);
-    t[11] = VADD(t[11], VSL(rem, 19));
+    t[11] = VADD(t[11], VSL(rem, 40));
 
     // Propogating carry
     t[9] = VADDMASK(t[9], 0x55, t[9], VSRA(t[8], LIMB_LEN));

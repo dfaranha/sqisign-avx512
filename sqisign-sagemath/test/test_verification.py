@@ -1,7 +1,7 @@
 from sage.all import proof
 from sqisign.sqisign import SQIsign
 
-NUM_KATS = 1
+NUM_KATS = 10
 
 
 def read_kat_int(kat_line):
@@ -34,12 +34,25 @@ def parse_kat_file(filename):
 def generic_KAT_test(level=1):
     sqisign = SQIsign(level)
     kat_tests = parse_kat_file(
-        f"assets/PQCsignKAT_{sqisign.sk_len}_SQIsign_lvl{level}.rsp"
+        f"../assets/PQCsignKAT_{sqisign.sk_len}_SQIsign_lvl{level}.rsp"
     )
 
-    print(f"Testing {NUM_KATS} of total {len(kat_tests)} tests for level {level}")
+    print(
+        f"""
+struct dim_two_isogeny_test_t {{
+    unsigned length;
+    theta_couple_curve_t domain;
+    theta_kernel_couple_points_t kernel;
+    theta_couple_curve_t codomain;
+}};
+
+const dim_two_isogeny_test_t TESTS[{NUM_KATS}] = {{"""
+    )
+
+    # print(f"Testing {NUM_KATS} of total {len(kat_tests)} tests for level {level}")
     for i, test in enumerate(kat_tests[:NUM_KATS]):
-        print(".", end="", flush=True)
+        print("\t{")
+        # print(".", end="", flush=True)
 
         # Assert lengths match expectation from KAT
         assert len(test["msg"]) == test["mlen"]
@@ -53,7 +66,10 @@ def generic_KAT_test(level=1):
 
         # Run SQIsign verification
         assert sqisign.verify(test["msg"], signature, test["pk"])
-    print(f" level {level} tests passed!")
+        print("\t},")
+    # print(f" level {level} tests passed!")
+
+    print("};")
 
 
 def test_level_1():

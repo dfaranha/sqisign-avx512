@@ -12,6 +12,8 @@
 
 #include "intrinsics_avx512.h"
 
+#include "sqi_fp_lvl3.h"
+
 #define FP_NUM_64LIMBS 6
 #define FP_NUM_AVXLIMBS 8
 
@@ -47,12 +49,12 @@ void fp_copy_8x1(__m512i* res, __m512i* a);
 void fp_duplicate_8x1(__m512i* res, const uint64_t* a);
 
 /**
- *   Returns an 8-bit mask which is 1 iff the i-th Fp elements are equal
+ *   Returns an 8-bit mask where the i-th bit is 1 iff the i-th Fp elements are equal
  */
 int fp_is_equal_8x1(__m512i* a, __m512i* b);
 
 /**
- *   Returns an 8-bit mask which is 1 iff the i-th Fp elements are equal
+ *   Returns an 8-bit mask where the i-th bit is 1 iff the i-th Fp elements are equal
  */
 int fp_is_zero_8x1(__m512i* a);
 
@@ -92,6 +94,11 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b);
 void fp_sqr_8x1(__m512i* res, __m512i* a);
 
 /**
+ * res = a * 3^(-1) (mod p)
+ */
+void fp_div3_8x1(__m512i* res, __m512i* src);
+
+/**
  * res = a * R (mod p)
  */
 void fp_tomont_8x1(__m512i* res, __m512i* a);
@@ -99,7 +106,17 @@ void fp_tomont_8x1(__m512i* res, __m512i* a);
 /**
  * res = a * R^(-1) (mod p)
  */
-void fp_frommont_8x1(__m512i*res, __m512i* a);
+void fp_frommont_8x1(__m512i* res, __m512i* a);
+
+void fp_8x1_to_unvectorized(fp_t* res, __m512i* src);
+// helper function, also used in fp2 conversions.
+void fp_48_to_64_bit_limbs_8x1(fp_t* res, __m512i* src);
+void fp_48_to_64_bit_limbs_8x1_only_even_idx(fp_t* res, __m512i* src);
+
+void fp_unvectorized_to_8x1(__m512i* res, fp_t* src);
+// helper function, also used in fp2 conversions.
+void fp_64_to_48_bit_limbs_8x1(__m512i* res, fp_t* src);
+void fp_64_to_48_bit_limbs_8x1_only_even_idx(__m512i* res, fp_t* src);
 
 /**
  *  res = a + b, multiprecision addition, no correction, no carry propagation
@@ -180,6 +197,6 @@ void fp_sqr_4x2(__m512i* res, __m512i* a);
 
 void fp_tomont_4x2(__m512i* res, __m512i* a);
 
-void fp_frommont_4x2(__m512i*res, __m512i* a);
+void fp_frommont_4x2(__m512i* res, __m512i* a);
 
 #endif

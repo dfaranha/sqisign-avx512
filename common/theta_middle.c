@@ -42,7 +42,7 @@ void theta_had_single(__m512i* res, __m512i* a)
     fp2_mixaddsub_4x2x1(res, t, res, 0xf); // p + r, q + s, p - r, q - s = a + b + c + d, a - b + c - d, a + b - c - d, a - b - c + d
 }
 
-void theta_precomp(__m512i* c1, __m512i* c2, __m512i* null)
+void theta_precomp_single(__m512i* c1, __m512i* c2, __m512i* null)
 {
     __m512i t1[8], t2[8], idx1, idx2;
 
@@ -60,8 +60,8 @@ void theta_precomp(__m512i* c1, __m512i* c2, __m512i* null)
     for (int i = 0; i < 8; i++) {
         c1[i] = VPERM256(t1[i], 0x4e);                      // (y', x', w', z')
         c2[i] = VPERM256(null[i], 0x4e);                    // (y, x, w, z)
-        t2[i] = VBLENDPERM(0xffff, null[i], t1[i], idx2);   // (y', w', y, w)
-        t1[i] = VBLENDPERM(0xffff, null[i], t1[i], idx1);   // (x', z', x, z)
+        t2[i] = VBLENDPERM32(0xffff, null[i], t1[i], idx2);   // (y', w', y, w)
+        t1[i] = VBLENDPERM32(0xffff, null[i], t1[i], idx1);   // (x', z', x, z)
     }
 
     fp2_mul_4x2x1(t2, t1, t2);
@@ -73,8 +73,7 @@ void theta_precomp(__m512i* c1, __m512i* c2, __m512i* null)
         t2[i] = VPERM512(idx2, t2[i]);
     }
 
-    fp2_mul_4x2x1(c1, c1, t1);
-    fp2_mul_4x2x1(c2, c2, t2);
+    fp2_mulx2_4x2x1(c1, c2, c1, t1, c2, t2);
 }
 
 void theta_double_single(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2)
@@ -87,22 +86,39 @@ void theta_double_single(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2)
     theta_mul_single(res, res, c2);
 }
 
+void theta_double_iter_single(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2, const int n)
+{
+    if (n == 0) {
+        fp2_copy_4x2x1(res, a);
+        return;
+    }
+
+    theta_double_single(res, a, c1, c2);
+    for (int i = 0; i < n-1; i++) {
+        theta_double_single(res, res, c1, c2);
+    }
+}
+
+
 // Idea 2: Investigate the possibility of 1x8x1 Fp2 mul? Or convert to non-vectorized rep and do a single Fp mul?
 // Warning: Modifies k1 and k2
-void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i* k2, bool h1, bool h2) 
+void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i* k2, const bool h1, const bool h2) 
 {
-    __m512i t1[16], t2[16], idx, idx2;
+    __m512i t1[16], t2[16], P[8], Q[8], idx, idx2;
+
+    fp2_copy_4x2x1(P, k1);
+    fp2_copy_4x2x1(Q, k2);
 
     //TODO: Would it be more efficient to use the pair operations here?
     if (h1) {
-        theta_had_single(k1, k1);
-        theta_had_single(k2, k2);
+        theta_had_single(P, P);
+        theta_had_single(Q, Q);
     }
 
-    theta_sqr_single(k1, k1);
-    theta_sqr_single(k2, k2);
-    theta_had_single(k1, k1);
-    theta_had_single(k2, k2);
+    theta_sqr_single(P, P);
+    theta_sqr_single(Q, Q);
+    theta_had_single(P, P);
+    theta_had_single(Q, Q);
 
     // Input: ki = (xi, yi, zi, wi) in the 4x2x1 format
     // t1 = (x1, y1, z2, w2)
@@ -112,8 +128,8 @@ void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i*
         0x0000001900000018, 0x0000001b0000001a, 0x0000001d0000001c, 0x0000001f0000001e
     );
     for (int i = 0; i < 8; i++) {
-        t2[i] = VPERM256(k2[i], 0x4e);
-        t1[i] = VBLENDPERM(0xffff, k1[i], k2[i], idx);
+        t2[i] = VPERM256(Q[i], 0x4e);
+        t1[i] = VBLENDPERM32(0xffff, P[i], Q[i], idx);
     }
 
     // t1 = (x1 * y2, y1 * x2, z2 * w2, w2 * z2) = (s1, s2, s3, s3)
@@ -127,14 +143,14 @@ void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i*
     }
 
     // res
-    fp2_mul_4x2x1(res, k2, t2);
+    fp2_mul_4x2x1(res, Q, t2);
 
     // res_inv
     fp2_4x2x1_to_2x4x1(t2, t1); // t2[8:15] = (s3, s3)
     idx = VSET(2, 2, 3, 3, 0, 0, 1, 1);
     idx2 = VSET(6, 6, 7, 7, 4, 4, 5, 5);
     for (int i = 0; i < 8; i++) { // t1[0:7] = (y1, x1), t1[8:15] = (w_res, z_res)
-        t1[i] = VPERM512MASKZ(0x55, k1[i], idx);
+        t1[i] = VPERM512MASKZ(0x55, P[i], idx);
         t1[i+8] = VPERM512MASKZ(0x55, res[i], idx2);
     }
     fp2_mul_2x4x1(t1, t1, t2+8);
@@ -145,7 +161,148 @@ void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i*
     }
 }
 
-void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
+void theta_codomain_with_four_torsion(__m512i* res_inv, __m512i* null, __m512i* ker, const bool h1, const bool h2)
+{
+    __m512i t0[8], t1[8], t2[8];
+    fp2_t unvec0[4], unvec1[4], unvec2[4], unvec3[4], t_unvec[4], AB, AC;
+
+    if (h1) {
+        theta_had_single(t0, ker);
+        theta_sqr_single(t0, t0);
+        theta_had_single(t0, t0);
+
+        theta_had_single(t1, null);
+        theta_sqr_single(t1, t1);
+        theta_had_single(t1, t1);
+    } else {
+        theta_sqr_single(t0, ker);
+        theta_had_single(t0, t0);
+
+        theta_sqr_single(t1, null);
+        theta_had_single(t1, t1);
+    }
+
+    // TODO: two wasted squarings? Or needed for had?
+    //xAB, _, xCD, _ = T0
+    //AA, BB, CC, DD = T1
+    fp2_4x2x1_to_unvectorized(unvec0, t0);
+    fp2_4x2x1_to_unvectorized(unvec1, t1);
+
+    // T0 = AVX_4x2x1(AA, AA, xAB, BB)
+    t_unvec[0] = unvec1[0]; t_unvec[1] = unvec1[0]; t_unvec[2] = unvec0[0]; t_unvec[3] = unvec1[1];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec);
+    // T1 = AVX_4x2x1(BB, CC, CC, DD)
+    t_unvec[0] = unvec1[1]; t_unvec[1] = unvec1[2]; t_unvec[2] = unvec1[2]; t_unvec[3] = unvec1[3];
+    fp2_unvectorized_to_4x2x1(t1, t_unvec);
+    //AABB, AACC, xABCC, BBDD = pairwise_multiplication(T0, T1)
+    fp2_mul_4x2x1(t0, t0, t1);
+    fp2_4x2x1_to_unvectorized(unvec2, t0);
+
+    // TODO: here are two fp2 sqrt, do we want to do something
+    //       in parallel here, or convert from 64-bit for the last
+    //       two steps where we need sqrts?
+    fp2_copy(&AB, unvec2);
+    fp2_copy(&AC, unvec2+1);
+    fp2_sqrt(&AB);
+    fp2_sqrt(&AC);
+
+    // x A^3 BC as a projective factor
+    // A = xAB * AA * AC
+    // B = AB * AC * xAB
+    // C = xAB * AA * CC
+    // D = xCD * AB * AA
+
+    // x A^2 B^3 C^2 D^2 as a projective factor
+    // A_inv = xAB * BB * CC * DD
+    // B_inv = xAB * AB * CC * DD
+    // C_inv = xAB * AC * BB * DD
+    // D_inv = AB * BB * AC * xCD
+
+    // T0 = AVX_4x2x1(xAB, AB, xCD, BB)
+    t_unvec[0] = unvec0[0]; t_unvec[1] = AB; t_unvec[2] = unvec0[2]; t_unvec[3] = unvec1[1];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec);
+    // T1 = AVX_4x2x1(AC, DD, AB, AC)
+    t_unvec[0] = AC; t_unvec[1] = unvec1[3]; t_unvec[2] = AB; t_unvec[3] = AC;
+    fp2_unvectorized_to_4x2x1(t1, t_unvec);
+    //xABAC, ABDD, xCDAB, BBAC = pairwise_multiplication(T0, T1)
+    fp2_mul_4x2x1(t0, t0, t1);
+    fp2_4x2x1_to_unvectorized(unvec3, t0);
+
+    // OB = AVX_4x2x1(AA, AB, AA, AA)
+    t_unvec[0] = unvec1[0]; t_unvec[1] = AB; t_unvec[2] = unvec1[0]; t_unvec[3] = unvec1[0];
+    fp2_unvectorized_to_4x2x1(null, t_unvec);
+    //T0 = AVX_4x2x1(xABAC, xABAC, xABCC, xCDAB)
+    t_unvec[0] = unvec3[0]; t_unvec[1] = unvec3[0]; t_unvec[2] = unvec2[2]; t_unvec[3] = unvec3[2];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec);
+    fp2_mul_4x2x1(null, null, t0);
+
+    // inv = AVX_4x2x1(xABCC, xABCC, xABAC, xCDAB)
+    t_unvec[0] = unvec2[2]; t_unvec[1] = unvec2[2]; t_unvec[2] = unvec3[0]; t_unvec[3] = unvec3[2];
+    fp2_unvectorized_to_4x2x1(res_inv, t_unvec);
+    // T0 = AVX_4x2x1(BBDD, ABDD, BBDD, BBAC)
+    t_unvec[0] = unvec2[3]; t_unvec[1] = unvec3[1]; t_unvec[2] = unvec2[3]; t_unvec[3] = unvec3[3];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec);
+    fp2_mul_4x2x1(res_inv, res_inv, t0);
+
+    if (h2) {
+        theta_had_single(null, null);
+    }
+}
+
+void theta_codomain_with_no_torsion(__m512i* res_inv, __m512i* null, const bool h1, const bool h2)
+{
+    __m512i t0[8], t1[8];
+    fp2_t unvec[4], t_unvec[4], AB, AC, AD;
+    
+    if (h1) {
+        theta_had_single(null, null);
+    }
+    fp2_sqr_4x2x1(t0, null);
+    theta_had_single(t0, t0);
+
+    // TODO: here are three fp2 sqrt, do we want to do something
+    //       in parallel here, or convert from 64-bit for the last
+    //       two steps where we need sqrts?
+    // AA, BB, CC, DD = T0
+    fp2_4x2x1_to_unvectorized(unvec, t0);
+    fp2_mul(&AB, unvec, unvec + 1);
+    fp2_mul(&AC, unvec, unvec + 2);
+    fp2_mul(&AD, unvec, unvec + 3);
+    fp2_sqrt(&AB);
+    fp2_sqrt(&AC);
+    fp2_sqrt(&AD);
+    // OB = AVX_4x2x1(AA, AB, AC, AD)
+    t_unvec[0] = unvec[0]; t_unvec[1] = AB; t_unvec[2] = AC; t_unvec[3] = AD;
+    fp2_unvectorized_to_4x2x1(null, t_unvec);
+
+    // This calls pairwise_multiplication twice for a total of
+    // 8M where as in serial we only need 7, so 1 M is technically
+    // redundant here.
+    // A_inv = BB * CC * DD
+    // B_inv = AB * CC * DD
+    // C_inv = BB * AC * DD
+    // D_inv = BB * CC * AD
+    
+    // inv = AVX_4x2x1(BB, AB, BB, BB)
+    t_unvec[0] = unvec[1]; t_unvec[1] = AB; t_unvec[2] = unvec[1]; t_unvec[3] = unvec[1];
+    fp2_unvectorized_to_4x2x1(res_inv, t_unvec);
+    // T0 = AVX_4x2x1(CC, CC, AC, CC)
+    t_unvec[0] = unvec[2]; t_unvec[1] = unvec[2]; t_unvec[2] = AC; t_unvec[3] = unvec[2];
+    fp2_unvectorized_to_4x2x1(t0, t_unvec);
+    fp2_mul_4x2x1(res_inv, res_inv, t0);
+    
+    // T0 = AVX_4x2x1(DD, DD, DD, AD)
+    t_unvec[0] = unvec[3]; t_unvec[1] = unvec[3]; t_unvec[2] = unvec[3]; t_unvec[3] = AD;
+    fp2_unvectorized_to_4x2x1(t0, t_unvec);
+    fp2_mul_4x2x1(res_inv, res_inv, t0);
+   
+    if (h2) {
+        theta_had_single(null, null);
+    }
+}
+
+
+void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, const bool h1, const bool h2)
 {
     if (h1) {
         theta_had_single(res, a);
@@ -155,6 +312,13 @@ void theta_eval_single(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
     theta_mul_single(res, res, inv);
     if (h2) {
         theta_had_single(res, res);
+    }
+}
+
+void theta_eval_list_single(__m512i* pts, __m512i* inv, const bool h1, const bool h2, const int num_pts)
+{
+    for (int i = 0; i < num_pts; i++) {
+        theta_eval_single(pts + 8*i, pts + 8*i, inv, h1, h2);
     }
 }
 
@@ -227,7 +391,52 @@ void theta_had_pair_alt(__m512i* res, __m512i* a)
     fp2_mixaddsub_8x1x1(res, t, res, 0x33, 0x33);
 }
 
-void theta_double_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2)
+void theta_precomp_pair(__m512i* c1, __m512i* c2, __m512i* null)
+{
+    __m512i t1_t2[16], idx1, idx2, idx_re, idx_im;
+
+    theta_sqr_single(t1_t2, null);
+    theta_had_single(t1_t2, t1_t2); // t1 = (x', y', z', w')
+
+    idx1 = VSET(
+        0x0000001100000010, 0x0000001300000012, 0x0000001900000018, 0x0000001b0000001a,
+        0x0000000100000000, 0x0000000300000002, 0x0000000900000008, 0x0000000b0000000a
+    );
+    idx2 = VSET(
+        0x0000001500000014, 0x0000001700000016, 0x0000001d0000001c, 0x0000001f0000001e,
+        0x0000000500000004, 0x0000000700000006, 0x0000000d0000000c, 0x0000000f0000000e
+    );
+    idx_re = VSET(2, 10, 0, 8, 6, 14, 4, 12);
+    idx_im = VSET(3, 11, 1, 9, 7, 15, 5, 13);
+    for (int i = 0; i < 8; i++) {
+        // Interleave (y', x', w', z') and (y, x, w, z)
+        c1[i] = VBLENDPERM(idx_re, t1_t2[i], null[i]);
+        c1[i+8] = VBLENDPERM(idx_im, t1_t2[i], null[i]);
+        t1_t2[i+8] = VBLENDPERM32(0xffff, null[i], t1_t2[i], idx2);   // (y', w', y, w)
+        t1_t2[i] = VBLENDPERM32(0xffff, null[i], t1_t2[i], idx1);   // (x', z', x, z)
+    }
+
+    fp2_mul_4x2x1(t1_t2+8, t1_t2, t1_t2+8); // t2 = (a, b, c, d)
+
+    // Interleave (b, b, a, a) and (d, d, c, c)
+    idx_re = VSET(2, 6, 2, 6, 0, 4, 0, 4);
+    idx_im = VSET(3, 7, 3, 7, 1, 5, 1, 5);
+    for (int i = 0; i < 8; i++) {
+        t1_t2[i] = VPERM512(idx_re, t1_t2[i+8]);
+        t1_t2[i+8] = VPERM512(idx_im, t1_t2[i+8]);
+    }
+
+    // Result is c1 and c2 interleaved
+    fp2_mul_8x1x1(t1_t2, t1_t2, c1);
+
+    // Output (c1, c1) and (c2, c2)
+    for (int i = 0; i < 16; i++) {
+        c1[i] = VUNPACKLO(t1_t2[i], t1_t2[i]);
+        c2[i] = VUNPACKHI(t1_t2[i], t1_t2[i]);
+    }
+}
+
+void theta_double_pair_old(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2)
 {
     theta_sqr_pair(res, a);
     theta_had_pair(res, res);
@@ -237,31 +446,65 @@ void theta_double_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2)
     theta_mul_pair(res, res, c2);
 }
 
-void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, bool h1, bool h2)
+void theta_double_iter_pair_old(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2, const int n)
 {
-    __m512i k_split[16], t1[16], t2[16], idx, idx2;
-
-    //TODO: Would it be more efficient to use the pair operations here?
-    if (h1) {
-        theta_had_pair(k, k);
+    if (n == 0) { 
+        fp2_copy_8x1x1(res, a);
+        return; 
     }
 
-    theta_sqr_pair(k, k);
-    theta_had_pair(k, k);
+    theta_double_pair_old(res, a, c1, c2);
+    for (int i = 0; i < n-1; i++) {
+        theta_double_pair_old(res, res, c1, c2);
+    }
+}
+
+void theta_double_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2)
+{
+    theta_sqr_pair(res, a);
+    theta_had_pair(res, res);
+    theta_sqr_pair(res, res);
+    fp2_mul_8x1x1(res, res, c1);
+    theta_had_pair(res, res);
+    fp2_mul_8x1x1(res, res, c2);
+}
+
+void theta_double_iter_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2, const int n)
+{
+    if (n == 0) { 
+        fp2_copy_8x1x1(res, a);
+        return; 
+    }
+
+    theta_double_pair(res, a, c1, c2);
+    for (int i = 0; i < n-1; i++) {
+        theta_double_pair(res, res, c1, c2);
+    }
+}
+
+void theta_codomain_pair_old(__m512i* res, __m512i* res_inv, __m512i* k, const bool h1, const bool h2)
+{
+    __m512i PQ[16], k_split[16], t1[16], t2[16], idx, idx2;
+
+    fp2_copy_8x1x1(PQ, k);
+
+    if (h1) {
+        theta_had_pair(PQ, PQ);
+    }
+
+    theta_sqr_pair(PQ, PQ);
+    theta_had_pair(PQ, PQ);
 
     // Input: k = (k1, k2) = (xi, yi, zi, wi)_{i=1,2}
     // TODO: Is this necessary?
-    fp2_8x1x1_to_4x2x1(k_split, k);
+    fp2_8x1x1_to_4x2x1(k_split, k_split+8, PQ);
 
     // t1 = (x1, y1, z2, w2)
     // t2 = (y2, x2, w2, z2)
-    idx = VSET(
-        0x0000000100000000, 0x0000000300000002, 0x0000000500000004, 0x0000000700000006,
-        0x0000001900000018, 0x0000001b0000001a, 0x0000001d0000001c, 0x0000001f0000001e
-    );
+    idx = VSET(0, 1, 2, 3, 12, 13, 14, 15);
     for (int i = 0; i < 8; i++) {
         t2[i] = VPERM256(k_split[i+8], 0x4e);
-        t1[i] = VBLENDPERM(0xffff, k_split[i], k_split[i+8], idx);
+        t1[i] = VBLENDPERM(idx, k_split[i], k_split[i+8]);
     }
 
     // t1 = (x1 * y2, y1 * x2, z2 * w2, w2 * z2) = (s1, s2, s3, s3)
@@ -293,7 +536,96 @@ void theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, bool h1, bo
     }
 }
 
-void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
+bool check_isotropic_pair(__m512i* PQ, __m512i* inv)
+{
+    __m512i t0[16], t1[16];
+
+    // PQ = (P0, Q0, P1, Q1, P2, Q2, P3, Q3)
+    // t0 = (inv0, inv0, inv1, inv1, inv2, inv2, inv3, inv3)
+    fp2_mul_8x1x1(t0, PQ, inv);
+
+    // assert t0[0] == t0[2] & t0[4] == t0[6] & 
+    //        t0[1] == t0[5] & t0[3] == t0[7]
+    __m512i idx0 = VSET(0, 8, 4, 12, 1, 9, 3, 11);
+    __m512i idx1 = VSET(2, 10, 6, 14, 5, 13, 7, 15);
+    for (int i = 0; i < 8; i++) {
+        t1[i] = VBLENDPERM(idx0, t0[i], t0[i+8]);
+        t1[i+8] = VBLENDPERM(idx1, t0[i], t0[i+8]);
+    }
+    
+    return fp2_is_equal_4x2x1(t1, t1+8) == 0xf;
+}
+
+bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool h1, const bool h2, const bool verify)
+{
+    __m512i PQ[16], k_split[16], t1[16], t2[16], idx1, idx2, idx3;
+
+    fp2_copy_8x1x1(PQ, k);
+
+    if (h1) {
+        theta_had_pair(PQ, PQ);
+    }
+
+    theta_sqr_pair(PQ, PQ);
+    theta_had_pair(PQ, PQ);
+
+    if (verify) {
+        // xA, xB, yC, yD = ker_P
+        // zA, wB, zC, wD = ker_Q
+        // assert all but yC and yD are nonzero
+        int nz_mask = ~fp2_is_zero_8x1x1(PQ);
+        if (nz_mask & 0xaf != 0xaf) {
+            return false;
+        }
+    }
+
+    // t1 = (x1, x2, z2, z2)
+    // t2 = (y2, y1, w2, w2)
+    idx1 = VSET(0, 8, 1, 9, 5, 13, 5, 13);
+    idx2 = VSET(3, 11, 2, 10, 7, 15, 7, 15);
+    for (int i = 0; i < 8; i++) {
+        t1[i] = VBLENDPERM(idx1, PQ[i], PQ[i+8]);
+        t2[i] = VBLENDPERM(idx2, PQ[i], PQ[i+8]);
+    }
+
+    // t1 = (x1 * y2, y1 * x2, z2 * w2, w2 * z2) = (s1, s2, s3, s3)
+    fp2_mul_4x2x1(t1, t1, t2);
+
+    // Computing res and res_inv simultenously with 8x1x1 mul (faster than 4x2x1 mul + 2x4x1 mul)
+    // t2 = (s1, s2, s1, s2) and (s3, s3, s2, s1) interleaved
+    idx2 = VSET(0, 4, 2, 4, 0, 2, 2, 0);
+    idx3 = VSET(1, 5, 3, 5, 1, 3, 3, 1);
+    // t1 = (x2, y2, z2, w2) and (y1, z1, w2, z2) interleaved
+    idx1 = VSET(1, 2, 3, 0, 5, 7, 7, 5);
+    for (int i = 0; i < 8; i++) {
+        t2[i] = VPERM512(idx2, t1[i]);
+        t2[i+8] = VPERM512(idx3, t1[i]);
+        t1[i] = VPERM512(idx1, PQ[i]);
+        t1[i+8] = VPERM512(idx1, PQ[i+8]);
+    }
+    fp2_mul_8x1x1(t1, t1, t2);
+
+    // Preparing res in 4x2x1 and (res_inv, res_inv) in 8x1x1
+    fp2_8x1x1_to_first_4x2x1(res, t1);
+    idx1 = VSET(1, 1, 3, 3, 5, 5, 7, 7);
+    for (int i = 0; i < 16; i++) {
+        res_inv[i] = VPERM512(idx1, t1[i]);
+    }
+
+    if (verify) {
+        bool is_isotropic = check_isotropic_pair(PQ, res_inv);
+        if (!is_isotropic) {
+            return false;
+        }
+    }
+
+    if (h2) {
+        theta_had_single(res, res);
+    }
+    return true;
+}
+
+void theta_eval_pair_old(__m512i* res, __m512i* a, __m512i* inv, const bool h1, const bool h2)
 {
     if (h1) {
         theta_had_pair(res, a);
@@ -303,5 +635,47 @@ void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, bool h1, bool h2)
     theta_mul_pair(res, res, inv);
     if (h2) {
         theta_had_pair(res, res);
+    }
+}
+
+void theta_eval_list_pair_old(__m512i* pts, __m512i* inv, const bool h1, const bool h2, const int num_pts)
+{
+    bool num_pts_is_odd = (num_pts & 0x1);
+    int num_pair_pts = num_pts / 2;
+
+    for (int i = 0; i < num_pair_pts; i++) {
+        theta_eval_pair_old(pts + 16*i, pts + 16*i, inv, h1, h2);
+    }
+    if (num_pts_is_odd) {
+        theta_eval_single(pts+8*(num_pts-1), pts+8*(num_pts-1), inv, h1, h2);
+    }
+}
+
+void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, const bool h1, const bool h2)
+{
+    if (h1) {
+        theta_had_pair(res, a);
+    }
+    theta_sqr_pair(res, res);
+    theta_had_pair(res, res);
+    fp2_mul_8x1x1(res, res, inv);
+    if (h2) {
+        theta_had_pair(res, res);
+    }
+}
+
+
+void theta_eval_list_pair(__m512i* pts, __m512i* inv, const bool h1, const bool h2, const int num_pts)
+{
+    bool num_pts_is_odd = (num_pts & 0x1);
+    int num_pair_pts = num_pts / 2;
+    __m512i t[8];
+
+    for (int i = 0; i < num_pair_pts; i++) {
+        theta_eval_pair(pts + 16*i, pts + 16*i, inv, h1, h2);
+    }
+    if (num_pts_is_odd) {
+        fp2_8x1x1_to_first_4x2x1(t, inv);
+        theta_eval_single(pts+8*(num_pts-1), pts+8*(num_pts-1), t, h1, h2);
     }
 }

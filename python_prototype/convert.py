@@ -36,6 +36,63 @@ def fp2_to_le(x, w, n=None):
     return re_limbs, im_limbs
 
 
+def print_fp(x):
+    limbs = int_to_le(x, 64)
+    txt = "{ "
+    for i in range(6):
+        if i < len(limbs):
+            val = limbs[i]
+        else:
+            val = 0
+        txt += f"0x{val:x}"
+        if i < 5:
+            txt += ", "
+    txt += " }"
+    print(txt)
+
+
+def print_fp2(x):
+    if isinstance(x, int):
+        print_fp(x)
+        print_fp(0)
+        return
+    coeffs = x.polynomial().coefficients(sparse=False)
+    for i in range(2):
+        if i >= len(coeffs):
+            print_fp(0)
+        else:
+            print_fp(coeffs[i])
+
+
+def print_fp2_4x2x1(P):
+    print_fp2(P.x)
+    print_fp2(P.y)
+    print_fp2(P.z)
+    print_fp2(P.w)
+
+
+def print_fp2_8x1x1(P):
+    print_fp2(P.x1)
+    print_fp2(P.y1)
+    print_fp2(P.z1)
+    print_fp2(P.w1)
+    print_fp2(P.x2)
+    print_fp2(P.y2)
+    print_fp2(P.z2)
+    print_fp2(P.w2)
+
+
+def print_theta_pair(P):
+    print_fp2(P.x1)
+    print_fp2(P.x2)
+    print_fp2(P.y1)
+    print_fp2(P.y2)
+    print_fp2(P.z1)
+    print_fp2(P.z2)
+    print_fp2(P.w1)
+    print_fp2(P.w2)
+
+
 def theta_to_avx512_4_2_1(P):
     """
     Given a theta point (a : b : c : d) as four elements in Fp2 convert this

@@ -20,6 +20,77 @@ from elliptic_curves.kummer_line import KummerPoint, KummerLine
 from elliptic_curves.jacobian_arithmetic import DBL
 from elliptic_curves.torsion_basis import lift_basis_to_jacobian
 
+# ===================================================
+# Hacky Code for Formatting from Sage to C
+# ===================================================
+
+from math import floor, log, ceil
+
+
+def fp_element_to_list(el, radix=64, montgomery=True):
+    Fp2 = el.parent()
+    p = Fp2.characteristic()
+    l = 1 + floor(log(p, 2**radix))
+    if montgomery:
+        R = 2 ** (radix * ceil(log(p, 2**radix)))
+        el = (el * R) % p
+    vs = [(int(el) >> radix * i) % 2**radix for i in range(l)]
+    return ", ".join(map(hex, vs))
+
+
+def fp2_element_to_list(el):
+    return ", ".join([fp_element_to_list(el[0]), fp_element_to_list(el[1])])
+
+
+def to_ec_curve(E):
+    Fp2 = E.parent()
+    ONE = fp2_element_to_list(Fp2.one())
+    A_24 = (E + 2) / 4
+
+    return ", ".join(
+        [
+            fp2_element_to_list(E),  # A
+            ONE,  # C
+            fp2_element_to_list(A_24),  # A24.x
+            ONE,  # A24.z
+            "1",  # is_A24_computed_and_normalized
+        ]
+    )
+
+
+def to_theta_couple_curve(E1, E2):
+    curve_one = to_ec_curve(E1)
+    curve_two = to_ec_curve(E2)
+    return "{" + ", ".join([curve_one, curve_two]) + "}"
+
+
+def to_couple_point(P1, P2):
+    X1, Z1 = P1.XZ()
+    X2, Z2 = P2.XZ()
+
+    return ", ".join(
+        [
+            fp2_element_to_list(X1),  # P1.x
+            fp2_element_to_list(Z1),  # P1.z
+            fp2_element_to_list(X2),  # P2.x
+            fp2_element_to_list(Z2),  # P2.z
+        ]
+    )
+
+
+def to_theta_kernel_couple_point(B1, B2):
+    P1, Q1, R1 = B1
+    P2, Q2, R2 = B2
+
+    T1 = to_couple_point(P1, P2)
+    T2 = to_couple_point(Q1, Q2)
+    T1mT2 = to_couple_point(R1, R2)
+
+    return "{" + ", ".join([T1, T2, T1mT2]) + "}"
+
+
+# ===================================================
+
 
 def two_two_isogeny_chain(
     kernel: tuple[tuple[KummerPoint]],
@@ -200,24 +271,11 @@ def two_two_isogeny_chain_with_torsion(
     # Extract out the bases on E_chl and E_aux
     chl_basis, aux_basis = kernel
 
-    print(f"\n\n{length = }")
-
     # Montgomery coefficients of E_chl and E_aux needed for
     # Jacobian arithmetic
     E1 = chl_basis[0].parent()
     E2 = aux_basis[0].parent()
     (A1, A2) = (E1.a(), E2.a())
-
-    print(f"A1 = {A1}")
-    print(f"A2 = {A2}\n")
-
-    print("PX1 = {0}\nPZ1 = {1}\n".format(*chl_basis[0].XZ()))
-    print("QX1 = {0}\nQZ1 = {1}\n".format(*chl_basis[1].XZ()))
-    print("PmQX1 = {0}\nPmQZ1 = {1}\n".format(*chl_basis[2].XZ()))
-
-    print("PX2 = {0}\nPZ2 = {1}\n".format(*aux_basis[0].XZ()))
-    print("QX2 = {0}\nQZ2 = {1}\n".format(*aux_basis[1].XZ()))
-    print("PmQX2 = {0}\nPmQZ2 = {1}\n".format(*aux_basis[2].XZ()))
 
     # Lift xP, xQ, xPQ to points on the Jacobian for evaluation
     P_chl, Q_chl = lift_basis_to_jacobian(chl_basis, A1)
@@ -338,8 +396,11 @@ def two_two_isogeny_chain_with_torsion(
     E3 = KummerLine(Fq, [A1, C1])
     E4 = KummerLine(Fq, [A2, C2])
 
-    print(f"A3_check = {E3.a()}")
-    print(f"A4_check = {E4.a()}\n")
+    # Printing values for the C tests
+    print(f"\t\t.length = {length},")
+    print(f"\t\t.domain = {to_theta_couple_curve(E1.a(), E2.a())},")
+    print(f"\t\t.kernel = {to_theta_kernel_couple_point(chl_basis, aux_basis)},")
+    print(f"\t\t.codomain = {to_theta_couple_curve(E3.a(), E4.a())},")
 
     # Compute the point coordinates on the KummerLines
     image_points = []

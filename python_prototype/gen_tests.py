@@ -1,3 +1,8 @@
+from sage.misc.randstate import set_random_seed
+from sage.rings.finite_rings.finite_field_constructor import GF
+
+from avx_types import AVX_4x2x1
+from avx_arithmetic import avx_421_mul, avx_421_sqr
 from convert import (
     theta_to_avx512_4_2_1,
     print_avx512_blobs,
@@ -5,19 +10,12 @@ from convert import (
     theta_to_avx512_8_1_1,
     avx512_blobs_8_1_1_to_theta,
 )
-from avx_types import AVX_4x2x1
-from theta_structure import (
-    hadamard,
-    squaring,
-    pairwise_multiplication,
-)
-from sage.all import GF, proof, set_random_seed
+from theta_structure import hadamard
 
-proof.all(False)
 set_random_seed(0)
 
 p = 65 * 2**376 - 1
-F = GF(p**2, names="i", modulus=[1, 0, 1])
+F = GF((p, 2), names="i", modulus=[1, 0, 1])
 
 # For now, use totally random points, later we'll do an isogeny chain
 P = AVX_4x2x1(*[F.random_element() for _ in range(4)])
@@ -31,8 +29,8 @@ for ai, bi in zip(P, P4):
     assert 4 * ai == bi
 
 # P * P should be the same as S(P)
-PP = pairwise_multiplication(P, P)
-PS = squaring(P)
+PP = avx_421_mul(P, P)
+PS = avx_421_sqr(P)
 for ai, bi in zip(PP, PS):
     assert ai == bi
 
@@ -42,11 +40,11 @@ for ai, bi in zip(P, PS):
 
 # Now generate values for the C code
 P_had = hadamard(P)
-P_sqr = squaring(P)
+P_sqr = avx_421_sqr(P)
 Q_had = hadamard(Q)
-Q_sqr = squaring(Q)
-PC = pairwise_multiplication(P, C)
-QC = pairwise_multiplication(Q, C)
+Q_sqr = avx_421_sqr(Q)
+PC = avx_421_mul(P, C)
+QC = avx_421_mul(Q, C)
 
 # Package four coordinates into n AVX blobs, where n is ceil(p.nbits() / 51)
 P_avx512 = theta_to_avx512_4_2_1(P)

@@ -42,6 +42,11 @@ int main()
     {
         return 0;
     }
+    passed = test_ec(n_tests);
+    if(!passed)
+    {
+        return 0;
+    }
     passed = test_theta_gluing(n_tests);
     if(!passed)
     {
@@ -57,7 +62,7 @@ int main()
     {
         return 0;
     }
-    passed = test_theta(n_tests);
+    passed = test_theta_KAT(n_tests);
     if(!passed)
     {
         return 0;

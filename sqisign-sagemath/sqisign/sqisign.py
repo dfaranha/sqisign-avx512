@@ -12,6 +12,7 @@ from elliptic_curves.torsion_basis import torsion_basis_from_hint
 from theta_model.theta_isogeny_chain import two_two_isogeny_chain_verify
 from drbg.aes256_ctr_drbg import AES256_CTR_DRBG
 
+
 class SQIsign:
     """
     An implementation of the SQIsign digital signature algorithm.

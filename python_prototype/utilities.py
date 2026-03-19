@@ -1,6 +1,5 @@
 from avx_types import AVX_4x2x1, AVX_8x1x1
-from avx_arithmetic import avx_add, avx_wide_add, avx_wide_pairwise_mul
-from theta_structure import pairwise_pair
+from avx_arithmetic import avx_421_add, avx_811_add, avx_811_mul, avx_421_to_811
 
 
 def deterministic_fp_root(a):
@@ -16,7 +15,7 @@ def deterministic_fp2_root(a):
     """
     Ensure the square root matches deterministic output
     """
-    a0, a1 = a.list()
+    a0, a1 = a.polynomial().list()
 
     a0_is_zero = a0.is_zero()
     a0_is_odd = int(a0) & 1
@@ -49,7 +48,7 @@ def sqrt_fp2(x):
     F = x.parent()
     p = F.characteristic()
 
-    a0, a1 = x.list()
+    a0, a1 = x.polynomial().list()
 
     delta = sqrt_fp(a0**2 + a1**2)
     if a1.is_zero():
@@ -122,11 +121,11 @@ def internal_sum(A: AVX_8x1x1, B: AVX_8x1x1) -> AVX_4x2x1:
     # d = a3 + b3 + c3 + d3
     C = AVX_4x2x1(a0, a1, a2, a3)
     tmp = AVX_4x2x1(b0, b1, b2, b3)
-    C = avx_add(C, tmp)
+    C = avx_421_add(C, tmp)
     tmp = AVX_4x2x1(c0, c1, c2, c3)
-    C = avx_add(C, tmp)
+    C = avx_421_add(C, tmp)
     tmp = AVX_4x2x1(d0, d1, d2, d3)
-    C = avx_add(C, tmp)
+    C = avx_421_add(C, tmp)
 
     return C
 
@@ -138,11 +137,14 @@ def apply_isomorphism(P: AVX_4x2x1, M: tuple[AVX_8x1x1, AVX_8x1x1]) -> AVX_4x2x1
     # First two and last two rows of the 4x4 matrices
     M01, M23 = M
 
+    # Create an 8x1x1 from P | P
+    PP = avx_421_to_811(P, P)
+
     # First and second row multiplied by P
-    M01 = pairwise_pair(M01, P)
+    M01 = avx_811_mul(M01, PP)
 
     # Second and third row multiplied by P
-    M23 = pairwise_pair(M23, P)
+    M23 = avx_811_mul(M23, PP)
 
     # Sum up multiplications to compute the four coordinates
     return internal_sum(M01, M23)
@@ -173,13 +175,13 @@ def internal_sum_pair(
     E = AVX_8x1x1(Pa0, Pa1, Pa2, Pa3, Qa0, Qa1, Qa2, Qa3)
 
     tmp = AVX_8x1x1(Pb0, Pb1, Pb2, Pb3, Qb0, Qb1, Qb2, Qb3)
-    E = avx_wide_add(E, tmp)
+    E = avx_811_add(E, tmp)
 
     tmp = AVX_8x1x1(Pc0, Pc1, Pc2, Pc3, Qc0, Qc1, Qc2, Qc3)
-    E = avx_wide_add(E, tmp)
+    E = avx_811_add(E, tmp)
 
     tmp = AVX_8x1x1(Pd0, Pd1, Pd2, Pd3, Qd0, Qd1, Qd2, Qd3)
-    E = avx_wide_add(E, tmp)
+    E = avx_811_add(E, tmp)
 
     return E
 
@@ -195,15 +197,15 @@ def apply_isomorphism_pair(PQ: AVX_8x1x1, M: tuple[AVX_8x1x1, AVX_8x1x1]) -> AVX
     QP = AVX_8x1x1(*PQ[4:], *PQ[:4])
 
     # Compute first row mul P, second row mul Q
-    P0Q1 = avx_wide_pairwise_mul(M01, PQ)
+    P0Q1 = avx_811_mul(M01, PQ)
 
     # Compute first row mul Q, second row mul P
-    Q0P1 = avx_wide_pairwise_mul(M01, QP)
+    Q0P1 = avx_811_mul(M01, QP)
 
     # Compute third row mul P, fourth row mul Q
-    P2Q3 = avx_wide_pairwise_mul(M23, PQ)
+    P2Q3 = avx_811_mul(M23, PQ)
 
     # Compute third row mul Q, fourth row mul P
-    Q2P3 = avx_wide_pairwise_mul(M23, QP)
+    Q2P3 = avx_811_mul(M23, QP)
 
     return internal_sum_pair(P0Q1, Q0P1, P2Q3, Q2P3)

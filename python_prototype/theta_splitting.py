@@ -1,5 +1,11 @@
 from os import urandom
 from avx_types import AVX_8x1x1, AVX_4x2x1
+from avx_arithmetic import (
+    avx_421_mul,
+    avx_421_all_zero,
+    avx_421_any_zero,
+    avx_421_eq,
+)
 from utilities import apply_isomorphism
 
 EVEN_INDICES = [
@@ -125,7 +131,7 @@ def randomized_null_point(P: AVX_4x2x1) -> AVX_4x2x1:
     return apply_isomorphism(P, N), N
 
 
-def theta_to_product(OA: AVX_4x2x1):
+def theta_to_product(OA: AVX_4x2x1, verify: bool = False):
     """
     Algorithm 8.45 of the SQIsign spec.
 
@@ -136,8 +142,17 @@ def theta_to_product(OA: AVX_4x2x1):
     TODO: can we use parallelism here?
     """
     a, b, c, d = OA
-    if a * d != b * c:
-        raise ValueError("OA does not come from a product theta structure")
+
+    if verify:
+        # Ensure a * d == b * c
+        T1 = AVX_4x2x1(OA[0], OA[1], 0, 0)
+        T2 = AVX_4x2x1(OA[3], OA[2], 0, 0)
+        T3 = avx_421_mul(T1, T2)
+
+        T1 = AVX_4x2x1(T3[0], 0, 0, 0)
+        T2 = AVX_4x2x1(T3[1], 0, 0, 0)
+        if not avx_421_eq(T1, T2):
+            raise ValueError("OA does not come from a product theta structure")
 
     # TODO:
     # here we can do 6 Fp2 squares or two calls to squaring on OA
@@ -154,13 +169,17 @@ def theta_to_product(OA: AVX_4x2x1):
     A1 = -2 * (x + z)
     C1 = x - z
 
-    if C1.is_zero() or C2.is_zero():
-        raise ValueError("failed to split to a product of elliptic curves")
+    if verify:
+        T1 = AVX_4x2x1(C1, C2, C1, C2)
+        if avx_421_any_zero(T1):
+            raise ValueError("failed to split to a product of elliptic curves")
 
     return (A1, C1), (A2, C2)
 
 
-def theta_product_point_to_montgomery(P: AVX_4x2x1, OA: AVX_4x2x1):
+def theta_product_point_to_montgomery(
+    P: AVX_4x2x1, OA: AVX_4x2x1, verify: bool = False
+):
     """
     Algorithm 8.46 of the SQIsign spec.
 
@@ -169,16 +188,24 @@ def theta_product_point_to_montgomery(P: AVX_4x2x1, OA: AVX_4x2x1):
 
     TODO: can we use parallelism here?
     """
+    if verify:
+        # Ensure P is not all zero
+        if avx_421_all_zero(P):
+            raise ValueError("all coordinates of P are zero")
+
+        # Ensure a * d == b * c and x * w == y * z
+        T1 = AVX_4x2x1(OA[0], OA[1], P[0], P[1])
+        T2 = AVX_4x2x1(OA[3], OA[2], P[3], P[2])
+        T3 = avx_421_mul(T1, T2)
+
+        T1 = AVX_4x2x1(T3[0], T3[2], 0, 0)
+        T2 = AVX_4x2x1(T3[1], T3[3], 0, 0)
+
+        if not avx_421_eq(T1, T2):
+            raise ValueError("OA or P does not come from a product theta structure")
+
     a, b, c, d = OA
-    if a * d != b * c:
-        raise ValueError("OA does not come from a product theta structure")
-
     x, y, z, w = P
-    if x * w != y * z:
-        raise ValueError("P does not come from a product theta structure")
-
-    if all([c.is_zero() for x in P]):
-        raise ValueError("all coordinates are zero")
 
     if x.is_zero() and z.is_zero():
         X1 = a * w + c * y
