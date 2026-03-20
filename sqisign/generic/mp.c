@@ -355,3 +355,19 @@ mp_invert_matrix(digit_t *r1, digit_t *r2, digit_t *s1, digit_t *s2, int e, unsi
     mp_copy(s1, resc, nwords);
     mp_copy(s2, resd, nwords);
 }
+
+unsigned int mp_bitlength(const digit_t *x, const unsigned int nwords) {
+    int i = nwords - 1;
+    while (i >= 0 && x[i] == 0) {
+        i--;
+    }
+
+    if (i < 0) {
+        return 0; 
+    }
+
+    // Count leading zeros of the top word using a compiler intrinsic for GCC/Clang
+    unsigned int top_word_bits = RADIX - __builtin_clzll(x[i]);
+
+    return (i * RADIX) + top_word_bits;
+}

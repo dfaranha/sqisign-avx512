@@ -99,8 +99,9 @@ matrix_scalar_application_even_basis(ec_basis_t *bas, const ec_curve_t *E, scala
     ec_basis_t tmp_bas;
     copy_basis(&tmp_bas, bas);
 
+    // TODO double biscalar
+
     // For a matrix [[a, c], [b, d]] we compute:
-    //
     // first basis element R = [a]P + [b]Q
     if (!ec_biscalar_mul(&bas->P, (*mat)[0][0], (*mat)[1][0], f, &tmp_bas, E))
         return 0;
@@ -112,7 +113,23 @@ matrix_scalar_application_even_basis(ec_basis_t *bas, const ec_curve_t *E, scala
     mp_mod_2exp(scalar0, f, NWORDS_ORDER);
     mp_sub(scalar1, (*mat)[1][0], (*mat)[1][1], NWORDS_ORDER);
     mp_mod_2exp(scalar1, f, NWORDS_ORDER);
-    return ec_biscalar_mul(&bas->PmQ, scalar0, scalar1, f, &tmp_bas, E);
+
+    // return ec_biscalar_mul(&bas->PmQ, scalar0, scalar1, f, &tmp_bas, E);
+
+    // ============== VECTORIZED ================================================================================
+
+    __m512i res[8], A24[8], basis_vec[24];
+    ec_point_t EA24;
+    copy_point(&EA24, &E->A24);
+    ec_point_unvec_to_1x2x4x1(A24, &EA24);
+    ec_point_unvec_to_1x2x4x1(basis_vec, &tmp_bas.P);
+    ec_point_unvec_to_1x2x4x1(basis_vec + 8, &tmp_bas.Q);
+    ec_point_unvec_to_1x2x4x1(basis_vec + 16, &tmp_bas.PmQ);
+    ec_biscalar_mul_1x2x4x1(res, scalar0, scalar1, A24, basis_vec);
+    ec_point_1x2x4x1_to_unvec(&bas->PmQ, res);
+
+    // ============== END ================================================================================
+
 }
 
 // Compute the bases for the challenge and auxillary curve from

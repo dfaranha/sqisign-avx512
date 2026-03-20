@@ -83,13 +83,16 @@ void ec_add_components_4x4x2x1(
 );
 
 
-// ==== For 1D isogeny ====
-// TODO: Names might not be consistent. ec_double_4x2x1 doubles 4 points at once,
-// while ec_double_1x2x4x1 doubles only one point.
+// ========================= 1x2x4x1  ==================================================
 
 void ec_point_unvec_to_1x2x4x1(__m512i* res, ec_point_t* P);
 
 void ec_point_1x2x4x1_to_unvec(ec_point_t* res, __m512i* P);
+
+/**
+ *  P = (0 : 1) in 2x4x1
+ */
+void ec_set_zero_1x2x4x1(__m512i* P);
 
 void ec_double_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24);
 void ec_double_iter_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const int n);
@@ -102,16 +105,48 @@ void ec_double_iter_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const int n)
 void ec_double_add_1x2x4x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A24);
 
 /**
+ *  @param P The (x,z) point in 2x4x1
+ *  @param A24 The curve's A24 point in 2x4x1
+ *  @param m The scalar as an array of digits
+ *  @param mbits The bit length of the scalar m
+ *  @param res Output: [m]*P in 2x4x1
+ */
+void ec_scalar_mul_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const digit_t* m, const unsigned int mbits);
+
+// TODO: Have consistent ordering of parameters.
+
+/**
  *  @param A24 The A24 of the curve in 2x4x1
  *  @param basis The basis P, Q stored with three points x(P), x(Q), x(P-Q) as consecutive 2x4x1's
- *  @param m The scalar
+ *  @param m The scalar as an array of NWORDS_ORDER digits
  *  @param res Output: P + [m]*Q in 2x4x1
  */
 bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const digit_t *m);
+
+/**
+ *  @param scalarP The scalar for P as an array of NWORDS_ORDER digits
+ *  @param scalarQ The scalar for Q as an array of NWORDS_ORDER digits
+ *  @param A24 The A24 of the curve in 2x4x1
+ *  @param basis The basis P, Q stored with three points x(P), x(Q), x(P-Q) as consecutive 2x4x1's
+ *  @param res Output: [scalarP]*P + [scalarQ]*Q in 2x4x1
+ */
+bool ec_biscalar_mul_1x2x4x1(
+    __m512i* res, 
+    const digit_t *scalarP,
+    const digit_t *scalarQ,
+    __m512i* A24,
+    __m512i* basis
+);
 
 // ========================= Debugging functions =================================================
 
 bool test_point_order_twof_1x2x4x1(__m512i* P, __m512i* A24, unsigned int f);
 bool test_basis_order_twof_1x2x4x1(__m512i* B, __m512i* A24, unsigned int f);
+
+
+
+
+// TODO: Delete
+void ec_diff_add_1x2x4x1(__m512i* P_Q, __m512i* PmQ_A24);
 
 #endif

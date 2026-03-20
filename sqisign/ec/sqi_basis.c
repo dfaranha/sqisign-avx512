@@ -2,6 +2,8 @@
 #include "sqi_ec_params_lvl3.h"
 #include "sqi_e0_basis_lvl3.h"
 
+#include "ec.h"
+
 uint32_t ec_recover_y(fp2_t *y, const fp2_t *Px, const ec_curve_t *curve, const bool verify)
 { // Recover y-coordinate of a point on the Montgomery curve y^2 = x^3 + Ax^2 + x
     fp2_add(y, Px, &curve->A); // A + x
@@ -155,7 +157,13 @@ static inline void
 clear_cofactor_for_maximal_even_order(ec_point_t *P, ec_curve_t *curve, int f)
 {
     // clear out the odd cofactor to get a point of order 2^n
-    ec_mul(P, p_cofactor_for_2f, P_COFACTOR_FOR_2F_BITLENGTH, P, curve);
+    //ec_mul(P, p_cofactor_for_2f, P_COFACTOR_FOR_2F_BITLENGTH, P, curve);
+
+    __m512i P_vec[8], A24[8];
+    ec_point_unvec_to_1x2x4x1(P_vec, P);
+    ec_point_unvec_to_1x2x4x1(A24, &curve->A24);
+    ec_scalar_mul_1x2x4x1(P_vec, P_vec, A24, p_cofactor_for_2f, P_COFACTOR_FOR_2F_BITLENGTH);
+    ec_point_1x2x4x1_to_unvec(P, P_vec);
 
     // clear the power of two to get a point of order 2^f
     for (int i = 0; i < TORSION_EVEN_POWER - f; i++) {

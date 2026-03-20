@@ -1,6 +1,7 @@
 #include "ec.h"
 #include "fp2_lvl3.h"
 #include "sqi_fp_constants_lvl3.h"
+#include "mp.h"
 
 void ec_point_unvectorized_to_4x4x2x1(__m512i* res_x, __m512i* res_z, ec_point_t* src)
 {
@@ -337,6 +338,52 @@ void ec_double_add_1x2x4x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A24)
     fp2_mul_4x2x1(res, res, t0);
 }
 
+// TODO: Do we want to make this more efficient without a mul?
+void ec_set_zero_1x2x4x1(__m512i* P)
+{
+    fp2_setzero_2x4x1(P);
+    P[0] = VSET(1, 0, 0, 0, 0, 0, 0, 0);
+    fp2_tomont_2x4x1(P, P);
+}
+
+void ec_scalar_mul_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const digit_t* m, const unsigned int mbits)
+{
+    unsigned int bit;
+    __m512i X0_X1[8], XD_A24[8];
+    __m512i idx_swap = VSET(4, 5, 6, 7, 0, 1, 2, 3);
+
+    if (mbits == 0) {
+        fp2_copy_2x4x1(res, P);
+        return;
+    }
+
+    // X0 = P, X1 = 0, XD = P
+    ec_set_zero_1x2x4x1(X0_X1);
+    fp2_2x4x1_to_4x2x1(X0_X1, X0_X1, P);
+    fp2_2x4x1_to_4x2x1(XD_A24, P, A24);
+
+    for (int i = mbits - 1; i >= 0; i--) {
+        bit = (m[i >> LOG2RADIX] >> (i & (RADIX - 1))) & 1;
+
+        if (bit) { // swap
+            for (int k = 0; k < 8; k++) {
+                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
+            }
+        }
+
+        ec_double_add_1x2x4x1(X0_X1, X0_X1, XD_A24);
+
+        if (bit) { // swap
+            for (int k = 0; k < 8; k++) {
+                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
+            }
+        }
+    }
+
+    // Ignore X1 and output X0
+    fp2_4x2x1_to_2x4x1(res, XD_A24, X0_X1);
+}
+
 bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const digit_t *m)
 {
     __m512i X0_X1[8], XD_A24[8], X0_XD[8], X1_A24[8];
@@ -381,6 +428,198 @@ bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const dig
 
     // We output X1 and ignore X0
     fp2_4x2x1_to_2x4x1(XD_A24, res, X0_X1);
+
+    return true;
+}
+
+// TODO: change to static
+
+/**
+ * Internal helper function for ec_biscalar mul.
+ * Given x(P), x(Q) and x(P-Q) it computes x(P+Q). It then sets x(Q), x(P-Q) := x(P+Q), x(Q).
+ * A24 is not needed, but is only an artifact of how PmQ is stored in the biscalar ladder.
+ * @param P_Q P and Q in 4x2x1
+ * @param PmQ_A24 PmQ and A24 in 4x2x1
+ */
+void ec_diff_add_1x2x4x1(__m512i* P_Q, __m512i* PmQ_A24)
+{
+    __m512i t0[8], t1[8], idx0, idx1;
+    __mmask8 mask;
+
+    // t0 = (P.x, P.x, Q.x, Q.x)
+    // t1 = (P.z, P.z, Q.z, Q.z)
+    idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    for (int i = 0; i < 8; i++) {
+        t0[i] = VPERM512(idx0, P_Q[i]);
+        t1[i] = VPERM512(idx1, P_Q[i]);
+    }
+    // t0 = (P.x + P.z, P.x - P.z, Q.x + Q.z, Q.x - Q.z)
+    mask = 0x33;
+    fp2_mixaddsub_4x2x1(t0, t0, t1, mask);
+
+    // t1 = (t0[3], t0[2])
+    // t0 = (t0[0], t0[1])
+    idx0 = VSET(6, 6, 7, 7, 4, 4, 5, 5);
+    idx1 = VSET(0, 0, 1, 1, 2, 2, 3, 3);
+    mask = 0x55;
+    for (int i = 0; i < 8; i++) {
+        t1[i] = VPERM512MASKZ(mask, t0[i], idx0);
+        t0[i] = VPERM512MASKZ(mask, t0[i], idx1);
+    }
+    fp2_mul_2x4x1(t0, t0, t1);
+
+    // t1 = (t0[1], t0[1])
+    // t0 = (t0[0], t0[0])
+    idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    idx1 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    for (int i = 0; i < 8; i++) {
+        t1[i] = VPERM512(idx0, t0[i]);
+        t0[i] = VPERM512(idx1, t0[i]);
+    }
+    mask = 0xf;
+    fp2_mixaddsub_2x4x1(t0, t0, t1, mask);
+    fp2_sqr_2x4x1(t0, t0);
+
+    // t1 = (PmQ.z, PmQ.x)
+    idx0 = VSET(2, 2, 3, 3, 0, 0, 1, 1);
+    mask = 0x55;
+    for (int i = 0; i < 8; i++) {
+        t1[i] = VPERM512MASKZ(mask, PmQ_A24[i], idx0);
+    }
+    fp2_mul_2x4x1(t0, t0, t1); // Output t0 = ((P+Q).x, (P+Q).z)
+
+    // Updating input
+    // PmQ_A24 = (Q, A24), P_Q = (P, P+Q)
+    idx0 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+    idx1 = VSET(0, 1, 2, 3, 8, 10, 12, 14);
+    for (int i = 0; i < 8; i++) {
+        PmQ_A24[i] = VBLENDPERM(idx0, P_Q[i], PmQ_A24[i]);
+        P_Q[i] = VBLENDPERM(idx1, P_Q[i], t0[i]);
+    }
+}
+
+// TODO: Can we optimize ec_double_add to modify in place?
+// TODO: At the moment I don't take the number of bits as input. 
+//       Potentially, the scalars could be much smaller than NWORDS_ORDER.
+bool ec_biscalar_mul_1x2x4x1(
+    __m512i* res, 
+    const digit_t *scalarP,
+    const digit_t *scalarQ,
+    __m512i* A24,
+    __m512i* basis
+)
+{
+    __m512i X0_X1[8], XD_A24[8], t0[8], t1[8];
+    __m512i idx_swap = VSET(4, 5, 6, 7, 0, 1, 2, 3), idx0, idx1;
+    digit_t s0_arr[NWORDS_ORDER], s1_arr[NWORDS_ORDER], t_arr[NWORDS_ORDER];
+    digit_t* s0 = s0_arr, *s1 = s1_arr, *t = t_arr;
+
+    // Formulas are not valid if PmQ.x = 0 or PmQ.z = 0
+    if (fp2_is_zero_2x4x1(basis+16)) {
+        return false;
+    }
+
+    fp2_2x4x1_to_4x2x1(X0_X1, basis, basis+8);
+    fp2_2x4x1_to_4x2x1(XD_A24, basis+16, A24);
+    mp_copy(s0, scalarP, NWORDS_ORDER);
+    mp_copy(s1, scalarQ, NWORDS_ORDER);
+
+    while (!mp_is_zero(s0, NWORDS_ORDER)) {
+        if (mp_compare(s0, s1, NWORDS_ORDER) > 0) { // s0 > s1
+            digit_t* tmp = s0;
+            s0 = s1;
+            s1 = tmp;
+            
+            for (int k = 0; k < 8; k++) {
+                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
+            }
+        }
+        // Now s0 <= s1
+
+        // t = 4 * s0
+        mp_copy(t, s0, NWORDS_ORDER);
+        digit_t overflow_bits = t[NWORDS_ORDER - 1] >> (RADIX-2);
+        mp_shiftl(t, 2, NWORDS_ORDER); 
+        bool s0_even = mp_is_even(s0, NWORDS_ORDER);
+        bool s1_even = mp_is_even(s1, NWORDS_ORDER);
+
+        // if the shift overflows, 4*s0 is definitely larger than s1.
+        if (overflow_bits || mp_compare(s1, t, NWORDS_ORDER) <= 0) {
+            mp_sub(s1, s1, s0, NWORDS_ORDER);
+
+            for (int k = 0; k < 8; k++) {
+                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
+            }
+
+            ec_diff_add_1x2x4x1(X0_X1, XD_A24);
+
+            for (int k = 0; k < 8; k++) {
+                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
+            }
+        } else if (s0_even == s1_even) {
+            mp_sub(s1, s1, s0, NWORDS_ORDER);
+            mp_shiftr(s1, 1, NWORDS_ORDER);
+
+            for (int k = 0; k < 8; k++) {
+                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
+            }
+
+            ec_double_add_1x2x4x1(X0_X1, X0_X1, XD_A24);
+
+            for (int k = 0; k < 8; k++) {
+                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
+            }
+        } else if (s1_even) {
+            mp_shiftr(s1, 1, NWORDS_ORDER);
+
+            idx0 = VSET(4, 5, 6, 7, 8, 9, 10, 11); // second first
+            idx1 = VSET(0, 1, 2, 3, 12, 13, 14, 15); // first second
+            for (int k = 0; k < 8; k++) {
+                t0[k] = VBLENDPERM(idx0, X0_X1[k], XD_A24[k]);
+                t1[k] = VBLENDPERM(idx1, X0_X1[k], XD_A24[k]);
+            }
+            ec_double_add_1x2x4x1(t0, t0, t1);
+
+            // Update X1 and XD
+            idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11); // first first
+            idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15); // second second
+            for (int k = 0; k < 8; k++) {
+                X0_X1[k] = VBLENDPERM(idx0, X0_X1[k], t0[k]);
+                XD_A24[k] = VBLENDPERM(idx1, t0[k], XD_A24[k]);
+            }
+        } else {
+            mp_shiftr(s0, 1, NWORDS_ORDER);
+
+            idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11); // first first
+            idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15); // second second
+            for (int k = 0; k < 8; k++) {
+                t0[k] = VBLENDPERM(idx0, X0_X1[k], XD_A24[k]);
+                t1[k] = VBLENDPERM(idx1, X0_X1[k], XD_A24[k]);
+            }
+            ec_double_add_1x2x4x1(t0, t0, t1);
+
+            // Update X0 and XD
+            idx0 = VSET(0, 1, 2, 3, 12, 13, 14, 15); // first second
+            idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15); // second second
+            for (int k = 0; k < 8; k++) {
+                X0_X1[k] = VBLENDPERM(idx0, t0[k], X0_X1[k]);
+                XD_A24[k] = VBLENDPERM(idx1, t0[k], XD_A24[k]);
+            }
+        }
+    }
+
+    // We ignore X0, and continue with X1 in 2x4x1
+    fp2_4x2x1_to_2x4x1(XD_A24, X0_X1, X0_X1);
+
+    while (mp_is_even(s1, NWORDS_ORDER)) {
+        mp_shiftr(s1, 1, NWORDS_ORDER);
+        ec_double_1x2x4x1(X0_X1, X0_X1, A24);
+    }
+    unsigned int s1_nbits = mp_bitlength(s1, NWORDS_ORDER);
+
+    // res = [s_1]*X1
+    ec_scalar_mul_1x2x4x1(res, X0_X1, A24, s1, s1_nbits);
 
     return true;
 }
