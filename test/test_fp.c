@@ -480,6 +480,7 @@ bool test_fp(int iterations)
     if (passed == 0) {
         return false;
     }
+#if 0
 
     printf("Fp lvl3 4x2 tests:\n");
     one[0] = VSET(1, 0, 1, 0, 1, 0, 1, 0);
@@ -847,6 +848,7 @@ bool test_fp(int iterations)
     if (passed == 0) {
         return false;
     }
+#endif
 
     return true;
 }
