@@ -4,14 +4,14 @@ from sage.rings.integer_ring import ZZ
 from hashlib import shake_256
 
 from avx_types import AVX_2x4x1
-from elliptic_types import Curve, BasisX, PointX
+from elliptic_types import Curve
 from elliptic_arithmetic import (
     j_invariant,
     ladder_3pt_1x2x4x1,
-    x_double_n,
     x_double_n_1x2x4x1,
     x_basis_double_n_1x2x4x1,
     ladder_biscalar_1x2x4x1,
+    ladder_double_biscalar_1x2x4x1,
 )
 from limb_conversion import (
     basis_from_64_to_51_bit,
@@ -157,20 +157,15 @@ class SQIsign:
         res &= 2 ** (self.f - self.response_length) - 1
         return res.to_bytes(byteorder="little", length=hash_bytes)
 
-    def _hash_challenge(self, E_pk: Curve, E_chl: Curve, message: bytes):
+    def _hash_challenge(self, pk: bytes, E_chl: Curve, message: bytes):
         """
         Pack bytes and then repeatedly hash to obtain challenge bytes
         """
-        j_pk = j_invariant(E_pk)
         j_chl = j_invariant(E_chl)
+        j_chl_bytes_re = j_chl[0].to_bytes(byteorder="little")
+        j_chl_bytes_im = j_chl[1].to_bytes(byteorder="little")
 
-        j_pk_bytes = j_pk[0].to_bytes(byteorder="little")
-        j_pk_bytes += j_pk[1].to_bytes(byteorder="little")
-
-        j_chl_bytes = j_chl[0].to_bytes(byteorder="little")
-        j_chl_bytes += j_chl[1].to_bytes(byteorder="little")
-
-        return self._iterative_shake256(j_pk_bytes + j_chl_bytes + message)
+        return self._iterative_shake256(pk + j_chl_bytes_re + j_chl_bytes_im + message)
 
     def _compute_challenge_from_scalar(
         self, A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], chl: ZZ, n_bt: ZZ
@@ -217,8 +212,9 @@ class SQIsign:
         a00, a01, a10, a11 = M.list()
 
         # Compute the new scaled basis
-        xR = ladder_biscalar_1x2x4x1(A24, basis, a00, a10)
-        xS = ladder_biscalar_1x2x4x1(A24, basis, a01, a11)
+        # xR = ladder_biscalar_1x2x4x1(A24, basis, a00, a10)
+        # xS = ladder_biscalar_1x2x4x1(A24, basis, a01, a11)
+        xR, xS = ladder_double_biscalar_1x2x4x1(A24, basis, a00, a10, a01, a11)
 
         # For the difference point we must be careful the result
         # is positive, so we work modulo the point order
@@ -334,7 +330,7 @@ class SQIsign:
 
         # In the very rare case, all of the isogeny was handled here and we skip the (2,2) chain
         if e_rsp_prime == 0:
-            return chl == self._hash_challenge(E_pk, E_chl, message)
+            return chl == self._hash_challenge(public_key, E_chl, message)
 
         # Compute the 2D isogeny
         # Because of our 2,2 chain with torsion above, the target curve is deterministically the first
@@ -351,8 +347,9 @@ class SQIsign:
         A3, C3 = E3
         E3 = Curve(A3, C3, (A3 + 2 * C3), 4 * C3)
 
+
         # Compute the hash from the codomain
-        chl_prime = self._hash_challenge(E_pk, E3, message)
+        chl_prime = self._hash_challenge(public_key, E3, message)
 
         # The signature is valid if we recover chl from the hash of the codomain
         # of the (2,2)-chain computed above

@@ -104,16 +104,21 @@ int splitting_get_index(__m512i* null)
     num_found += t;
     index = index*(1-t) + 9*t;
 
+    // printf("num_found %d\n", num_found);
     if (num_found != 1) {
         return -1;
     } 
     return index;
 } 
 
-void splitting_isom_matrix(splitting_matrix_t* matrix, __m512i* null)
+bool splitting_isom_matrix(splitting_matrix_t* matrix, __m512i* null, bool verify)
 {
     int index = splitting_get_index(null);
+    if (index == -1) {
+        return false;
+    }
     *matrix = SPLITTING_MATRICES[index];
+    return true;
 }
 
 void splitting_rand_matrix(splitting_matrix_t* matrix)

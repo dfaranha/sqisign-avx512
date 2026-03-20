@@ -600,19 +600,10 @@ uint32_t
 gf65376_sqrt(gf65376 *d, const gf65376 *a)
 {
     // Candidate root is a^((q+1)/4), with (q+1)/4 = 65*2^374
-    gf65376 y;
+    gf65376 y, yn;
     gf65376_xsquare(&y, a, 6);
     gf65376_mul(&y, &y, a);
     gf65376_xsquare(&y, &y, 374);
-
-    // Normalize y and negate if necessary, to set the low bit to 0.
-    // The low bit check must be on the normal representation,
-    // not the Montgomery representation.
-    gf65376 yn;
-    inner_gf65376_montgomery_reduce(&yn, &y);
-    uint32_t ctl = -((uint32_t)yn.v0 & 1);
-    gf65376_neg(&yn, &y);
-    gf65376_select(&y, &y, &yn, ctl);
 
     // Check whether the candidate is indeed a square root.
     gf65376_square(&yn, &y);

@@ -2,6 +2,7 @@
 #include "fp2_lvl3.h"
 #include "ec.h"
 #include <assert.h>
+#include "sqi_test_extras.h"
 
 void two_isog_codom_1x2x4x1(__m512i* res_A24, __m512i* res_eval_data, __m512i* ker)
 {
@@ -29,12 +30,14 @@ void two_isog_codom_1x2x4x1(__m512i* res_A24, __m512i* res_eval_data, __m512i* k
     fp2_mixaddsub_2x4x1(res_eval_data, res_eval_data, t, mask);
 }
 
-void two_isog_eval_1x2x4x1(__m512i* P, __m512i* eval_data, __m512i* ker)
+void two_isog_eval_1x2x4x1(__m512i* Q, __m512i* eval_data, __m512i* P)
 {
     __m512i t0[8], t1[8], idx0, idx1;
     __mmask8 mask;
     
     // t0 = (Px - Pz, Px + Pz)
+    idx0 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    idx1 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
     mask = 0xf0;
     for (int i = 0; i < 8; i++) {
         t0[i] = VPERM512(idx0, P[i]);
@@ -51,7 +54,7 @@ void two_isog_eval_1x2x4x1(__m512i* P, __m512i* eval_data, __m512i* ker)
     }
     fp2_mixaddsub_2x4x1(t1, t0, t1, mask);
 
-    fp2_mul_2x4x1(P, P, t1);
+    fp2_mul_2x4x1(Q, P, t1);
 }
 
 void four_isog_codom_1x2x4x1(__m512i* res_A24, __m512i* res_eval_data, __m512i* ker)
@@ -90,13 +93,14 @@ void four_isog_codom_1x2x4x1(__m512i* res_A24, __m512i* res_eval_data, __m512i* 
     mask = 0xf0;
     for (int i = 0; i < 8; i++) {
         res_A24[i] = VBLENDPERM(idx0, res_A24[i], t1[i]);
-        t0[i] = VBLENDPERM(idx1, res_eval_data[i], t1[i]);
-        t1[i] = VBLENDPERMMASKZ(mask, res_eval_data[i], t1[i], idx1);
+        t0[i] = VBLENDPERM(idx1, res_eval_data[i], t1[i]); // (c2, t1[1])
+        t1[i] = VBLENDPERMMASKZ(mask, res_eval_data[i], t1[i], idx1); // (0, t1[1])
     }
-    fp2_add_2x4x1(t0, t0, t1);
+    
+    fp2_add_2x4x1(res_eval_data+8, t0, t1);
 }
 
-void four_isog_eval_1x2x4x1(__m512i* P, __m512i* eval_data, __m512i* ker)
+void four_isog_eval_1x2x4x1(__m512i* Q, __m512i* eval_data, __m512i* P)
 {
     __m512i t0[8], t1[8], t2[8], idx0, idx1;
     __mmask8 mask;
@@ -124,33 +128,34 @@ void four_isog_eval_1x2x4x1(__m512i* P, __m512i* eval_data, __m512i* ker)
     for (int i = 0; i < 8; i++) {
         t0[i] = VBLENDPERM(idx1, t0[i], t1[i]);
     }
-    fp2_mul_2x4x1(t0, t0, eval_data+1);
+    fp2_mul_2x4x1(t0, t0, eval_data+8);
 
     // t1 = (t1[0] + t0[0], t1[0] - t0[0])^2
     for (int i = 0; i < 8; i++) {
-        t1[i] = VPERM512(idx0, t0[i]);
+        t1[i] = VPERM512(idx0, t1[i]);
         t2[i] = VPERM512(idx0, t0[i]);
     }
     fp2_mixaddsub_2x4x1(t1, t1, t2, mask);
     fp2_sqr_2x4x1(t1, t1);
 
-    // t0 = (t0[0] + t1[0], t0[0] - t1[1])
+    // t0 = (t0[1] + t1[0], t0[1] - t1[1])
     idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
     for (int i = 0; i < 8; i++) {
         t0[i] = VPERM512(idx0, t0[i]);
     }
     fp2_mixaddsub_2x4x1(t0, t0, t1, mask);
 
-    fp2_mul_2x4x1(P, t0, t1);
+    fp2_mul_2x4x1(Q, t0, t1);
 }
 
-bool isog_chain_1d(
-    ec_curve_t* res_E2,
-    ec_curve_t* E1,
-    ec_point_t* pts,
-    const unsigned int num_pts,
-    ec_point_t* ker,
+// Purely in 1x2x4x1
+bool isog_chain_1d_1x2x4x1(
+    __m512i* res_A24,
+    __m512i *A24,
+    __m512i *ker,
     const unsigned int isog_len,
+    __m512i *pts,
+    const unsigned int num_pts,
     const bool verify
 )
 {
@@ -159,15 +164,11 @@ bool isog_chain_1d(
         space++;
     }
 
-    __m512i strat[8*space], pts_vec[8*num_pts], A24[8], eval_data[16], test[8];
+    __m512i strat[8*space], eval_data[16], test[8];
     uint16_t orders[space];
     orders[0] = isog_len;
     int current = 0;
-    ec_point_unvec_to_1x2x4x1(strat, ker);
-    ec_point_unvec_to_1x2x4x1(A24, &E1->A24);
-    for (int i = 0; i < num_pts; i++) {
-        ec_point_unvec_to_1x2x4x1(pts_vec + 8*i, pts+i);
-    }
+    fp2_copy_2x4x1(strat, ker);
     
     for (int j = 0; j < isog_len/2; j++) {
         assert(current >= 0);
@@ -190,60 +191,79 @@ bool isog_chain_1d(
         if (verify) {
             // P != 0
             int zmask = fp2_is_zero_2x4x1(strat + 8*current);
-            int z_is_zero = (zmask & 0x50) == 0x50;
+            int z_is_zero = (zmask & 0x2) == 0x2;
             if (z_is_zero) { return false; }
 
             // Q= 2 * P != 0 and XQ != 0 (disallow singular)
             ec_double_1x2x4x1(test, strat + 8*current, A24);
             zmask = fp2_is_zero_2x4x1(test);
-            int x_is_zero = (zmask & 0x5) == 0x5;
-            z_is_zero = (zmask & 0x50) == 0x50;
-            if (x_is_zero || z_is_zero) { return false; }
+            // if Q.x = 0 or Q.z = 0
+            if (zmask) { return false; }
 
             // order must be 4
             ec_double_1x2x4x1(test, test, A24);
             zmask = fp2_is_zero_2x4x1(test);
-            z_is_zero = (zmask & 0x50) == 0x50;
+            z_is_zero = (zmask & 0x2) == 0x2;
             if (!z_is_zero) { return false; }
         }
 
         // Evaluate 4-isogeny
         four_isog_codom_1x2x4x1(A24, eval_data, strat + 8*current);
+         
         for (int i = 0; i < current; i++) {
-            four_isog_eval_1x2x4x1(strat + 8*i, eval_data, strat + 8*current);
+            four_isog_eval_1x2x4x1(strat + 8*i, eval_data, strat + 8*i);
             orders[i] -= 2;
         }
         for (int i = 0; i < num_pts; i++) {
-            four_isog_eval_1x2x4x1(pts_vec + 8*i, eval_data, pts_vec + 8*i);
+            four_isog_eval_1x2x4x1(pts + 8*i, eval_data, pts + 8*i);
         }
         current--;
     }
     assert(isog_len % 2 ? !current : current == -1);
-    if (isog_len % 2 == 0) { // can stop
-        return true; 
+    if (isog_len % 2 == 1) { // last 2-isogeny
+        if (verify) {
+            // P != 0 and P.X != 0 (disallow singular)
+            int zmask = fp2_is_zero_2x4x1(strat);
+            if (zmask) { return false; }
+
+            // order must be 2
+            ec_double_1x2x4x1(test, strat, A24);
+            zmask = fp2_is_zero_2x4x1(test);
+            int z_is_zero = (zmask & 0x2) == 0x2;
+            if (!z_is_zero) { return false; }
+        }
+
+        two_isog_codom_1x2x4x1(A24, eval_data, strat);
+        for (int i = 0; i < num_pts; i++) {
+            two_isog_eval_1x2x4x1(pts+8*i, eval_data, pts+8*i);
+        }
     }
 
-    if (verify) {
-        // P != 0 and PQ != 0 (disallow singular)
-        int zmask = fp2_is_zero_2x4x1(strat);
-        int x_is_zero = (zmask & 0x5) == 0x5;
-        int z_is_zero = (zmask & 0x50) == 0x50;
-        if (x_is_zero || z_is_zero) { return false; }
+    return true;
+}
 
-        // order must be 2
-        ec_double_1x2x4x1(test, strat, A24);
-        zmask = fp2_is_zero_2x4x1(test);
-        z_is_zero = (zmask & 0x50) == 0x50;
-        if (!z_is_zero) { return false; }
-    }
-
-    two_isog_codom_1x2x4x1(A24, eval_data, strat);
+// Does the unvec <--> 1x2x4x1 conversion
+bool isog_chain_1d(
+    ec_curve_t* res_E2,
+    ec_curve_t* E1,
+    ec_point_t* ker,
+    const unsigned int isog_len,
+    ec_point_t* pts,
+    const unsigned int num_pts,
+    const bool verify
+)
+{
+    __m512i A24[8], ker_vec[8], pts_vec[8*num_pts];
+    ec_point_unvec_to_1x2x4x1(A24, &E1->A24);
+    ec_point_unvec_to_1x2x4x1(ker_vec, ker);
     for (int i = 0; i < num_pts; i++) {
-        two_isog_eval_1x2x4x1(pts_vec+8*i, eval_data, strat);
+        ec_point_unvec_to_1x2x4x1(pts_vec + 8*i, pts+i);
     }
+
+    bool success = isog_chain_1d_1x2x4x1(A24, A24, ker_vec, isog_len, pts_vec, num_pts, verify);
 
     ec_point_1x2x4x1_to_unvec(&res_E2->A24, A24);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < num_pts; i++) {
         ec_point_1x2x4x1_to_unvec(pts+i, pts_vec+8*i);
     }
 
@@ -251,5 +271,5 @@ bool isog_chain_1d(
     A24_to_AC(res_E2, &res_E2->A24);
     res_E2->is_A24_computed_and_normalized = false;
 
-    return true;
+    return success;
 }

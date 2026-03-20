@@ -265,7 +265,7 @@ void fp2_4x2x1_duplicate_to_8x1x1(__m512i* res, __m512i* src);
 void fp2_8x1x1_to_first_4x2x1(__m512i* res, __m512i* src);
 
 
-void fp2_4x2x1_to_2x4x1(__m512i* res, __m512i* src);
+void fp2_4x2x1_to_2x4x1(__m512i* res1, __m512i* res2, __m512i* src);
 void fp2_2x4x1_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2);
 
 #endif

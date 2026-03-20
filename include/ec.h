@@ -92,5 +92,26 @@ void ec_point_unvec_to_1x2x4x1(__m512i* res, ec_point_t* P);
 void ec_point_1x2x4x1_to_unvec(ec_point_t* res, __m512i* P);
 
 void ec_double_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24);
+void ec_double_iter_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const int n);
+
+/**
+ *  @param P_Q The (x,z) points P and Q stored in 4x2x1
+ *  @param PmQ_A24 P-Q and A24 stored in 4x2x1
+ *  @param res Output: 2*P and P+Q stored in 4x2x1
+ */
+void ec_double_add_1x2x4x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A24);
+
+/**
+ *  @param A24 The A24 of the curve in 2x4x1
+ *  @param basis The basis P, Q stored with three points x(P), x(Q), x(P-Q) as consecutive 2x4x1's
+ *  @param m The scalar
+ *  @param res Output: P + [m]*Q in 2x4x1
+ */
+bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const digit_t *m);
+
+// ========================= Debugging functions =================================================
+
+bool test_point_order_twof_1x2x4x1(__m512i* P, __m512i* A24, unsigned int f);
+bool test_basis_order_twof_1x2x4x1(__m512i* B, __m512i* A24, unsigned int f);
 
 #endif

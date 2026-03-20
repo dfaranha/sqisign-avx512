@@ -31,10 +31,10 @@ hash_to_challenge(scalar_t *scalar,
     // First encode the public key as bytes
     public_key_to_bytes(buf, pk);
     {
-        // Compute the j-invariant and include bytes into buffer 
-        fp2_t j;
-        ec_j_inv(&j, com_curve);
-        fp2_encode(buf + PUBLICKEY_BYTES, &j);
+        // Compute the j-invariant of the commitment and include bytes into buffer 
+        fp2_t j_com;
+        ec_j_inv(&j_com, com_curve);
+        fp2_encode(buf + PUBLICKEY_BYTES, &j_com);
     }
 
     {
@@ -54,7 +54,7 @@ hash_to_challenge(scalar_t *scalar,
 #endif
 
         shake256_inc_init(&ctx);
-        shake256_inc_absorb(&ctx, buf, 2 * FP2_ENCODED_BYTES);
+        shake256_inc_absorb(&ctx, buf, sizeof(buf));
         shake256_inc_absorb(&ctx, message, length);
         shake256_inc_finalize(&ctx);
         shake256_inc_squeeze((void *)(*scalar), hash_bytes, &ctx);

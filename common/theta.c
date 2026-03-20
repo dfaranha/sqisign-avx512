@@ -14,21 +14,46 @@
 //                 Helper functions for isogeny chains    
 // ====================================================================
 
-// TODO: Do I need to normalize points?
-// TODO: Should we normalize eval points?
 void theta_normalize_chain_input(
     theta_couple_curve_t* E12, theta_kernel_couple_points_t* ker
 )
 {
-    //TODO batched inv
-    ec_normalize_curve(&E12->E1);
-    ec_normalize_curve(&E12->E2);
-    // ec_normalize_point(&B1->P);
-    // ec_normalize_point(&B1->Q);
-    // ec_normalize_point(&B1->PmQ);
-    // ec_normalize_point(&B2->P);
-    // ec_normalize_point(&B2->Q);
-    // ec_normalize_point(&B2->PmQ);
+    fp2_t inverses[4];
+    fp2_copy(&inverses[0], &E12->E1.C);
+    fp2_copy(&inverses[1], &E12->E2.C);
+    fp2_copy(&inverses[2], &ker->T1.P1.z);
+    fp2_copy(&inverses[3], &ker->T1.P2.z);
+
+    fp2_batched_inv(inverses, 4);
+
+    // Set Z-values to 1
+    fp2_set_one(&E12->E1.C);
+    fp2_set_one(&E12->E2.C);
+    fp2_set_one(&ker->T1.P1.z);
+    fp2_set_one(&ker->T1.P2.z);
+
+    // Multiply by the inverses
+    fp2_mul(&E12->E1.A, &E12->E1.A, &inverses[0]);
+    fp2_mul(&E12->E2.A, &E12->E2.A, &inverses[1]);
+    fp2_mul(&ker->T1.P1.x, &ker->T1.P1.x, &inverses[2]);
+    fp2_mul(&ker->T1.P2.x, &ker->T1.P2.x, &inverses[3]);
+
+    // Compute A24 in place
+    fp2_add_one(&E12->E1.A24.x, &E12->E1.A); 
+    fp2_add_one(&E12->E1.A24.x, &E12->E1.A24.x);
+    fp_copy(&E12->E1.A24.x.im, &E12->E1.A.im);
+    fp2_half(&E12->E1.A24.x, &E12->E1.A24.x); 
+    fp2_half(&E12->E1.A24.x, &E12->E1.A24.x); 
+    fp2_set_one(&E12->E1.A24.z);
+
+    // TODO: potentially remove me, for the aux curve
+    // This doesnt need to be done, but it might do after more AVX things?
+    fp2_add_one(&E12->E2.A24.x, &E12->E2.A); 
+    fp2_add_one(&E12->E2.A24.x, &E12->E2.A24.x); 
+    fp_copy(&E12->E2.A24.x.im, &E12->E2.A.im);
+    fp2_half(&E12->E2.A24.x, &E12->E2.A24.x); 
+    fp2_half(&E12->E2.A24.x, &E12->E2.A24.x);
+    fp2_set_one(&E12->E2.A24.z);
 }
 
 int theta_compute_product_doubles(
@@ -113,7 +138,7 @@ bool theta_isogeny_chain_single(
 
     fp2_t unvec1[4];
 
-    // TODO: Is it enough to just normalize curves? 
+    // Normalise E1, E2 as well as T1.P1 and T1.P2
     theta_normalize_chain_input(E12, ker);   
 
     // lift the basis
@@ -121,8 +146,8 @@ bool theta_isogeny_chain_single(
     ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
     ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
 
-    success &= lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
-    success &= lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
+    success &= lift_basis_normalized(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
+    success &= lift_basis_normalized(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
 
     // We are now in the position to convert from 64 to 51 bit limbs
     // For the curve we need to pack the Montgomery coefficient for
@@ -257,7 +282,7 @@ bool theta_isogeny_chain_single(
     }
 
     // Step Three: Splitting
-    splitting_isom_matrix(&isom_matrix, OA);
+    success &= splitting_isom_matrix(&isom_matrix, OA, verify);
     splitting_apply_isomorphism_single(OA, OA, &isom_matrix);
     splitting_apply_isomorphism_list_single(eval_pts_theta, &isom_matrix, num_pts);
 
@@ -296,7 +321,7 @@ bool theta_isogeny_chain_pair(
 
     fp2_t unvec1[4];
 
-    // TODO: Is it enough to just normalize curves? 
+    // Normalise E1, E2 as well as T1.P1 and T1.P2
     theta_normalize_chain_input(E12, ker);   
 
     // lift the basis
@@ -304,9 +329,9 @@ bool theta_isogeny_chain_pair(
     ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
     ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
 
-    success &= lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
-    success &= lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
-
+    success &= lift_basis_normalized(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
+    success &= lift_basis_normalized(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
+    // printf("lift %d\n", success);
     // We are now in the position to convert from 64 to 51 bit limbs
     // For the curve we need to pack the Montgomery coefficient for
     // arithmetic.
@@ -350,6 +375,7 @@ bool theta_isogeny_chain_pair(
         strat_points_x + (8*current), strat_points_z + (8*current),
         verify
     );
+    // printf("gluing_codom %d\n", success);
 
     // Package the point we use for translation
     // T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
@@ -381,6 +407,7 @@ bool theta_isogeny_chain_pair(
         eval_pts_theta, pts, OA_dual_inv, 
         matrix01, matrix23, num_pts, verify
     );
+    // printf("gluing eval %d\n", success);
 
     // Step Two: Compute the rest of the chain
     int step = 0;
@@ -415,6 +442,7 @@ bool theta_isogeny_chain_pair(
             OA, OA_dual_inv, strat_theta_pair + (16*current), 
             h1, h2, codom_verify
         );
+        // printf("%d-th codomain %d\n", step, success);
 
         // Push the kernel through the images
         // we have current number of pairs, so 2*current number of points
@@ -430,7 +458,7 @@ bool theta_isogeny_chain_pair(
     }
 
     // Step Three: Splitting
-    splitting_isom_matrix(&isom_matrix, OA);
+    success &= splitting_isom_matrix(&isom_matrix, OA, verify);
     splitting_apply_isomorphism_single(OA, OA, &isom_matrix);
     splitting_apply_isomorphism_list_pair(eval_pts_theta, &isom_matrix, num_pts);
 
@@ -442,7 +470,7 @@ bool theta_isogeny_chain_pair(
 
     success &= splitting_theta_to_product(res_E34, OA, verify);
     success &= splitting_theta_point_to_mont_list_pair(res_pts, eval_pts_theta, OA, num_pts, verify);
-
+    // printf("splitting %d\n", success);
     return success;
 }
 
@@ -487,7 +515,7 @@ bool theta_isogeny_chain_no_torsion_single(
     __m512i c1[8], c2[8], p1[8], p2[8], k1[8], k2[8];
     fp2_t unvec1[4];
 
-    // TODO: Is it enough to just normalize curves? 
+    // Normalise E1, E2 as well as T1.P1 and T1.P2
     theta_normalize_chain_input(E12, ker);   
 
     // lift the basis
@@ -496,8 +524,8 @@ bool theta_isogeny_chain_no_torsion_single(
     ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
     ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
     
-    success &= lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
-    success &= lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
+    success &= lift_basis_normalized(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
+    success &= lift_basis_normalized(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
 
     // We are now in the position to convert from 64 to 51 bit limbs
     // For the curve we need to pack the Montgomery coefficient for
@@ -642,7 +670,7 @@ bool theta_isogeny_chain_no_torsion_single(
     theta_eval_list_single(eval_pts_theta, OA_dual_inv, h1, h2, num_pts);
 
     // Step Four: Splitting
-    splitting_isom_matrix(&isom_matrix, OA);
+    success &= splitting_isom_matrix(&isom_matrix, OA, verify);
     splitting_apply_isomorphism_single(OA, OA, &isom_matrix);
     splitting_apply_isomorphism_list_single(eval_pts_theta, &isom_matrix, num_pts);
 
@@ -681,7 +709,7 @@ bool theta_isogeny_chain_no_torsion_pair(
 
     fp2_t unvec1[4];
 
-    // TODO: Is it enough to just normalize curves? 
+    // Normalise E1, E2 as well as T1.P1 and T1.P2
     theta_normalize_chain_input(E12, ker);   
 
     // lift the basis
@@ -689,8 +717,8 @@ bool theta_isogeny_chain_no_torsion_pair(
     ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
     ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
 
-    success &= lift_basis(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
-    success &= lift_basis(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
+    success &= lift_basis_normalized(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
+    success &= lift_basis_normalized(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
 
     // We are now in the position to convert from 64 to 51 bit limbs
     // For the curve we need to pack the Montgomery coefficient for
@@ -828,7 +856,7 @@ bool theta_isogeny_chain_no_torsion_pair(
 
 
     // Step Four: Splitting
-    splitting_isom_matrix(&isom_matrix, OA);
+    success &= splitting_isom_matrix(&isom_matrix, OA, verify);
     splitting_apply_isomorphism_single(OA, OA, &isom_matrix);
     splitting_apply_isomorphism_list_pair(eval_pts_theta, &isom_matrix, num_pts);
 

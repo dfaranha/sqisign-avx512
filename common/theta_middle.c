@@ -146,7 +146,7 @@ void theta_codomain_single(__m512i* res, __m512i* res_inv, __m512i* k1, __m512i*
     fp2_mul_4x2x1(res, Q, t2);
 
     // res_inv
-    fp2_4x2x1_to_2x4x1(t2, t1); // t2[8:15] = (s3, s3)
+    fp2_4x2x1_to_2x4x1(t2, t2+8, t1); // t2[8:15] = (s3, s3)
     idx = VSET(2, 2, 3, 3, 0, 0, 1, 1);
     idx2 = VSET(6, 6, 7, 7, 4, 4, 5, 5);
     for (int i = 0; i < 8; i++) { // t1[0:7] = (y1, x1), t1[8:15] = (w_res, z_res)
@@ -521,7 +521,7 @@ void theta_codomain_pair_old(__m512i* res, __m512i* res_inv, __m512i* k, const b
     fp2_mul_4x2x1(res, k_split+8, t2);
 
     // res_inv
-    fp2_4x2x1_to_2x4x1(t2, t1); // t2[8:15] = (s3, s3)
+    fp2_4x2x1_to_2x4x1(t2, t2+8, t1); // t2[8:15] = (s3, s3)
     idx = VSET(2, 2, 3, 3, 0, 0, 1, 1);
     idx2 = VSET(6, 6, 7, 7, 4, 4, 5, 5);
     for (int i = 0; i < 8; i++) { // t1[0:7] = (y1, x1), t1[8:15] = (w_res, z_res)

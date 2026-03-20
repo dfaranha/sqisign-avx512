@@ -10,6 +10,7 @@ bool test_theta_KAT(int iterations);
 bool test_theta_gluing(int iterations);
 bool test_theta_middle(int iterations);
 bool test_theta_splitting(int iterations);
+int test_verification_kat();
 
 void print_test_res(char * title, int passed);
 

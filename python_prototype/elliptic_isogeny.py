@@ -1,12 +1,17 @@
 from elliptic_types import Curve, PointX
 from elliptic_arithmetic import x_double_1x2x4x1, x_double_n_1x2x4x1
-from avx_types import AVX_2x4x1
+from avx_types import AVX_2x4x1, AVX_8x1x1
 from avx_arithmetic import (
     avx_241_sqr,
     avx_241_mul,
     avx_241_sub,
     avx_241_add_sub,
     avx_241_add,
+    avx_241_to_811,
+    avx_811_to_241,
+    avx_811_add_sub,
+    avx_811_sqr,
+    avx_811_mul,
 )
 
 
@@ -128,6 +133,107 @@ def four_isogeny_eval(Q: AVX_2x4x1, C01: AVX_2x4x1, C2: AVX_2x4x1) -> AVX_2x4x1:
     return XQ_ZQ
 
 
+def four_isogeny_eval_quad(points: tuple[AVX_2x4x1], C01: AVX_2x4x1, C2: AVX_2x4x1):
+    """
+    Evaluate four points in parallel using 8-way vectorisation
+    """
+    # Pack the four points into a single 8x1x1 blob
+    P_Q_R_S = avx_241_to_811(*points)
+
+    # only need 3 of the 8 elements here but we'll have to convert to 8x1x1
+    C012 = avx_241_to_811(C01, C2, C01, C2)
+
+    # Note the ADD SUB uses (+ + + + - - - -)
+    # Compute X + Z, X - Z for four points
+    T0 = AVX_8x1x1(
+        P_Q_R_S[0],
+        P_Q_R_S[2],
+        P_Q_R_S[4],
+        P_Q_R_S[6],
+        P_Q_R_S[0],
+        P_Q_R_S[2],
+        P_Q_R_S[4],
+        P_Q_R_S[6],
+    )
+    T1 = AVX_8x1x1(
+        P_Q_R_S[1],
+        P_Q_R_S[3],
+        P_Q_R_S[5],
+        P_Q_R_S[7],
+        P_Q_R_S[1],
+        P_Q_R_S[3],
+        P_Q_R_S[5],
+        P_Q_R_S[7],
+    )
+    t0_t1 = avx_811_add_sub(T0, T1)
+
+    # (X + Z) * C1, (X + Z) * (X - Z)
+    T0 = AVX_8x1x1(
+        t0_t1[0], t0_t1[0], t0_t1[1], t0_t1[1], t0_t1[2], t0_t1[2], t0_t1[3], t0_t1[3]
+    )
+    T1 = AVX_8x1x1(
+        C012[1], t0_t1[4], C012[1], t0_t1[5], C012[1], t0_t1[6], C012[1], t0_t1[7]
+    )
+    XQ_t0 = avx_811_mul(T0, T1)
+
+    # (X - Z) * C2 and (X + Z) * (X - Z) * C0
+    T0 = AVX_8x1x1(
+        t0_t1[4], XQ_t0[1], t0_t1[5], XQ_t0[3], t0_t1[6], XQ_t0[5], t0_t1[7], XQ_t0[7]
+    )
+    T1 = AVX_8x1x1(
+        C012[2], C012[0], C012[2], C012[0], C012[2], C012[0], C012[2], C012[0]
+    )
+    ZQ_t0 = avx_811_mul(T0, T1)
+
+    # Note the ADD SUB uses (+ + + + - - - -)
+    T0 = AVX_8x1x1(
+        XQ_t0[0], XQ_t0[2], XQ_t0[4], XQ_t0[6], XQ_t0[0], XQ_t0[2], XQ_t0[4], XQ_t0[6]
+    )
+    T1 = AVX_8x1x1(
+        ZQ_t0[0], ZQ_t0[2], ZQ_t0[4], ZQ_t0[6], ZQ_t0[0], ZQ_t0[2], ZQ_t0[4], ZQ_t0[6]
+    )
+    t1_ZQ = avx_811_add_sub(T0, T1)
+    t1_ZQ = avx_811_sqr(t1_ZQ)
+
+    # Note the ADD SUB uses (+ + + + - - - -)
+    T0 = AVX_8x1x1(
+        ZQ_t0[1], ZQ_t0[3], ZQ_t0[5], ZQ_t0[7], ZQ_t0[1], ZQ_t0[3], ZQ_t0[5], ZQ_t0[7]
+    )
+    T1 = AVX_8x1x1(
+        t1_ZQ[0], t1_ZQ[1], t1_ZQ[2], t1_ZQ[3], t1_ZQ[4], t1_ZQ[5], t1_ZQ[6], t1_ZQ[7]
+    )
+    XQ_t0 = avx_811_add_sub(T0, T1)
+
+    T0 = AVX_8x1x1(
+        XQ_t0[0], t1_ZQ[4], XQ_t0[1], t1_ZQ[5], XQ_t0[2], t1_ZQ[6], XQ_t0[3], t1_ZQ[7]
+    )
+    T1 = AVX_8x1x1(
+        t1_ZQ[0], XQ_t0[4], t1_ZQ[1], XQ_t0[5], t1_ZQ[2], XQ_t0[6], t1_ZQ[3], XQ_t0[7]
+    )
+    im_P_Q_R_S = avx_811_mul(T0, T1)
+
+    # Convert back to 2x4x1 points
+    im_P, im_Q, im_R, im_S = avx_811_to_241(im_P_Q_R_S)
+
+    return im_P, im_Q, im_R, im_S
+
+
+def four_isogeny_eval_array(points: tuple[AVX_2x4x1], C01: AVX_2x4x1, C2: AVX_2x4x1):
+    # We eval `n` points by evaluating four at a time with four_isogeny_eval_quad
+    # and then the remaining `n mod 4` points with four_isogeny_eval
+    chunks = len(points) // 4
+
+    images = []
+    for i in range(chunks):
+        chunk = points[i * 4 : (i + 1) * 4]
+        images.extend(four_isogeny_eval_quad(chunk, C01, C2))
+
+    for Q in points[chunks * 4 :]:
+        images.append(four_isogeny_eval(Q, C01, C2))
+
+    return images
+
+
 def two_isogeny_chain_1x2x4x1(
     domain: AVX_2x4x1, kernel: AVX_2x4x1, length: int, points: list[AVX_2x4x1] = []
 ):
@@ -165,11 +271,11 @@ def two_isogeny_chain_1x2x4x1(
                 raise ValueError("2, chain failed: kernel has wrong order")
 
         A24, C01, C2 = four_isogeny_codomain(ker)
-        strat_points = [four_isogeny_eval(Q, C01, C2) for Q in strat_points]
+        strat_points[:k] = four_isogeny_eval_array(strat_points[:k], C01, C2)
         orders = [m - 2 for m in orders]
         k = k - 1
 
-        points = [four_isogeny_eval(Q, C01, C2) for Q in points]
+        points = four_isogeny_eval_array(points, C01, C2)
 
     # Compute a 2-isogeny if the length is odd
     if length % 2:
