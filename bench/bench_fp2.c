@@ -466,7 +466,7 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int i = 0; i < iterations; i++) {
-            fp2_4x2x1_to_2x4x1(c, a);
+            fp2_4x2x1_to_2x4x1(c, a, b);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
