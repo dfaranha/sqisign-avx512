@@ -157,13 +157,7 @@ static inline void
 clear_cofactor_for_maximal_even_order(ec_point_t *P, ec_curve_t *curve, int f)
 {
     // clear out the odd cofactor to get a point of order 2^n
-    //ec_mul(P, p_cofactor_for_2f, P_COFACTOR_FOR_2F_BITLENGTH, P, curve);
-
-    __m512i P_vec[8], A24[8];
-    ec_point_unvec_to_1x2x4x1(P_vec, P);
-    ec_point_unvec_to_1x2x4x1(A24, &curve->A24);
-    ec_scalar_mul_1x2x4x1(P_vec, P_vec, A24, p_cofactor_for_2f, P_COFACTOR_FOR_2F_BITLENGTH);
-    ec_point_1x2x4x1_to_unvec(P, P_vec);
+    ec_mul(P, p_cofactor_for_2f, P_COFACTOR_FOR_2F_BITLENGTH, P, curve);
 
     // clear the power of two to get a point of order 2^f
     for (int i = 0; i < TORSION_EVEN_POWER - f; i++) {

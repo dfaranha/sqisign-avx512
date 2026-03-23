@@ -4,6 +4,12 @@
 #include "intrinsics_avx512.h"
 
 #include "sqi_ec.h"
+#include "sqi_fp_constants_lvl3.h"
+
+// TODO replace digit_t with scalar_t where appropriate
+
+typedef digit_t scalar_t[NWORDS_ORDER];
+typedef scalar_t scalar_mtx_2x2_t[2][2];
 
 // TODO: Probably want to create structs to group elements together.
 // Next goal is to implement division by 3 in fp and fp2. 
@@ -98,11 +104,23 @@ void ec_double_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24);
 void ec_double_iter_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const int n);
 
 /**
+ *  Assumes res != PmQ_A24
  *  @param P_Q The (x,z) points P and Q stored in 4x2x1
  *  @param PmQ_A24 P-Q and A24 stored in 4x2x1
  *  @param res Output: 2*P and P+Q stored in 4x2x1
  */
 void ec_double_add_1x2x4x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A24);
+
+/**
+ * Computes two double_add's in parallel.
+ * The inputs and output is in the 8x1x1 format (P.x, PQ.x, P.z, PQ.z, Q.x, A24.x, Q.z, A24.z)
+ * Assumes that the output vector is not the same as one of the inputs.
+ *
+ * @param P1_Q1_PQ1_A24 Points P1, Q1, P1-Q1 on E1 and the curve's A24
+ * @param P2_Q2_PQ2_A24 Points P2, Q2, P2-Q2 on E2 and the curve's A24
+ * @param R1_R2_S1_S2 Output: R1 = 2*P1, R2 = P1 + Q1 and S1 = 2*P2, S2 = P2 + Q2
+ */
+void ec_double_add_pair_8x1x1(__m512i* R1_R2_S1_S2, __m512i* P1_Q1_PQ1_A24, __m512i* P2_Q2_PQ2_A24);
 
 /**
  *  @param P The (x,z) point in 2x4x1
@@ -134,6 +152,17 @@ bool ec_biscalar_mul_1x2x4x1(
     __m512i* res, 
     const digit_t *scalarP,
     const digit_t *scalarQ,
+    __m512i* A24,
+    __m512i* basis
+);
+
+/**
+ * Computes res1 = mat[0,0]*P + mat[1,0]*Q and res2 = mat[0,1]*P + mat[1,1]*Q
+ */
+bool ec_biscalar_mul_pair_1x2x4x1(
+    __m512i* res1,
+    __m512i* res2,
+    scalar_mtx_2x2_t* mat,
     __m512i* A24,
     __m512i* basis
 );

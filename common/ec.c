@@ -1,7 +1,8 @@
 #include "ec.h"
 #include "fp2_lvl3.h"
-#include "sqi_fp_constants_lvl3.h"
 #include "mp.h"
+
+#include "utils.h"
 
 void ec_point_unvectorized_to_4x4x2x1(__m512i* res_x, __m512i* res_z, ec_point_t* src)
 {
@@ -338,6 +339,92 @@ void ec_double_add_1x2x4x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A24)
     fp2_mul_4x2x1(res, res, t0);
 }
 
+// TODO: Create a VPERM512 and VBLENDPERM for loop macro? We do it so often. Just input pattern (and len of array?)
+
+// TODO: Simplify 8x1x1 to not have this weird interleaving pattern? I think the interleaving doesn't improve efficiency much, if at all.
+
+void ec_double_add_pair_8x1x1(__m512i* R1_R2_S1_S2, __m512i* P1_Q1_PQ1_A24, __m512i* P2_Q2_PQ2_A24)
+{
+    // Note: Python stores elements in the format
+    //       (P.x, P.z, Q.x, Q.z, PQ.x, PQ.z, A24.x, A24.z)
+    __m512i t0[16], t1[16], t2[16];
+    __m512i idx0, idx1, idx2;
+    __mmask8 mask;
+
+    // t0 = (P1.x, Q1.x, P2.x, Q2.x, P1.x, Q1.x, P2.x, Q2.x)
+    //         +     +     +     +     -     -     -     -
+    // t1 = (P1.z, Q1.z, P2.z, Q2.z, P1.z, Q1.z, P2.z, Q2.z)    
+    idx0 = VSET(0, 4, 8, 12, 0, 4, 8, 12);
+    idx1 = VSET(2, 6, 10, 14, 2, 6, 10, 14);
+    mask = 0xf;
+    for (int i = 0; i < 16; i++) {
+        t0[i] = VBLENDPERM(idx0, P1_Q1_PQ1_A24[i], P2_Q2_PQ2_A24[i]);
+        t1[i] = VBLENDPERM(idx1, P1_Q1_PQ1_A24[i], P2_Q2_PQ2_A24[i]);
+    }
+    fp2_mixaddsub_8x1x1(t0, t0, t1, mask, mask);
+
+    // 8x2x1 mul with four squares hidden inside
+    // t1 = (t0[0], t0[4], t0[5], t0[1], t0[2], t0[6], t0[7], t0[3])
+    // t0 = (t0[0], t0[4], t0[0], t0[4], t0[2], t0[6], t0[2], t0[6])
+    idx0 = VSET(0, 4, 0, 4, 2, 6, 2, 6);
+    idx1 = VSET(0, 4, 5, 1, 2, 6, 7, 3);
+    for (int i = 0; i < 16; i++) {
+        t1[i] = VPERM512(idx1, t0[i]);
+        t0[i] = VPERM512(idx0, t0[i]);
+    }
+    fp2_mul_8x1x1(t0, t0, t1);
+
+    // t1 = (t0[0], t0[2], t0[4], t0[6], t0[0], t0[2], t0[4], t0[6])
+    // t2 = (t0[1], t0[3], t0[5], t0[7], t0[1], t0[3], t0[5], t0[7])
+    idx0 = VSET(0, 2, 4, 6, 0, 2, 4, 6);
+    idx1 = VSET(1, 3, 5, 7, 1, 3, 5, 7);
+    mask = 0xf;
+    for (int i = 0; i < 16; i++) {
+        t1[i] = VPERM512(idx0, t0[i]);
+        t2[i] = VPERM512(idx1, t0[i]);
+    }
+    fp2_mixaddsub_8x1x1(t1, t1, t2, mask, mask);
+
+    // Moving values from t0 and t1 to res to free them after the next mul
+    // res = (t0[0], t0[4], t1[4], t1[6], PQ1.z, PQ2.z, PQ1.x, PQ2.x)
+    idx0 = VSET(0, 4, 12, 14, 0, 0, 0, 0);
+    idx1 = VSET(0, 1, 2, 3, 11, 0, 9, 0);
+    idx2 = VSET(0, 1, 2, 3, 4, 11, 6, 9);
+    for (int i = 0; i < 16; i++) {
+        R1_R2_S1_S2[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        R1_R2_S1_S2[i] = VBLENDPERM(idx1, R1_R2_S1_S2[i], P1_Q1_PQ1_A24[i]);
+        R1_R2_S1_S2[i] = VBLENDPERM(idx2, R1_R2_S1_S2[i], P2_Q2_PQ2_A24[i]);
+    }
+
+    // t0 = (t0[1], t1[4], t1[1], t1[5], t0[5], t1[6], t1[3], t1[7])
+    // t1 = (A24_1.z, A24_1.x, t1[1], t1[5], A24_2.z, A24_2.x, t1[3], t1[7])
+    idx0 = VSET(1, 12, 9, 13, 5, 14, 11, 15);
+    idx1 = VSET(15, 13, 1, 5, 0, 0, 3, 7);
+    idx2 = VSET(0, 1, 2, 3, 15, 13, 6, 7);
+    for (int i = 0; i < 16; i++) {
+        t0[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        t1[i] = VBLENDPERM(idx1, t1[i], P1_Q1_PQ1_A24[i]);
+        t1[i] = VBLENDPERM(idx2, t1[i], P2_Q2_PQ2_A24[i]);
+    }
+    fp2_mul_8x1x1(t0, t0, t1);
+
+    // C: (P.x, PQ.x, P.z, PQ.z, Q.x, A24.x, Q.z, A24.z)
+    // P: (P.x, P.z, Q.x, Q.z, PQ.x, PQ.z, A24.x, A24.z)
+
+    // t1 = (t0[0], t0[4], t0[0], t0[4], t0[2], t0[6], t0[3], t0[7])
+    // t0 = (0    , 0    , t0[1], t0[5], 0    , 0    , 0    , 0    )
+
+    mask = 0xc; 
+    idx0 = VSET(0, 4, 0, 4, 2, 6, 3, 7);
+    idx1 = VSET(0, 0, 1, 5, 0, 0, 0, 0);
+    for (int i = 0; i < 16; i++) {
+        t1[i] = VPERM512(idx0, t0[i]);
+        t0[i] = VPERM512MASKZ(mask, t0[i], idx1);
+    }
+    fp2_add_8x1x1(t0, t0, t1);
+    fp2_mul_8x1x1(R1_R2_S1_S2, R1_R2_S1_S2, t0);
+}
+
 // TODO: Do we want to make this more efficient without a mul?
 void ec_set_zero_1x2x4x1(__m512i* P)
 {
@@ -502,6 +589,7 @@ void ec_diff_add_1x2x4x1(__m512i* P_Q, __m512i* PmQ_A24)
 // TODO: Can we optimize ec_double_add to modify in place?
 // TODO: At the moment I don't take the number of bits as input. 
 //       Potentially, the scalars could be much smaller than NWORDS_ORDER.
+// TODO: Some swaps are unecessary with a different arrangement of inputs.
 bool ec_biscalar_mul_1x2x4x1(
     __m512i* res, 
     const digit_t *scalarP,
@@ -622,6 +710,184 @@ bool ec_biscalar_mul_1x2x4x1(
     ec_scalar_mul_1x2x4x1(res, X0_X1, A24, s1, s1_nbits);
 
     return true;
+}
+
+bool ec_biscalar_mul_pair_1x2x4x1(
+    __m512i* res1,
+    __m512i* res2,
+    scalar_mtx_2x2_t *mat,
+    __m512i* A24,
+    __m512i* basis
+)
+{
+    digit_t r0_arr[NWORDS_ORDER], r1_arr[NWORDS_ORDER], s0_arr[NWORDS_ORDER], s1_arr[NWORDS_ORDER];
+    digit_t *r0 = r0_arr, *r1 = r1_arr, *s0 = s0_arr, *s1 = s1_arr; 
+    __m512i X0_X1_XD_A24[32], Y0_Y1_YD_A24[32], R1_R2_S1_S2[16]; // Need 32 consecutive vectors for single biscalars at the end
+    __m512i *P1_Q1_PQ1_A24 = X0_X1_XD_A24+16, *P2_Q2_PQ2_A24 = Y0_Y1_YD_A24+16;
+    __m512i idx;
+
+    // 8x1x1 layout = (X0.x, XD.x, X0.z, XD.z, X1.x, A24.x, X1.z, A24.z)
+    fp2_2x4x1_to_4x2x1(X0_X1_XD_A24, basis, basis+8);
+    fp2_2x4x1_to_4x2x1(X0_X1_XD_A24+8, basis+16, A24);
+    fp2_4x2x1_to_8x1x1(X0_X1_XD_A24, X0_X1_XD_A24, X0_X1_XD_A24+8);
+    fp2_copy_8x1x1(Y0_Y1_YD_A24, X0_X1_XD_A24);
+
+    mp_copy(r0, (*mat)[0][0], NWORDS_ORDER);
+    mp_copy(r1, (*mat)[1][0], NWORDS_ORDER);
+    mp_copy(s0, (*mat)[0][1], NWORDS_ORDER);
+    mp_copy(s1, (*mat)[1][1], NWORDS_ORDER);
+
+    int case_r, case_s;
+
+    while (true) {
+        if (mp_compare(r0, r1, NWORDS_ORDER) > 0) { // r0 > r1
+            digit_t *tmp = r0;
+            r0 = r1;
+            r1 = tmp;
+
+            // swapping X0 and X1
+            idx = VSET(4, 1, 6, 3, 0, 5, 2, 7);
+            for (int i = 0; i < 16; i++) {
+                X0_X1_XD_A24[i] = VPERM512(idx, X0_X1_XD_A24[i]);
+            }
+        }
+
+        if (mp_compare(s0, s1, NWORDS_ORDER) > 0) { // s0 > s1
+            digit_t *tmp = s0;
+            s0 = s1;
+            s1 = tmp;
+
+            idx = VSET(4, 1, 6, 3, 0, 5, 2, 7);
+            for (int i = 0; i < 16; i++) {
+                Y0_Y1_YD_A24[i] = VPERM512(idx, Y0_Y1_YD_A24[i]);
+            }
+        }
+
+        bool r0_even = mp_is_even(r0, NWORDS_ORDER);
+        bool r1_even = mp_is_even(r1, NWORDS_ORDER);
+
+        if (r0_even == r1_even) {
+            case_r = 0;
+            mp_sub(r1, r1, r0, NWORDS_ORDER);
+            mp_shiftr(r1, 1, NWORDS_ORDER);
+
+            // P1 = X1, Q1 = X0, PQ1 = XD
+            idx = VSET(4, 1, 6, 3, 0, 5, 2, 7);
+            for (int i = 0; i < 16; i++) {
+                P1_Q1_PQ1_A24[i] = VPERM512(idx, X0_X1_XD_A24[i]);
+            }
+        } else if (r1_even) {
+            case_r = 1;
+            mp_shiftr(r1, 1, NWORDS_ORDER);
+
+            // P1 = X1, Q1 = XD, PQ1 = X0
+            idx = VSET(4, 0, 6, 2, 1, 5, 3, 7);
+            for (int i = 0; i < 16; i++) {
+                P1_Q1_PQ1_A24[i] = VPERM512(idx, X0_X1_XD_A24[i]);
+            }
+        } else {
+            case_r = 2;
+            mp_shiftr(r0, 1, NWORDS_ORDER);
+
+            // P1 = X0, Q1 = XD, PQ1 = X1
+            idx = VSET(0, 4, 2, 6, 1, 5, 3, 7);
+            for (int i = 0; i < 16; i++) {
+                P1_Q1_PQ1_A24[i] = VPERM512(idx, X0_X1_XD_A24[i]);
+            }
+        }
+
+        bool s0_even = mp_is_even(s0, NWORDS_ORDER);
+        bool s1_even = mp_is_even(s1, NWORDS_ORDER);
+
+        if (s0_even == s1_even) {
+            case_s = 0;
+            mp_sub(s1, s1, s0, NWORDS_ORDER);
+            mp_shiftr(s1, 1, NWORDS_ORDER);
+
+            // P2 = Y1, Q2 = Y0, PQ2 = YD
+            idx = VSET(4, 1, 6, 3, 0, 5, 2, 7);
+            for (int i = 0; i < 16; i++) {
+                P2_Q2_PQ2_A24[i] = VPERM512(idx, Y0_Y1_YD_A24[i]);
+            }
+        } else if(s1_even) {
+            case_s = 1;
+            mp_shiftr(s1, 1, NWORDS_ORDER);
+
+            // P2 = Y1, Q2 = YD, PQ2 = Y0
+            idx = VSET(4, 0, 6, 2, 1, 5, 3, 7);
+            for (int i = 0; i < 16; i++) {
+                P2_Q2_PQ2_A24[i] = VPERM512(idx, Y0_Y1_YD_A24[i]);
+            }
+        } else {
+            case_s = 2;
+            mp_shiftr(s0, 1, NWORDS_ORDER);
+
+            // P2 = Y0, Q2 = YD, PQ2 = Y1
+            idx = VSET(0, 4, 2, 6, 1, 5, 3, 7);
+            for (int i = 0; i < 16; i++) {
+                P2_Q2_PQ2_A24[i] = VPERM512(idx, Y0_Y1_YD_A24[i]);
+            }
+        }
+
+        ec_double_add_pair_8x1x1(R1_R2_S1_S2, P1_Q1_PQ1_A24, P2_Q2_PQ2_A24);
+
+        if (case_r == 0) {
+            // X0 = R2, X1 = R1
+            idx = VSET(4, 9, 6, 11, 0, 13, 2, 15);
+            for (int i = 0; i < 16; i++) {
+                X0_X1_XD_A24[i] = VBLENDPERM(idx, R1_R2_S1_S2[i], X0_X1_XD_A24[i]);
+            }
+        } else if (case_r == 1) {
+            // X1 = R1, XD = R2
+            idx = VSET(8, 4, 10, 6, 0, 13, 2, 15);
+            for (int i = 0; i < 16; i++) {
+                X0_X1_XD_A24[i] = VBLENDPERM(idx, R1_R2_S1_S2[i], X0_X1_XD_A24[i]);
+            }
+        } else if (case_r == 2) {
+            // X0 = R1, XD = R2
+            idx = VSET(0, 4, 2, 6, 12, 13, 14, 15);
+            for (int i = 0; i < 16; i++) {
+                X0_X1_XD_A24[i] = VBLENDPERM(idx, R1_R2_S1_S2[i], X0_X1_XD_A24[i]);
+            }
+        }
+
+        if (case_s == 0) {
+            // Y0 = S2, Y1 = S1
+            idx = VSET(5, 9, 7, 11, 1, 13, 3, 15);
+            for (int i = 0; i < 16; i++) {
+                Y0_Y1_YD_A24[i] = VBLENDPERM(idx, R1_R2_S1_S2[i], Y0_Y1_YD_A24[i]);
+            }
+        } else if (case_s == 1) {
+            // Y1 = S1, YD = S2
+            idx = VSET(8, 5, 10, 7, 1, 13, 3, 15);
+            for (int i = 0; i < 16; i++) {
+                Y0_Y1_YD_A24[i] = VBLENDPERM(idx, R1_R2_S1_S2[i], Y0_Y1_YD_A24[i]);
+            }
+        } else if (case_s == 2) {
+            // Y0 = S1, YD = S2
+            idx = VSET(1, 5, 3, 7, 12, 13, 14, 15);
+            for (int i = 0; i < 16; i++) {
+                Y0_Y1_YD_A24[i] = VBLENDPERM(idx, R1_R2_S1_S2[i], Y0_Y1_YD_A24[i]);
+            }
+        }
+
+        // If either r0 = 0 or s0 = 0, we must break the chain
+        if (mp_is_zero(r0, NWORDS_ORDER) || mp_is_zero(s0, NWORDS_ORDER)) {
+            break;
+        }
+    }
+
+    fp2_8x1x1_to_4x2x1(X0_X1_XD_A24, X0_X1_XD_A24+16, X0_X1_XD_A24);
+    fp2_4x2x1_to_2x4x1(X0_X1_XD_A24, X0_X1_XD_A24+8, X0_X1_XD_A24);
+    fp2_4x2x1_to_2x4x1(X0_X1_XD_A24+16, X0_X1_XD_A24+24, X0_X1_XD_A24+16);
+    fp2_8x1x1_to_4x2x1(Y0_Y1_YD_A24, Y0_Y1_YD_A24+16, Y0_Y1_YD_A24);
+    fp2_4x2x1_to_2x4x1(Y0_Y1_YD_A24, Y0_Y1_YD_A24+8, Y0_Y1_YD_A24);
+    fp2_4x2x1_to_2x4x1(Y0_Y1_YD_A24+16, Y0_Y1_YD_A24+24, Y0_Y1_YD_A24+16);
+
+    bool succ1 = ec_biscalar_mul_1x2x4x1(res1, r0, r1, A24, X0_X1_XD_A24);
+    bool succ2 = ec_biscalar_mul_1x2x4x1(res2, s0, s1, A24, Y0_Y1_YD_A24);
+
+    return succ1 && succ2;
 }
 
 // ========================= Debugging functions =================================================

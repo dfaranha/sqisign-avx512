@@ -92,44 +92,38 @@ compute_challenge_verify(ec_curve_t *E_chall, const signature_t *sig, const ec_c
 static int
 matrix_scalar_application_even_basis(ec_basis_t *bas, const ec_curve_t *E, scalar_mtx_2x2_t *mat, int f)
 {
+    // ============== VECTORIZED ================================================================================
+    __m512i res1[8], res2[8], A24[8], basis_vec[24];
+    ec_point_t EA24;
+    copy_point(&EA24, &E->A24);
+    ec_point_unvec_to_1x2x4x1(A24, &EA24);
+    ec_point_unvec_to_1x2x4x1(basis_vec, &bas->P);
+    ec_point_unvec_to_1x2x4x1(basis_vec + 8, &bas->Q);
+    ec_point_unvec_to_1x2x4x1(basis_vec + 16, &bas->PmQ);
+
     scalar_t scalar0, scalar1;
     memset(scalar0, 0, NWORDS_ORDER * sizeof(digit_t));
     memset(scalar1, 0, NWORDS_ORDER * sizeof(digit_t));
 
-    ec_basis_t tmp_bas;
-    copy_basis(&tmp_bas, bas);
-
-    // TODO double biscalar
-
     // For a matrix [[a, c], [b, d]] we compute:
     // first basis element R = [a]P + [b]Q
-    if (!ec_biscalar_mul(&bas->P, (*mat)[0][0], (*mat)[1][0], f, &tmp_bas, E))
-        return 0;
     // second basis element S = [c]P + [d]Q
-    if (!ec_biscalar_mul(&bas->Q, (*mat)[0][1], (*mat)[1][1], f, &tmp_bas, E))
+    if(!ec_biscalar_mul_pair_1x2x4x1(res1, res2, mat, A24, basis_vec))
         return 0;
+    ec_point_1x2x4x1_to_unvec(&bas->P, res1);
+    ec_point_1x2x4x1_to_unvec(&bas->Q, res2);
+
     // Their difference R - S = [a - c]P + [b - d]Q
     mp_sub(scalar0, (*mat)[0][0], (*mat)[0][1], NWORDS_ORDER);
     mp_mod_2exp(scalar0, f, NWORDS_ORDER);
     mp_sub(scalar1, (*mat)[1][0], (*mat)[1][1], NWORDS_ORDER);
     mp_mod_2exp(scalar1, f, NWORDS_ORDER);
 
-    // return ec_biscalar_mul(&bas->PmQ, scalar0, scalar1, f, &tmp_bas, E);
-
-    // ============== VECTORIZED ================================================================================
-
-    __m512i res[8], A24[8], basis_vec[24];
-    ec_point_t EA24;
-    copy_point(&EA24, &E->A24);
-    ec_point_unvec_to_1x2x4x1(A24, &EA24);
-    ec_point_unvec_to_1x2x4x1(basis_vec, &tmp_bas.P);
-    ec_point_unvec_to_1x2x4x1(basis_vec + 8, &tmp_bas.Q);
-    ec_point_unvec_to_1x2x4x1(basis_vec + 16, &tmp_bas.PmQ);
-    ec_biscalar_mul_1x2x4x1(res, scalar0, scalar1, A24, basis_vec);
-    ec_point_1x2x4x1_to_unvec(&bas->PmQ, res);
+    bool success = ec_biscalar_mul_1x2x4x1(res1, scalar0, scalar1, A24, basis_vec);
+    ec_point_1x2x4x1_to_unvec(&bas->PmQ, res1);
+    return success ? 1 : 0;
 
     // ============== END ================================================================================
-
 }
 
 // Compute the bases for the challenge and auxillary curve from

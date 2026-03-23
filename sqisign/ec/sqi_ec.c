@@ -3,9 +3,6 @@
 #include "sqi_fp_constants_lvl3.h"
 #include "sqi_ec_params_lvl3.h"
 
-#include "fp2_lvl3.h"
-#include "ec.h"
-
 void ec_point_init(ec_point_t *P)
 { // Initialize point as identity element (1:0)
     fp2_set_one(&(P->x));
@@ -369,18 +366,8 @@ xDBLMUL(ec_point_t *S,
     fp2_copy(&DIFF1b.z, &R[2].z);
 
     // Initialize DIFF2a <- P+Q, DIFF2b <- P-Q
-    // xADD(&R[2], &R[1], &R[2], PQ);
+    xADD(&R[2], &R[1], &R[2], PQ);
     __m512i P_Q[8], PmQ_A24[8];
-    ec_point_t PmQ;
-    copy_point(&PmQ, PQ);
-    ec_point_unvec_to_1x2x4x1(P_Q, &R[1]);
-    ec_point_unvec_to_1x2x4x1(PmQ_A24, &R[2]);
-    fp2_2x4x1_to_4x2x1(P_Q, P_Q, PmQ_A24);
-    ec_point_unvec_to_1x2x4x1(PmQ_A24, &PmQ);
-    fp2_2x4x1_to_4x2x1(PmQ_A24, PmQ_A24, PmQ_A24);
-    ec_diff_add_1x2x4x1(P_Q, PmQ_A24);
-    fp2_4x2x1_to_2x4x1(PmQ_A24, P_Q, P_Q);
-    ec_point_1x2x4x1_to_unvec(&R[2], P_Q);
 
     if (ec_has_zero_coordinate(&R[2]))
         return 0; // non valid formulas
