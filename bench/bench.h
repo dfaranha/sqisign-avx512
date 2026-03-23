@@ -7,6 +7,7 @@ void bench_fp(int iterations);
 void bench_fp2(int iterations);
 void bench_ec(int iterations);
 void bench_theta(int iterations);
+void bench_verif();
 
 // Comparison of uint64 for qsort
 int cmp_uint64(const void *v1, const void *v2);

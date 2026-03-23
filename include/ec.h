@@ -100,6 +100,11 @@ void ec_point_1x2x4x1_to_unvec(ec_point_t* res, __m512i* P);
  */
 void ec_set_zero_1x2x4x1(__m512i* P);
 
+/**
+ * Verify that a pair of Montgomery A-coefficients in 2x4x1 are valid, i.e. that A^2-4 != 0
+ */
+bool ec_curve_verif_A_1x2x4x1(__m512i* A1_A2);
+
 void ec_double_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24);
 void ec_double_iter_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const int n);
 

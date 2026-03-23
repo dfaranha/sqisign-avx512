@@ -433,6 +433,23 @@ void ec_set_zero_1x2x4x1(__m512i* P)
     fp2_tomont_2x4x1(P, P);
 }
 
+// TODO: Do we want to make this more efficient without a mul?
+// TODO maybe setzero is redundant and there is a way to init to zero?
+bool ec_curve_verif_A_1x2x4x1(__m512i* A1_A2)
+{
+    __m512i t[8];
+    fp2_setzero_2x4x1(t);
+    t[0] = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    fp2_tomont_2x4x1(t, t);
+
+    fp2_add_2x4x1(t, t, t); // t = 2
+    if (fp2_is_equal_2x4x1(A1_A2, t))
+        return false;
+
+    fp2_neg_2x4x1(t, t);
+    return fp2_is_equal_2x4x1(A1_A2, t) != 0;
+}
+
 void ec_scalar_mul_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const digit_t* m, const unsigned int mbits)
 {
     unsigned int bit;

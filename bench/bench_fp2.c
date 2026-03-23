@@ -24,7 +24,7 @@ void bench_fp2(int iterations)
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_add_8x1x1(b, a, b);
         }
         end = cpucycles();
@@ -37,7 +37,7 @@ void bench_fp2(int iterations)
     // Subtraction
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_sub_8x1x1(b, a, b);
         }
         end = cpucycles();
@@ -50,7 +50,7 @@ void bench_fp2(int iterations)
     // Negation
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_neg_8x1x1(b, a);
         }
         end = cpucycles();
@@ -63,7 +63,7 @@ void bench_fp2(int iterations)
     // Multiplication
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_mul_8x1x1(c, b, a);
         }
         end = cpucycles();
@@ -76,7 +76,7 @@ void bench_fp2(int iterations)
     // Squaring
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_sqr_8x1x1(c, a);
         }
         end = cpucycles();
@@ -91,7 +91,7 @@ void bench_fp2(int iterations)
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_add_4x1x2(b, a, b);
         }
         end = cpucycles();
@@ -104,7 +104,7 @@ void bench_fp2(int iterations)
     // Subtraction
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_sub_4x1x2(b, a, b);
         }
         end = cpucycles();
@@ -117,7 +117,7 @@ void bench_fp2(int iterations)
     // Negation
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_neg_4x1x2(b, a);
         }
         end = cpucycles();
@@ -130,7 +130,7 @@ void bench_fp2(int iterations)
     // Multiplication
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_mul_4x1x2(c, b, a);
         }
         end = cpucycles();
@@ -143,7 +143,7 @@ void bench_fp2(int iterations)
     // Squaring
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_sqr_4x1x2(c, a);
         }
         end = cpucycles();
@@ -158,7 +158,7 @@ void bench_fp2(int iterations)
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_add_4x2x1(b, a, b);
         }
         end = cpucycles();
@@ -171,7 +171,7 @@ void bench_fp2(int iterations)
     // Subtraction
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_sub_4x2x1(b, a, b);
         }
         end = cpucycles();
@@ -184,7 +184,7 @@ void bench_fp2(int iterations)
     // Negation
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_neg_4x2x1(b, a);
         }
         end = cpucycles();
@@ -197,7 +197,7 @@ void bench_fp2(int iterations)
     // Multiplication
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_mul_4x2x1(c, b, a);
         }
         end = cpucycles();
@@ -210,7 +210,7 @@ void bench_fp2(int iterations)
     // Squaring
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_sqr_4x2x1(c, a);
         }
         end = cpucycles();
@@ -225,7 +225,7 @@ void bench_fp2(int iterations)
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_add_2x2x2(b, a, b);
         }
         end = cpucycles();
@@ -238,7 +238,7 @@ void bench_fp2(int iterations)
     // Subtraction
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_sub_2x2x2(b, a, b);
         }
         end = cpucycles();
@@ -251,7 +251,7 @@ void bench_fp2(int iterations)
     // Negation
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_neg_2x2x2(b, a);
         }
         end = cpucycles();
@@ -264,7 +264,7 @@ void bench_fp2(int iterations)
     // Multiplication
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_mul_2x2x2(c, b, a);
         }
         end = cpucycles();
@@ -277,7 +277,7 @@ void bench_fp2(int iterations)
     // Squaring
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_sqr_2x2x2(c, a);
         }
         end = cpucycles();
@@ -292,7 +292,7 @@ void bench_fp2(int iterations)
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_add_2x4x1(b, a, b);
         }
         end = cpucycles();
@@ -305,7 +305,7 @@ void bench_fp2(int iterations)
     // Subtraction
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_sub_2x4x1(b, a, b);
         }
         end = cpucycles();
@@ -318,7 +318,7 @@ void bench_fp2(int iterations)
     // Negation
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_neg_2x4x1(b, a);
         }
         end = cpucycles();
@@ -331,7 +331,7 @@ void bench_fp2(int iterations)
     // Multiplication
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_mul_2x4x1(c, b, a);
         }
         end = cpucycles();
@@ -344,7 +344,7 @@ void bench_fp2(int iterations)
     // Squaring
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_sqr_2x4x1(c, a);
         }
         end = cpucycles();
@@ -360,7 +360,7 @@ void bench_fp2(int iterations)
     fp2_t unvec[8];
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_unvectorized_to_8x1x1(c, unvec);
         }
         end = cpucycles();
@@ -373,7 +373,7 @@ void bench_fp2(int iterations)
     // 8x1x1 to unvec
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_8x1x1_to_unvectorized(unvec, c);
         }
         end = cpucycles();
@@ -386,7 +386,7 @@ void bench_fp2(int iterations)
     // unvec to 4x2x1
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_unvectorized_to_4x2x1(c, unvec);
         }
         end = cpucycles();
@@ -399,7 +399,7 @@ void bench_fp2(int iterations)
     // 4x2x1 to unvec
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_4x2x1_to_unvectorized(unvec, c);
         }
         end = cpucycles();
@@ -412,7 +412,7 @@ void bench_fp2(int iterations)
     // unvec to 2x4x1
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_unvectorized_to_2x4x1(c, unvec);
         }
         end = cpucycles();
@@ -425,7 +425,7 @@ void bench_fp2(int iterations)
     // 2x4x1 to unvec
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_2x4x1_to_unvectorized(unvec, c);
         }
         end = cpucycles();
@@ -439,7 +439,7 @@ void bench_fp2(int iterations)
     // 8x1x1 to 4x2x1
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_8x1x1_to_4x2x1(c, c+8, a);
         }
         end = cpucycles();
@@ -452,7 +452,7 @@ void bench_fp2(int iterations)
     // 4x2x1 to 8x1x1
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_4x2x1_to_8x1x1(a, b, c);
         }
         end = cpucycles();
@@ -465,8 +465,8 @@ void bench_fp2(int iterations)
     // 4x2x1 to 2x4x1
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
-            fp2_4x2x1_to_2x4x1(c, a);
+        for(int j = 0; j < iterations; j++) {
+            fp2_4x2x1_to_2x4x1(b, c, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
@@ -478,7 +478,7 @@ void bench_fp2(int iterations)
     // 2x4x1 to 4x2x1
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp2_2x4x1_to_4x2x1(a, b, c);
         }
         end = cpucycles();

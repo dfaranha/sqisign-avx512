@@ -11,12 +11,12 @@
 
 // Check that the basis change matrix elements are canonical
 // representatives modulo 2^(SQIsign_response_length + 2).
-static int
+static bool
 check_canonical_basis_change_matrix(const signature_t *sig)
 {
     // This works as long as all values in sig->mat_Bchall_can_to_B_chall are
     // positive integers.
-    int ret = 1;
+    bool ret = true;
     scalar_t aux;
 
     memset(aux, 0, NWORDS_ORDER * sizeof(digit_t));
@@ -26,7 +26,7 @@ check_canonical_basis_change_matrix(const signature_t *sig)
     for (int i = 0; i < 2; i++) {
         for (int j = 0; j < 2; j++) {
             if (mp_compare(aux, sig->mat_Bchall_can_to_B_chall[i][j], NWORDS_ORDER) <= 0) {
-                ret = 0;
+                ret = false;
             }
         }
     }
@@ -320,54 +320,56 @@ compute_commitment_curve_verify(ec_curve_t *E_com,
 }
 
 // SQIsign verification
-int
+bool
 protocols_verify(signature_t *sig, const public_key_t *pk, const unsigned char *m, size_t l)
 {
-    int verify;
-
     if (!check_canonical_basis_change_matrix(sig))
-        return 0;
+        return false;
 
     // Computation of the length of the dim 2 2^n isogeny
     int pow_dim2_deg_resp = SQIsign_response_length - (int)sig->two_resp_length - (int)sig->backtracking;
 
     // basic sanity test: checking that the response is not too long
     if (pow_dim2_deg_resp < 0)
-        return 0;
+        return false;
     // The dim 2 isogeny embeds a dim 1 isogeny of odd degree, so it can
     // never be of length 2.
     if (pow_dim2_deg_resp == 1)
-        return 0;
+        return false;
 
+    // checking that we are given A-coefficients and no precomputation
+    if(fp2_is_one(&pk->curve.C) != 0xFFFFFFFF || pk->curve.is_A24_computed_and_normalized)
+        return false;
+
+    // ============= Converting input to vectorized format ============================
+    __m512i Epk_A24[8], Echl_A24[8];
+    
     // check the public curve is valid
     if (!ec_curve_verify_A(&(pk->curve).A))
-        return 0;
+        return false;
 
     // Set auxiliary curve from the A-coefficient within the signature
     ec_curve_t E_aux;
     if (!ec_curve_init_from_A(&E_aux, &sig->E_aux_A))
-        return 0; // invalid curve
-
-    // checking that we are given A-coefficients and no precomputation
-    assert(fp2_is_one(&pk->curve.C) == 0xFFFFFFFF && !pk->curve.is_A24_computed_and_normalized);
+        return false; // invalid curve
 
     // computation of the challenge
     ec_curve_t E_chall;
     if (!compute_challenge_verify(&E_chall, sig, &pk->curve, pk->hint_pk)) {
-        return 0;
+        return false;
     }
 
     // Computation of the canonical bases for the challenge and aux curve
     ec_basis_t B_chall_can, B_aux_can;
 
     if (!challenge_and_aux_basis_verify(&B_chall_can, &B_aux_can, &E_chall, &E_aux, sig, pow_dim2_deg_resp)) {
-        return 0;
+        return false;
     }
 
     // When two_resp_length != 0 we need to compute a second, short 2^r-isogeny
     if (sig->two_resp_length > 0) {
         if (!two_response_isogeny_verify(&E_chall, &B_chall_can, sig, pow_dim2_deg_resp)) {
-            return 0;
+            return false;
         }
     }
 
@@ -376,26 +378,23 @@ protocols_verify(signature_t *sig, const public_key_t *pk, const unsigned char *
     // and so definitely is an invalid signature.
     ec_curve_t E_com;
     if (!compute_commitment_curve_verify(&E_com, &B_chall_can, &B_aux_can, &E_chall, &E_aux, pow_dim2_deg_resp))
-        return 0;
+        return false;
 
     // recomputing the challenge vector
     scalar_t chk_chall;
     hash_to_challenge(&chk_chall, pk, &E_com, m, l);
 
     // performing the final check
-    verify = mp_compare(sig->chall_coeff, chk_chall, NWORDS_ORDER) == 0;
-
-    return verify;
+    return mp_compare(sig->chall_coeff, chk_chall, NWORDS_ORDER) == 0;
 }
 
-int verify(const unsigned char *m,
+bool verify(const unsigned char *m,
     unsigned long long mlen,
     const unsigned char *sig,
     unsigned long long siglen,
     const unsigned char *pk
 )
 {
-    int ret = 0;
     public_key_t pkt = { 0 };
     signature_t sigt;
 
