@@ -1822,26 +1822,28 @@ void fp_neg_4x2(__m512i* res, __m512i* a)
     res[3] = t3;
 }
 
-void fp_mixsubadd_4x2(__m512i* res, __m512i* a, __m512i* b)
+//was sub_add with submask 0x33 and addmask 0xcc
+void fp_mixaddsub_4x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)
 {
     __m512i t[8], sign_mask, carry;
     __m512i limb_mask = VSETALL(LIMB_MASK);
     __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);
     __m512i p_top = VSET(0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top);
+    const __mmask8 sub_mask = ~add_mask;
 
-    t[0] = VSUBMASK(a[0], 0x33, a[0], b[0]);
-    t[1] = VSUBMASK(a[1], 0x33, a[1], b[1]);
-    t[2] = VSUBMASK(a[2], 0x33, a[2], b[2]);
-    t[3] = VSUBMASK(a[3], 0x33, a[3], b[3]);
+    t[0] = VSUBMASK(a[0], sub_mask, a[0], b[0]);
+    t[1] = VSUBMASK(a[1], sub_mask, a[1], b[1]);
+    t[2] = VSUBMASK(a[2], sub_mask, a[2], b[2]);
+    t[3] = VSUBMASK(a[3], sub_mask, a[3], b[3]);
 
-    t[0] = VADDMASK(t[0], 0xcc, a[0], b[0]);
-    t[1] = VADDMASK(t[1], 0xcc, a[1], b[1]);
-    t[2] = VADDMASK(t[2], 0xcc, a[2], b[2]);
-    t[3] = VADDMASK(t[3], 0xcc, a[3], b[3]);
+    t[0] = VADDMASK(t[0], add_mask, a[0], b[0]);
+    t[1] = VADDMASK(t[1], add_mask, a[1], b[1]);
+    t[2] = VADDMASK(t[2], add_mask, a[2], b[2]);
+    t[3] = VADDMASK(t[3], add_mask, a[3], b[3]);
 
     // a + b - p
-    t[0] = VADDMASK(t[0], 0xcc, t[0], p_bot);
-    t[3] = VSUBMASK(t[3], 0xcc, t[3], p_top);
+    t[0] = VADDMASK(t[0], add_mask, t[0], p_bot);
+    t[3] = VSUBMASK(t[3], add_mask, t[3], p_top);
 
     // Carry propagation
     // TODO: Carry propagation could be suboptimal, recomputing shifts

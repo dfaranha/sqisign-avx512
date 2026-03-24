@@ -10,8 +10,8 @@
 #include "theta.h"
 #include "sqi_test_extras.h"
 
-#include "bench.h"
-#include <inttypes.h>
+// #include "bench.h"
+// #include <inttypes.h>
 
 // Check that the basis change matrix elements are canonical
 // representatives modulo 2^(SQIsign_response_length + 2).
@@ -361,7 +361,7 @@ compute_commitment_curve_verify(ec_curve_t *E_com,
 bool
 protocols_verify(signature_t *sig, const public_key_t *pk, const unsigned char *m, size_t l)
 {
-    uint64_t start1 = cpucycles();
+    // uint64_t start1 = cpucycles();
 
     if (!check_canonical_basis_change_matrix(sig))
         return false;

@@ -602,7 +602,7 @@ bool test_fp(int iterations)
         rand_fp_4x2(a);
         rand_fp_4x2(b);
 
-        fp_mixsubadd_4x2(d, a, b);
+        fp_mixaddsub_4x2(d, a, b, 0xcc);
         fp_sub_4x2(e, a, b);
         fp_add_4x2(f, a, b);
         if(fp_is_equal_4x2(d, e) != 0x5 || fp_is_equal_4x2(d, f) != 0xa) {

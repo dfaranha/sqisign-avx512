@@ -387,12 +387,22 @@ void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b)
     }
     fp_mul_4x2(t1, s1, b);
     fp_mul_4x2(t2, s2, s3);
-    fp_mixsubadd_4x2(res, t1, t2);
+    fp_mixaddsub_4x2(res, t1, t2, 0xcc);
 }
 
 void fp2_sqr_2x2x2(__m512i* res, __m512i* a)
 {
-    fp2_mul_2x2x2(res, a, a);
+    __m512i t0[4], t1[4];
+    for (int i = 0; i < 4; i++) {
+        t0[i] = VPERM256(a[i], 0x44); // a0, a0
+        t1[i] = VPERM256(a[i], 0x4e); // a1, a0
+    }
+    fp_add_4x2(t0, t0, t1); // a0 + a1, a0 + a0
+    for (int i = 0; i < 4; i++) {
+        t1[i] = VPERM256MASKZ(0xf, a[i], 0x4e); // a1, 0
+    }
+    fp_sub_4x2(t1, a, t1); // a0 - a1, a1
+    fp_mul_4x2(res, t0, t1);
 }
  
 void fp2_tomont_2x2x2(__m512i* res, __m512i* a)
