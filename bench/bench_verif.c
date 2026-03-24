@@ -30,7 +30,7 @@
 static int      FindMarker(FILE *infile, const char *marker);
 static int      ReadHex(FILE *infile, unsigned char *A, int Length, char *str);
 
-void bench_verif() {
+void bench_verif(int iterations) {
 
     unsigned char       pk_rsp[CRYPTO_PUBLICKEYBYTES];
     unsigned char       *m, *m1, *sm_rsp;
@@ -96,9 +96,11 @@ void bench_verif() {
         m = sm_rsp + SIGNATURE_BYTES;
 
         start = cpucycles();
-        tmp += verify(m, mlen, sm_rsp, CRYPTO_BYTES, pk_rsp);
+        for (int j = 0; j < iterations; j++) {
+            tmp += verify(m, mlen, sm_rsp, CRYPTO_BYTES, pk_rsp);
+        }
         end = cpucycles();
-        cycles[i] = (end - start);
+        cycles[i] = (end - start)/iterations;
         i += 1;
 
         free(sm_rsp);
