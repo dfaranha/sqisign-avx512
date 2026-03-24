@@ -399,7 +399,7 @@ void fp2_sqr_2x2x2(__m512i* res, __m512i* a)
     }
     fp_add_4x2(t0, t0, t1); // a0 + a1, a0 + a0
     for (int i = 0; i < 4; i++) {
-        t1[i] = VPERM256MASKZ(0xf, a[i], 0x4e); // a1, 0
+        t1[i] = VPERM256MASKZ(0x33, a[i], 0x4e); // a1, 0
     }
     fp_sub_4x2(t1, a, t1); // a0 - a1, a1
     fp_mul_4x2(res, t0, t1);
