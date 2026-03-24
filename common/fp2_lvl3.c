@@ -560,6 +560,18 @@ void fp2_unvectorized_to_4x2x1(__m512i* res, fp2_t* src)
     fp2_tomont_4x2x1(res, res);
 }
 
+void fp2_unvectorized_to_2x2x2(__m512i* res, fp2_t* src)
+{
+    fp_t coeffs[4];
+    for (int i = 0; i < 2; i++) {
+        fp_encode(coeffs[2*i].arr, &src[i].re);
+        fp_encode(coeffs[2*i+1].arr, &src[i].im);
+    }
+
+    fp_64_to_51_bit_limbs_4x2(res, coeffs);
+    fp2_tomont_2x2x2(res, res);
+}
+
 void fp2_unvectorized_to_2x4x1(__m512i* res, fp2_t* src)
 {
     fp_t coeffs[4];
@@ -581,6 +593,20 @@ void fp2_4x2x1_to_unvectorized(fp2_t* res, __m512i* src)
     fp_51_to_64_bit_limbs_8x1(coeffs, src_frommont);
 
     for (int i = 0; i < 4; i++) {
+        fp_decode(&res[i].re, (const void *) coeffs[2*i].arr);
+        fp_decode(&res[i].im, (const void *) coeffs[2*i+1].arr);
+    }
+}
+
+void fp2_2x2x2_to_unvectorized(fp2_t* res, __m512i* src)
+{
+    fp_t coeffs[4];
+    __m512i src_frommont[4];
+
+    fp2_frommont_2x2x2(src_frommont, src);
+    fp_51_to_64_bit_limbs_4x2(coeffs, src_frommont);
+
+    for (int i = 0; i < 2; i++) {
         fp_decode(&res[i].re, (const void *) coeffs[2*i].arr);
         fp_decode(&res[i].im, (const void *) coeffs[2*i+1].arr);
     }
