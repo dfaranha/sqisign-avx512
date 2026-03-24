@@ -19,7 +19,7 @@ void bench_fp(int iterations)
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp_add_8x1(b, a, b);
         }
         end = cpucycles();
@@ -32,7 +32,7 @@ void bench_fp(int iterations)
     // Subtraction
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp_sub_8x1(b, a, b);
         }
         end = cpucycles();
@@ -45,7 +45,7 @@ void bench_fp(int iterations)
     // Negation
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp_neg_8x1(b, a);
         }
         end = cpucycles();
@@ -58,7 +58,7 @@ void bench_fp(int iterations)
     // Multiplication
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp_mul_8x1(c, b, a);
         }
         end = cpucycles();
@@ -71,7 +71,7 @@ void bench_fp(int iterations)
     // Squaring
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp_sqr_8x1(c, a);
         }
         end = cpucycles();
@@ -86,7 +86,7 @@ void bench_fp(int iterations)
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp_add_4x2(b, a, b);
         }
         end = cpucycles();
@@ -99,7 +99,7 @@ void bench_fp(int iterations)
     // Subtraction
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp_sub_4x2(b, a, b);
         }
         end = cpucycles();
@@ -112,7 +112,7 @@ void bench_fp(int iterations)
     // Negation
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp_neg_4x2(b, a);
         }
         end = cpucycles();
@@ -125,7 +125,7 @@ void bench_fp(int iterations)
     // Multiplication
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp_mul_4x2(c, b, a);
         }
         end = cpucycles();
@@ -138,7 +138,7 @@ void bench_fp(int iterations)
     // Squaring
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             fp_sqr_4x2(c, a);
         }
         end = cpucycles();

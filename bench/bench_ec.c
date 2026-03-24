@@ -38,7 +38,7 @@ void bench_ec(int iterations)
     // ec_double_4x4x2x1
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             ec_double_4x4x2x1(a, b, A24_x4, Px_x4, Pz_x4);
         }
         end = cpucycles();
@@ -53,7 +53,7 @@ void bench_ec(int iterations)
     ec_point_unvec_to_1x2x4x1(b, &curve.A24);
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             ec_double_1x2x4x1(c, a, b);
         }
         end = cpucycles();

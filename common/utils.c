@@ -163,6 +163,15 @@ void rand_fp2_2x4x1(__m512i* res)
     }
 }
 
+void print_fp2_2x4x1(__m512i* a) 
+{
+    fp2_t unvec[2];
+    fp2_2x4x1_to_unvectorized(unvec, a);
+    for(int i = 0; i < 2; i++) {
+        print_fp2(unvec+i);
+    }
+}
+
 void print_fp2_4x2x1(__m512i* a) 
 {
     fp2_t unvec[4];

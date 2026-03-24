@@ -4,19 +4,23 @@
 #include "sqi_encoded_sizes_lvl3.h"
 #include "sqi_ec_params_lvl3.h"
 #include <assert.h>
+#include "fp2_lvl3.h"
 #include "ec.h"
 #include "isog-1d.h"
 #include "theta.h"
 #include "sqi_test_extras.h"
 
+// #include "bench.h"
+// #include <inttypes.h>
+
 // Check that the basis change matrix elements are canonical
 // representatives modulo 2^(SQIsign_response_length + 2).
-static int
+static bool
 check_canonical_basis_change_matrix(const signature_t *sig)
 {
     // This works as long as all values in sig->mat_Bchall_can_to_B_chall are
     // positive integers.
-    int ret = 1;
+    bool ret = true;
     scalar_t aux;
 
     memset(aux, 0, NWORDS_ORDER * sizeof(digit_t));
@@ -26,7 +30,7 @@ check_canonical_basis_change_matrix(const signature_t *sig)
     for (int i = 0; i < 2; i++) {
         for (int j = 0; j < 2; j++) {
             if (mp_compare(aux, sig->mat_Bchall_can_to_B_chall[i][j], NWORDS_ORDER) <= 0) {
-                ret = 0;
+                ret = false;
             }
         }
     }
@@ -50,29 +54,58 @@ compute_challenge_verify(ec_curve_t *E_chall, const signature_t *sig, const ec_c
     int len = TORSION_EVEN_POWER - sig->backtracking;
 
     // Compute the basis from the supplied hint
+    // uint64_t start4 = cpucycles();
+    // for (int i = 0; i < 1000; i++) {
     if (!ec_curve_to_basis_2f_from_hint(&bas_Epk_unvec, E_chall, TORSION_EVEN_POWER, hint_pk)) // canonical
         return 0;
+    // }
+    // uint64_t end4 = cpucycles();
+    // printf("basis %" PRIu64 "\n", (end4-start4)/1000);
 
     // ============== VECTORIZED ================================================================================
 
     __m512i ker[8], A24[8], bas_Epk[24];
+    // uint64_t start2 = cpucycles();
+    // for (int i = 0; i < 1000; i++) {
     ec_point_unvec_to_1x2x4x1(A24, &E_chall->A24);
     ec_point_unvec_to_1x2x4x1(bas_Epk, &bas_Epk_unvec.P);
     ec_point_unvec_to_1x2x4x1(bas_Epk+8, &bas_Epk_unvec.Q);
     ec_point_unvec_to_1x2x4x1(bas_Epk+16, &bas_Epk_unvec.PmQ);
+    // }
+    // uint64_t end2 = cpucycles();
+    // printf("conv to 1x2x4x1 %" PRIu64 "\n", (end2-start2)/1000);
+
     
     // recovering the exact challenge
+    // uint64_t start1 = cpucycles();
+    // for (int i = 0; i < 1000; i++) {
     if (!ec_ladder_3pt_1x2x4x1(ker, A24, bas_Epk, sig->chall_coeff)) {
         return 0;
     }
+    //}
+    // uint64_t end1 = cpucycles();
+    // printf("3pt ladder %" PRIu64 "\n", (end1-start1)/1000);
 
     // Double the kernel until is has the correct order
+    // uint64_t start3 = cpucycles();
+    // for (int i = 0; i < 1000; i++) {
     ec_double_iter_1x2x4x1(ker, ker, A24, sig->backtracking);
+    // }
+    // uint64_t end3 = cpucycles();
+    // printf("double backtrack %" PRIu64 "\n", (end3-start3)/1000);
+
 
     // Compute the codomain
-    if (!isog_chain_1d_1x2x4x1(A24, A24, ker, len, NULL, 0, true)) {
+    // __m512i A24_copy[8];
+    // uint64_t start = cpucycles();
+    // for (int i = 0; i < 1000; i++) {
+    if (!isog_chain_1d_1x2x4x1(A24, A24, ker, len, NULL, 0, false)) {
         return 0;
     }
+    // }
+    // uint64_t end = cpucycles();
+    // fp2_copy_2x4x1(A24, A24_copy);
+    // printf("1D isog %" PRIu64 "\n", (end-start)/1000);
 
     ec_point_1x2x4x1_to_unvec(&E_chall->A24, A24);
     A24_to_AC(E_chall, &E_chall->A24);
@@ -92,27 +125,38 @@ compute_challenge_verify(ec_curve_t *E_chall, const signature_t *sig, const ec_c
 static int
 matrix_scalar_application_even_basis(ec_basis_t *bas, const ec_curve_t *E, scalar_mtx_2x2_t *mat, int f)
 {
+    // ============== VECTORIZED ================================================================================
+    __m512i res1[8], res2[8], A24[8], basis_vec[24];
+    ec_point_t EA24;
+    copy_point(&EA24, &E->A24);
+    ec_point_unvec_to_1x2x4x1(A24, &EA24);
+    ec_point_unvec_to_1x2x4x1(basis_vec, &bas->P);
+    ec_point_unvec_to_1x2x4x1(basis_vec + 8, &bas->Q);
+    ec_point_unvec_to_1x2x4x1(basis_vec + 16, &bas->PmQ);
+
     scalar_t scalar0, scalar1;
     memset(scalar0, 0, NWORDS_ORDER * sizeof(digit_t));
     memset(scalar1, 0, NWORDS_ORDER * sizeof(digit_t));
 
-    ec_basis_t tmp_bas;
-    copy_basis(&tmp_bas, bas);
-
     // For a matrix [[a, c], [b, d]] we compute:
-    //
     // first basis element R = [a]P + [b]Q
-    if (!ec_biscalar_mul(&bas->P, (*mat)[0][0], (*mat)[1][0], f, &tmp_bas, E))
-        return 0;
     // second basis element S = [c]P + [d]Q
-    if (!ec_biscalar_mul(&bas->Q, (*mat)[0][1], (*mat)[1][1], f, &tmp_bas, E))
+    if(!ec_biscalar_mul_pair_1x2x4x1(res1, res2, mat, A24, basis_vec))
         return 0;
+    ec_point_1x2x4x1_to_unvec(&bas->P, res1);
+    ec_point_1x2x4x1_to_unvec(&bas->Q, res2);
+
     // Their difference R - S = [a - c]P + [b - d]Q
     mp_sub(scalar0, (*mat)[0][0], (*mat)[0][1], NWORDS_ORDER);
     mp_mod_2exp(scalar0, f, NWORDS_ORDER);
     mp_sub(scalar1, (*mat)[1][0], (*mat)[1][1], NWORDS_ORDER);
     mp_mod_2exp(scalar1, f, NWORDS_ORDER);
-    return ec_biscalar_mul(&bas->PmQ, scalar0, scalar1, f, &tmp_bas, E);
+
+    bool success = ec_biscalar_mul_1x2x4x1(res1, scalar0, scalar1, A24, basis_vec);
+    ec_point_1x2x4x1_to_unvec(&bas->PmQ, res1);
+    return success ? 1 : 0;
+
+    // ============== END ================================================================================
 }
 
 // Compute the bases for the challenge and auxillary curve from
@@ -293,98 +337,121 @@ compute_commitment_curve_verify(ec_curve_t *E_com,
             return 0;
         }
     } else {
+        //uint64_t start = cpucycles();
         theta_couple_curve_t codomain;
         ec_curve_init(&codomain.E1);
         ec_curve_init(&codomain.E2);
 
+        //for (int i = 0; i < 1000; i++) {
         codomain_splits = theta_isogeny_chain_ver(
             &codomain, &EchallxEaux, &dim_two_ker, pow_dim2_deg_resp
         );
+        //}
 
         // computing the commitment curve
         // its always the first one because of our (2^n,2^n)-isogeny formulae
         copy_curve(E_com, &codomain.E1);
+        // uint64_t end = cpucycles();
+        // printf("2D chain len %d runs in %" PRIu64 "\n", pow_dim2_deg_resp, (end-start)/1000);
     }
     return codomain_splits;
 }
 
 // SQIsign verification
-int
+bool
 protocols_verify(signature_t *sig, const public_key_t *pk, const unsigned char *m, size_t l)
 {
-    int verify;
+    // uint64_t start1 = cpucycles();
 
     if (!check_canonical_basis_change_matrix(sig))
-        return 0;
+        return false;
 
     // Computation of the length of the dim 2 2^n isogeny
     int pow_dim2_deg_resp = SQIsign_response_length - (int)sig->two_resp_length - (int)sig->backtracking;
 
     // basic sanity test: checking that the response is not too long
     if (pow_dim2_deg_resp < 0)
-        return 0;
+        return false;
     // The dim 2 isogeny embeds a dim 1 isogeny of odd degree, so it can
     // never be of length 2.
     if (pow_dim2_deg_resp == 1)
-        return 0;
+        return false;
 
+    // checking that we are given A-coefficients and no precomputation
+    if(fp2_is_one(&pk->curve.C) != 0xFFFFFFFF || pk->curve.is_A24_computed_and_normalized)
+        return false;
+
+    // ============= Converting input to vectorized format ============================
+    __m512i Epk_A24[8], Echl_A24[8];
+    
     // check the public curve is valid
     if (!ec_curve_verify_A(&(pk->curve).A))
-        return 0;
+        return false;
 
     // Set auxiliary curve from the A-coefficient within the signature
     ec_curve_t E_aux;
     if (!ec_curve_init_from_A(&E_aux, &sig->E_aux_A))
-        return 0; // invalid curve
-
-    // checking that we are given A-coefficients and no precomputation
-    assert(fp2_is_one(&pk->curve.C) == 0xFFFFFFFF && !pk->curve.is_A24_computed_and_normalized);
+        return false; // invalid curve
 
     // computation of the challenge
+    //uint64_t start = cpucycles();
     ec_curve_t E_chall;
+    // for (int i = 0; i < 1000; i++) {
     if (!compute_challenge_verify(&E_chall, sig, &pk->curve, pk->hint_pk)) {
-        return 0;
+        return false;
     }
+    // }
+    // uint64_t end = cpucycles();
+    // printf("compute_challenge_verify %" PRIu64 "\n", (end-start)/1000);
 
     // Computation of the canonical bases for the challenge and aux curve
     ec_basis_t B_chall_can, B_aux_can;
-
+    // start = cpucycles();
+    // for (int i = 0; i < 1000; i++) {
     if (!challenge_and_aux_basis_verify(&B_chall_can, &B_aux_can, &E_chall, &E_aux, sig, pow_dim2_deg_resp)) {
-        return 0;
+        return false;
     }
+    // }
+    // end = cpucycles();
+    // printf("challenge_and_aux_basis_verify %" PRIu64 "\n", (end-start)/1000);
 
     // When two_resp_length != 0 we need to compute a second, short 2^r-isogeny
     if (sig->two_resp_length > 0) {
         if (!two_response_isogeny_verify(&E_chall, &B_chall_can, sig, pow_dim2_deg_resp)) {
-            return 0;
+            return false;
         }
     }
 
     // We can recover the commitment curve with a 2D isogeny
     // The supplied signature did not compute an isogeny between eliptic products
     // and so definitely is an invalid signature.
+    // start = cpucycles();
     ec_curve_t E_com;
+    // for (int i = 0; i < 1000; i++) {
     if (!compute_commitment_curve_verify(&E_com, &B_chall_can, &B_aux_can, &E_chall, &E_aux, pow_dim2_deg_resp))
-        return 0;
+        return false;
+    // }
+    // end = cpucycles();
+    // printf("compute_commitment_curve_verify %" PRIu64 "\n", (end-start)/1000);
 
     // recomputing the challenge vector
     scalar_t chk_chall;
     hash_to_challenge(&chk_chall, pk, &E_com, m, l);
 
-    // performing the final check
-    verify = mp_compare(sig->chall_coeff, chk_chall, NWORDS_ORDER) == 0;
+    // uint64_t end1 = cpucycles();
+    // printf("SQIsign verif runs in %" PRIu64 "\n", (end1-start1)/1000);
 
-    return verify;
+    // performing the final check
+    return mp_compare(sig->chall_coeff, chk_chall, NWORDS_ORDER) == 0;
 }
 
-int verify(const unsigned char *m,
+bool verify(const unsigned char *m,
     unsigned long long mlen,
     const unsigned char *sig,
     unsigned long long siglen,
     const unsigned char *pk
 )
 {
-    int ret = 0;
     public_key_t pkt = { 0 };
     signature_t sigt;
 

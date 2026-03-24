@@ -27,7 +27,7 @@ void bench_theta(int iterations)
     // Hadamard
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             theta_had_single(b, a);
         }
         end = cpucycles();
@@ -40,7 +40,7 @@ void bench_theta(int iterations)
     // mul
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             theta_mul_single(c, a, b);
         }
         end = cpucycles();
@@ -53,7 +53,7 @@ void bench_theta(int iterations)
     // sqr 
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             theta_sqr_single(c, a);
         }
         end = cpucycles();
@@ -66,7 +66,7 @@ void bench_theta(int iterations)
     // double 
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             theta_double_single(d, a, b, c);
         }
         end = cpucycles();
@@ -79,7 +79,7 @@ void bench_theta(int iterations)
     // codomain
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             theta_codomain_single(c, d, a, b, false, true);
         }
         end = cpucycles();
@@ -92,7 +92,7 @@ void bench_theta(int iterations)
     // eval
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             theta_eval_single(a, b, c, false, true);
         }
         end = cpucycles();
@@ -107,7 +107,7 @@ void bench_theta(int iterations)
     // Hadamard
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             theta_had_pair(b, a);
         }
         end = cpucycles();
@@ -119,7 +119,7 @@ void bench_theta(int iterations)
 
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             theta_had_pair_alt(b, a);
         }
         end = cpucycles();
@@ -132,7 +132,7 @@ void bench_theta(int iterations)
     // mul
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             theta_mul_pair(c, a, b);
         }
         end = cpucycles();
@@ -145,7 +145,7 @@ void bench_theta(int iterations)
     // sqr 
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             theta_sqr_pair(c, a);
         }
         end = cpucycles();
@@ -158,7 +158,7 @@ void bench_theta(int iterations)
     // double 
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             theta_double_pair(d, a, b, c);
         }
         end = cpucycles();
@@ -171,7 +171,7 @@ void bench_theta(int iterations)
     // eval
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int i = 0; i < iterations; i++) {
+        for(int j = 0; j < iterations; j++) {
             theta_eval_pair(a, b, c, false, true);
         }
         end = cpucycles();

@@ -643,8 +643,9 @@ void fp2_4x2x1_to_2x4x1(__m512i* res1, __m512i* res2, __m512i* src)
     __m512i idx1 = VSET(0, 0, 1, 1, 2, 2, 3, 3);
     __m512i idx2 = VSET(4, 4, 5, 5, 6, 6, 7, 7);
     for (int i = 0; i < 8; i++) {
-        res1[i] = VPERM512MASKZ(0x55, src[i], idx1);
-        res2[i] = VPERM512MASKZ(0x55, src[i], idx2);
+        __m512i t = src[i];
+        res1[i] = VPERM512MASKZ(0x55, t, idx1);
+        res2[i] = VPERM512MASKZ(0x55, t, idx2);
     }
 }
 

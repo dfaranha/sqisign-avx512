@@ -1,5 +1,4 @@
-from sage.matrix.constructor import Matrix
-from sage.rings.integer_ring import ZZ
+from sage.all import (ZZ, Matrix)
 
 from hashlib import shake_256
 

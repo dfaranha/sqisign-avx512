@@ -169,6 +169,7 @@ bool isog_chain_1d_1x2x4x1(
     orders[0] = isog_len;
     int current = 0;
     fp2_copy_2x4x1(strat, ker);
+    fp2_copy_2x4x1(res_A24, A24);
     
     for (int j = 0; j < isog_len/2; j++) {
         assert(current >= 0);
@@ -184,7 +185,7 @@ bool isog_chain_1d_1x2x4x1(
             int num_dbls = (orders[current - 1] / 4) * 2 + orders[current - 1] % 2;
             orders[current] = orders[current-1] - num_dbls;
             while (num_dbls--) {
-                ec_double_1x2x4x1(strat+8*current, strat+8*current, A24);
+                ec_double_1x2x4x1(strat+8*current, strat+8*current, res_A24);
             }
         }
 
@@ -195,20 +196,20 @@ bool isog_chain_1d_1x2x4x1(
             if (z_is_zero) { return false; }
 
             // Q= 2 * P != 0 and XQ != 0 (disallow singular)
-            ec_double_1x2x4x1(test, strat + 8*current, A24);
+            ec_double_1x2x4x1(test, strat + 8*current, res_A24);
             zmask = fp2_is_zero_2x4x1(test);
             // if Q.x = 0 or Q.z = 0
             if (zmask) { return false; }
 
             // order must be 4
-            ec_double_1x2x4x1(test, test, A24);
+            ec_double_1x2x4x1(test, test, res_A24);
             zmask = fp2_is_zero_2x4x1(test);
             z_is_zero = (zmask & 0x2) == 0x2;
             if (!z_is_zero) { return false; }
         }
 
         // Evaluate 4-isogeny
-        four_isog_codom_1x2x4x1(A24, eval_data, strat + 8*current);
+        four_isog_codom_1x2x4x1(res_A24, eval_data, strat + 8*current);
          
         for (int i = 0; i < current; i++) {
             four_isog_eval_1x2x4x1(strat + 8*i, eval_data, strat + 8*i);
@@ -233,7 +234,7 @@ bool isog_chain_1d_1x2x4x1(
             if (!z_is_zero) { return false; }
         }
 
-        two_isog_codom_1x2x4x1(A24, eval_data, strat);
+        two_isog_codom_1x2x4x1(res_A24, eval_data, strat);
         for (int i = 0; i < num_pts; i++) {
             two_isog_eval_1x2x4x1(pts+8*i, eval_data, pts+8*i);
         }
