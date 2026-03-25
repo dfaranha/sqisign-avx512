@@ -100,8 +100,8 @@ static int test_verification_kat_single(int cnt) {
         unsigned char *sig = sm_rsp;
         m = sm_rsp + SIGNATURE_BYTES;
 
-        if ( (ret_val = verify(m, mlen, sm_rsp, CRYPTO_BYTES, pk_rsp)) == 0 ) {
-            printf("crypto_sign_open returned <%d>\n", ret_val);
+        if (!verify(m, mlen, sm_rsp, CRYPTO_BYTES, pk_rsp)) {
+            printf("crypto_sign_open failed\n");
             return KAT_CRYPTO_FAILURE;
         }
 

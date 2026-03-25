@@ -1,6 +1,6 @@
 /**
  *   The SQISign lvl3 prime is p = 65 * 2^376 - 1
- *   It is 383 bits, so the number of 51-bit limbs needed is 383/51 < 8
+ *   It is 383 bits, so the number of 48-bit limbs needed is 383/48 < 8
  *   
  *   Formats: a x b = a vectors of b Fp limbs
  */
@@ -17,20 +17,39 @@
 #define FP_NUM_64LIMBS 6
 #define FP_NUM_AVXLIMBS 8
 
-static const uint64_t LIMB_LEN = 51;                 ///////// PLANNING SWITCHING TO LIMB_LEN = 48
+static const uint64_t LIMB_LEN = 48;
 static const uint64_t LIMB_ALIGN = 52 - LIMB_LEN;
-static const uint64_t LIMB_MASK = 0x7ffffffffffff;   ///////// THIS WOULD CHANGE TO LIMB_MASK 0xFFFFFFFFFFFF
-static const uint64_t LAST_LIMB_MASK = 0x3ffffff;    ///////// IS THIS USED SOMEWHERE?
-// p in radix 2^51
-static const uint64_t p[8] = { 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x207ffff };
+static const uint64_t LIMB_MASK = 0xffffffffffff;
+static const uint64_t LAST_LIMB_MASK = 0x7fffffffffff;    ///////// IS THIS USED SOMEWHERE?
+// p in radix 2^48
+static const uint64_t p[8] = { 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0x40ffffffffff };
 
-static const uint64_t p_plus_1_top = 0x2080000;
-// 2*p in radix 2^51
-static const uint64_t p2[8] = { 0x7fffffffffffe, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x7ffffffffffff, 0x40fffff };
+static const uint64_t p_plus_1_top = 0x410000000000;
+// 2*p in radix 2^48
+static const uint64_t p2[8] = { 0xfffffffffffe, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0x81ffffffffff };
 
-// We use the Montgomery representation with R = 2^408
+// We use the Montgomery representation with R = 2^(8*48) = 2^384
 // R2 is R^2 mod p, which is needed to convert to the representation.
-static const uint64_t R2[8] = { 0x3732f52771f91, 0x7e07e07e07e2, 0x40fc0fc0fc0fc, 0x781f81f81f81f, 0x3f03f03f03f03, 0x7e07e07e07e0, 0x40fc0fc0fc0fc, 0xf9f81f };
+static const uint64_t R[8] = {
+    0x000000000003, 0x000000000000, 0x000000000000, 0x000000000000,
+    0x000000000000, 0x000000000000, 0x000000000000, 0x3d0000000000
+};
+
+static const uint64_t R2[8] = {
+    0xf03f03f03f13, 0xf03f03f03f03, 0xf03f03f03f03, 0xf03f03f03f03,
+    0xf03f03f03f03, 0xf03f03f03f03, 0xf03f03f03f03, 0x1d3f03f03f03
+};
+
+// TODO: This is the constants used for 51 bit limbs, 2^(8*51) = 2^408. Why does 8x1 with 48-bit limbs use this?
+static const uint64_t R_8x1[8] = {
+    0xF03F03F03F03, 0x03, 0x0, 0x0, 
+    0x0, 0x0, 0x0, 0x3D0000000000
+};
+
+static const uint64_t R2_8x1[8] = { 
+    0x7B0FD07F000F, 0x732F52771F91, 0xF03F03F03F13, 0xF03F03F03F03, 
+    0xF03F03F03F03, 0xF03F03F03F03, 0xF03F03F03F03, 0x213F03F03F03 
+};
 
 // ======================================================================================================
 //                                                 8x1
@@ -110,13 +129,13 @@ void fp_frommont_8x1(__m512i* res, __m512i* a);
 
 void fp_8x1_to_unvectorized(fp_t* res, __m512i* src);
 // helper function, also used in fp2 conversions.
-void fp_51_to_64_bit_limbs_8x1(fp_t* res, __m512i* src);
-void fp_51_to_64_bit_limbs_8x1_only_even_idx(fp_t* res, __m512i* src);
+void fp_48_to_64_bit_limbs_8x1(fp_t* res, __m512i* src);
+void fp_48_to_64_bit_limbs_8x1_only_even_idx(fp_t* res, __m512i* src);
 
 void fp_unvectorized_to_8x1(__m512i* res, fp_t* src);
 // helper function, also used in fp2 conversions.
-void fp_64_to_51_bit_limbs_8x1(__m512i* res, fp_t* src);
-void fp_64_to_51_bit_limbs_8x1_only_even_idx(__m512i* res, fp_t* src);
+void fp_64_to_48_bit_limbs_8x1(__m512i* res, fp_t* src);
+void fp_64_to_48_bit_limbs_8x1_only_even_idx(__m512i* res, fp_t* src);
 
 /**
  *  res = a + b, multiprecision addition, no correction, no carry propagation
@@ -189,7 +208,7 @@ void fp_neg_4x2(__m512i* res, __m512i* a);
  *  Denote the 4 Fp elements stored in a by a0, a1, a2, a3, and in b by b0, b1, b2, b3.
  *  Computes a0 - b0, a1 + b1, a2 - b2, a3 + b3.
  */
- void fp_mixsubadd_4x2(__m512i* res, __m512i* a, __m512i* b);
+ void fp_mixaddsub_4x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
 
 void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b);
 

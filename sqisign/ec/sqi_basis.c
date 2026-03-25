@@ -2,6 +2,8 @@
 #include "sqi_ec_params_lvl3.h"
 #include "sqi_e0_basis_lvl3.h"
 
+#include "ec.h"
+
 uint32_t ec_recover_y(fp2_t *y, const fp2_t *Px, const ec_curve_t *curve, const bool verify)
 { // Recover y-coordinate of a point on the Montgomery curve y^2 = x^3 + Ax^2 + x
     fp2_add(y, Px, &curve->A); // A + x

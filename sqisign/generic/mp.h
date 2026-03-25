@@ -30,6 +30,7 @@ void mp_mul(digit_t *c, const digit_t *a, const digit_t *b, size_t nwords);
 void mp_mod_2exp(digit_t *a, unsigned int e, unsigned int nwords);
 void mp_inv_2e(digit_t *b, const digit_t *a, int e, unsigned int nwords);
 void mp_invert_matrix(digit_t *r1, digit_t *r2, digit_t *s1, digit_t *s2, int e, unsigned int nwords);
+unsigned int mp_bitlength(const digit_t *x, const unsigned int nwords);
 
 #define mp_is_odd(x, nwords) (((nwords) != 0) & (int)(x)[0])
 #define mp_is_even(x, nwords) (!mp_is_odd(x, nwords))

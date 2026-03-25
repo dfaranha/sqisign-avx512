@@ -387,12 +387,22 @@ void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b)
     }
     fp_mul_4x2(t1, s1, b);
     fp_mul_4x2(t2, s2, s3);
-    fp_mixsubadd_4x2(res, t1, t2);
+    fp_mixaddsub_4x2(res, t1, t2, 0xcc);
 }
 
 void fp2_sqr_2x2x2(__m512i* res, __m512i* a)
 {
-    fp2_mul_2x2x2(res, a, a);
+    __m512i t0[4], t1[4];
+    for (int i = 0; i < 4; i++) {
+        t0[i] = VPERM256(a[i], 0x44); // a0, a0
+        t1[i] = VPERM256(a[i], 0x4e); // a1, a0
+    }
+    fp_add_4x2(t0, t0, t1); // a0 + a1, a0 + a0
+    for (int i = 0; i < 4; i++) {
+        t1[i] = VPERM256MASKZ(0x33, a[i], 0x4e); // a1, 0
+    }
+    fp_sub_4x2(t1, a, t1); // a0 - a1, a1
+    fp_mul_4x2(res, t0, t1);
 }
  
 void fp2_tomont_2x2x2(__m512i* res, __m512i* a)
@@ -518,8 +528,8 @@ void fp2_unvectorized_to_8x1x1(__m512i* res, fp2_t* src)
         fp_encode(coeffs_im[i].arr, &(src+i)->im);
     }
 
-    fp_64_to_51_bit_limbs_8x1(res, coeffs_re);
-    fp_64_to_51_bit_limbs_8x1(res+8, coeffs_im);
+    fp_64_to_48_bit_limbs_8x1(res, coeffs_re);
+    fp_64_to_48_bit_limbs_8x1(res+8, coeffs_im);
     fp2_tomont_8x1x1(res, res);
 }
 
@@ -529,8 +539,8 @@ void fp2_8x1x1_to_unvectorized(fp2_t* res, __m512i* src)
     __m512i src_frommont[16];
 
     fp2_frommont_8x1x1(src_frommont, src);
-    fp_51_to_64_bit_limbs_8x1(coeffs_re, src_frommont);
-    fp_51_to_64_bit_limbs_8x1(coeffs_im, src_frommont+8);
+    fp_48_to_64_bit_limbs_8x1(coeffs_re, src_frommont);
+    fp_48_to_64_bit_limbs_8x1(coeffs_im, src_frommont+8);
 
     for (int i = 0; i < 8; i++) {
         fp_decode(&(res+i)->re, (const void *) coeffs_re[i].arr);
@@ -546,7 +556,7 @@ void fp2_unvectorized_to_4x2x1(__m512i* res, fp2_t* src)
         fp_encode(coeffs[2*i+1].arr, &src[i].im);
     }
 
-    fp_64_to_51_bit_limbs_8x1(res, coeffs);
+    fp_64_to_48_bit_limbs_8x1(res, coeffs);
     fp2_tomont_4x2x1(res, res);
 }
 
@@ -558,7 +568,7 @@ void fp2_unvectorized_to_2x4x1(__m512i* res, fp2_t* src)
         fp_encode(coeffs[2*i+1].arr, &src[i].im);
     }
 
-    fp_64_to_51_bit_limbs_8x1_only_even_idx(res, coeffs);
+    fp_64_to_48_bit_limbs_8x1_only_even_idx(res, coeffs);
     fp2_tomont_2x4x1(res, res);
 }
 
@@ -568,7 +578,7 @@ void fp2_4x2x1_to_unvectorized(fp2_t* res, __m512i* src)
     __m512i src_frommont[8];
 
     fp2_frommont_4x2x1(src_frommont, src);
-    fp_51_to_64_bit_limbs_8x1(coeffs, src_frommont);
+    fp_48_to_64_bit_limbs_8x1(coeffs, src_frommont);
 
     for (int i = 0; i < 4; i++) {
         fp_decode(&res[i].re, (const void *) coeffs[2*i].arr);
@@ -582,7 +592,7 @@ void fp2_2x4x1_to_unvectorized(fp2_t* res, __m512i* src)
     __m512i src_frommont[8];
 
     fp2_frommont_2x4x1(src_frommont, src);
-    fp_51_to_64_bit_limbs_8x1_only_even_idx(coeffs, src_frommont);
+    fp_48_to_64_bit_limbs_8x1_only_even_idx(coeffs, src_frommont);
 
     for (int i = 0; i < 2; i++) {
         fp_decode(&res[i].re, (const void *) coeffs[2*i].arr);
@@ -638,13 +648,14 @@ void fp2_4x2x1_duplicate_to_8x1x1(__m512i* res, __m512i* src)
 
 // Assumes that the input and output arrays do not overlap.
 // Maps (a,b,c,d) in 4x2x1 to (a,b) and (c,d) in 2x4x1
-void fp2_4x2x1_to_2x4x1(__m512i* res, __m512i* src)
+void fp2_4x2x1_to_2x4x1(__m512i* res1, __m512i* res2, __m512i* src)
 {
     __m512i idx1 = VSET(0, 0, 1, 1, 2, 2, 3, 3);
     __m512i idx2 = VSET(4, 4, 5, 5, 6, 6, 7, 7);
     for (int i = 0; i < 8; i++) {
-        res[i] = VPERM512MASKZ(0x55, src[i], idx1);
-        res[i+8] = VPERM512MASKZ(0x55, src[i], idx2);
+        __m512i t = src[i];
+        res1[i] = VPERM512MASKZ(0x55, t, idx1);
+        res2[i] = VPERM512MASKZ(0x55, t, idx2);
     }
 }
 
