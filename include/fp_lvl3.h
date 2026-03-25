@@ -211,11 +211,15 @@ void fp_neg_4x2(__m512i* res, __m512i* a);
  void fp_mixaddsub_4x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
 
 void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b);
-
 void fp_sqr_4x2(__m512i* res, __m512i* a);
 
 void fp_tomont_4x2(__m512i* res, __m512i* a);
-
 void fp_frommont_4x2(__m512i* res, __m512i* a);
+
+void fp_48_to_64_bit_limbs_4x2(fp_t* res, __m512i* src);
+void fp_64_to_48_bit_limbs_4x2(__m512i* res, fp_t* src);
+
+void fp_4x2_to_unvectorized(fp_t* res, __m512i* src);
+void fp_unvectorized_to_4x2(__m512i* res, fp_t* src);
 
 #endif

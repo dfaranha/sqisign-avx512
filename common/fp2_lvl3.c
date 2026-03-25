@@ -377,6 +377,11 @@ void fp2_neg_2x2x2(__m512i* res, __m512i* a)
     fp_neg_4x2(res, a);
 }
 
+void fp2_mixaddsub_2x2x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)
+{
+    fp_mixaddsub_4x2(res, a, b, add_mask);
+}
+
 void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i s1[4], s2[4], s3[4], t1[4], t2[4];
@@ -560,6 +565,18 @@ void fp2_unvectorized_to_4x2x1(__m512i* res, fp2_t* src)
     fp2_tomont_4x2x1(res, res);
 }
 
+void fp2_unvectorized_to_2x2x2(__m512i* res, fp2_t* src)
+{
+    fp_t coeffs[4];
+    for (int i = 0; i < 2; i++) {
+        fp_encode(coeffs[2*i].arr, &src[i].re);
+        fp_encode(coeffs[2*i+1].arr, &src[i].im);
+    }
+
+    fp_64_to_48_bit_limbs_4x2(res, coeffs);
+    fp2_tomont_2x2x2(res, res);
+}
+
 void fp2_unvectorized_to_2x4x1(__m512i* res, fp2_t* src)
 {
     fp_t coeffs[4];
@@ -581,6 +598,20 @@ void fp2_4x2x1_to_unvectorized(fp2_t* res, __m512i* src)
     fp_48_to_64_bit_limbs_8x1(coeffs, src_frommont);
 
     for (int i = 0; i < 4; i++) {
+        fp_decode(&res[i].re, (const void *) coeffs[2*i].arr);
+        fp_decode(&res[i].im, (const void *) coeffs[2*i+1].arr);
+    }
+}
+
+void fp2_2x2x2_to_unvectorized(fp2_t* res, __m512i* src)
+{
+    fp_t coeffs[4];
+    __m512i src_frommont[4];
+
+    fp2_frommont_2x2x2(src_frommont, src);
+    fp_48_to_64_bit_limbs_4x2(coeffs, src_frommont);
+
+    for (int i = 0; i < 2; i++) {
         fp_decode(&res[i].re, (const void *) coeffs[2*i].arr);
         fp_decode(&res[i].im, (const void *) coeffs[2*i+1].arr);
     }
@@ -646,7 +677,30 @@ void fp2_4x2x1_duplicate_to_8x1x1(__m512i* res, __m512i* src)
     }
 }
 
-// Assumes that the input and output arrays do not overlap.
+void fp2_4x2x1_to_2x2x2(__m512i* res1, __m512i* res2, __m512i* src)
+{
+    __m512i idx1 = VSET(0, 8, 1, 9, 2, 10, 3, 11);
+    __m512i idx2 = VSET(4, 12, 5, 13, 6, 14, 7, 15);
+
+    for (int i = 0; i < 4; i++) {
+        __m512i s = src[i], t = src[i+4];
+        res1[i] = VBLENDPERM(idx1, s, t);
+        res2[i] = VBLENDPERM(idx2, s, t);
+    }
+}
+
+void fp2_2x2x2_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2)
+{
+    __m512i idx1 = VSET(0, 2, 4, 6, 8, 10, 12, 14);
+    __m512i idx2 = VSET(1, 3, 5, 7, 9, 11, 13, 15);
+
+    for (int i = 0; i < 4; i++) {
+        __m512i s = src1[i], t = src2[i];
+        res[i] = VBLENDPERM(idx1, s, t);
+        res[i+4] = VBLENDPERM(idx2, s, t);
+    }
+}
+
 // Maps (a,b,c,d) in 4x2x1 to (a,b) and (c,d) in 2x4x1
 void fp2_4x2x1_to_2x4x1(__m512i* res1, __m512i* res2, __m512i* src)
 {
@@ -688,3 +742,23 @@ void fp2_2x4x1_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2)
 //         res[i] = VBLENDPERM32(0xffff, src1[i], src2[i], indices);
 //     }
 // }
+
+void fp2_2x2x2_to_2x4x1(__m512i* res, __m512i* src)
+{
+    __m512i idx1 = VSET(0, 0, 2, 2, 4, 4, 6, 6);
+    __m512i idx2 = VSET(1, 1, 3, 3, 5, 5, 7, 7);
+
+    for (int i = 0; i < 4; i++) {
+        __m512i t = src[i];
+        res[i] = VPERM512MASKZ(0x55, t, idx1);
+        res[i+4] = VPERM512MASKZ(0x55, t, idx2);
+    }
+}
+
+void fp2_2x4x1_to_2x2x2(__m512i* res, __m512i* src)
+{
+    __m512i idx = VSET(0, 8, 2, 10, 4, 12, 6, 14);
+    for (int i = 0; i < 4; i++) {
+        res[i] = VBLENDPERM(idx, src[i], src[i+4]);
+    }
+}

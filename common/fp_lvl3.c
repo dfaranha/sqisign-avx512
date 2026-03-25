@@ -2063,3 +2063,90 @@ void fp_frommont_4x2(__m512i* res, __m512i* a)
     fp_mul_4x2(res, a, one);
 }
 
+void fp_48_to_64_bit_limbs_4x2(fp_t* res, __m512i* src)
+{
+    uint64_t t[8];
+    VSTORE(t, src[0]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[0] = t[2*i] & LIMB_MASK;
+        (res+i)->arr[3] = t[2*i+1] & 0xffffffffffff;
+    } 
+    VSTORE(t, src[1]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[0] |= (t[2*i] & 0xffff) << 48;
+        (res+i)->arr[1] = (t[2*i] >> 16) & 0xffffffffffff;
+
+        (res+i)->arr[3] |= (t[2*i+1] & 0xffff) << 48;
+        (res+i)->arr[4] = (t[2*i+1] >> 16) & 0xffffffffffff;
+    } 
+    VSTORE(t, src[2]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[1] |= (t[2*i] & 0xffffffff) << 32;
+        (res+i)->arr[2] = (t[2*i] >> 32) & 0xffffffff;
+
+        (res+i)->arr[4] |= (t[2*i+1] & 0xffffffff) << 32;
+        (res+i)->arr[5] = (t[2*i+1] >> 32) & 0xffffffff;
+    }
+    VSTORE(t, src[3]);
+    for (int i = 0; i < 4; i++) {
+        (res+i)->arr[2] |= (t[2*i] & 0xffffffffffff) << 16;
+        (res+i)->arr[3] |= (t[2*i] >> 48) & 0xffff;
+
+        (res+i)->arr[5] |= t[2*i+1] << 16;
+    }
+}
+
+void fp_64_to_48_bit_limbs_4x2(__m512i* res, fp_t* src)
+{
+    uint64_t t[8];
+
+    for (int i = 0; i < 4; i++) {
+        t[2*i] = (src+i)->arr[0] & LIMB_MASK;
+        t[2*i+1] = ((src+i)->arr[3]) & LIMB_MASK;
+    }
+    res[0] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 4; i++) {
+        t[2*i] = (((src+i)->arr[0] >> 48) & 0xffff) | (((src+i)->arr[1] & 0xffffffff) << 16); 
+        t[2*i+1] = (((src+i)->arr[3] >> 48) & 0xffff) | (((src+i)->arr[4] & 0xffffffff) << 16); 
+    }
+    res[1] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 4; i++) {
+        t[2*i] = (((src+i)->arr[1] >> 32) & 0xffffffff) | (((src+i)->arr[2] & 0xffff) << 32); 
+        t[2*i+1] = (((src+i)->arr[4] >> 32) & 0xffffffff) | (((src+i)->arr[5] & 0xffff) << 32); 
+    }
+    res[2] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 4; i++) {
+        t[2*i] = (((src+i)->arr[2] >> 16) & 0xffffffffffff);
+        t[2*i+1] = ((src+i)->arr[5] >> 16) & LIMB_MASK;
+    }
+    res[3] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+}
+
+
+
+void fp_4x2_to_unvectorized(fp_t* res, __m512i* src)
+{
+    fp_t coeffs[4];
+    __m512i src_frommont[4];
+
+    fp_frommont_4x2(src_frommont, src);
+    fp_48_to_64_bit_limbs_4x2(coeffs, src_frommont);
+
+    // Convert to Montgomery representation
+    for (int i = 0; i < 4; i++) {
+        fp_decode(res+i, (const void *) coeffs[i].arr);
+    }
+}
+
+void fp_unvectorized_to_4x2(__m512i* res, fp_t* src)
+{
+    fp_t coeffs[4];
+
+    // Convert from Montgomery representation
+    for (int i = 0; i < 4; i++) {
+        fp_encode(coeffs[i].arr, src+i);
+    }
+
+    fp_64_to_48_bit_limbs_4x2(res, coeffs);
+    fp_tomont_4x2(res, res);
+}

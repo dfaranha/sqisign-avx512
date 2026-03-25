@@ -142,5 +142,33 @@ bool test_ec(int iterations)
         return false;
     }
 
+    // double 1x2x2x2
+    for (int i = 0; i < iterations && passed; i++) {
+        // Sample random point
+        ec_random_test(P, &curve);            
+        ec_point_unvec_to_1x2x2x2(xz0, P);
+
+        // Randomize projective repr of A24
+        fp2_set_zero(&scalar);
+        while (fp2_is_zero(&scalar)) {
+            fp2_random_test(&scalar);
+        }
+        fp2_mul(&A24_point.x, &scalar, &curve.A24.x);
+        fp2_mul(&A24_point.z, &scalar, &curve.A24.z);
+        ec_point_unvec_to_1x2x2x2(xz1, &A24_point);
+
+        // Double
+        ec_double_1x2x2x2(xz2, xz0, xz1);
+        xDBL_A24(Q, P, &curve.A24, true);
+
+        // Compare
+        ec_point_1x2x2x2_to_unvec(R, xz2);
+        passed = ec_is_equal(Q, R);
+    }
+    print_test_res("double 1x2x2x2", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     return true;
 }

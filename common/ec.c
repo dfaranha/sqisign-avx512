@@ -186,6 +186,8 @@ void ec_add_components_4x4x2x1(
     fp2_sub_4x2x1(res_u, t4_t5, t1_t0);
 }
 
+// ============================== 2x4x1 ======================================0
+
 void ec_point_unvec_to_1x2x4x1(__m512i* res, ec_point_t* P)
 {
     fp2_t xz[2] = { P->x, P->z };
@@ -200,7 +202,31 @@ void ec_point_1x2x4x1_to_unvec(ec_point_t* res, __m512i* P)
     fp2_copy(&res->z, xz+1);
 }
 
-// TODO: Might be that 2x2x2 is faster?
+// TODO: Do we want to make this more efficient without a mul?
+void ec_set_zero_1x2x4x1(__m512i* P)
+{
+    fp2_setzero_2x4x1(P);
+    P[0] = VSET(1, 0, 0, 0, 0, 0, 0, 0);
+    fp2_tomont_2x4x1(P, P);
+}
+
+// TODO: Do we want to make this more efficient without a mul?
+// TODO maybe setzero is redundant and there is a way to init to zero?
+bool ec_curve_verif_A_1x2x4x1(__m512i* A1_A2)
+{
+    __m512i t[8];
+    fp2_setzero_2x4x1(t);
+    t[0] = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    fp2_tomont_2x4x1(t, t);
+
+    fp2_add_2x4x1(t, t, t); // t = 2
+    if (fp2_is_equal_2x4x1(A1_A2, t))
+        return false;
+
+    fp2_neg_2x4x1(t, t);
+    return fp2_is_equal_2x4x1(A1_A2, t) != 0;
+}
+
 // TODO: Can we not use this algorithm to create a 8x1x1 algorithm
 //       for doubling 4 points in theta isog?
 // Does not assume A24 has been normalized.
@@ -425,31 +451,6 @@ void ec_double_add_pair_8x1x1(__m512i* R1_R2_S1_S2, __m512i* P1_Q1_PQ1_A24, __m5
     fp2_mul_8x1x1(R1_R2_S1_S2, R1_R2_S1_S2, t0);
 }
 
-// TODO: Do we want to make this more efficient without a mul?
-void ec_set_zero_1x2x4x1(__m512i* P)
-{
-    fp2_setzero_2x4x1(P);
-    P[0] = VSET(1, 0, 0, 0, 0, 0, 0, 0);
-    fp2_tomont_2x4x1(P, P);
-}
-
-// TODO: Do we want to make this more efficient without a mul?
-// TODO maybe setzero is redundant and there is a way to init to zero?
-bool ec_curve_verif_A_1x2x4x1(__m512i* A1_A2)
-{
-    __m512i t[8];
-    fp2_setzero_2x4x1(t);
-    t[0] = VSET(1, 0, 0, 0, 1, 0, 0, 0);
-    fp2_tomont_2x4x1(t, t);
-
-    fp2_add_2x4x1(t, t, t); // t = 2
-    if (fp2_is_equal_2x4x1(A1_A2, t))
-        return false;
-
-    fp2_neg_2x4x1(t, t);
-    return fp2_is_equal_2x4x1(A1_A2, t) != 0;
-}
-
 void ec_scalar_mul_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const digit_t* m, const unsigned int mbits)
 {
     unsigned int bit;
@@ -536,8 +537,6 @@ bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const dig
     return true;
 }
 
-// TODO: change to static
-
 /**
  * Internal helper function for ec_biscalar mul.
  * Given x(P), x(Q) and x(P-Q) it computes x(P+Q). It then sets x(Q), x(P-Q) := x(P+Q), x(Q).
@@ -545,7 +544,7 @@ bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const dig
  * @param P_Q P and Q in 4x2x1
  * @param PmQ_A24 PmQ and A24 in 4x2x1
  */
-void ec_diff_add_1x2x4x1(__m512i* P_Q, __m512i* PmQ_A24)
+static void ec_diff_add_1x2x4x1(__m512i* P_Q, __m512i* PmQ_A24)
 {
     __m512i t0[8], t1[8], idx0, idx1;
     __mmask8 mask;
@@ -907,7 +906,7 @@ bool ec_biscalar_mul_pair_1x2x4x1(
     return succ1 && succ2;
 }
 
-// ========================= Debugging functions =================================================
+// Debugging functions
 
 bool test_point_order_twof_1x2x4x1(__m512i* P, __m512i* A24, unsigned int f)
 {
@@ -936,4 +935,93 @@ bool test_basis_order_twof_1x2x4x1(__m512i* B, __m512i* A24, unsigned int f)
         test_point_order_twof_1x2x4x1(B, A24, f) &
         test_point_order_twof_1x2x4x1(B+8, A24, f) &
         test_point_order_twof_1x2x4x1(B+16, A24, f);
+}
+
+// ==================== 2x2x2 ===================================================
+
+void ec_point_unvec_to_1x2x2x2(__m512i* res, ec_point_t* P)
+{
+    fp2_t xz[2] = { P->x, P->z };
+    fp2_unvectorized_to_2x2x2(res, xz);
+}
+
+void ec_point_1x2x2x2_to_unvec(ec_point_t* res, __m512i* P)
+{
+    fp2_t xz[2];
+    fp2_2x2x2_to_unvectorized(xz, P);
+    fp2_copy(&res->x, xz);
+    fp2_copy(&res->z, xz+1);
+}
+
+void ec_set_zero_1x2x2x2(__m512i* P)
+{
+    fp2_setzero_2x2x2(P);
+    P[0] = VSET(1, 0, 0, 0, 0, 0, 0, 0);
+    fp2_tomont_2x2x2(P, P);
+}
+
+// Does not assume A24 has been normalized.
+void ec_double_1x2x2x2(__m512i* res, __m512i* P, __m512i* A24)
+{
+    __m512i t0[4], t1[4], t2[4], t3[4], idx0, idx1;
+    __mmask8 mask;
+
+    // t0 = (X, X), t1 = (Z, Z)
+    idx0 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    idx1 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    for (int i = 0; i < 4; i++) {
+        t0[i] = VPERM512(idx0, P[i]);
+        t1[i] = VPERM512(idx1, P[i]);
+    }
+
+    // t0 = (X + Z, X - Z)
+    // t1 = t0^2
+    mask = 0xf;
+    fp2_mixaddsub_2x2x2(t0, t0, t1, mask);
+    fp2_sqr_2x2x2(t1, t0);
+
+    // t0 = (t1[0] + t1[1], t1[0] - t1[1])
+    for (int i = 0; i < 4; i++) {
+        t0[i] = VPERM512(idx0, t1[i]);
+        t2[i] = VPERM512(idx1, t1[i]);
+    }
+    fp2_mixaddsub_2x2x2(t0, t0, t2, mask);
+
+    // t2 = (A24 * t0[1], C24 * t1[1])
+    idx0 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+    for (int i = 0; i < 4; i++) {
+        t2[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+    }
+    fp2_mul_2x2x2(t2, t2, A24);
+
+    // TODO: Wasting one addition here.
+    // t3 = (-, t2[0] + t2[1])
+    // Maybe we can implement 1x8x1 Fp2?
+    idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);
+    for (int i = 0; i < 4; i++) {
+        t3[i] = VPERM512(idx0, t2[i]);
+    }
+    fp2_add_2x2x2(t3, t3, t2);
+    
+    // res_X = t1[0] * t2[1], res_Z = t0[1] * t3[1]
+    idx0 = VSET(8, 9, 10, 11, 4, 5, 6, 7);
+    idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+    for (int i = 0; i < 4; i++) {
+        t0[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        t1[i] = VBLENDPERM(idx1, t2[i], t3[i]);
+    }
+    fp2_mul_2x2x2(res, t0, t1);
+}
+
+void ec_double_iter_1x2x2x2(__m512i* res, __m512i* P, __m512i* A24, const int n)
+{
+    if (n == 0) {
+        fp2_copy_2x2x2(res, P);
+        return;
+    }
+    
+    ec_double_1x2x2x2(res, P, A24);
+    for (int i = 0; i < n-1; i++) {
+        ec_double_1x2x2x2(res, res, A24);
+    }   
 }

@@ -172,15 +172,21 @@ bool ec_biscalar_mul_pair_1x2x4x1(
     __m512i* basis
 );
 
-// ========================= Debugging functions =================================================
-
+// Debugging functions
 bool test_point_order_twof_1x2x4x1(__m512i* P, __m512i* A24, unsigned int f);
 bool test_basis_order_twof_1x2x4x1(__m512i* B, __m512i* A24, unsigned int f);
 
+// ==================== 2x2x2 ===================================================
 
+void ec_point_unvec_to_1x2x2x2(__m512i* res, ec_point_t* P);
+void ec_point_1x2x2x2_to_unvec(ec_point_t* res, __m512i* P);
 
+/**
+ *  P = (0 : 1) in 2x2x2
+ */
+void ec_set_zero_1x2x2x2(__m512i* P);
 
-// TODO: Delete
-void ec_diff_add_1x2x4x1(__m512i* P_Q, __m512i* PmQ_A24);
+void ec_double_1x2x2x2(__m512i* res, __m512i* P, __m512i* A24);
+void ec_double_iter_1x2x2x2(__m512i* res, __m512i* P, __m512i* A24, const int n);
 
 #endif

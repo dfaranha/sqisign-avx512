@@ -194,10 +194,9 @@ bool test_fp2(int iterations)
 
     // Multiplication tests
     // Using Montgomery constant
-    uint64_t R[8] = { 0xF03F03F03F03, 0x03, 0x0, 0x0, 0x0, 0x0, 0x0, 0x3D0000000000 };
     __m512i vR[16];
     fp2_setzero_8x1x1(vR);
-    fp_duplicate_8x1(vR, R);
+    fp_duplicate_8x1(vR, R_8x1);
 
     for(int i = 0; i < iterations && passed != 0; i++) {
         rand_fp2_8x1x1(a);
@@ -331,8 +330,6 @@ bool test_fp2(int iterations)
     if (passed == 0) {
         return false;
     }
-
-/*
 
     // Division by 3
     for (int i = 0; i < iterations; i++) {
@@ -820,7 +817,7 @@ bool test_fp2(int iterations)
     // Using Montgomery constant
     fp2_setzero_4x2x1(vR);
     for(int i = 0; i < 8; i++) {
-        vR[i] = VSET(R[i], 0, R[i], 0, R[i], 0, R[i], 0);
+        vR[i] = VSET(R_8x1[i], 0, R_8x1[i], 0, R_8x1[i], 0, R_8x1[i], 0);
     }
 
     for(int i = 0; i < iterations && passed != 0; i++) {
@@ -1460,7 +1457,7 @@ bool test_fp2(int iterations)
     // Using Montgomery constant
     fp2_setzero_2x4x1(vR);
     for(int i = 0; i < 8; i++) {
-        vR[i] = VSET(R[i], 0, 0, 0, R[i], 0, 0, 0);
+        vR[i] = VSET(R_8x1[i], 0, 0, 0, R_8x1[i], 0, 0, 0);
     }
 
     for(int i = 0; i < iterations && passed != 0; i++) {
@@ -1737,6 +1734,85 @@ bool test_fp2(int iterations)
         for (int j = 0; j < 2; j++) {
             fp2_random_test(&unvec1[j]);
         }
+        rand_fp2_2x2x2(a);
+
+        // Converting back and forth does nothin
+        fp2_unvectorized_to_2x2x2(d, unvec1);
+        fp2_2x2x2_to_unvectorized(unvec2, d);
+
+        for (int j = 0; j < 2; j++) {
+            if (fp2_is_equal(&unvec1[j], &unvec2[j]) == 0) { passed = 0; }
+        }
+        if (passed == 0) {
+            break;
+        }
+
+        fp2_2x2x2_to_unvectorized(unvec2, a);
+        fp2_unvectorized_to_2x2x2(d, unvec2);
+
+        if (fp2_is_equal_2x2x2(a, d) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        // Top 13 bits of each AVX limb is 0
+        t = VSETALL(0xfff8000000000000);
+        fp2_unvectorized_to_2x2x2(d, unvec1);
+        for (int j = 0; j < 4; j++) {
+            e[j] = VAND(d[j], t);
+        }
+        if (fp2_is_zero_2x2x2(e) != 0x3) {
+            passed = 0;
+            break;
+        }
+        
+        // Conversion commutes with arithmetic
+        rand_fp2_2x2x2(a);
+        rand_fp2_2x2x2(b);
+        fp2_mul_2x2x2(c, a, b);
+
+        fp2_2x2x2_to_unvectorized(unvec1, a);
+        fp2_2x2x2_to_unvectorized(unvec2, b);
+        for (int i = 0; i < 2; i++) {
+            fp2_mul(&unvec1[i], &unvec1[i], &unvec2[i]);
+        }
+        fp2_unvectorized_to_2x2x2(d, unvec1);
+
+        if (fp2_is_equal_2x2x2(c, d) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        for (int j = 0; j < 2; j++) {
+            fp2_random_test(&unvec1[j]);
+            fp2_random_test(&unvec2[j]);
+        }
+
+        fp2_unvectorized_to_2x2x2(d, unvec1);
+        fp2_unvectorized_to_2x2x2(e, unvec2);
+
+        for (int j = 0; j < 2; j++) {
+            fp2_mul(&unvec1[j], &unvec1[j], &unvec2[j]);
+        }
+        fp2_mul_2x2x2(f, d, e);
+        fp2_2x2x2_to_unvectorized(unvec2, f);
+        
+        for (int j = 0; j < 2; j++) {
+            if (fp2_is_equal(&unvec1[j], &unvec2[j]) == 0) {
+                passed = 0;
+                break;
+            }
+        }
+    }
+    print_test_res("unvectorized <-> 2x2x2", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    for (int i = 0; i < iterations; i++) {
+        for (int j = 0; j < 2; j++) {
+            fp2_random_test(&unvec1[j]);
+        }
         rand_fp2_2x4x1(a);
 
         // Converting back and forth does nothin
@@ -1901,6 +1977,73 @@ bool test_fp2(int iterations)
 
     for(int i = 0; i < iterations; i++) {
         rand_fp2_4x2x1(a);
+        rand_fp2_2x2x2(b);
+        rand_fp2_2x2x2(b+4);
+
+        // Conversion back and forth is identity
+        fp2_4x2x1_to_2x2x2(d, d+4, a);
+        fp2_2x2x2_to_4x2x1(e, d, d+4);
+        if (fp2_is_equal_4x2x1(e, a) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        fp2_2x2x2_to_4x2x1(f, b, b+4);
+        fp2_4x2x1_to_2x2x2(e, e+4, f);
+        if (fp2_is_equal_2x2x2(e, b) != 0x3 || fp2_is_equal_2x2x2(e+4, b+4) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        // Top 13 bits of each limb is 0
+        t = VSETALL(0xfff8000000000000);
+        for(int j = 0; j < 8; j++) {
+            d[j] = VAND(d[j], t);
+            f[j] = VAND(f[j], t);
+        }
+        if (fp2_is_zero_2x2x2(d) != 0x3 || fp2_is_zero_2x2x2(d+4) != 0x3 || fp2_is_zero_4x2x1(f) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        // Conversion commutes with arithmetic
+        rand_fp2_4x2x1(b);
+        fp2_mul_4x2x1(c, a, b);
+
+        fp2_4x2x1_to_2x2x2(d, d+4, a);
+        fp2_4x2x1_to_2x2x2(e, e+4, b);
+        fp2_mul_2x2x2(f, d, e);
+        fp2_mul_2x2x2(f+4, d+4, e+4);
+        fp2_2x2x2_to_4x2x1(f, f, f+4);
+
+        if (fp2_is_equal_4x2x1(c, f) != 0xf) {
+            passed = 0;
+            printf("fails because Montgomery constants are different\n");
+            break;
+        }
+
+        rand_fp2_2x2x2(a); rand_fp2_2x2x2(a+4);
+        rand_fp2_2x2x2(b); rand_fp2_2x2x2(b+4);
+        fp2_mul_2x2x2(c, a, b);
+        fp2_mul_2x2x2(c+4, a+4, b+4);
+
+        fp2_2x2x2_to_4x2x1(d, a, a+4);
+        fp2_2x2x2_to_4x2x1(e, b, b+4);
+        fp2_mul_4x2x1(f, d, e);
+        fp2_4x2x1_to_2x2x2(e, e+4, f);
+
+        if (fp2_is_equal_2x2x2(c, e) != 0x3 || fp2_is_equal_2x2x2(c+4, e+4) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("4x2x1 <-> 2x2x2", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    for(int i = 0; i < iterations; i++) {
+        rand_fp2_4x2x1(a);
         rand_fp2_2x4x1(b);
         rand_fp2_2x4x1(b+8);
 
@@ -1962,7 +2105,71 @@ bool test_fp2(int iterations)
     print_test_res("4x2x1 <-> 2x4x1", passed);
     if (passed == 0) {
         return false;
-    }*/
+    }
+
+    for(int i = 0; i < iterations; i++) {
+        rand_fp2_2x4x1(a);
+        rand_fp2_2x2x2(b);
+
+        // Conversion back and forth is identity
+        fp2_2x4x1_to_2x2x2(d, a);
+        fp2_2x2x2_to_2x4x1(e, d);
+        if (fp2_is_equal_2x4x1(e, a) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        fp2_2x2x2_to_2x4x1(f, b);
+        fp2_2x4x1_to_2x2x2(e, f);
+        if (fp2_is_equal_2x2x2(e, b) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        // Top 13 bits of each limb is 0
+        t = VSETALL(0xfff8000000000000);
+        for(int j = 0; j < 4; j++) {
+            d[j] = VAND(d[j], t);
+            f[j] = VAND(f[j], t);
+            f[j+4] = VAND(f[j+4], t);
+        }
+        if (fp2_is_zero_2x2x2(d) != 0x3 || fp2_is_zero_2x4x1(f) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        // Conversion commutes with arithmetic
+        rand_fp2_2x4x1(b);
+        fp2_mul_2x4x1(c, a, b);
+
+        fp2_2x4x1_to_2x2x2(d, a);
+        fp2_2x4x1_to_2x2x2(e, b);
+        fp2_mul_2x2x2(f, d, e);
+        fp2_2x2x2_to_2x4x1(f, f);
+
+        if (fp2_is_equal_2x4x1(c, f) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        rand_fp2_2x2x2(a);
+        rand_fp2_2x2x2(b);
+        fp2_mul_2x2x2(c, a, b);
+
+        fp2_2x2x2_to_2x4x1(d, a);
+        fp2_2x2x2_to_2x4x1(e, b);
+        fp2_mul_2x4x1(f, d, e);
+        fp2_2x4x1_to_2x2x2(e, f);
+
+        if (fp2_is_equal_2x2x2(c, e) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("2x2x2 <-> 2x4x1", passed);
+    if (passed == 0) {
+        return false;
+    }
 
     return true;
 }
