@@ -200,4 +200,7 @@ void fp_frommont_4x2(__m512i* res, __m512i* a);
 void fp_51_to_64_bit_limbs_4x2(fp_t* res, __m512i* src);
 void fp_64_to_51_bit_limbs_4x2(__m512i* res, fp_t* src);
 
+void fp_4x2_to_unvectorized(fp_t* res, __m512i* src);
+void fp_unvectorized_to_4x2(__m512i* res, fp_t* src);
+
 #endif

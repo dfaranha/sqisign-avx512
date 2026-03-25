@@ -2179,3 +2179,29 @@ void fp_64_to_51_bit_limbs_4x2(__m512i* res, fp_t* src)
     res[3] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
 }
 
+void fp_4x2_to_unvectorized(fp_t* res, __m512i* src)
+{
+    fp_t coeffs[4];
+    __m512i src_frommont[4];
+
+    fp_frommont_4x2(src_frommont, src);
+    fp_51_to_64_bit_limbs_4x2(coeffs, src_frommont);
+
+    // Convert to Montgomery representation
+    for (int i = 0; i < 4; i++) {
+        fp_decode(res+i, (const void *) coeffs[i].arr);
+    }
+}
+
+void fp_unvectorized_to_4x2(__m512i* res, fp_t* src)
+{
+    fp_t coeffs[4];
+
+    // Convert from Montgomery representation
+    for (int i = 0; i < 4; i++) {
+        fp_encode(coeffs[i].arr, src+i);
+    }
+
+    fp_64_to_51_bit_limbs_4x2(res, coeffs);
+    fp_tomont_4x2(res, res);
+}
