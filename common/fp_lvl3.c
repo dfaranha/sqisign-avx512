@@ -1995,13 +1995,6 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[10] = VAND(t[10], limb_mask);
     t[11] = VANDMASK(t[11], 0x55, t[11], limb_mask);
 
-    // Output result
-    res[0] = t[8];
-    res[1] = t[9];
-    res[2] = t[10];
-    res[3] = t[11];
-	return;
-
     // The result is in t8 - t11, and it is 8 * 48 = 384 bits
     // We do a final reduction step, to get the result down to 383 bits
 
@@ -2014,7 +2007,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     // 65 * 2^376 = 1 mod p, hence hi mod p = floor(h/65) + (h mod 65)*2^376
     cnst = VSETALL(0xfc1);
     quo = VMULADDL(zero, hi, cnst);
-    quo = VSRA(quo, 39);
+    quo = VSRA(quo, 18);
     cnst = VSETALL(65); // again suboptimal, not doing -65
     rem = VMULADDL(zero, quo, cnst);
     rem = VSUB(hi, rem);
