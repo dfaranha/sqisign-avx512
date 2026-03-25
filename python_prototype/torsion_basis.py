@@ -74,20 +74,23 @@ def torsion_basis_from_hint(E: Curve, hint: ZZ, e: ZZ) -> BasisX:
     # When hint_P is zero, we have an edge case where the hint did not
     # work and we need to find our own basis. This is rare, and doesn't
     # happen in the KATS so I'm not implementing it right now.
+    #
+    # We work projectively to avoid inverting Fp2([1, hint_P]) when hint_A
+    # is true, and the point Q which is not above (0 : 0) has x coordinate
+    # -(xP / zP + A), or projectively (-(xP + A*zP) : zP)
     if hint_P:
         if hint_A:
-            xP = -A / Fp2([1, hint_P])
+            xP, zP = -A, Fp2([1, hint_P])
+            xQ, zQ = -(xP + A*zP), zP
         else:
-            xP = hint_P * A
+            xP, zP = hint_P * A, Fp2.one()
+            xQ, zQ = -(xP + A), Fp2.one()
     else:
         raise NotImplementedError
 
-    # Compute the second x-coord of a point of full even torsion not above (0 : 0)
-    xQ = -(xP + A)
-
     # Clear the cofactor with x-only arithmetic
-    P = PointX(xP, Fp2.one())
-    Q = PointX(xQ, Fp2.one())
+    P = PointX(xP, zP)
+    Q = PointX(xQ, zQ)
 
     cofactor = (p + 1) // (2**e)
     P = x_mul(E, P, cofactor)
