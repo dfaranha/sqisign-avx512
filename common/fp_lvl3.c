@@ -1843,20 +1843,17 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     __m512i sl0, sl1, sl2, sl3, sh0, sh1, sh2, sh3;
     __m512i carry, hi, shuf, quo, rem;
     __m512i zero = VZERO();
-    __m512i cnst = VSETALL((uint64_t) 65 << 40); // top limb of (p+1)
+    
+    // Constant is now 65 << 40 because 376 - (7 * 48) = 40
+    __m512i cnst = VSETALL((uint64_t) 65 << 40); 
     __m512i limb_mask = VSETALL(LIMB_MASK);
 
-
     // Part 1: Integer multiplication
-    // Algorithm 2 from "Finite Field Arithmetic Using AVX-512 For Isogeny-Based Cryptography" by Orisaka, Aranha and López
 
-    // Duplicating limbs of b with shuffles:
-    // If b[0] = {a_0, a_4, b_0, b_4, ...} then sl0 = {a_0, a_0, b_0, b_0, ...}
     sl0 = VSHUFFLE(b[0], 0x44);
     sl1 = VSHUFFLE(b[1], 0x44);
     sl2 = VSHUFFLE(b[2], 0x44);
     sl3 = VSHUFFLE(b[3], 0x44);
-    //// If b[0] = {a_0, a_4, b_0, b_4, ...} then sh0 = {a_4, a_4, b_4, b_4, ...}
     sh0 = VSHUFFLE(b[0], 0xEE);
     sh1 = VSHUFFLE(b[1], 0xEE);
     sh2 = VSHUFFLE(b[2], 0xEE);
@@ -1865,14 +1862,14 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     // left i+j = 0 right i+j = 4
     t[0] = VMULADDL(zero, a[0], sl0);
     t[1] = VMULADDH(zero, a[0], sl0);
-    t[1] = VSL(t[1], LIMB_ALIGN);
+    t[1] = VSL(t[1], 4); // Shift by 4 to align 52-bit IFMA to 48-bit limbs
 
     // left i+j = 1 
     t[1] = VMULADDL(t[1], a[0], sl1);
     t[2] = VMULADDH(zero, a[0], sl1);
     t[1] = VMULADDL(t[1], a[1], sl0);
     t[2] = VMULADDH(t[2], a[1], sl0);
-    t[2] = VSL(t[2], LIMB_ALIGN);
+    t[2] = VSL(t[2], 4);
 
     // left i+j = 2
     t[2] = VMULADDL(t[2], a[0], sl2);
@@ -1881,7 +1878,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[3] = VMULADDH(t[3], a[1], sl1);
     t[2] = VMULADDL(t[2], a[2], sl0);
     t[3] = VMULADDH(t[3], a[2], sl0);
-    t[3] = VSL(t[3], LIMB_ALIGN);
+    t[3] = VSL(t[3], 4);
 
     // left i+j = 3
     t[3] = VMULADDL(t[3], a[0], sl3);
@@ -1892,7 +1889,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[4] = VMULADDH(t[4], a[2], sl1);
     t[3] = VMULADDL(t[3], a[3], sl0);
     t[4] = VMULADDH(t[4], a[3], sl0);
-    t[4] = VSL(t[4], LIMB_ALIGN);
+    t[4] = VSL(t[4], 4);
 
     // left i+j = 4
     t[4] = VMULADDL(t[4], a[0], sh0);
@@ -1903,7 +1900,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[5] = VMULADDH(t[5], a[2], sl2);
     t[4] = VMULADDL(t[4], a[3], sl1);
     t[5] = VMULADDH(t[5], a[3], sl1);
-    t[5] = VSL(t[5], LIMB_ALIGN);
+    t[5] = VSL(t[5], 4);
 
     // left i+j = 5
     t[5] = VMULADDL(t[5], a[0], sh1);
@@ -1914,7 +1911,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[6] = VMULADDH(t[6], a[2], sl3);
     t[5] = VMULADDL(t[5], a[3], sl2);
     t[6] = VMULADDH(t[6], a[3], sl2);
-    t[6] = VSL(t[6], LIMB_ALIGN);
+    t[6] = VSL(t[6], 4);
 
     // left i+j = 6
     t[6] = VMULADDL(t[6], a[0], sh2);
@@ -1925,7 +1922,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[7] = VMULADDH(t[7], a[2], sh0);
     t[6] = VMULADDL(t[6], a[3], sl3);
     t[7] = VMULADDH(t[7], a[3], sl3);
-    t[7] = VSL(t[7], LIMB_ALIGN);
+    t[7] = VSL(t[7], 4);
 
     // left i+j = 7
     t[7] = VMULADDL(t[7], a[0], sh3);
@@ -1936,7 +1933,7 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[8] = VMULADDH(t[8], a[2], sh1);
     t[7] = VMULADDL(t[7], a[3], sh0);
     t[8] = VMULADDH(t[8], a[3], sh0);
-    t[8] = VSL(t[8], LIMB_ALIGN);
+    t[8] = VSL(t[8], 4);
 
     // left i+j = 8
     t[8] = VMULADDL(t[8], a[1], sh3);
@@ -1945,45 +1942,41 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[9] = VMULADDH(t[9], a[2], sh2);
     t[8] = VMULADDL(t[8], a[3], sh1);
     t[9] = VMULADDH(t[9], a[3], sh1);
-    t[9] = VSL(t[9], LIMB_ALIGN);
+    t[9] = VSL(t[9], 4);
     
     // left i+j = 9
     t[9] = VMULADDL(t[9], a[2], sh3);
     t[10] = VMULADDH(zero, a[2], sh3);
     t[9] = VMULADDL(t[9], a[3], sh2);
     t[10] = VMULADDH(t[10], a[3], sh2);
-    t[10] = VSL(t[10], LIMB_ALIGN);
+    t[10] = VSL(t[10], 4);
 
     // left i+j = 10
     t[10] = VMULADDL(t[10], a[3], sh3);
     t[11] = VMULADDH(zero, a[3], sh3);
-    t[11] = VSL(t[11], LIMB_ALIGN);
+    t[11] = VSL(t[11], 4);
 
     // Part 2: Montgomery reduction
 
     for(int i = 0; i < 8; i++) {
-        carry = VSRA(t[i], LIMB_LEN);
-        t[i] = VAND(t[i], limb_mask); // Left slot is u_i = t_i mod 2^48
+        carry = VSRA(t[i], 48); // Changed from 51
+        t[i] = VAND(t[i], limb_mask); 
         t[i+1] = VADD(t[i+1], carry);
 
-        // t = t + u_i * p * 2^(48*i) 
-        // p = (p+1) - 1 = 2^(48*7) * (65 << 40) -1
-        shuf = VSHUFFLEMASKZ(0xcccc, t[i], 0x4e); // shuf = {0, u_i, 0, ...}
+        shuf = VSHUFFLEMASKZ(0xcccc, t[i], 0x4e); 
         t[i+3] = VMULADDL(t[i+3], shuf, cnst);
         hi = VMULADDH(zero, shuf, cnst);
-        hi = VSL(hi, LIMB_ALIGN);
+        hi = VSL(hi, 4); // Changed from 1
         t[i+4] = VADD(t[i+4], hi);
-        //t[i] = VSHUFFLEMASKZ(0xcc, t[i], 0xe4); // Would need to do t - 2^(48*i)*u_i, but we will drop vector when dividing, so can skip
         t[i+4] = VADDMASK(t[i+4], 0x55, t[i+4], VSHUFFLE(t[i], 0x4e));
     }
 
     // Result is now in t[8] to t[11]
-    // Propogating carry
-    // TODO: Can this be removed?
+    // Propagating carry
     t[9] = VADDMASK(t[9], 0x55, t[9], VSRA(t[8], LIMB_LEN));
     t[10] = VADDMASK(t[10], 0x55, t[10], VSRA(t[9], LIMB_LEN));
     t[11] = VADDMASK(t[11], 0x55, t[11], VSRA(t[10], LIMB_LEN));
-    //Need to move carry to second word. Shifting is faster than permuting (1 cycle vs 3)
+    
     carry = VSRA(t[11], LIMB_LEN);
     carry = VSHUFFLEMASKZ(0xcccc, carry, 0x4e);
     t[8] = VADDMASK(t[8], 0xaa, t[8], carry); 
@@ -1995,43 +1988,30 @@ void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[10] = VAND(t[10], limb_mask);
     t[11] = VANDMASK(t[11], 0x55, t[11], limb_mask);
 
-    // Output result
-    res[0] = t[8];
-    res[1] = t[9];
-    res[2] = t[10];
-    res[3] = t[11];
-	return;
-
-    // The result is in t8 - t11, and it is 8 * 48 = 384 bits
-    // We do a final reduction step, to get the result down to 383 bits
-
-    // Split into an 8-bit top part and 376-bit bottom part
-    hi = VSRAMASKZ(0xaa, t[11], 40); // hi = {0, high part, 0, hight part, ...}
-    uint64_t right_mask = 0xffffffffff;
+    // Final reduction step: getting result down to 383 bits
+    // Split point is now bit 40 (376 - 336) instead of 19
+    hi = VSRAMASKZ(0xaa, t[11], 40); 
+    uint64_t right_mask = 0xffffffffff; // 40 bits
     cnst = VSET(LIMB_MASK, right_mask, LIMB_MASK, right_mask, LIMB_MASK, right_mask, LIMB_MASK, right_mask);
     t[11] = VAND(t[11], cnst);
 
-    // 65 * 2^376 = 1 mod p, hence hi mod p = floor(h/65) + (h mod 65)*2^376
+    // Division trick by 65 stays exactly the same!
     cnst = VSETALL(0xfc1);
     quo = VMULADDL(zero, hi, cnst);
-    quo = VSRA(quo, 39);
-    cnst = VSETALL(65); // again suboptimal, not doing -65
+    quo = VSRA(quo, 18);
+    cnst = VSETALL(65); 
     rem = VMULADDL(zero, quo, cnst);
     rem = VSUB(hi, rem);
 
-    // Adding hi mod p to 376-bit bottom part
-    // quo < floor(2^8 / 65) <= 3 and rem <= 64
-    // Hence quo + rem * 2^376 <= 3 + 2^382.
-    // Adding this to 376-bit bottom part, we get a result that is at most 383 bits.
     quo = VSHUFFLE(quo, 0x4e);
     t[8] = VADD(t[8], quo);
-    t[11] = VADD(t[11], VSL(rem, 40));
+    t[11] = VADD(t[11], VSL(rem, 40)); // Shift back by 40 bits instead of 19
 
-    // Propogating carry
+    // Propagating carry
     t[9] = VADDMASK(t[9], 0x55, t[9], VSRA(t[8], LIMB_LEN));
     t[10] = VADDMASK(t[10], 0x55, t[10], VSRA(t[9], LIMB_LEN));
     t[11] = VADDMASK(t[11], 0x55, t[11], VSRA(t[10], LIMB_LEN));
-    //Need to move carry to second word. Shifting is faster than permuting (1 cycle vs 3)
+    
     carry = VSRA(t[11], LIMB_LEN);
     carry = VSHUFFLEMASKZ(0xcccc, carry, 0x4e);
     t[8] = VADDMASK(t[8], 0xaa, t[8], carry); 
