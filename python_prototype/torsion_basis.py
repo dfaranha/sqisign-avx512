@@ -37,17 +37,11 @@ def projective_difference(E: Curve, xP: PointX, xQ: PointX):
     t2 = t0 - t1
     t6 = t4 - t5
 
-    # 2M parallel (uses 2S)
+    # 4M parallel (uses 2S)
     t8 = t3 * t7 
     t9 = t0 * t1
-    b_xx = t2 ** 2
-    b_zz = t6 ** 2
-
-    # Needs t9, loose end mul on it's own?
-    t10 = A * t9
-    
-    # Annoying add
-    b_xz = t8 + t10 + t10
+    b_xx = t2 ** 2 # This could be done later
+    b_zz = t6 ** 2 # This could be done later
 
     # No need to mul, we have t11 from t1 directly with one fp negation
     # t11 = ZP.conjugate() * ZQ.conjugate()
@@ -55,8 +49,14 @@ def projective_difference(E: Curve, xP: PointX, xQ: PointX):
     t11 = F([t1[0],  -t1[1]])
     assert t11 == ZP.conjugate() * ZQ.conjugate()
 
-    # 4M parallel (uses 1S)
-    lam = t11 ** 2
+    # 2M (wasteful)
+    t10 = A * t9 # This has do be done after the last mul and before the next
+    lam = t11 ** 2 # This could be done earlier
+    
+    # Annoying add
+    b_xz = t8 + t10 + t10
+
+    # 3M parallel (wasteful)    
     b_xx = lam * b_xx
     b_xz = lam * b_xz
     b_zz = lam * b_zz
