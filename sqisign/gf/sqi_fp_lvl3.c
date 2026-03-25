@@ -10,7 +10,18 @@ const digit_t p2[NWORDS_FIELD] = { 0xfffffffffffffffe, 0xffffffffffffffff, 0xfff
 void
 fp_sqrt(fp_t *x)
 {
-    (void)gf65376_sqrt(x, x);
+    // Candidate root is a^((q+1)/4), with (q+1)/4 = 65*2^374
+    fp_t y;
+
+    fp_sqr(&y, x);
+    for (size_t i = 1; i < 6; i++) {
+    	fp_sqr(&y, &y);
+    }
+    fp_mul(&y, &y, x);
+    for (size_t i = 0; i < 374; i++) {
+    	fp_sqr(&y, &y);
+    }
+    fp_copy(x, &y);
 }
 
 uint32_t
