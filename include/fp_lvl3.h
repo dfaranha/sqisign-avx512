@@ -30,8 +30,10 @@ static const uint64_t p2[8] = { 0xfffffffffffe, 0xffffffffffff, 0xffffffffffff, 
 
 // We use the Montgomery representation with R = 2^408
 // R2 is R^2 mod p, which is needed to convert to the representation.
-static const uint64_t R2[8] = { 0x7B0FD07F000F, 0x732F52771F91, 0xF03F03F03F13, 0xF03F03F03F03, 0xF03F03F03F03, 0xF03F03F03F03, 0xF03F03F03F03, 0x213F03F03F03 };
-
+static const uint64_t R2[8] = {
+    0xf03f03f03f13, 0xf03f03f03f03, 0xf03f03f03f03, 0xf03f03f03f03,
+    0xf03f03f03f03, 0xf03f03f03f03, 0xf03f03f03f03, 0x1d3f03f03f03
+};
 // ======================================================================================================
 //                                                 8x1
 // ======================================================================================================
