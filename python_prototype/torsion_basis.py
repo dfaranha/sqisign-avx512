@@ -19,16 +19,6 @@ def projective_difference(E: Curve, xP: PointX, xQ: PointX):
 
     Given (XP : ZP) and (XQ : ZQ) compute xPQ which is
     equal to x(P ± Q) with a deterministic choice
-
-    WARNING:
-
-    Because of the deterministic nature of sqrt_fp2 this function
-    depends on the projective factors of xP, xQ despite the design
-    intention of this function.
-
-    To get the matching projective_difference() to align with KAT
-    values, we need to have the exact (X : Z) values as are computed
-    in the C code.
     """
     A = E.A
     assert E.C.is_one()
