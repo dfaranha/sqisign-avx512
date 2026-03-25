@@ -180,6 +180,8 @@ void fp2_sub_2x2x2(__m512i* res, __m512i* a, __m512i* b);
 
 void fp2_neg_2x2x2(__m512i* res, __m512i* a);
 
+void fp2_mixaddsub_2x2x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
+
 void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b);
 
 void fp2_sqr_2x2x2(__m512i* res, __m512i* a);
