@@ -15,6 +15,7 @@ from avx_arithmetic import (
     avx_241_sqr,
     avx_241_add,
     avx_421_add_sub,
+    avx_421_had,
     avx_241_to_421,
     avx_421_to_241,
     avx_241_to_811,
@@ -481,6 +482,31 @@ def x_double_add_1x2x4x1(P_Q: AVX_4x2x1, PmQ_A24: AVX_4x2x1) -> AVX_4x2x1:
     T1 = AVX_4x2x1(S1[0], S2[2], PmQ_A24[1], PmQ_A24[0])
     PP_PQ = avx_421_mul(T0, T1)
 
+    return PP_PQ
+
+# Requires normalized A coordinate 4* (A24 / C4) - 2
+def x_double_add_normA_1x2x4x1(P_Q: AVX_4x2x1, PmQ_A: AVX_4x2x1) -> AVX_4x2x1:
+
+    # First had
+    T0 = AVX_4x2x1(P_Q[0], P_Q[0], P_Q[2], P_Q[2])
+    T1 = AVX_4x2x1(P_Q[1], P_Q[1], P_Q[3], P_Q[3])
+    S0 = avx_421_had(T0, T1)
+
+    T0 = AVX_4x2x1(S0[0], S0[1], S0[1], S0[0])
+    S1 = avx_421_mul(S0, T0)
+
+    T0 = AVX_4x2x1(S1[0], S1[0], S1[2], S1[2])
+    T1 = AVX_4x2x1(S1[1], S1[1], S1[3], S1[3])
+    S2 = avx_421_had(T0, T1)
+
+    S3 = avx_421_sqr(S2)
+
+    T0 = AVX_4x2x1(S2[0], S3[1], S3[2], S3[3])
+    T1 = AVX_4x2x1(S2[1], PmQ_A[2], PmQ_A[1], PmQ_A[0])
+    S4 = avx_421_mul(T0, T1)
+
+    #figure out how to do this efficiently in C
+    PP_PQ = AVX_4x2x1(S3[0] - S3[1], 2*S4[0] + S4[1], S4[2], S4[3])
     return PP_PQ
 
 
