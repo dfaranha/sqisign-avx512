@@ -363,36 +363,42 @@ ec_curve_to_basis_2f_from_hint(ec_basis_t *PQ2, ec_curve_t *curve, int f, const 
         } else {
             find_nqr_factor(&P.x, curve, 128);
         }
+        fp2_set_one(&P.z);
     } else {
         // Otherwise we use the hint to directly find x(P) based on hint_A
         if (!hint_A) {
             // when A is NQR, we have found n such that x(P) = n*A
             fp2_mul_small(&P.x, &curve->A, hint_P);
+            fp2_set_one(&P.z);
         } else {
             // when A is QR we have found b such that (1 + b^2) is a NQR in
             // Fp, so we must compute x(P) = -A / (1 + i*b)
-            fp_set_one(&P.x.re);
-            fp_set_small(&P.x.im, hint_P);
-            fp2_inv(&P.x);
-            fp2_mul(&P.x, &P.x, &curve->A);
-            fp2_neg(&P.x, &P.x);
+            fp2_neg(&P.x, &curve->A);
+            fp_set_one(&P.z.re);
+            fp_set_small(&P.z.im, hint_P);
+
+            fp2_mul(&Q.x, &curve->A, &P.z);
+            fp2_add(&Q.x, &Q.x, &P.x);
+            fp2_neg(&Q.x, &Q.x);
+            fp2_copy(&Q.z, &P.z);
         }
     }
-    fp2_set_one(&P.z);
 
 #ifndef NDEBUG
     int passed = 1;
-    passed = is_on_curve(&P.x, curve);
-    passed &= !fp2_is_square(&P.x);
+    passed = ec_test_is_on_curve(curve, &P);
+    // passed &= !fp2_is_square(&P.x);
 
     if (!passed)
         return 0;
 #endif
 
     // set xQ to -xP - A
-    fp2_add(&Q.x, &curve->A, &P.x);
-    fp2_neg(&Q.x, &Q.x);
-    fp2_set_one(&Q.z);
+    if (!hint_P || !hint_A) {
+        fp2_add(&Q.x, &curve->A, &P.x);
+        fp2_neg(&Q.x, &Q.x);
+        fp2_set_one(&Q.z);
+    }
 
     // clear out the odd cofactor to get a point of order 2^f
     clear_cofactor_for_maximal_even_order(&P, curve, f);
