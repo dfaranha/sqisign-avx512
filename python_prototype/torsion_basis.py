@@ -19,32 +19,56 @@ def projective_difference(E: Curve, xP: PointX, xQ: PointX):
 
     Given (XP : ZP) and (XQ : ZQ) compute xPQ which is
     equal to x(P ± Q) with a deterministic choice
-
-    WARNING:
-
-    Because of the deterministic nature of sqrt_fp2 this function
-    depends on the projective factors of xP, xQ despite the design
-    intention of this function.
-
-    To get the matching projective_difference() to align with KAT
-    values, we need to have the exact (X : Z) values as are computed
-    in the C code.
     """
     A = E.A
     assert E.C.is_one()
     XP, ZP = xP
     XQ, ZQ = xQ
 
-    b_xx = (XP * XQ - ZP * ZQ) ** 2
-    b_xz = (XP * XQ + ZP * ZQ) * (XP * ZQ + ZP * XQ) + 2 * A * XP * XQ * ZP * ZQ
-    b_zz = (XP * ZQ - ZP * XQ) ** 2
+    # 4M parallel
+    t0 = XP * XQ
+    t1 = ZP * ZQ
+    t4 = XP * ZQ
+    t5 = ZP * XQ
 
-    lam = (ZP.conjugate() * ZQ.conjugate()) ** 2
+    # 4 add parallel
+    t3 = t0 + t1
+    t7 = t4 + t5
+    t2 = t0 - t1
+    t6 = t4 - t5
+
+    # 4M parallel (uses 2S)
+    t8 = t3 * t7 
+    t9 = t0 * t1
+    b_xx = t2 ** 2 # This could be done later
+    b_zz = t6 ** 2 # This could be done later
+
+    # No need to mul, we have t11 from t1 directly with one fp negation
+    # t11 = ZP.conjugate() * ZQ.conjugate()
+    F = t1.parent()
+    t11 = F([t1[0],  -t1[1]])
+    assert t11 == ZP.conjugate() * ZQ.conjugate()
+
+    # 2M (wasteful)
+    t10 = A * t9 # This has do be done after the last mul and before the next
+    lam = t11 ** 2 # This could be done earlier
+    
+    # Annoying add
+    b_xz = t8 + t10 + t10
+
+    # 3M parallel (wasteful)    
     b_xx = lam * b_xx
     b_xz = lam * b_xz
     b_zz = lam * b_zz
 
-    delta = sqrt_fp2(b_xz**2 - b_xx * b_zz)
+    # 2M parallel
+    t12 = b_xz ** 2
+    t13 = b_xx * b_zz
+
+    # Annoying add
+    delta = sqrt_fp2(t12 - t13)
+
+    # Annoying add
     xPQ = PointX(delta + b_xz, b_zz)
 
     return xPQ
@@ -74,20 +98,23 @@ def torsion_basis_from_hint(E: Curve, hint: ZZ, e: ZZ) -> BasisX:
     # When hint_P is zero, we have an edge case where the hint did not
     # work and we need to find our own basis. This is rare, and doesn't
     # happen in the KATS so I'm not implementing it right now.
+    #
+    # We work projectively to avoid inverting Fp2([1, hint_P]) when hint_A
+    # is true, and the point Q which is not above (0 : 0) has x coordinate
+    # -(xP / zP + A), or projectively (-(xP + A*zP) : zP)
     if hint_P:
         if hint_A:
-            xP = -A / Fp2([1, hint_P])
+            xP, zP = -A, Fp2([1, hint_P])
+            xQ, zQ = -(xP + A*zP), zP
         else:
-            xP = hint_P * A
+            xP, zP = hint_P * A, Fp2.one()
+            xQ, zQ = -(xP + A), Fp2.one()
     else:
         raise NotImplementedError
 
-    # Compute the second x-coord of a point of full even torsion not above (0 : 0)
-    xQ = -(xP + A)
-
     # Clear the cofactor with x-only arithmetic
-    P = PointX(xP, Fp2.one())
-    Q = PointX(xQ, Fp2.one())
+    P = PointX(xP, zP)
+    Q = PointX(xQ, zQ)
 
     cofactor = (p + 1) // (2**e)
     P = x_mul(E, P, cofactor)
