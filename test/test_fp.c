@@ -251,14 +251,9 @@ bool test_fp(int iterations)
 
     // Multiplication tests
     // Using Montgomery constant
-    uint64_t R[8] = {
-        0x000000000003, 0x000000000000, 0x000000000000, 0x000000000000,
-        0x000000000000, 0x000000000000, 0x000000000000, 0x3d0000000000
-    };
     __m512i vR[8], vR2[8];
-    #if 0
-    fp_duplicate_8x1(vR, R);
-    fp_duplicate_8x1(vR2, R2);
+    fp_duplicate_8x1(vR, R_8x1);
+    fp_duplicate_8x1(vR2, R2_8x1);
 
     // Montgomery representation of 1 is R mod p
     fp_tomont_8x1(d, one);
@@ -484,8 +479,6 @@ bool test_fp(int iterations)
     if (passed == 0) {
         return false;
     }
-
-    #endif
 
     printf("Fp lvl3 4x2 tests:\n");
     one[0] = VSET(1, 0, 1, 0, 1, 0, 1, 0);

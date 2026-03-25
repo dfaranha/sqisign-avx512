@@ -747,7 +747,7 @@ void fp_div3_8x1(__m512i* res, __m512i* src)
 void fp_tomont_8x1(__m512i* res, __m512i* a)
 {
     __m512i vR2[8];
-    fp_duplicate_8x1(vR2, R2);
+    fp_duplicate_8x1(vR2, R2_8x1);
     fp_mul_8x1(res, a, vR2);
 }
 

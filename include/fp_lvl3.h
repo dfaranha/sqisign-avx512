@@ -28,12 +28,29 @@ static const uint64_t p_plus_1_top = 0x410000000000;
 // 2*p in radix 2^48
 static const uint64_t p2[8] = { 0xfffffffffffe, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0x81ffffffffff };
 
-// We use the Montgomery representation with R = 2^408
+// We use the Montgomery representation with R = 2^(8*48) = 2^384
 // R2 is R^2 mod p, which is needed to convert to the representation.
+static const uint64_t R[8] = {
+    0x000000000003, 0x000000000000, 0x000000000000, 0x000000000000,
+    0x000000000000, 0x000000000000, 0x000000000000, 0x3d0000000000
+};
+
 static const uint64_t R2[8] = {
     0xf03f03f03f13, 0xf03f03f03f03, 0xf03f03f03f03, 0xf03f03f03f03,
     0xf03f03f03f03, 0xf03f03f03f03, 0xf03f03f03f03, 0x1d3f03f03f03
 };
+
+// TODO: This is the constants used for 51 bit limbs, 2^(8*51) = 2^408. Why does 8x1 with 48-bit limbs use this?
+static const uint64_t R_8x1[8] = {
+    0xF03F03F03F03, 0x03, 0x0, 0x0, 
+    0x0, 0x0, 0x0, 0x3D0000000000
+};
+
+static const uint64_t R2_8x1[8] = { 
+    0x7B0FD07F000F, 0x732F52771F91, 0xF03F03F03F13, 0xF03F03F03F03, 
+    0xF03F03F03F03, 0xF03F03F03F03, 0xF03F03F03F03, 0x213F03F03F03 
+};
+
 // ======================================================================================================
 //                                                 8x1
 // ======================================================================================================
