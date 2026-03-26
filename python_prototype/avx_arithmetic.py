@@ -237,6 +237,21 @@ def avx_811_add_sub(A: AVX_8x1x1, B: AVX_8x1x1) -> AVX_8x1x1:
         A[7] - B[7],
     )
 
+def avx_811_had(A: AVX_8x1x1, B: AVX_8x1x1) -> AVX_8x1x1:
+    """
+    Add the first four and subtract the last four components
+    """
+    return AVX_8x1x1(
+        A[0] + B[0],
+        A[1] - B[1],
+        A[2] + B[2],
+        A[3] - B[3],
+        A[4] + B[4],
+        A[5] - B[5],
+        A[6] + B[6],
+        A[7] - B[7],
+    )
+
 
 def avx_811_sqr(
     A: AVX_8x1x1,
