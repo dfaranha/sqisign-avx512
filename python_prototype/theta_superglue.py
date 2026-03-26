@@ -33,6 +33,9 @@ def gluing_kernel_to_x_only(X: AVX_4x2x1, Z: AVX_4x2x1) -> tuple[AVX_4x2x1, AVX_
 
 
 def compute_symmetric_position(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
+    """
+    4M + 8a
+    """
     x1, x2, x3, x4 = X_4
     z1, z2, z3, z4 = Z_4
 
@@ -95,25 +98,34 @@ def compute_symmetric_position(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
 
 
 def compute_matrix_coefficients(x1, z1, x2, z2):
-    # TODO: parallel computation, basic for now
+    """
+    2M + 4S + 6a
+    """
+    # 2M + 4S parallel computations
     s1 = x1**2
     s2 = z1**2
-    delta_1 = s1 - s2
-    r1 = s1 + s2
-    r2 = x1 * z1
-    r2 = r2 + r2
-
     s3 = x2**2
     s4 = z2**2
-    delta_2 = s3 - s4
-    r3 = s3 + s4
+
+    r2 = x1 * z1
     r4 = x2 * z2
+
+    # 4s + 2s parallel computations
+    r1 = s1 + s2
+    r2 = r2 + r2
+    r3 = s3 + s4
     r4 = r4 + r4
+
+    delta_1 = s1 - s2
+    delta_2 = s3 - s4
 
     return ((r1, r2, delta_1), (r3, r4, delta_2))
 
 
 def compute_symmetric_elements(r1, r2, delta, pos):
+    """
+    Almost no arithmetic here, just memory management and a sign flip
+    """
     # TODO: mul by zeta is just sign flips and memory...
     F = r1.parent()
     zero = F.zero()
@@ -204,21 +216,28 @@ def compute_superglue_coefficients(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
     c -= g2_1[1] * g2_2[0]
     d -= g2_1[1] * g2_2[1]
 
+    t0 = g1_2[0] * a
+    t1 = g1_2[2] * b
+    t2 = g0_1[0] * a
+    t3 = g0_1[2] * c
+
+    # 2 more M, annoying can be paired with optional 2 below
     # Now we act by (0, Q2)
-    a1 = delta_1 * (g1_2[0] * a + g1_2[2] * b)
+    a1 = delta_1 * (t0 + t1)
 
     # Now we act by (P1, 0)
-    a2 = delta_2 * (g0_1[0] * a + g0_1[2] * c)
+    a2 = delta_2 * (t2 + t3)
 
     # Special value needed for case 1, 2, 3
     # In SQIsign we are only in case 0 or 2
     sgl_val = 0
-    if superglue_case in [1, 3]:
+    if superglue_case in [1, 3]:  # Never happens in sqisign
         sgl_val = delta_1 * (g1_2[1] * a - g1_2[0] * b)
     elif superglue_case == 2:
+        # 3 more M... annoying
         sgl_val = delta_2 * (g0_1[0] * b + g0_1[2] * d)
 
-    # Projective factor
+    # Projective factor, 4M is nice
     a *= delta
     b *= delta
     c *= delta
@@ -278,37 +297,45 @@ def superglue_evaluaton(
     element_02,
     element_03,
 ):
+    # NOTE: this is always called in pairs, so we can make this
+    # a pair function and do 8 way instead of 4 way as seen below.
+
     tmp3 = barycentric_1[2]
     if sign_flip:
         tmp3 = -tmp3
 
+    # 4 adds
     uuvv_p_ww1 = barycentric_1[0] + barycentric_1[1]
     tmp1 = barycentric_1[0] - barycentric_1[1]
-    uuvv_p_ww1 = uuvv_p_ww1 * tmp1
-
     uuvv_p_ww2 = barycentric_2[0] + barycentric_2[1]
-    tmp1 = barycentric_2[0] - barycentric_2[1]
-    uuvv_p_ww2 = uuvv_p_ww2 * tmp1
+    tmp2 = barycentric_2[0] - barycentric_2[1]
 
+    # 2M + 2S
+    uuvv_p_ww1 = uuvv_p_ww1 * tmp1
+    uuvv_p_ww2 = uuvv_p_ww2 * tmp2
     tmp1 = barycentric_1[2] ** 2
     tmp2 = barycentric_2[2] ** 2
 
+    # 4 adds
     uuvv_m_ww1 = uuvv_p_ww1 - tmp1
     uuvv_p_ww1 = uuvv_p_ww1 + tmp1
     uuvv_m_ww2 = uuvv_p_ww2 - tmp2
     uuvv_p_ww2 = uuvv_p_ww2 + tmp2
 
+    # 4M
     uw1 = barycentric_1[0] * tmp3
-    uw1 = uw1 + uw1
     uw2 = barycentric_2[0] * barycentric_2[2]
-    uw2 = uw2 + uw2
-
     vw12 = barycentric_1[1] * barycentric_2[1]
     tmp1 = tmp3 * barycentric_2[2]
-    vw12 = vw12 * tmp1
+
+    vw12 = vw12 * tmp1  # Annoying one on its own
+
+    uw1 = uw1 + uw1
+    uw2 = uw2 + uw2
     vw12 = vw12 + vw12
     vw12 = vw12 + vw12
 
+    # WARNING No refactoring from max has happened below.
     # SQIsign has only position 1, 4, 7 (to save time when writing code)
     match position:
         case 1:
