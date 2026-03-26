@@ -64,10 +64,12 @@ compute_challenge_verify(ec_curve_t *E_chall, const signature_t *sig, const ec_c
 
     // ============== VECTORIZED ================================================================================
 
-    __m512i ker[8], A24[8], bas_Epk[24];
+    __m512i ker[8], A24[8], A[8], bas_Epk[24];
     // uint64_t start2 = cpucycles();
     // for (int i = 0; i < 1000; i++) {
     ec_point_unvec_to_1x2x4x1(A24, &E_chall->A24);
+    ec_point_t AC = {E_chall-> A, E_chall -> C};
+    ec_point_unvec_to_1x2x4x1(A, &AC);
     ec_point_unvec_to_1x2x4x1(bas_Epk, &bas_Epk_unvec.P);
     ec_point_unvec_to_1x2x4x1(bas_Epk+8, &bas_Epk_unvec.Q);
     ec_point_unvec_to_1x2x4x1(bas_Epk+16, &bas_Epk_unvec.PmQ);
@@ -79,10 +81,10 @@ compute_challenge_verify(ec_curve_t *E_chall, const signature_t *sig, const ec_c
     // recovering the exact challenge
     // uint64_t start1 = cpucycles();
     // for (int i = 0; i < 1000; i++) {
-    if (!ec_ladder_3pt_1x2x4x1(ker, A24, bas_Epk, sig->chall_coeff)) {
+    if (!ec_ladder_3pt_normA_1x2x4x1(ker, A, bas_Epk, sig->chall_coeff)) {
         return 0;
     }
-    //}
+    // }
     // uint64_t end1 = cpucycles();
     // printf("3pt ladder %" PRIu64 "\n", (end1-start1)/1000);
 
@@ -125,11 +127,13 @@ compute_challenge_verify(ec_curve_t *E_chall, const signature_t *sig, const ec_c
 static int
 matrix_scalar_application_even_basis(ec_basis_t *bas, const ec_curve_t *E, scalar_mtx_2x2_t *mat, int f)
 {
+
     // ============== VECTORIZED ================================================================================
-    __m512i res1[8], res2[8], A24[8], basis_vec[24];
-    ec_point_t EA24;
+    __m512i res1[8], res2[8], A24[8], A[8], basis_vec[24];
+    ec_point_t EA24, AC = {E->A, E->C};
     copy_point(&EA24, &E->A24);
     ec_point_unvec_to_1x2x4x1(A24, &EA24);
+    ec_point_unvec_to_1x2x4x1(A, &AC);
     ec_point_unvec_to_1x2x4x1(basis_vec, &bas->P);
     ec_point_unvec_to_1x2x4x1(basis_vec + 8, &bas->Q);
     ec_point_unvec_to_1x2x4x1(basis_vec + 16, &bas->PmQ);
@@ -141,7 +145,7 @@ matrix_scalar_application_even_basis(ec_basis_t *bas, const ec_curve_t *E, scala
     // For a matrix [[a, c], [b, d]] we compute:
     // first basis element R = [a]P + [b]Q
     // second basis element S = [c]P + [d]Q
-    if(!ec_biscalar_mul_pair_1x2x4x1(res1, res2, mat, A24, basis_vec))
+    if(!ec_biscalar_mul_pair_normA_1x2x4x1(res1, res2, mat, A, A24, basis_vec))
         return 0;
     ec_point_1x2x4x1_to_unvec(&bas->P, res1);
     ec_point_1x2x4x1_to_unvec(&bas->Q, res2);
@@ -152,7 +156,7 @@ matrix_scalar_application_even_basis(ec_basis_t *bas, const ec_curve_t *E, scala
     mp_sub(scalar1, (*mat)[1][0], (*mat)[1][1], NWORDS_ORDER);
     mp_mod_2exp(scalar1, f, NWORDS_ORDER);
 
-    bool success = ec_biscalar_mul_1x2x4x1(res1, scalar0, scalar1, A24, basis_vec);
+    bool success = ec_biscalar_mul_normA_1x2x4x1(res1, scalar0, scalar1, A, A24, basis_vec);
     ec_point_1x2x4x1_to_unvec(&bas->PmQ, res1);
     return success ? 1 : 0;
 
@@ -177,6 +181,8 @@ challenge_and_aux_basis_verify(ec_basis_t *B_chall_can_unvec,
 
     if (!ec_curve_to_basis_2f_from_hint(B_aux_can_unvec, E_aux, TORSION_EVEN_POWER, sig->hint_aux))
         return 0;
+
+    ec_normalize_curve(E_chall); // to use normalized ladders
 
     // ============== VECTORIZED ================================================================================
 
