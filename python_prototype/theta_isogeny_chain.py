@@ -14,6 +14,11 @@ from theta_gluing import (
     gluing_eval_special,
     gluing_eval_special_pair,
 )
+from theta_superglue import (
+    superglue_precomputation,
+    superglue_codomain,
+    superglue_eval_pair,
+)
 from theta_isogeny import (
     theta_precompute,
     theta_double,
@@ -585,7 +590,9 @@ def theta_isogeny_chain_with_torsion_8x1x1(
 
     # Compute the gluing codomain
     X_8, Y_8, Z_8 = strat_points[k]
-    OA, OA_inv, J_prime, N = gluing_codomain(A24_12, X_8, Z_8, verify)
+
+    precomputation = superglue_precomputation(A24_12, X_8, Z_8)
+    OA, (a, b) = superglue_codomain(X_8, Z_8, precomputation)
 
     # Package the point we use for translation
     T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
@@ -596,17 +603,18 @@ def theta_isogeny_chain_with_torsion_8x1x1(
     # Push kernel though the gluing isogeny
     for i in range(k):
         P = strat_points[i]
-        imP_Q = gluing_eval_pair(A_12, P, T8, J_prime, N)
+        imP_Q = superglue_eval_pair(A_12, P, T8, a, b, precomputation)
         strat_points[i] = imP_Q
         orders[i] = orders[i] - 1
 
     # Push other points through gluing isogeny
-    OA_inv_inv = avx_421_to_811(OA_inv, OA_inv)
-    eval_pairs = [
-        gluing_eval_special_pair(P1, P2, Q1, Q2, OA_inv_inv, N)
-        for ((P1, P2), (Q1, Q2)) in eval_pairs
-    ]
-    eval_single = [gluing_eval_special(P1, P2, OA_inv, N) for (P1, P2) in eval_single]
+    # TODO fix images for generic points
+    # OA_inv_inv = avx_421_to_811(OA_inv, OA_inv)
+    # eval_pairs = [
+    #     gluing_eval_special_pair(P1, P2, Q1, Q2, OA_inv_inv, N)
+    #     for ((P1, P2), (Q1, Q2)) in eval_pairs
+    # ]
+    # eval_single = [gluing_eval_special(P1, P2, OA_inv, N) for (P1, P2) in eval_single]
 
     # Step Two: Main loop
     # Compute length - 1 (2, 2)-isogenies in the theta model
