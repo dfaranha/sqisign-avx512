@@ -72,83 +72,79 @@ def compute_symmetric_position(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
     u3 = t3 + t4
     u4 = t3 - t4
 
-    # Set positions
-    if s1 == 0:
-        pos_1 = 0
-    elif r1 == 0:
-        pos_1 = 1
-    elif s2 == 0:
-        pos_1 = 2
-    elif r2 == 0:
-        pos_1 = 3
-    elif u1 == 0:
-        pos_1 = 4
-    elif u2 == 0:
-        pos_1 = 5
-    else:
-        raise ValueError("issue with four torsion")
+    def find_pos(s, r, s_other, r_other, u_plus, u_minus):
+        if s == 0:
+            return 0
+        elif r == 0:
+            return 1
+        elif s_other == 0:
+            return 2
+        elif r_other == 0:
+            return 3
+        elif u_plus == 0:
+            return 4
+        elif u_minus == 0:
+            return 5
+        else:
+            raise ValueError("No vanishing coordinate found in 4-torsion")
 
-    # Set positions
-    if s3 == 0:
-        pos_2 = 0
-    elif r3 == 0:
-        pos_2 = 1
-    elif s4 == 0:
-        pos_2 = 2
-    elif r4 == 0:
-        pos_2 = 3
-    elif u3 == 0:
-        pos_2 = 4
-    elif u4 == 0:
-        pos_2 = 5
-    else:
-        raise ValueError("issue with four torsion")
+    pos_1 = find_pos(s1, r1, s2, r2, u1, u2)
+    pos_2 = find_pos(s3, r3, s4, r4, u3, u4)
 
     return pos_1, pos_2
 
 
-def compute_matrix_coefficients(x, z):
+def compute_matrix_coefficients(x1, z1, x2, z2):
     # TODO: parallel computation, basic for now
-    s1 = x**2
-    s2 = z**2
-    delta = s1 - s2
+    s1 = x1**2
+    s2 = z1**2
+    delta_1 = s1 - s2
     r1 = s1 + s2
-    r2 = x * z
+    r2 = x1 * z1
     r2 = r2 + r2
-    return r1, r2, delta
+
+    s3 = x2**2
+    s4 = z2**2
+    delta_2 = s3 - s4
+    r3 = s3 + s4
+    r4 = x2 * z2
+    r4 = r4 + r4
+
+    return ((r1, r2, delta_1), (r3, r4, delta_2))
 
 
 def compute_symmetric_elements(r1, r2, delta, pos):
     # TODO: mul by zeta is just sign flips and memory...
     F = r1.parent()
+    zero = F.zero()
     zeta = F.gen()
+    ir1, ir2 = zeta * r1, zeta * r2
 
-    # TODO: make this parallel nicely...
     # TODO: pos 3, 4 and 5, 6 are just 1, 2 but ordered differently
     if pos == 0:
-        g1 = [F.zero(), delta, delta]
+        g1 = [zero, delta, delta]
         g2 = [r1, -r2, r2]
-        g3 = [zeta * r2, -zeta * r1, zeta * r1]
+        g3 = [ir2, -ir1, ir1]
     elif pos == 1:
-        g1 = [F.zero(), -delta, -delta]
+        g1 = [zero, -delta, -delta]
         g2 = [r1, -r2, r2]
-        g3 = [-zeta * r2, zeta * r1, -zeta * r1]
+        g3 = [-ir2, ir1, -ir1]
     elif pos == 2:
         g1 = [r1, -r2, r2]
-        g2 = [F.zero(), delta, delta]
-        g3 = [-zeta * r2, zeta * r1, -zeta * r1]
+        g2 = [zero, delta, delta]
+        g3 = [-ir2, ir1, -ir1]
     elif pos == 3:
         g1 = [r1, -r2, r2]
-        g2 = [F.zero(), -delta, -delta]
-        g3 = [zeta * r2, -zeta * r1, zeta * r1]
+        g2 = [zero, -delta, -delta]
+        g3 = [ir2, -ir1, ir1]
     elif pos == 4:
         g1 = [r1, -r2, r2]
-        g2 = [-zeta * r2, zeta * r1, -zeta * r1]
-        g3 = [F.zero(), -delta, -delta]
+        g2 = [-ir2, ir1, -ir1]
+        g3 = [zero, -delta, -delta]
     elif pos == 5:
         g1 = [r1, -r2, r2]
-        g2 = [zeta * r2, -zeta * r1, zeta * r1]
-        g3 = [F.zero(), delta, delta]
+        g2 = [ir2, -ir1, ir1]
+        g3 = [zero, delta, delta]
 
     return g1, g2, g3
 
@@ -157,19 +153,20 @@ def compute_superglue_coefficients(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
     # Compute the positions of each element
     pos_1, pos_2 = compute_symmetric_position(X_4, Z_4)
 
-    # TODO: do this in parallel for both points, just get it working
-    # for now...
+    # Memory management for what we send into compute_matrix_coefficients
+    # based on pos_1 and pos_2
     x1, x2, x3, x4 = X_4
     z1, z2, z3, z4 = Z_4
     if pos_1 == 0 or pos_1 == 1:
-        r1, r2, delta_1 = compute_matrix_coefficients(x2, z2)
+        X1, Z1 = x2, z2
     else:
-        r1, r2, delta_1 = compute_matrix_coefficients(x1, z1)
-
+        X1, Z1 = x1, z1
     if pos_2 == 0 or pos_2 == 1:
-        r3, r4, delta_2 = compute_matrix_coefficients(x4, z4)
+        X2, Z2 = x4, z4
     else:
-        r3, r4, delta_2 = compute_matrix_coefficients(x3, z3)
+        X2, Z2 = x3, z3
+
+    ((r1, r2, delta_1), (r3, r4, delta_2)) = compute_matrix_coefficients(X1, Z1, X2, Z2)
 
     # TODO: this can be done in parallel, but there is no arithmetic, only
     # memory management
@@ -178,17 +175,10 @@ def compute_superglue_coefficients(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
 
     # Combined projective factor and position
     delta = delta_1 * delta_2
-    pos = 3 * (pos_1 >> 1) + (pos_2 >> 1)
 
     # Handle special cases for positions
-    superglue_case = 0
-    match pos:
-        case 0:
-            superglue_case = 1
-        case 4:
-            superglue_case = 2
-        case 8:
-            superglue_case = 3
+    position = 3 * (pos_1 >> 1) + (pos_2 >> 1)
+    superglue_case = {0: 1, 4: 2, 8: 3}.get(position, 0)
 
     # Init first values
     a = delta
@@ -216,12 +206,16 @@ def compute_superglue_coefficients(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
 
     # Now we act by (0, Q2)
     a1 = delta_1 * (g1_2[0] * a + g1_2[2] * b)
-    if superglue_case == 1 or superglue_case == 3:
-        sgl_val = delta_1 * (g1_2[1] * a - g1_2[0] * b)
 
     # Now we act by (P1, 0)
     a2 = delta_2 * (g0_1[0] * a + g0_1[2] * c)
-    if superglue_case == 2:
+
+    # Special value needed for case 1, 2, 3
+    # In SQIsign we are only in case 0 or 2
+    sgl_val = 0
+    if superglue_case in [1, 3]:
+        sgl_val = delta_1 * (g1_2[1] * a - g1_2[0] * b)
+    elif superglue_case == 2:
         sgl_val = delta_2 * (g0_1[0] * b + g0_1[2] * d)
 
     # Projective factor
@@ -230,65 +224,48 @@ def compute_superglue_coefficients(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
     c *= delta
     d *= delta
 
-    # TODO: refactor
-    dual_theta_null_square = [0, a1**2, a2**2, a**2]
-    dual_theta_null_square[0] = dual_theta_null_square[1] + dual_theta_null_square[2]
-    dual_theta_null_square[1] = dual_theta_null_square[3] - dual_theta_null_square[1]
-    dual_theta_null_square[2] = dual_theta_null_square[3] - dual_theta_null_square[2]
-    dual_theta_null_square[3] = 0
+    # Compute dual_theta_null_square for later
+    a1sq, a2sq, asq = a1**2, a2**2, a**2
+    dual_theta_null_square = [a1sq + a2sq, asq - a1sq, asq - a2sq, 0]
 
     match superglue_case:
         case 0:
-            tmp1 = a * b
-            tmp2 = c * d
-            element_01 = [tmp1 + tmp2, tmp1 - tmp2]
+            # Standard case: all four coordinates are nonzero
+            t0 = a * b
+            t1 = c * d
+            t2 = a * c
+            t3 = b * d
+            t4 = a * d
+            t5 = b * c
 
+            element_01 = [t0 + t1, t0 - t1]
+            element_02 = [t2 + t3, t2 - t3]
+            element_03 = [t4 + t5, t4 - t5]
             sign_flip = False
 
-            tmp3 = a * c
-            tmp2 = b * d
-            element_02 = [tmp3 + tmp2, tmp3 - tmp2]
+        case 1 | 2 | 3:
+            # Special case: one coordinate vanishes, sign_flip encodes
+            # which square root branch to take
+            alpha = a1 if superglue_case != 2 else a2
 
-            tmp1 = a * d
-            tmp3 = b * c
-            element_03 = [tmp1 + tmp3, tmp1 - tmp3]
-        case 1:
-            tmp1 = a * b
-            tmp2 = a1 * sgl_val
-            element_01 = [tmp1 + tmp2, tmp1 - tmp2]
+            t0 = a * b
+            t1 = alpha * sgl_val
+            t2 = a * b
+            t3 = a * c
 
-            tmp3 = a * c
-            tmp1 -= tmp3
-            sign_flip = tmp1 != 0
+            element_01 = [t0 + t1, t0 - t1]
+            sign_flip = (t2 - t3) != 0
+            # element_02 and element_03 are not used in these cases
+            element_02 = element_03 = None
 
-            # Not needed for case 1, 2, 3
-            element_02, element_03 = None, None
-
-        case 2:
-            tmp1 = a * b
-            tmp2 = a2 * sgl_val
-            element_01 = [tmp1 + tmp2, tmp1 - tmp2]
-
-            tmp3 = a * c
-            tmp1 -= tmp3
-            sign_flip = tmp1 != 0
-
-            # Not needed for case 1, 2, 3
-            element_02, element_03 = None, None
-
-        case 3:
-            tmp1 = a * b
-            tmp2 = a1 * sgl_val
-            element_01 = [tmp1 + tmp2, tmp1 - tmp2]
-
-            tmp3 = a * c
-            tmp1 -= tmp3
-            sign_flip = tmp1 != 0
-
-            # Not needed for case 1, 2, 3
-            element_02, element_03 = None, None
-
-    return pos, sign_flip, dual_theta_null_square, element_01, element_02, element_03
+    return (
+        position,
+        sign_flip,
+        dual_theta_null_square,
+        element_01,
+        element_02,
+        element_03,
+    )
 
 
 def superglue_evaluaton(
@@ -332,6 +309,7 @@ def superglue_evaluaton(
     vw12 = vw12 + vw12
     vw12 = vw12 + vw12
 
+    # SQIsign has only position 1, 4, 7 (to save time when writing code)
     match position:
         case 1:
             # Compute first element
@@ -650,11 +628,19 @@ def superglue_precomputation(A24_12: AVX_4x2x1, X_8: AVX_4x2x1, Z_8: AVX_4x2x1):
     return compute_superglue_coefficients(X_4, Z_4)
 
 
-def superglue_codomain(X_8: AVX_4x2x1, Z_8: AVX_4x2x1, precomputation):
+def superglue_codomain(
+    A24_12: AVX_4x2x1,
+    X_8: AVX_4x2x1,
+    Z_8: AVX_4x2x1,
+):
     # TODO: avoid computing this twice
     X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)
 
+    # Double points to recover 4-torsion for change of basis
+    X_4, Z_4 = x_double_4x4x2x1(A24_12, X_8, Z_8)
+
     # Unpack the insane precomputation
+    precomputation = compute_superglue_coefficients(X_4, Z_4)
     position, sign_flip, dual_theta_null_square, element_01, element_02, element_03 = (
         precomputation
     )
@@ -701,7 +687,7 @@ def superglue_codomain(X_8: AVX_4x2x1, Z_8: AVX_4x2x1, precomputation):
 
     codomain = hadamard(AVX_4x2x1(*ABCD))
 
-    return codomain, (a, b)
+    return codomain, (a, b), precomputation
 
 
 def superglue_eval_pair(
