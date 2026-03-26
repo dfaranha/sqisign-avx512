@@ -21,7 +21,9 @@ from avx_arithmetic import (
     avx_241_to_811,
     avx_811_to_241,
     avx_811_add_sub,
+    avx_811_had,
     avx_811_mul,
+    avx_811_sqr
 )
 from utilities import sqrt_fp2
 
@@ -559,6 +561,30 @@ def x_double_add_pair_8x1x1(PQDA1: AVX_8x1x1, PQDA2: AVX_8x1x1):
 
     return R1_R2_S1_S2
 
+# Requires normalized A coordinate 4* (A24 / C24) - 2
+def x_double_add_pair_normA_8x1x1(PQDA1: AVX_8x1x1, PQDA2: AVX_8x1x1) -> AVX_8x1x1:
+
+    # First had
+    T0 = AVX_8x1x1(PQDA1[0], PQDA1[0], PQDA1[2], PQDA1[2], PQDA2[0], PQDA2[0], PQDA2[2], PQDA2[2])
+    T1 = AVX_8x1x1(PQDA1[1], PQDA1[1], PQDA1[3], PQDA1[3], PQDA2[1], PQDA2[1], PQDA2[3], PQDA2[3])
+    S0 = avx_811_had(T0, T1)
+
+    T0 = AVX_8x1x1(S0[0], S0[1], S0[1], S0[0], S0[4], S0[5], S0[5], S0[4])
+    S1 = avx_811_mul(S0, T0)
+
+    T0 = AVX_8x1x1(S1[0], S1[0], S1[2], S1[2], S1[4], S1[4], S1[6], S1[6])
+    T1 = AVX_8x1x1(S1[1], S1[1], S1[3], S1[3], S1[5], S1[5], S1[7], S1[7])
+    S2 = avx_811_had(T0, T1)
+
+    S3 = avx_811_sqr(S2)
+
+    T0 = AVX_8x1x1(S2[0], S3[1], S3[2], S3[3], S2[4], S3[5], S3[6], S3[7])
+    T1 = AVX_8x1x1(S2[1], PQDA1[6], PQDA1[5], PQDA1[4], S2[5], PQDA2[6], PQDA2[5], PQDA2[4])
+    S4 = avx_811_mul(T0, T1)
+
+    #figure out how to do this efficiently in C
+    R1_R2_S1_S2 = AVX_8x1x1(S3[0] - S3[1], 2*S4[0] + S4[1], S4[2], S4[3], S3[4] - S3[5], 2*S4[4] + S4[5], S4[6], S4[7])
+    return R1_R2_S1_S2
 
 def x_mul_1x2x4x1(A24: AVX_2x4x1, P: AVX_2x4x1, m: ZZ) -> PointX:
     try:
