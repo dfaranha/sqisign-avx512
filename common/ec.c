@@ -312,7 +312,7 @@ void ec_double_iter_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const int n)
     }   
 }
 
-// Assumes n1 <= n2, inputs in 2x4x1
+// Assumes n1 >= n2, inputs in 2x4x1
 void ec_double_basis_pair_1x2x4x1(
     __m512i* res_B1, 
     __m512i* res_B2, 
@@ -385,12 +385,12 @@ void ec_double_basis_pair_1x2x4x1(
     idx2 = VSET(4, 4, 5, 5, 12, 12, 13, 13);
     mask = 0x55;
     for (int i = 0; i < 8; i++) {
-        B1[i] = VBLENDPERMMASKZ(mask, x[i], z[i], idx0);
-        B1[i+8] = VBLENDPERMMASKZ(mask, x[i], z[i], idx1);
-        B1[i+16] = VBLENDPERMMASKZ(mask, x[i], z[i], idx2);
-        B2[i] = VBLENDPERMMASKZ(mask, x[i+8], z[i+8], idx0);
-        B2[i+8] = VBLENDPERMMASKZ(mask, x[i+8], z[i+8], idx1);
-        B2[i+16] = VBLENDPERMMASKZ(mask, x[i+8], z[i+8], idx2);
+        res_B1[i] = VBLENDPERMMASKZ(mask, x[i], z[i], idx0);
+        res_B1[i+8] = VBLENDPERMMASKZ(mask, x[i], z[i], idx1);
+        res_B1[i+16] = VBLENDPERMMASKZ(mask, x[i], z[i], idx2);
+        res_B2[i] = VBLENDPERMMASKZ(mask, x[i+8], z[i+8], idx0);
+        res_B2[i+8] = VBLENDPERMMASKZ(mask, x[i+8], z[i+8], idx1);
+        res_B2[i+16] = VBLENDPERMMASKZ(mask, x[i+8], z[i+8], idx2);
     }
 }
 
@@ -1674,4 +1674,139 @@ void ec_double_iter_1x2x2x2(__m512i* res, __m512i* P, __m512i* A24, const int n)
     for (int i = 0; i < n-1; i++) {
         ec_double_1x2x2x2(res, res, A24);
     }   
+}
+
+// Assumes n1 >= n2, inputs in 2x2x2
+void ec_double_basis_pair_1x2x2x2(
+    __m512i* res_B1, 
+    __m512i* res_B2, 
+    __m512i* B1, 
+    __m512i* B2, 
+    __m512i* A24_norm1,
+    __m512i* A24_norm2,
+    const int n1,
+    const int n2
+)
+{
+    __m512i x[16], z[16], t0[16], t1[16], A24x8[16];
+    __m512i idx0, idx1, idx2, idx3;
+
+    // TODO: Remove when unified Montgomery constant
+    // This is so bad, we are mutating inputs
+    fp2_frommont_2x2x2(B1, B1);
+    fp2_frommont_2x2x2(B1+4, B1+4);
+    fp2_frommont_2x2x2(B1+8, B1+8);
+    fp2_frommont_2x2x2(B2, B2);
+    fp2_frommont_2x2x2(B2+4, B2+4);
+    fp2_frommont_2x2x2(B2+8, B2+8);
+    fp2_frommont_2x2x2(A24_norm1, A24_norm1);
+    fp2_frommont_2x2x2(A24_norm2, A24_norm2);
+    // =======================================
+
+    assert(n1 >= n2);
+
+    idx0 = VSET(0, 8, 0, 0, 0, 0, 0, 0);
+    idx1 = VSET(1, 9, 0, 0, 0, 0, 0, 0);
+    idx2 = VSET(2, 10, 0, 0, 0, 0, 0, 0);
+    idx3 = VSET(3, 11, 0, 0, 0, 0, 0, 0);
+    for (int i = 0; i < 4; i++) {
+        x[i] = VBLENDPERM(idx0, B1[i], B2[i]);
+        x[i+4] = VBLENDPERM(idx1, B1[i], B2[i]);
+        x[i+8] = VBLENDPERM(idx2, B1[i], B2[i]);
+        x[i+12] = VBLENDPERM(idx3, B1[i], B2[i]);
+
+        t0[i] = VBLENDPERM(idx0, B1[i+4], B2[i+4]);
+        t0[i+4] = VBLENDPERM(idx1, B1[i+4], B2[i+4]);
+        t0[i+8] = VBLENDPERM(idx2, B1[i+4], B2[i+4]);
+        t0[i+12] = VBLENDPERM(idx3, B1[i+4], B2[i+4]);
+
+        t1[i] = VBLENDPERM(idx0, B1[i+8], B2[i+8]);
+        t1[i+4] = VBLENDPERM(idx1, B1[i+8], B2[i+8]);
+        t1[i+8] = VBLENDPERM(idx2, B1[i+8], B2[i+8]);
+        t1[i+12] = VBLENDPERM(idx3, B1[i+8], B2[i+8]);
+    }
+    idx0 = VSET(0, 1, 8, 9, 0, 0, 0, 0);
+    idx1 = VSET(0, 1, 2, 3, 8, 9, 0, 0);
+    for (int i = 0; i < 16; i++) {
+        x[i] = VBLENDPERM(idx0, x[i], t0[i]);
+        x[i] = VBLENDPERM(idx1, x[i], t1[i]);
+    }
+    idx0 = VSET(4, 12, 0, 0, 0, 0, 0, 0);
+    idx1 = VSET(5, 13, 0, 0, 0, 0, 0, 0);
+    idx2 = VSET(6, 14, 0, 0, 0, 0, 0, 0);
+    idx3 = VSET(7, 15, 0, 0, 0, 0, 0, 0);
+    for (int i = 0; i < 4; i++) {
+        z[i] = VBLENDPERM(idx0, B1[i], B2[i]);
+        z[i+4] = VBLENDPERM(idx1, B1[i], B2[i]);
+        z[i+8] = VBLENDPERM(idx2, B1[i], B2[i]);
+        z[i+12] = VBLENDPERM(idx3, B1[i], B2[i]);
+
+        t0[i] = VBLENDPERM(idx0, B1[i+4], B2[i+4]);
+        t0[i+4] = VBLENDPERM(idx1, B1[i+4], B2[i+4]);
+        t0[i+8] = VBLENDPERM(idx2, B1[i+4], B2[i+4]);
+        t0[i+12] = VBLENDPERM(idx3, B1[i+4], B2[i+4]);
+
+        t1[i] = VBLENDPERM(idx0, B1[i+8], B2[i+8]);
+        t1[i+4] = VBLENDPERM(idx1, B1[i+8], B2[i+8]);
+        t1[i+8] = VBLENDPERM(idx2, B1[i+8], B2[i+8]);
+        t1[i+12] = VBLENDPERM(idx3, B1[i+8], B2[i+8]);
+    }
+    idx0 = VSET(0, 1, 8, 9, 0, 0, 0, 0);
+    idx1 = VSET(0, 1, 2, 3, 8, 9, 0, 0);
+    for (int i = 0; i < 16; i++) {
+        z[i] = VBLENDPERM(idx0, z[i], t0[i]);
+        z[i] = VBLENDPERM(idx1, z[i], t1[i]);
+    }
+    idx0 = VSET(0, 8, 0, 8, 0, 8, 0, 8);
+    idx1 = VSET(1, 9, 1, 9, 1, 9, 1, 9);
+    idx2 = VSET(2, 10, 2, 10, 2, 10, 2, 10);
+    idx3 = VSET(3, 11, 3, 11, 3, 11, 3, 11);
+    for (int i = 0; i < 4; i++) {
+        A24x8[i] = VBLENDPERM(idx0, A24_norm1[i], A24_norm2[i]);
+        A24x8[i+4] = VBLENDPERM(idx1, A24_norm1[i], A24_norm2[i]);
+        A24x8[i+8] = VBLENDPERM(idx2, A24_norm1[i], A24_norm2[i]);
+        A24x8[i+12] = VBLENDPERM(idx3, A24_norm1[i], A24_norm2[i]);
+    }
+
+    // TODO: Remove when unified Montgomery constant
+
+    fp2_tomont_8x1x1(x, x);
+    fp2_tomont_8x1x1(z, z);
+    fp2_tomont_8x1x1(A24x8, A24x8);
+
+    // ==========================================
+
+    for (int i = 0; i < n2; i++) {
+        ec_double_8x1x1x1(x, z, A24x8, x, z);
+    }
+
+    fp2_8x1x1_to_4x2x1(x, x+8, x);
+    fp2_8x1x1_to_4x2x1(z, z+8, z);
+    fp2_8x1x1_to_first_4x2x1(A24x8, A24x8);
+    for (int i = 0; i < n1 - n2; i++) {
+        ec_double_4x4x2x1(x, z, A24x8, x, z);
+    }
+
+    fp2_4x2x1_to_2x2x2(x, x+4, x);
+    fp2_4x2x1_to_2x2x2(x+8, x+12, x+8);
+    fp2_4x2x1_to_2x2x2(z, z+4, z);
+    fp2_4x2x1_to_2x2x2(z+8, z+12, z+8);
+
+    // Coupling first and second components
+    idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+    for(int i = 0; i < 4; i++) {
+        res_B1[i] = VBLENDPERM(idx0, x[i], z[i]);
+        res_B1[i+4] = VBLENDPERM(idx1, x[i], z[i]);
+        res_B1[i+8] = VBLENDPERM(idx0, x[i+4], z[i+4]);
+        res_B2[i] = VBLENDPERM(idx0, x[i+8], z[i+8]);
+        res_B2[i+4] = VBLENDPERM(idx1, x[i+8], z[i+8]);
+        res_B2[i+8] = VBLENDPERM(idx0, x[i+12], z[i+12]);
+    }
+
+    // TODO: Remove when unified Montgomery constant
+    // Soooo bad
+    fp2_tomont_2x2x2(A24_norm1, A24_norm1);
+    fp2_tomont_2x2x2(A24_norm2, A24_norm2);
+    // ===============================================
 }

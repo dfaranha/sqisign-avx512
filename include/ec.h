@@ -108,7 +108,7 @@ bool ec_curve_verif_A_1x2x4x1(__m512i* A1_A2);
 void ec_double_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24);
 void ec_double_iter_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const int n);
 
-// Assumes n1 <= n2, inputs in 2x4x1
+// Assumes n1 >= n2, inputs in 2x4x1
 void ec_double_basis_pair_1x2x4x1(
     __m512i* res_B1, 
     __m512i* res_B2, 
@@ -252,5 +252,17 @@ void ec_set_zero_1x2x2x2(__m512i* P);
 
 void ec_double_1x2x2x2(__m512i* res, __m512i* P, __m512i* A24);
 void ec_double_iter_1x2x2x2(__m512i* res, __m512i* P, __m512i* A24, const int n);
+
+// Assumes n1 >= n2, inputs in 2x4x1
+void ec_double_basis_pair_1x2x2x2(
+    __m512i* res_B1, 
+    __m512i* res_B2, 
+    __m512i* B1, 
+    __m512i* B2, 
+    __m512i* A24_norm1,
+    __m512i* A24_norm2,
+    const int n1,
+    const int n2
+);
 
 #endif

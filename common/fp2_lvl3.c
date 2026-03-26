@@ -687,11 +687,9 @@ void fp2_4x2x1_to_2x2x2(__m512i* res1, __m512i* res2, __m512i* src)
 
     __m512i idx1 = VSET(0, 8, 1, 9, 2, 10, 3, 11);
     __m512i idx2 = VSET(4, 12, 5, 13, 6, 14, 7, 15);
-
     for (int i = 0; i < 4; i++) {
-        __m512i s = tmp[i], t = tmp[i+4];
-        res1[i] = VBLENDPERM(idx1, s, t);
-        res2[i] = VBLENDPERM(idx2, s, t);
+        res1[i] = VBLENDPERM(idx1, tmp[i], tmp[i+4]);
+        res2[i] = VBLENDPERM(idx2, tmp[i], tmp[i+4]);
     }
 
     fp2_tomont_2x2x2(res1, res1);
