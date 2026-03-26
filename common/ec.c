@@ -46,6 +46,22 @@ void ec_double_4x4x2x1(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x,
     fp2_mulx2_4x2x1(res_x, res_z, t0, t1, t2, t3);
 }
 
+// Assumes A24 is normalized.
+void ec_double_8x1x1x1(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, __m512i* z)
+{
+    __m512i t0[16], t1[16], t2[16];
+    fp2_add_8x1x1(t0, res_x, res_z);
+    fp2_sub_8x1x1(t1, res_x, res_z);
+    fp2_sqr_8x1x1(t0, t0);
+    fp2_sqr_8x1x1(t1, t1);
+
+    fp2_sub_8x1x1(t2, t0, t1);
+    fp2_mul_8x1x1(res_z, t2, A24);
+    fp2_add_8x1x1(res_z, res_z, t1);
+    fp2_mul_8x1x1(res_z, res_z, t2);
+    fp2_mul_8x1x1(res_x, t0, t1);
+}
+
 // TODO: in SQIsign jac_to_xz has more code to handle the point at infty
 void ec_jac_to_xz_4x4x2x1(__m512i* x, __m512i* z, __m512i* jac_x, __m512i* jac_z)
 {
@@ -296,8 +312,90 @@ void ec_double_iter_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const int n)
     }   
 }
 
+// Assumes n1 <= n2, inputs in 2x4x1
+void ec_double_basis_pair_1x2x4x1(
+    __m512i* res_B1, 
+    __m512i* res_B2, 
+    __m512i* B1, 
+    __m512i* B2, 
+    __m512i* A24_norm1,
+    __m512i* A24_norm2,
+    const int n1,
+    const int n2
+)
+{
+    __m512i x[16], z[16], t0[16], t1[16], A24x8[16];
+    __m512i idx0, idx1, idx2;
+    __mmask8 mask;
+
+    assert(n1 >= n2);
+
+    idx0 = VSET(0, 8, 0, 0, 0, 0, 0, 0);
+    idx1 = VSET(2, 10, 0, 0, 0, 0, 0, 0);
+    for (int i = 0; i < 8; i++) {
+        x[i] = VBLENDPERM(idx0, B1[i], B2[i]);
+        x[i+8] = VBLENDPERM(idx1, B1[i], B2[i]);
+        t0[i] = VBLENDPERM(idx0, B1[i+8], B2[i+8]);
+        t0[i+8] = VBLENDPERM(idx1, B1[i+8], B2[i+8]);
+        t1[i] = VBLENDPERM(idx0, B1[i+16], B2[i+16]);
+        t1[i+8] = VBLENDPERM(idx1, B1[i+16], B2[i+16]);
+    }
+    idx0 = VSET(0, 1, 8, 9, 0, 0, 0, 0);
+    idx1 = VSET(0, 1, 2, 3, 8, 9, 0, 0);
+    for (int i = 0; i < 16; i++) {
+        x[i] = VBLENDPERM(idx0, x[i], t0[i]);
+        x[i] = VBLENDPERM(idx1, x[i], t1[i]);
+    }
+    idx0 = VSET(4, 12, 0, 0, 0, 0, 0, 0);
+    idx1 = VSET(6, 14, 0, 0, 0, 0, 0, 0);
+    for (int i = 0; i < 8; i++) {
+        z[i] = VBLENDPERM(idx0, B1[i], B2[i]);
+        z[i+8] = VBLENDPERM(idx1, B1[i], B2[i]);
+        t0[i] = VBLENDPERM(idx0, B1[i+8], B2[i+8]);
+        t0[i+8] = VBLENDPERM(idx1, B1[i+8], B2[i+8]);
+        t1[i] = VBLENDPERM(idx0, B1[i+16], B2[i+16]);
+        t1[i+8] = VBLENDPERM(idx1, B1[i+16], B2[i+16]);
+    }
+    idx0 = VSET(0, 1, 8, 9, 0, 0, 0, 0);
+    idx1 = VSET(0, 1, 2, 3, 8, 9, 0, 0);
+    for (int i = 0; i < 16; i++) {
+        z[i] = VBLENDPERM(idx0, z[i], t0[i]);
+        z[i] = VBLENDPERM(idx1, z[i], t1[i]);
+    }
+    idx0 = VSET(0, 8, 0, 8, 0, 8, 0, 8);
+    idx1 = VSET(2, 10, 2, 10, 2, 10, 2, 10);
+    for (int i = 0; i < 8; i++) {
+        A24x8[i] = VBLENDPERM(idx0, A24_norm1[i], A24_norm2[i]);
+        A24x8[i+8] = VBLENDPERM(idx1, A24_norm1[i], A24_norm2[i]);
+    }
+
+    for (int i = 0; i < n2; i++) {
+        ec_double_8x1x1x1(x, z, A24x8, x, z);
+    }
+
+    fp2_8x1x1_to_4x2x1(x, x+8, x);
+    fp2_8x1x1_to_4x2x1(z, z+8, z);
+    fp2_8x1x1_to_first_4x2x1(A24x8, A24x8);
+    for (int i = 0; i < n1 - n2; i++) {
+        ec_double_4x4x2x1(x, z, A24x8, x, z);
+    }
+
+    idx0 = VSET(0, 0, 1, 1, 8, 8, 9, 9);
+    idx1 = VSET(2, 2, 3, 3, 10, 10, 11, 11);
+    idx2 = VSET(4, 4, 5, 5, 12, 12, 13, 13);
+    mask = 0x55;
+    for (int i = 0; i < 8; i++) {
+        B1[i] = VBLENDPERMMASKZ(mask, x[i], z[i], idx0);
+        B1[i+8] = VBLENDPERMMASKZ(mask, x[i], z[i], idx1);
+        B1[i+16] = VBLENDPERMMASKZ(mask, x[i], z[i], idx2);
+        B2[i] = VBLENDPERMMASKZ(mask, x[i+8], z[i+8], idx0);
+        B2[i+8] = VBLENDPERMMASKZ(mask, x[i+8], z[i+8], idx1);
+        B2[i+16] = VBLENDPERMMASKZ(mask, x[i+8], z[i+8], idx2);
+    }
+}
+
 // TODO: Name is slightly confusing, all operations are 4x2x1
-void ec_double_add_1x2x4x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A24)
+void ec_double_add_1x4x2x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A24)
 {
     __m512i t0[8], t1[8], t2[8];
     __m512i idx0, idx1;
@@ -452,7 +550,7 @@ void ec_double_add_pair_8x1x1(__m512i* R1_R2_S1_S2, __m512i* P1_Q1_PQ1_A24, __m5
 }
 
 // Requires normalized A coordinate 4* (A24 / C4) - 2
-void ec_double_add_normA_1x2x4x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A)
+void ec_double_add_normA_1x4x2x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A)
 {
     __m512i t0[8], t1[8];
     __m512i idx0, idx1;
@@ -557,12 +655,55 @@ void ec_double_add_pair_normA_8x1x1(__m512i* R1_R2_S1_S2, __m512i* P1_Q1_PQ1_A, 
     fp2_add_8x1x1(R1_R2_S1_S2, R1_R2_S1_S2, t0);
 }
 
-void ec_scalar_mul_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const digit_t* m, const unsigned int mbits)
-{
+static void ec_scalar_mul_inner_1x4x2x1(__m512i* X0_X1, __m512i* XD_A24, const digit_t* m, const unsigned int mbits) {
     unsigned int bit;
-    __m512i X0_X1[8], XD_A24[8];
     __m512i idx_swap = VSET(4, 5, 6, 7, 0, 1, 2, 3);
 
+    for (int i = mbits - 1; i >= 0; i--) {
+        bit = (m[i >> LOG2RADIX] >> (i & (RADIX - 1))) & 1;
+
+        if (bit) { // swap
+            for (int k = 0; k < 8; k++) {
+                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
+            }
+        }
+
+        ec_double_add_1x4x2x1(X0_X1, X0_X1, XD_A24);
+
+        if (bit) { // swap
+            for (int k = 0; k < 8; k++) {
+                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
+            }
+        }
+    }
+}
+
+static void ec_scalar_mul_normA_inner_1x4x2x1(__m512i* X0_X1, __m512i* XD_A, const digit_t* m, const unsigned int mbits) {
+    unsigned int bit;
+    __m512i idx_swap = VSET(4, 5, 6, 7, 0, 1, 2, 3);
+
+    for (int i = mbits - 1; i >= 0; i--) {
+        bit = (m[i >> LOG2RADIX] >> (i & (RADIX - 1))) & 1;
+
+        if (bit) { // swap
+            for (int k = 0; k < 8; k++) {
+                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
+            }
+        }
+
+        ec_double_add_normA_1x4x2x1(X0_X1, X0_X1, XD_A);
+
+        if (bit) { // swap
+            for (int k = 0; k < 8; k++) {
+                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
+            }
+        }
+    }
+}
+
+void ec_scalar_mul_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const digit_t* m, const unsigned int mbits)
+{
+    __m512i X0_X1[8], XD_A24[8];
     if (mbits == 0) {
         fp2_copy_2x4x1(res, P);
         return;
@@ -573,23 +714,7 @@ void ec_scalar_mul_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const digit_t
     fp2_2x4x1_to_4x2x1(X0_X1, X0_X1, P);
     fp2_2x4x1_to_4x2x1(XD_A24, P, A24);
 
-    for (int i = mbits - 1; i >= 0; i--) {
-        bit = (m[i >> LOG2RADIX] >> (i & (RADIX - 1))) & 1;
-
-        if (bit) { // swap
-            for (int k = 0; k < 8; k++) {
-                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
-            }
-        }
-
-        ec_double_add_1x2x4x1(X0_X1, X0_X1, XD_A24);
-
-        if (bit) { // swap
-            for (int k = 0; k < 8; k++) {
-                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
-            }
-        }
-    }
+    ec_scalar_mul_inner_1x4x2x1(X0_X1, XD_A24, m, mbits);
 
     // Ignore X1 and output X0
     fp2_4x2x1_to_2x4x1(res, XD_A24, X0_X1);
@@ -597,10 +722,7 @@ void ec_scalar_mul_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const digit_t
 
 void ec_scalar_mul_normA_1x2x4x1(__m512i* res, __m512i* P, __m512i* A, const digit_t* m, const unsigned int mbits)
 {
-    unsigned int bit;
     __m512i X0_X1[8], XD_A[8];
-    __m512i idx_swap = VSET(4, 5, 6, 7, 0, 1, 2, 3);
-
     if (mbits == 0) {
         fp2_copy_2x4x1(res, P);
         return;
@@ -611,43 +733,18 @@ void ec_scalar_mul_normA_1x2x4x1(__m512i* res, __m512i* P, __m512i* A, const dig
     fp2_2x4x1_to_4x2x1(X0_X1, X0_X1, P);
     fp2_2x4x1_to_4x2x1(XD_A, P, A);
 
-    for (int i = mbits - 1; i >= 0; i--) {
-        bit = (m[i >> LOG2RADIX] >> (i & (RADIX - 1))) & 1;
-
-        if (bit) { // swap
-            for (int k = 0; k < 8; k++) {
-                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
-            }
-        }
-
-        ec_double_add_normA_1x2x4x1(X0_X1, X0_X1, XD_A);
-
-        if (bit) { // swap
-            for (int k = 0; k < 8; k++) {
-                X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
-            }
-        }
-    }
+    ec_scalar_mul_normA_inner_1x4x2x1(X0_X1, XD_A, m, mbits);
 
     // Ignore X1 and output X0
     fp2_4x2x1_to_2x4x1(res, XD_A, X0_X1);
 }
 
-bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const digit_t *m)
+static void ec_ladder_3pt_inner_1x4x2x1(__m512i* X0_X1, __m512i* XD_A24, const digit_t* m)
 {
-    __m512i X0_X1[8], XD_A24[8], X0_XD[8], X1_A24[8];
+    __m512i X0_XD[8], X1_A24[8];
     __m512i idx_first1_second2 = VSET(0, 1, 2, 3, 12, 13, 14, 15);
     __m512i idx_first1_first2 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
     __m512i idx_second1_second2 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
-
-    // Formulas are not valid if PmQ.x = 0 or PmQ.z = 0
-    if (fp2_is_zero_2x4x1(basis+16)) {
-        return false;
-    }
-
-    // X0 = Q, X1 = P, XD = PmQ
-    fp2_2x4x1_to_4x2x1(X0_X1, basis+8, basis);
-    fp2_2x4x1_to_4x2x1(XD_A24, basis+16, A24);
 
     digit_t t;
     for (int i = 0; i < NWORDS_ORDER; i++) {
@@ -655,7 +752,7 @@ bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const dig
         for (int j = 0; j < 64; j++) {
             uint64_t bit_set = (t & m[i]);
             if (bit_set) {
-                ec_double_add_1x2x4x1(X0_X1, X0_X1, XD_A24);
+                ec_double_add_1x4x2x1(X0_X1, X0_X1, XD_A24);
             } else {
                 // Swap X1 and XD
                 for (int k = 0; k < 8; k++) {
@@ -663,7 +760,7 @@ bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const dig
                     X1_A24[k] = VBLENDPERM(idx_second1_second2, X0_X1[k], XD_A24[k]);
                 }
                 
-                ec_double_add_1x2x4x1(X0_XD, X0_XD, X1_A24);
+                ec_double_add_1x4x2x1(X0_XD, X0_XD, X1_A24);
 
                 // Update X0 and XD
                 for (int k = 0; k < 8; k++) {
@@ -674,28 +771,14 @@ bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const dig
             t <<= 1;
         }
     }
-
-    // We output X1 and ignore X0
-    fp2_4x2x1_to_2x4x1(XD_A24, res, X0_X1);
-
-    return true;
 }
 
-bool ec_ladder_3pt_normA_1x2x4x1(__m512i* res, __m512i* A, __m512i* basis, const digit_t *m)
+static void ec_ladder_3pt_normA_inner_1x4x2x1(__m512i* X0_X1, __m512i* XD_A, const digit_t* m)
 {
-    __m512i X0_X1[8], XD_A[8], X0_XD[8], X1_A[8];
-    __m512i idx_first1_second2 = VSET(0, 1, 2, 3, 12, 13, 14, 15);
+    __m512i X0_XD[8], X1_A[8];
+     __m512i idx_first1_second2 = VSET(0, 1, 2, 3, 12, 13, 14, 15);
     __m512i idx_first1_first2 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
     __m512i idx_second1_second2 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
-
-    // Formulas are not valid if PmQ.x = 0 or PmQ.z = 0
-    if (fp2_is_zero_2x4x1(basis+16)) {
-        return false;
-    }
-
-    // X0 = Q, X1 = P, XD = PmQ
-    fp2_2x4x1_to_4x2x1(X0_X1, basis+8, basis);
-    fp2_2x4x1_to_4x2x1(XD_A, basis+16, A);
 
     digit_t t;
     for (int i = 0; i < NWORDS_ORDER; i++) {
@@ -703,7 +786,7 @@ bool ec_ladder_3pt_normA_1x2x4x1(__m512i* res, __m512i* A, __m512i* basis, const
         for (int j = 0; j < 64; j++) {
             uint64_t bit_set = (t & m[i]);
             if (bit_set) {
-                ec_double_add_normA_1x2x4x1(X0_X1, X0_X1, XD_A);
+                ec_double_add_normA_1x4x2x1(X0_X1, X0_X1, XD_A);
             } else {
                 // Swap X1 and XD
                 for (int k = 0; k < 8; k++) {
@@ -711,7 +794,7 @@ bool ec_ladder_3pt_normA_1x2x4x1(__m512i* res, __m512i* A, __m512i* basis, const
                     X1_A[k] = VBLENDPERM(idx_second1_second2, X0_X1[k], XD_A[k]);
                 }
                 
-                ec_double_add_normA_1x2x4x1(X0_XD, X0_XD, X1_A);
+                ec_double_add_normA_1x4x2x1(X0_XD, X0_XD, X1_A);
 
                 // Update X0 and XD
                 for (int k = 0; k < 8; k++) {
@@ -722,6 +805,43 @@ bool ec_ladder_3pt_normA_1x2x4x1(__m512i* res, __m512i* A, __m512i* basis, const
             t <<= 1;
         }
     }
+}
+
+bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const digit_t* m)
+{
+    __m512i X0_X1[8], XD_A24[8];
+
+    // Formulas are not valid if PmQ.x = 0 or PmQ.z = 0
+    if (fp2_is_zero_2x4x1(basis+16)) {
+        return false;
+    }
+
+    // X0 = Q, X1 = P, XD = PmQ
+    fp2_2x4x1_to_4x2x1(X0_X1, basis+8, basis);
+    fp2_2x4x1_to_4x2x1(XD_A24, basis+16, A24);
+
+    ec_ladder_3pt_inner_1x4x2x1(X0_X1, XD_A24, m);
+
+    // We output X1 and ignore X0
+    fp2_4x2x1_to_2x4x1(XD_A24, res, X0_X1);
+
+    return true;
+}
+
+bool ec_ladder_3pt_normA_1x2x4x1(__m512i* res, __m512i* A, __m512i* basis, const digit_t *m)
+{
+    __m512i X0_X1[8], XD_A[8];
+
+    // Formulas are not valid if PmQ.x = 0 or PmQ.z = 0
+    if (fp2_is_zero_2x4x1(basis+16)) {
+        return false;
+    }
+
+    // X0 = Q, X1 = P, XD = PmQ
+    fp2_2x4x1_to_4x2x1(X0_X1, basis+8, basis);
+    fp2_2x4x1_to_4x2x1(XD_A, basis+16, A);
+
+    ec_ladder_3pt_normA_inner_1x4x2x1(X0_X1, XD_A, m);
 
     // We output X1 and ignore X0
     fp2_4x2x1_to_2x4x1(XD_A, res, X0_X1);
@@ -861,7 +981,7 @@ bool ec_biscalar_mul_1x2x4x1(
                 X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
             }
 
-            ec_double_add_1x2x4x1(X0_X1, X0_X1, XD_A24);
+            ec_double_add_1x4x2x1(X0_X1, X0_X1, XD_A24);
 
             for (int k = 0; k < 8; k++) {
                 X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
@@ -875,7 +995,7 @@ bool ec_biscalar_mul_1x2x4x1(
                 t0[k] = VBLENDPERM(idx0, X0_X1[k], XD_A24[k]);
                 t1[k] = VBLENDPERM(idx1, X0_X1[k], XD_A24[k]);
             }
-            ec_double_add_1x2x4x1(t0, t0, t1);
+            ec_double_add_1x4x2x1(t0, t0, t1);
 
             // Update X1 and XD
             idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11); // first first
@@ -893,7 +1013,7 @@ bool ec_biscalar_mul_1x2x4x1(
                 t0[k] = VBLENDPERM(idx0, X0_X1[k], XD_A24[k]);
                 t1[k] = VBLENDPERM(idx1, X0_X1[k], XD_A24[k]);
             }
-            ec_double_add_1x2x4x1(t0, t0, t1);
+            ec_double_add_1x4x2x1(t0, t0, t1);
 
             // Update X0 and XD
             idx0 = VSET(0, 1, 2, 3, 12, 13, 14, 15); // first second
@@ -984,7 +1104,7 @@ bool ec_biscalar_mul_normA_1x2x4x1(
                 X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
             }
 
-            ec_double_add_normA_1x2x4x1(X0_X1, X0_X1, XD_A);
+            ec_double_add_normA_1x4x2x1(X0_X1, X0_X1, XD_A);
 
             for (int k = 0; k < 8; k++) {
                 X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
@@ -998,7 +1118,7 @@ bool ec_biscalar_mul_normA_1x2x4x1(
                 t0[k] = VBLENDPERM(idx0, X0_X1[k], XD_A[k]);
                 t1[k] = VBLENDPERM(idx1, X0_X1[k], XD_A[k]);
             }
-            ec_double_add_normA_1x2x4x1(t0, t0, t1);
+            ec_double_add_normA_1x4x2x1(t0, t0, t1);
 
             // Update X1 and XD
             idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11); // first first
@@ -1016,7 +1136,7 @@ bool ec_biscalar_mul_normA_1x2x4x1(
                 t0[k] = VBLENDPERM(idx0, X0_X1[k], XD_A[k]);
                 t1[k] = VBLENDPERM(idx1, X0_X1[k], XD_A[k]);
             }
-            ec_double_add_normA_1x2x4x1(t0, t0, t1);
+            ec_double_add_normA_1x4x2x1(t0, t0, t1);
 
             // Update X0 and XD
             idx0 = VSET(0, 1, 2, 3, 12, 13, 14, 15); // first second
@@ -1043,31 +1163,18 @@ bool ec_biscalar_mul_normA_1x2x4x1(
     return true;
 }
 
-bool ec_biscalar_mul_pair_1x2x4x1(
-    __m512i* res1,
-    __m512i* res2,
-    scalar_mtx_2x2_t *mat,
-    __m512i* A24,
-    __m512i* basis
+static void ec_biscalar_mul_pair_inner_8x1x1(
+    __m512i* X0_X1_XD_A24,
+    __m512i* Y0_Y1_YD_A24,
+    digit_t** r0_ptr,
+    digit_t** r1_ptr,
+    digit_t** s0_ptr,
+    digit_t** s1_ptr
 )
 {
-    digit_t r0_arr[NWORDS_ORDER], r1_arr[NWORDS_ORDER], s0_arr[NWORDS_ORDER], s1_arr[NWORDS_ORDER];
-    digit_t *r0 = r0_arr, *r1 = r1_arr, *s0 = s0_arr, *s1 = s1_arr; 
-    __m512i X0_X1_XD_A24[32], Y0_Y1_YD_A24[32], R1_R2_S1_S2[16]; // Need 32 consecutive vectors for single biscalars at the end
+    __m512i R1_R2_S1_S2[16], idx;
     __m512i *P1_Q1_PQ1_A24 = X0_X1_XD_A24+16, *P2_Q2_PQ2_A24 = Y0_Y1_YD_A24+16;
-    __m512i idx;
-
-    // 8x1x1 layout = (X0.x, XD.x, X0.z, XD.z, X1.x, A24.x, X1.z, A24.z)
-    fp2_2x4x1_to_4x2x1(X0_X1_XD_A24, basis, basis+8);
-    fp2_2x4x1_to_4x2x1(X0_X1_XD_A24+8, basis+16, A24);
-    fp2_4x2x1_to_8x1x1(X0_X1_XD_A24, X0_X1_XD_A24, X0_X1_XD_A24+8);
-    fp2_copy_8x1x1(Y0_Y1_YD_A24, X0_X1_XD_A24);
-
-    mp_copy(r0, (*mat)[0][0], NWORDS_ORDER);
-    mp_copy(r1, (*mat)[1][0], NWORDS_ORDER);
-    mp_copy(s0, (*mat)[0][1], NWORDS_ORDER);
-    mp_copy(s1, (*mat)[1][1], NWORDS_ORDER);
-
+    digit_t *r0 = *r0_ptr, *r1 = *r1_ptr, *s0 = *s0_ptr, *s1 = *s1_ptr;
     int case_r, case_s;
 
     while (true) {
@@ -1208,45 +1315,24 @@ bool ec_biscalar_mul_pair_1x2x4x1(
         }
     }
 
-    fp2_8x1x1_to_4x2x1(X0_X1_XD_A24, X0_X1_XD_A24+16, X0_X1_XD_A24);
-    fp2_4x2x1_to_2x4x1(X0_X1_XD_A24, X0_X1_XD_A24+8, X0_X1_XD_A24);
-    fp2_4x2x1_to_2x4x1(X0_X1_XD_A24+16, X0_X1_XD_A24+24, X0_X1_XD_A24+16);
-    fp2_8x1x1_to_4x2x1(Y0_Y1_YD_A24, Y0_Y1_YD_A24+16, Y0_Y1_YD_A24);
-    fp2_4x2x1_to_2x4x1(Y0_Y1_YD_A24, Y0_Y1_YD_A24+8, Y0_Y1_YD_A24);
-    fp2_4x2x1_to_2x4x1(Y0_Y1_YD_A24+16, Y0_Y1_YD_A24+24, Y0_Y1_YD_A24+16);
-
-    bool succ1 = ec_biscalar_mul_1x2x4x1(res1, r0, r1, A24, X0_X1_XD_A24);
-    bool succ2 = ec_biscalar_mul_1x2x4x1(res2, s0, s1, A24, Y0_Y1_YD_A24);
-
-    return succ1 && succ2;
+    *r0_ptr = r0;
+    *r1_ptr = r1;
+    *s0_ptr = s0;
+    *s1_ptr = s1;
 }
 
-bool ec_biscalar_mul_pair_normA_1x2x4x1(
-    __m512i* res1,
-    __m512i* res2,
-    scalar_mtx_2x2_t *mat,
-    __m512i* A,
-    __m512i* A24,
-    __m512i* basis
+static void ec_biscalar_mul_pair_normA_inner_8x1x1(
+    __m512i* X0_X1_XD_A,
+    __m512i* Y0_Y1_YD_A,
+    digit_t** r0_ptr,
+    digit_t** r1_ptr,
+    digit_t** s0_ptr,
+    digit_t** s1_ptr
 )
 {
-    digit_t r0_arr[NWORDS_ORDER], r1_arr[NWORDS_ORDER], s0_arr[NWORDS_ORDER], s1_arr[NWORDS_ORDER];
-    digit_t *r0 = r0_arr, *r1 = r1_arr, *s0 = s0_arr, *s1 = s1_arr; 
-    __m512i X0_X1_XD_A[32], Y0_Y1_YD_A[32], R1_R2_S1_S2[16]; // Need 32 consecutive vectors for single biscalars at the end
+    __m512i R1_R2_S1_S2[16], idx;
     __m512i *P1_Q1_PQ1_A = X0_X1_XD_A+16, *P2_Q2_PQ2_A = Y0_Y1_YD_A+16;
-    __m512i idx;
-
-    // 8x1x1 layout = (X0.x, XD.x, X0.z, XD.z, X1.x, A.x, X1.z, -)
-    fp2_2x4x1_to_4x2x1(X0_X1_XD_A, basis, basis+8);
-    fp2_2x4x1_to_4x2x1(X0_X1_XD_A+8, basis+16, A);
-    fp2_4x2x1_to_8x1x1(X0_X1_XD_A, X0_X1_XD_A, X0_X1_XD_A+8);
-    fp2_copy_8x1x1(Y0_Y1_YD_A, X0_X1_XD_A);
-
-    mp_copy(r0, (*mat)[0][0], NWORDS_ORDER);
-    mp_copy(r1, (*mat)[1][0], NWORDS_ORDER);
-    mp_copy(s0, (*mat)[0][1], NWORDS_ORDER);
-    mp_copy(s1, (*mat)[1][1], NWORDS_ORDER);
-
+    digit_t *r0 = *r0_ptr, *r1 = *r1_ptr, *s0 = *s0_ptr, *s1 = *s1_ptr;
     int case_r, case_s;
 
     while (true) {
@@ -1386,6 +1472,76 @@ bool ec_biscalar_mul_pair_normA_1x2x4x1(
             break;
         }
     }
+
+    *r0_ptr = r0;
+    *r1_ptr = r1;
+    *s0_ptr = s0;
+    *s1_ptr = s1;
+}
+
+bool ec_biscalar_mul_pair_1x2x4x1(
+    __m512i* res1,
+    __m512i* res2,
+    scalar_mtx_2x2_t *mat,
+    __m512i* A24,
+    __m512i* basis
+)
+{
+    digit_t r0_arr[NWORDS_ORDER], r1_arr[NWORDS_ORDER], s0_arr[NWORDS_ORDER], s1_arr[NWORDS_ORDER];
+    digit_t *r0 = r0_arr, *r1 = r1_arr, *s0 = s0_arr, *s1 = s1_arr; 
+    __m512i X0_X1_XD_A24[32], Y0_Y1_YD_A24[32]; // Need 32 consecutive vectors for single biscalars at the end
+
+    // 8x1x1 layout = (X0.x, XD.x, X0.z, XD.z, X1.x, A24.x, X1.z, A24.z)
+    fp2_2x4x1_to_4x2x1(X0_X1_XD_A24, basis, basis+8);
+    fp2_2x4x1_to_4x2x1(X0_X1_XD_A24+8, basis+16, A24);
+    fp2_4x2x1_to_8x1x1(X0_X1_XD_A24, X0_X1_XD_A24, X0_X1_XD_A24+8);
+    fp2_copy_8x1x1(Y0_Y1_YD_A24, X0_X1_XD_A24);
+
+    mp_copy(r0, (*mat)[0][0], NWORDS_ORDER);
+    mp_copy(r1, (*mat)[1][0], NWORDS_ORDER);
+    mp_copy(s0, (*mat)[0][1], NWORDS_ORDER);
+    mp_copy(s1, (*mat)[1][1], NWORDS_ORDER);
+
+    ec_biscalar_mul_pair_inner_8x1x1(X0_X1_XD_A24, Y0_Y1_YD_A24, &r0, &r1, &s0, &s1);
+
+    fp2_8x1x1_to_4x2x1(X0_X1_XD_A24, X0_X1_XD_A24+16, X0_X1_XD_A24);
+    fp2_4x2x1_to_2x4x1(X0_X1_XD_A24, X0_X1_XD_A24+8, X0_X1_XD_A24);
+    fp2_4x2x1_to_2x4x1(X0_X1_XD_A24+16, X0_X1_XD_A24+24, X0_X1_XD_A24+16);
+    fp2_8x1x1_to_4x2x1(Y0_Y1_YD_A24, Y0_Y1_YD_A24+16, Y0_Y1_YD_A24);
+    fp2_4x2x1_to_2x4x1(Y0_Y1_YD_A24, Y0_Y1_YD_A24+8, Y0_Y1_YD_A24);
+    fp2_4x2x1_to_2x4x1(Y0_Y1_YD_A24+16, Y0_Y1_YD_A24+24, Y0_Y1_YD_A24+16);
+
+    bool succ1 = ec_biscalar_mul_1x2x4x1(res1, r0, r1, A24, X0_X1_XD_A24);
+    bool succ2 = ec_biscalar_mul_1x2x4x1(res2, s0, s1, A24, Y0_Y1_YD_A24);
+
+    return succ1 && succ2;
+}
+
+bool ec_biscalar_mul_pair_normA_1x2x4x1(
+    __m512i* res1,
+    __m512i* res2,
+    scalar_mtx_2x2_t *mat,
+    __m512i* A,
+    __m512i* A24,
+    __m512i* basis
+)
+{
+    digit_t r0_arr[NWORDS_ORDER], r1_arr[NWORDS_ORDER], s0_arr[NWORDS_ORDER], s1_arr[NWORDS_ORDER];
+    digit_t *r0 = r0_arr, *r1 = r1_arr, *s0 = s0_arr, *s1 = s1_arr; 
+    __m512i X0_X1_XD_A[32], Y0_Y1_YD_A[32]; // Need 32 consecutive vectors for single biscalars at the end
+
+    // 8x1x1 layout = (X0.x, XD.x, X0.z, XD.z, X1.x, A.x, X1.z, -)
+    fp2_2x4x1_to_4x2x1(X0_X1_XD_A, basis, basis+8);
+    fp2_2x4x1_to_4x2x1(X0_X1_XD_A+8, basis+16, A);
+    fp2_4x2x1_to_8x1x1(X0_X1_XD_A, X0_X1_XD_A, X0_X1_XD_A+8);
+    fp2_copy_8x1x1(Y0_Y1_YD_A, X0_X1_XD_A);
+
+    mp_copy(r0, (*mat)[0][0], NWORDS_ORDER);
+    mp_copy(r1, (*mat)[1][0], NWORDS_ORDER);
+    mp_copy(s0, (*mat)[0][1], NWORDS_ORDER);
+    mp_copy(s1, (*mat)[1][1], NWORDS_ORDER);
+
+    ec_biscalar_mul_pair_normA_inner_8x1x1(X0_X1_XD_A, Y0_Y1_YD_A, &r0, &r1, &s0, &s1);
 
     fp2_8x1x1_to_4x2x1(X0_X1_XD_A, X0_X1_XD_A+16, X0_X1_XD_A);
     fp2_4x2x1_to_2x4x1(X0_X1_XD_A, X0_X1_XD_A+8, X0_X1_XD_A);

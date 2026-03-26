@@ -108,13 +108,25 @@ bool ec_curve_verif_A_1x2x4x1(__m512i* A1_A2);
 void ec_double_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24);
 void ec_double_iter_1x2x4x1(__m512i* res, __m512i* P, __m512i* A24, const int n);
 
+// Assumes n1 <= n2, inputs in 2x4x1
+void ec_double_basis_pair_1x2x4x1(
+    __m512i* res_B1, 
+    __m512i* res_B2, 
+    __m512i* B1, 
+    __m512i* B2, 
+    __m512i* A24_norm1,
+    __m512i* A24_norm2,
+    const int n1,
+    const int n2
+);
+
 /**
  *  Assumes res != PmQ_A24
  *  @param P_Q The (x,z) points P and Q stored in 4x2x1
  *  @param PmQ_A24 P-Q and A24 stored in 4x2x1
  *  @param res Output: 2*P and P+Q stored in 4x2x1
  */
-void ec_double_add_1x2x4x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A24);
+void ec_double_add_1x4x2x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A24);
 
 /**
  *  Assumes res != PmQ_A24
@@ -122,7 +134,7 @@ void ec_double_add_1x2x4x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A24);
  *  @param PmQ_A24 P-Q and the normalized A coefficient stored in the first 3 components of a 4x2x1
  *  @param res Output: 2*P and P+Q stored in 4x2x1
  */
-void ec_double_add_normA_1x2x4x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A);
+void ec_double_add_normA_1x4x2x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A);
 
 /**
  * Computes two double_add's in parallel.

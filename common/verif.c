@@ -182,7 +182,9 @@ challenge_and_aux_basis_verify(ec_basis_t *B_chall_can_unvec,
     if (!ec_curve_to_basis_2f_from_hint(B_aux_can_unvec, E_aux, TORSION_EVEN_POWER, sig->hint_aux))
         return 0;
 
-    ec_normalize_curve(E_chall); // to use normalized ladders
+    // TODO: Pair these together
+    ec_normalize_curve_and_A24(E_chall); // to use normalized ladders
+    ec_normalize_curve_and_A24(E_aux); // for basis doubling
 
     // ============== VECTORIZED ================================================================================
 
@@ -200,12 +202,7 @@ challenge_and_aux_basis_verify(ec_basis_t *B_chall_can_unvec,
     int n_chall = TORSION_EVEN_POWER - pow_dim2_deg_resp - HD_extra_torsion - sig->two_resp_length;
     int n_aux = TORSION_EVEN_POWER - pow_dim2_deg_resp - HD_extra_torsion;
 
-    ec_double_iter_1x2x4x1(B_chall_can, B_chall_can, A24_chall, n_chall);
-    ec_double_iter_1x2x4x1(B_chall_can+8, B_chall_can+8, A24_chall, n_chall);
-    ec_double_iter_1x2x4x1(B_chall_can+16, B_chall_can+16, A24_chall, n_chall);
-    ec_double_iter_1x2x4x1(B_aux_can, B_aux_can, A24_aux, n_aux);
-    ec_double_iter_1x2x4x1(B_aux_can+8, B_aux_can+8, A24_aux, n_aux);
-    ec_double_iter_1x2x4x1(B_aux_can+16, B_aux_can+16, A24_aux, n_aux);
+    ec_double_basis_pair_1x2x4x1(B_aux_can, B_chall_can, B_aux_can, B_chall_can, A24_aux, A24_chall, n_aux, n_chall);
 
 #ifndef NDEBUG
     if (!test_basis_order_twof_1x2x4x1(B_chall_can, A24_chall, HD_extra_torsion + pow_dim2_deg_resp + sig->two_resp_length))
