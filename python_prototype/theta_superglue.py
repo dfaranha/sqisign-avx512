@@ -60,6 +60,10 @@ def compute_symmetric_position(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
     r4 = x4 + z4
     s4 = x4 - z4
 
+    # TODO: here we could check 4 of the 6 conditions
+    # and exit early if we want, saving 1 4 way mul
+    # and 1 4-way add
+
     # Four parallel multiplications
     # TODO: mul by zeta is just rearranging memory and a
     # sign flip
@@ -177,7 +181,6 @@ def compute_superglue_coefficients(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
         X2, Z2 = x4, z4
     else:
         X2, Z2 = x3, z3
-
     ((r1, r2, delta_1), (r3, r4, delta_2)) = compute_matrix_coefficients(X1, Z1, X2, Z2)
 
     # TODO: this can be done in parallel, but there is no arithmetic, only
@@ -339,8 +342,74 @@ def superglue_evaluaton(
     # SQIsign has only position 1, 4, 7 (to save time when writing code)
     match position:
         case 1:
-            # Compute first element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[0]
+            # 8 way multiplications with precomputations
+            t0 = uuvv_p_ww2 * dual_theta_null_square[0]
+            t1 = uw2 * element_01[0]
+            t4 = uuvv_p_ww2 * element_02[0]
+            t5 = uw2 * element_03[0]
+            t8 = uuvv_p_ww1 * dual_theta_null_square[1]
+            t9 = uw1 * element_02[1]
+            t12 = uuvv_p_ww2 * dual_theta_null_square[2]
+            t13 = uw2 * element_01[1]
+
+            # Two adds
+            t2 = t0 + t1
+            t6 = t4 + t5
+
+            # 7 multiplications
+            t3 = uuvv_p_ww1 * t2
+            t7 = uw1 * t6
+            t10 = t8 * uuvv_m_ww2
+            t11 = t9 * uuvv_m_ww2
+            t14 = t12 * uuvv_m_ww1
+            t15 = t13 * uuvv_m_ww1
+            T = vw12 * element_03[1]
+
+            # three adds
+            X = t3 + t7
+            Y = t10 + t11
+            Z = t14 + t15
+
+            return (X, Y, Z, T)
+
+        case 4:
+            # 8 way mul
+            t0 = uuvv_p_ww2 * dual_theta_null_square[0]
+            t1 = uw2 * element_01[0]
+            t4 = uuvv_p_ww2 * element_01[1]
+            t5 = uw2 * dual_theta_null_square[2]
+            t8 = uuvv_p_ww2 * dual_theta_null_square[2]
+            t9 = uw2 * element_01[1]
+            t12 = uuvv_p_ww2 * element_01[0]
+            t13 = uw2 * dual_theta_null_square[0]
+
+            # 4 adds
+            t2 = t0 + t1
+            t6 = t4 + t5
+            t10 = t8 + t9
+            t14 = t12 + t13
+
+            # 6 muls
+            t3 = uuvv_p_ww1 * t2
+            t7 = uw1 * t6
+            t11 = uuvv_p_ww1 * t10
+            t15 = uw1 * t14
+            t16 = uuvv_m_ww2 * uuvv_m_ww1
+            T = vw12 * dual_theta_null_square[1]
+
+            # 3 adds
+            X = t3 + t7
+            Z = t11 + t15
+
+            # 1 mul left over, can we refactor this?
+            Y = t16 * dual_theta_null_square[1]
+
+            return (X, Y, Z, T)
+
+        case 7:
+
+            # Compute third element
+            tmp1 = uuvv_p_ww2 * dual_theta_null_square[2]
             tmp2 = uw2 * element_01[0]
             tmp1 = tmp1 + tmp2
             tmp3 = uuvv_p_ww1 * tmp1
@@ -349,7 +418,7 @@ def superglue_evaluaton(
             tmp2 = uw2 * element_03[0]
             tmp1 = tmp1 + tmp2
             tmp1 = uw1 * tmp1
-            X = tmp3 + tmp1
+            Z = tmp3 + tmp1
 
             # Compute second element
             tmp1 = uuvv_p_ww1 * dual_theta_null_square[1]
@@ -359,17 +428,19 @@ def superglue_evaluaton(
             tmp1 = tmp1 + tmp2
             Y = 0 + tmp1
 
-            # Compute third element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[2]
+            # Compute first element
+            tmp1 = uuvv_p_ww2 * dual_theta_null_square[0]
             tmp2 = uw2 * element_01[1]
             tmp1 = tmp1 * uuvv_m_ww1
             tmp2 = tmp2 * uuvv_m_ww1
-            Z = tmp1 + tmp2
+            X = tmp1 + tmp2
 
             # Compute the last point.
             T = vw12 * element_03[1]
 
             return (X, Y, Z, T)
+
+        # All other cases wont be touched by SQIsign
 
         case 2:
             # Compute second element
@@ -506,40 +577,6 @@ def superglue_evaluaton(
 
             return (X, Y, Z, T)
 
-        case 7:
-
-            # Compute third element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[2]
-            tmp2 = uw2 * element_01[0]
-            tmp1 = tmp1 + tmp2
-            tmp3 = uuvv_p_ww1 * tmp1
-
-            tmp1 = uuvv_p_ww2 * element_02[0]
-            tmp2 = uw2 * element_03[0]
-            tmp1 = tmp1 + tmp2
-            tmp1 = uw1 * tmp1
-            Z = tmp3 + tmp1
-
-            # Compute second element
-            tmp1 = uuvv_p_ww1 * dual_theta_null_square[1]
-            tmp2 = uw1 * element_02[1]
-            tmp1 = tmp1 * uuvv_m_ww2
-            tmp2 = tmp2 * uuvv_m_ww2
-            tmp1 = tmp1 + tmp2
-            Y = 0 + tmp1
-
-            # Compute first element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[0]
-            tmp2 = uw2 * element_01[1]
-            tmp1 = tmp1 * uuvv_m_ww1
-            tmp2 = tmp2 * uuvv_m_ww1
-            X = tmp1 + tmp2
-
-            # Compute the last point.
-            T = vw12 * element_03[1]
-
-            return (X, Y, Z, T)
-
         case 0:
             # Compute first element
             tmp1 = uuvv_p_ww2 * dual_theta_null_square[0]
@@ -571,41 +608,6 @@ def superglue_evaluaton(
 
             # Compute the last point.
             T = vw12 * dual_theta_null_square[2]
-
-            return (X, Y, Z, T)
-
-        case 4:
-
-            # Compute first element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[0]
-            tmp2 = uw2 * element_01[0]
-            tmp1 += tmp2
-            tmp3 = uuvv_p_ww1 * tmp1
-
-            tmp1 = uuvv_p_ww2 * element_01[1]
-            tmp2 = uw2 * dual_theta_null_square[2]
-            tmp1 += tmp2
-            tmp1 = uw1 * tmp1
-            X = tmp3 + tmp1
-
-            # Compute third element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[2]
-            tmp2 = uw2 * element_01[1]
-            tmp1 += tmp2
-            tmp3 = uuvv_p_ww1 * tmp1
-
-            tmp1 = uuvv_p_ww2 * element_01[0]
-            tmp2 = uw2 * dual_theta_null_square[0]
-            tmp1 += tmp2
-            tmp1 = uw1 * tmp1
-            Z = tmp3 + tmp1
-
-            # Compute third element
-            tmp1 = uuvv_m_ww2 * uuvv_m_ww1
-            Y = tmp1 * dual_theta_null_square[1]
-
-            # Compute the last point.
-            T = vw12 * dual_theta_null_square[1]
 
             return (X, Y, Z, T)
 
