@@ -10,6 +10,13 @@
 #include "theta.h"
 #include "sqi_test_extras.h"
 
+// ================================================================================================================
+//  Remember that it's possible to use a combination of 2x4x1 and 2x2x2, we don't exclusively have to stick to one
+//  If we permute both inputs, we can even use 2x4x1 mul and 2x2x2 square in one!!
+// ================================================================================================================
+
+
+
 // #include "bench.h"
 // #include <inttypes.h>
 
@@ -81,9 +88,17 @@ compute_challenge_verify(ec_curve_t *E_chall, const signature_t *sig, const ec_c
     // recovering the exact challenge
     // uint64_t start1 = cpucycles();
     // for (int i = 0; i < 1000; i++) {
-    if (!ec_ladder_3pt_normA_1x2x4x1(ker, A, bas_Epk, sig->chall_coeff)) {
+    fp2_2x4x1_to_2x2x2(ker, ker);
+    fp2_2x4x1_to_2x2x2(bas_Epk, bas_Epk);
+    fp2_2x4x1_to_2x2x2(bas_Epk+4, bas_Epk+8);
+    fp2_2x4x1_to_2x2x2(bas_Epk+8, bas_Epk+16);
+    fp2_2x4x1_to_2x2x2(A, A);
+
+    if (!ec_ladder_3pt_normA_1x2x2x2(ker, A, bas_Epk, sig->chall_coeff)) {
         return 0;
     }
+    fp2_2x2x2_to_2x4x1(ker, ker);
+
     // }
     // uint64_t end1 = cpucycles();
     // printf("3pt ladder %" PRIu64 "\n", (end1-start1)/1000);

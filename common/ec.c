@@ -330,38 +330,27 @@ void ec_double_basis_pair_1x2x4x1(
 
     assert(n1 >= n2);
 
-    idx0 = VSET(0, 8, 0, 0, 0, 0, 0, 0);
-    idx1 = VSET(2, 10, 0, 0, 0, 0, 0, 0);
+    // pair first components and second components in a 2x4x1
+    // TODO: Define a gadget for this (observe same pattern for 2x2x2 except +4 instead of +8)
+    idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
     for (int i = 0; i < 8; i++) {
-        x[i] = VBLENDPERM(idx0, B1[i], B2[i]);
-        x[i+8] = VBLENDPERM(idx1, B1[i], B2[i]);
-        t0[i] = VBLENDPERM(idx0, B1[i+8], B2[i+8]);
-        t0[i+8] = VBLENDPERM(idx1, B1[i+8], B2[i+8]);
-        t1[i] = VBLENDPERM(idx0, B1[i+16], B2[i+16]);
-        t1[i+8] = VBLENDPERM(idx1, B1[i+16], B2[i+16]);
+        x[i] = VBLENDPERM(idx0, B1[i], B1[i+8]);
+        z[i] = VBLENDPERM(idx1, B1[i], B1[i+8]);
+        x[i+8] = VBLENDPERM(idx0, B1[i+16], B1[i+16]); //wasteful
+        z[i+8] = VBLENDPERM(idx1, B1[i+16], B1[i+16]);
+        t0[i] = VBLENDPERM(idx0, B2[i], B2[i+8]);
+        t1[i] = VBLENDPERM(idx1, B2[i], B2[i+8]);
+        t0[i+8] = VBLENDPERM(idx0, B2[i+16], B2[i+16]);
+        t1[i+8] = VBLENDPERM(idx1, B2[i+16], B2[i+16]);
     }
-    idx0 = VSET(0, 1, 8, 9, 0, 0, 0, 0);
-    idx1 = VSET(0, 1, 2, 3, 8, 9, 0, 0);
-    for (int i = 0; i < 16; i++) {
-        x[i] = VBLENDPERM(idx0, x[i], t0[i]);
-        x[i] = VBLENDPERM(idx1, x[i], t1[i]);
-    }
-    idx0 = VSET(4, 12, 0, 0, 0, 0, 0, 0);
-    idx1 = VSET(6, 14, 0, 0, 0, 0, 0, 0);
-    for (int i = 0; i < 8; i++) {
-        z[i] = VBLENDPERM(idx0, B1[i], B2[i]);
-        z[i+8] = VBLENDPERM(idx1, B1[i], B2[i]);
-        t0[i] = VBLENDPERM(idx0, B1[i+8], B2[i+8]);
-        t0[i+8] = VBLENDPERM(idx1, B1[i+8], B2[i+8]);
-        t1[i] = VBLENDPERM(idx0, B1[i+16], B2[i+16]);
-        t1[i+8] = VBLENDPERM(idx1, B1[i+16], B2[i+16]);
-    }
-    idx0 = VSET(0, 1, 8, 9, 0, 0, 0, 0);
-    idx1 = VSET(0, 1, 2, 3, 8, 9, 0, 0);
-    for (int i = 0; i < 16; i++) {
-        z[i] = VBLENDPERM(idx0, z[i], t0[i]);
-        z[i] = VBLENDPERM(idx1, z[i], t1[i]);
-    }
+    fp2_2x4x1_to_4x2x1(x, x, x+8);
+    fp2_2x4x1_to_4x2x1(x+8, t0, t0+8);
+    fp2_2x4x1_to_4x2x1(z, z, z+8);
+    fp2_2x4x1_to_4x2x1(z+8, t1, t1+8);
+    fp2_4x2x1_to_8x1x1(x, x, x+8);
+    fp2_4x2x1_to_8x1x1(z, z, z+8);
+
     idx0 = VSET(0, 8, 0, 8, 0, 8, 0, 8);
     idx1 = VSET(2, 10, 2, 10, 2, 10, 2, 10);
     for (int i = 0; i < 8; i++) {
@@ -1809,4 +1798,173 @@ void ec_double_basis_pair_1x2x2x2(
     fp2_tomont_2x2x2(A24_norm1, A24_norm1);
     fp2_tomont_2x2x2(A24_norm2, A24_norm2);
     // ===============================================
+}
+
+void ec_scalar_mul_1x2x2x2(__m512i* res, __m512i* P, __m512i* A24, const digit_t* m, const unsigned int mbits)
+{
+    __m512i X0_X1[8], XD_A24[8];
+    if (mbits == 0) {
+        fp2_copy_2x2x2(res, P);
+        return;
+    }
+
+    // X0 = P, X1 = 0, XD = P
+    ec_set_zero_1x2x2x2(X0_X1);
+    fp2_2x2x2_to_4x2x1(X0_X1, X0_X1, P);
+    fp2_2x2x2_to_4x2x1(XD_A24, P, A24);
+
+    ec_scalar_mul_inner_1x4x2x1(X0_X1, XD_A24, m, mbits);
+
+    // Ignore X1 and output X0
+    fp2_4x2x1_to_2x2x2(res, XD_A24, X0_X1);
+}
+
+void ec_scalar_mul_normA_1x2x2x2(__m512i* res, __m512i* P, __m512i* A, const digit_t* m, const unsigned int mbits)
+{
+    __m512i X0_X1[8], XD_A[8];
+    if (mbits == 0) {
+        fp2_copy_2x2x2(res, P);
+        return;
+    }
+
+    // X0 = P, X1 = 0, XD = P
+    ec_set_zero_1x2x2x2(X0_X1);
+    fp2_2x2x2_to_4x2x1(X0_X1, X0_X1, P);
+    fp2_2x2x2_to_4x2x1(XD_A, P, A);
+
+    ec_scalar_mul_normA_inner_1x4x2x1(X0_X1, XD_A, m, mbits);
+
+    // Ignore X1 and output X0
+    fp2_4x2x1_to_2x2x2(res, XD_A, X0_X1);
+}
+
+bool ec_ladder_3pt_1x2x2x2(__m512i* res, __m512i* A24, __m512i* basis, const digit_t* m)
+{
+    __m512i X0_X1[8], XD_A24[8];
+
+    // Formulas are not valid if PmQ.x = 0 or PmQ.z = 0
+    if (fp2_is_zero_2x2x2(basis+8)) {
+        return false;
+    }
+
+    // X0 = Q, X1 = P, XD = PmQ
+    fp2_2x2x2_to_4x2x1(X0_X1, basis+4, basis);
+    fp2_2x2x2_to_4x2x1(XD_A24, basis+8, A24);
+
+    ec_ladder_3pt_inner_1x4x2x1(X0_X1, XD_A24, m);
+
+    // We output X1 and ignore X0
+    fp2_4x2x1_to_2x2x2(XD_A24, res, X0_X1);
+
+    return true;
+}
+
+bool ec_ladder_3pt_normA_1x2x2x2(__m512i* res, __m512i* A, __m512i* basis, const digit_t *m)
+{
+    __m512i X0_X1[8], XD_A[8];
+
+    // Formulas are not valid if PmQ.x = 0 or PmQ.z = 0
+    if (fp2_is_zero_2x2x2(basis+8)) {
+        return false;
+    }
+
+    // X0 = Q, X1 = P, XD = PmQ
+    fp2_2x2x2_to_4x2x1(X0_X1, basis+4, basis);
+    fp2_2x2x2_to_4x2x1(XD_A, basis+8, A);
+
+    ec_ladder_3pt_normA_inner_1x4x2x1(X0_X1, XD_A, m);
+
+    // We output X1 and ignore X0
+    fp2_4x2x1_to_2x2x2(XD_A, res, X0_X1);
+
+    return true;
+}
+
+/**
+ * Internal helper function for ec_biscalar mul.
+ * Given x(P), x(Q) and x(P-Q) it computes x(P+Q). It then sets x(Q), x(P-Q) := x(P+Q), x(Q).
+ * A24 is not needed, but is only an artifact of how PmQ is stored in the biscalar ladder.
+ * @param P_Q P and Q in 4x2x1
+ * @param PmQ_A24 PmQ and A24 in 4x2x1
+ */
+static void ec_diff_add_1x2x2x2(__m512i* P_Q, __m512i* PmQ_A24)
+{
+    __m512i t0[8], t1[8], idx0, idx1;
+    __mmask8 mask;
+
+    // t0 = (P.x, P.x, Q.x, Q.x)
+    // t1 = (P.z, P.z, Q.z, Q.z)
+    idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    for (int i = 0; i < 8; i++) {
+        t0[i] = VPERM512(idx0, P_Q[i]);
+        t1[i] = VPERM512(idx1, P_Q[i]);
+    }
+    // t0 = (P.x + P.z, P.x - P.z, Q.x + Q.z, Q.x - Q.z)
+    mask = 0x33;
+    fp2_mixaddsub_4x2x1(t0, t0, t1, mask);
+
+    // TODO: When Montgomery constant fixed, remove this
+    fp2_frommont_4x2x1(t0, t0);
+    fp2_frommont_4x2x1(PmQ_A24, PmQ_A24);
+    // ================================================
+
+    // t1 = (t0[3], t0[2])
+    // t0 = (t0[0], t0[1])
+    idx0 = VSET(6, 14, 7, 15, 4, 12, 5, 13);
+    idx1 = VSET(0, 8, 1, 9, 2, 10, 3, 11);
+    for (int i = 0; i < 4; i++) {
+        t1[i] = VBLENDPERM(idx0, t0[i], t0[i+4]);
+        t0[i] = VBLENDPERM(idx1, t0[i], t0[i+4]);
+    }
+    // TODO: When Montgomery constant fixed, remove this
+    fp2_tomont_2x2x2(t0, t0);
+    fp2_tomont_2x2x2(t1, t1);
+    // ================================================
+
+    fp2_mul_2x2x2(t0, t0, t1);
+
+    // t1 = (t0[1], t0[1])
+    // t0 = (t0[0], t0[0])
+    idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    idx1 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    for (int i = 0; i < 4; i++) {
+        t1[i] = VPERM512(idx0, t0[i]);
+        t0[i] = VPERM512(idx1, t0[i]);
+    }
+    mask = 0xf;
+    fp2_mixaddsub_2x2x2(t0, t0, t1, mask);
+    fp2_sqr_2x2x2(t0, t0);
+
+    // t1 = (PmQ.z, PmQ.x)
+    idx0 = VSET(2, 10, 3, 11, 0, 8, 1, 9);
+    for (int i = 0; i < 4; i++) {
+        t1[i] = VBLENDPERM(idx0, PmQ_A24[i], PmQ_A24[i+4]);
+    }
+     // TODO: When Montgomery constant fixed, remove this
+    fp2_tomont_2x2x2(t1, t1);
+    // ================================================
+
+    fp2_mul_2x2x2(t0, t0, t1); // Output t0 = ((P+Q).x, (P+Q).z)
+
+    // TODO: When Montgomery constant fixed, remove this
+    fp2_tomont_4x2x1(PmQ_A24, PmQ_A24);
+    fp2_frommont_2x2x2(t0, t0);
+    // ================================================
+
+    // Updating input (split the loop because of the Montgomery constant discrepancy)
+    // PmQ_A24 = (Q, A24), P_Q = (P, P+Q)
+    idx0 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+    idx1 = VSET(0, 1, 2, 3, 8, 10, 12, 14);
+    for (int i = 0; i < 8; i++) {
+        PmQ_A24[i] = VBLENDPERM(idx0, P_Q[i], PmQ_A24[i]);
+    }
+
+    fp2_frommont_4x2x1(P_Q, P_Q);
+    for (int i = 0; i < 8; i++) {
+        P_Q[i] = VBLENDPERM(idx1, P_Q[i], t0[i]);
+    }
+    fp2_tomont_4x2x1(P_Q, P_Q);
+
+    // NEXT STEP: TEST THIS IN THE 2x4x1 biscalar, probably messed up Montgomery rep conversions.
 }

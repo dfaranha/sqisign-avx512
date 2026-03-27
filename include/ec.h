@@ -175,7 +175,6 @@ void ec_scalar_mul_normA_1x2x4x1(__m512i* res, __m512i* P, __m512i* A, const dig
  */
 bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const digit_t *m);
 
-
 /**
  *  @param A The normalized A coefficient of the curve. Stored in a 2x4x1 where the second component is ignored.
  *  @param basis The basis P, Q stored with three points x(P), x(Q), x(P-Q) as consecutive 2x4x1's
@@ -183,6 +182,7 @@ bool ec_ladder_3pt_1x2x4x1(__m512i* res, __m512i* A24, __m512i* basis, const dig
  *  @param res Output: P + [m]*Q in 2x4x1
  */
 bool ec_ladder_3pt_normA_1x2x4x1(__m512i* res, __m512i* A, __m512i* basis, const digit_t *m);
+
 /**
  *  @param scalarP The scalar for P as an array of NWORDS_ORDER digits
  *  @param scalarQ The scalar for Q as an array of NWORDS_ORDER digits
@@ -264,5 +264,39 @@ void ec_double_basis_pair_1x2x2x2(
     const int n1,
     const int n2
 );
+
+/**
+ *  @param P The (x,z) point in 2x2x2
+ *  @param A24 The curve's A24 point in 2x2x2
+ *  @param m The scalar as an array of digits
+ *  @param mbits The bit length of the scalar m
+ *  @param res Output: [m]*P in 2x2x2
+ */
+void ec_scalar_mul_1x2x2x2(__m512i* res, __m512i* P, __m512i* A24, const digit_t* m, const unsigned int mbits);
+
+/**
+ *  @param P The (x,z) point in 2x2x2
+ *  @param A The normalized A coefficient of the curve. Stored in a 2x2x2 where the second component is ignored.
+ *  @param m The scalar as an array of digits
+ *  @param mbits The bit length of the scalar m
+ *  @param res Output: [m]*P in 2x2x2
+ */
+void ec_scalar_mul_normA_1x2x2x2(__m512i* res, __m512i* P, __m512i* A, const digit_t* m, const unsigned int mbits);
+
+/**
+ *  @param A24 The A24 of the curve in 2x2x2
+ *  @param basis The basis P, Q stored with three points x(P), x(Q), x(P-Q) as consecutive 2x2x2's
+ *  @param m The scalar as an array of NWORDS_ORDER digits
+ *  @param res Output: P + [m]*Q in 2x2x2
+ */
+bool ec_ladder_3pt_1x2x2x2(__m512i* res, __m512i* A24, __m512i* basis, const digit_t *m);
+
+/**
+ *  @param A The normalized A coefficient of the curve. Stored in a 2x2x2 where the second component is ignored.
+ *  @param basis The basis P, Q stored with three points x(P), x(Q), x(P-Q) as consecutive 2x2x2's
+ *  @param m The scalar as an array of NWORDS_ORDER digits
+ *  @param res Output: P + [m]*Q in 2x2x2
+ */
+bool ec_ladder_3pt_normA_1x2x2x2(__m512i* res, __m512i* A, __m512i* basis, const digit_t *m);
 
 #endif

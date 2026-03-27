@@ -158,6 +158,16 @@ void mp_dblsubx2_8x1(__m512i* res, __m512i* a, __m512i* b);
 void mp_subx2_8x1(__m512i* res, __m512i* a);
 
 /**
+ *  res = (a+p) - b, no correction. When the inputs are fully reduced, this is guaranteed >= 0
+ */
+void mp_add_p_sub_8x1(__m512i* res, __m512i* a, __m512i* b);
+
+/**
+ *  res = 2*a, no correction
+ */
+void mp_dbl_8x1(__m512i* res, __m512i* a);
+
+/**
  *  res = a * b, multiprecision multiplication using Karatsuba
  */
 void mp_mul_8x1_karat(__m512i* res, __m512i* a, __m512i* b);

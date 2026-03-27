@@ -974,6 +974,34 @@ void mp_subx2_8x1(__m512i* res, __m512i* a)
     res[15] = t15;
 }
 
+// Computes res = a + p - b without any carry propagation or conditional masks
+void mp_add_p_sub_8x1(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i p_limb = VSETALL(LIMB_MASK);
+    __m512i p_top  = VSETALL((65ULL << 40) - 1);
+
+    res[0] = VSUB(VADD(a[0], p_limb), b[0]);
+    res[1] = VSUB(VADD(a[1], p_limb), b[1]);
+    res[2] = VSUB(VADD(a[2], p_limb), b[2]);
+    res[3] = VSUB(VADD(a[3], p_limb), b[3]);
+    res[4] = VSUB(VADD(a[4], p_limb), b[4]);
+    res[5] = VSUB(VADD(a[5], p_limb), b[5]);
+    res[6] = VSUB(VADD(a[6], p_limb), b[6]);
+    res[7] = VSUB(VADD(a[7], p_top), b[7]);
+}
+
+void mp_dbl_8x1(__m512i* res, __m512i* a)
+{
+    res[0] = VSL(a[0], 1);
+    res[1] = VSL(a[1], 1);
+    res[2] = VSL(a[2], 1);
+    res[3] = VSL(a[3], 1);
+    res[4] = VSL(a[4], 1);
+    res[5] = VSL(a[5], 1);
+    res[6] = VSL(a[6], 1);
+    res[7] = VSL(a[7], 1);
+}
+
 // Multiprecision multiplication using Karatsuba
 void mp_mul_8x1_karat(__m512i* res, __m512i* a, __m512i* b)
 {
@@ -2047,6 +2075,181 @@ void fp_sqr_4x2(__m512i* res, __m512i* a)
 {
     fp_mul_4x2(res, a, a);
 }
+
+// // Single-length multiprecision addition, no correction, no carry propagation
+// void mp_add_4x2(__m512i* res, __m512i* a, __m512i* b)
+// {
+//     __m512i t0, t1, t2, t3;
+
+//     t0 = VADD(a[0], b[0]);
+//     t1 = VADD(a[1], b[1]);
+//     t2 = VADD(a[2], b[2]);
+//     t3 = VADD(a[3], b[3]);
+
+//     // Output result
+//     res[0] = t0;
+//     res[1] = t1;
+//     res[2] = t2;
+//     res[3] = t3;
+// }
+
+// // Single-length multiprecision subtraction, no correction, no carry propagation
+// void mp_sub_4x2(__m512i* res, __m512i* a, __m512i* b)
+// {
+//     __m512i t0, t1, t2, t3;
+
+//     t0 = VSUB(a[0], b[0]);
+//     t1 = VSUB(a[1], b[1]);
+//     t2 = VSUB(a[2], b[2]);
+//     t3 = VSUB(a[3], b[3]);
+
+//     // Output result
+//     res[0] = t0;
+//     res[1] = t1;
+//     res[2] = t2;
+//     res[3] = t3;
+// }
+
+// // Double-length multiprecision subtraction res = res - a - b, no correction
+// void mp_dblsubx2_4x2(__m512i* res, __m512i* a, __m512i* b)
+// {
+//     __m512i t0, t1, t2, t3, t4, t5, t6, t7;
+//     __m512i limb_mask = VSETALL(LIMB_MASK);
+
+//     t0 = VSUB(res[0], a[0]);
+//     t1 = VSUB(res[1], a[1]);
+//     t2 = VSUB(res[2], a[2]);
+//     t3 = VSUB(res[3], a[3]);
+//     t4 = VSUB(res[4], a[4]);
+//     t5 = VSUB(res[5], a[5]);
+//     t6 = VSUB(res[6], a[6]);
+//     t7 = VSUB(res[7], a[7]);
+
+//     t0 = VSUB(t0, b[0]);
+//     t1 = VSUB(t1, b[1]);
+//     t2 = VSUB(t2, b[2]);
+//     t3 = VSUB(t3, b[3]);
+//     t4 = VSUB(t4, b[4]);
+//     t5 = VSUB(t5, b[5]);
+//     t6 = VSUB(t6, b[6]);
+//     t7 = VSUB(t7, b[7]);
+
+//     // Carry propagation
+//     t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+//     t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+//     t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+//     t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+//     t5 = VADD(t5, VSRA(t4, LIMB_LEN));
+//     t6 = VADD(t6, VSRA(t5, LIMB_LEN));
+//     t7 = VADD(t7, VSRA(t6, LIMB_LEN));
+//     t8 = VADD(t8, VSRA(t7, LIMB_LEN));
+//     t9 = VADD(t9, VSRA(t8, LIMB_LEN));
+//     t10 = VADD(t10, VSRA(t9, LIMB_LEN));
+//     t11 = VADD(t11, VSRA(t10, LIMB_LEN));
+//     t12 = VADD(t12, VSRA(t11, LIMB_LEN));
+//     t13 = VADD(t13, VSRA(t12, LIMB_LEN));
+//     t14 = VADD(t14, VSRA(t13, LIMB_LEN));
+//     t15 = VADD(t15, VSRA(t14, LIMB_LEN));
+//     t0 = VAND(t0, limb_mask);
+//     t1 = VAND(t1, limb_mask);
+//     t2 = VAND(t2, limb_mask);
+//     t3 = VAND(t3, limb_mask);
+//     t4 = VAND(t4, limb_mask);
+//     t5 = VAND(t5, limb_mask);
+//     t6 = VAND(t6, limb_mask);
+//     t7 = VAND(t7, limb_mask);
+//     t8 = VAND(t8, limb_mask);
+//     t9 = VAND(t9, limb_mask);
+//     t10 = VAND(t10, limb_mask);
+//     t11 = VAND(t11, limb_mask);
+//     t12 = VAND(t12, limb_mask);
+//     t13 = VAND(t13, limb_mask);
+//     t14 = VAND(t14, limb_mask);
+
+//     // Output result
+//     res[0] = t0;
+//     res[1] = t1;
+//     res[2] = t2;
+//     res[3] = t3;
+//     res[4] = t4;
+//     res[5] = t5;
+//     res[6] = t6;
+//     res[7] = t7;
+// }
+
+// // Double-length multiprecision subtraction res = res - a
+// void mp_subx2_4x2(__m512i* res, __m512i* a)
+// {
+//     __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15;
+//     __m512i limb_mask = VSETALL(LIMB_MASK);
+
+//     t0 = VSUB(res[0], a[0]);
+//     t1 = VSUB(res[1], a[1]);
+//     t2 = VSUB(res[2], a[2]);
+//     t3 = VSUB(res[3], a[3]);
+//     t4 = VSUB(res[4], a[4]);
+//     t5 = VSUB(res[5], a[5]);
+//     t6 = VSUB(res[6], a[6]);
+//     t7 = VSUB(res[7], a[7]);
+//     t8 = VSUB(res[8], a[8]);
+//     t9 = VSUB(res[9], a[9]);
+//     t10 = VSUB(res[10], a[10]);
+//     t11 = VSUB(res[11], a[11]);
+//     t12 = VSUB(res[12], a[12]);
+//     t13 = VSUB(res[13], a[13]);
+//     t14 = VSUB(res[14], a[14]);
+//     t15 = VSUB(res[15], a[15]);
+
+//     // Carry propagation
+//     t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+//     t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+//     t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+//     t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+//     t5 = VADD(t5, VSRA(t4, LIMB_LEN));
+//     t6 = VADD(t6, VSRA(t5, LIMB_LEN));
+//     t7 = VADD(t7, VSRA(t6, LIMB_LEN));
+//     t8 = VADD(t8, VSRA(t7, LIMB_LEN));
+//     t9 = VADD(t9, VSRA(t8, LIMB_LEN));
+//     t10 = VADD(t10, VSRA(t9, LIMB_LEN));
+//     t11 = VADD(t11, VSRA(t10, LIMB_LEN));
+//     t12 = VADD(t12, VSRA(t11, LIMB_LEN));
+//     t13 = VADD(t13, VSRA(t12, LIMB_LEN));
+//     t14 = VADD(t14, VSRA(t13, LIMB_LEN));
+//     t15 = VADD(t15, VSRA(t14, LIMB_LEN));
+//     t0 = VAND(t0, limb_mask);
+//     t1 = VAND(t1, limb_mask);
+//     t2 = VAND(t2, limb_mask);
+//     t3 = VAND(t3, limb_mask);
+//     t4 = VAND(t4, limb_mask);
+//     t5 = VAND(t5, limb_mask);
+//     t6 = VAND(t6, limb_mask);
+//     t7 = VAND(t7, limb_mask);
+//     t8 = VAND(t8, limb_mask);
+//     t9 = VAND(t9, limb_mask);
+//     t10 = VAND(t10, limb_mask);
+//     t11 = VAND(t11, limb_mask);
+//     t12 = VAND(t12, limb_mask);
+//     t13 = VAND(t13, limb_mask);
+//     t14 = VAND(t14, limb_mask);
+
+//     // Output result
+//     res[0] = t0;
+//     res[1] = t1;
+//     res[2] = t2;
+//     res[3] = t3;
+//     res[4] = t4;
+//     res[5] = t5;
+//     res[6] = t6;
+//     res[7] = t7;
+//     res[8] = t8;
+//     res[9] = t9;
+//     res[10] = t10;
+//     res[11] = t11;
+//     res[12] = t12;
+//     res[13] = t13;
+//     res[14] = t14;
+//     res[15] = t15;
+// }
 
 void fp_tomont_4x2(__m512i* res, __m512i* a)
 {

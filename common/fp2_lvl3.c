@@ -87,8 +87,8 @@ void fp2_sqr_8x1x1(__m512i* res, __m512i* a)
 {
     __m512i s1[8], s2[8], s3[8];
     mp_add_8x1(s1, a, a + 8);
-    fp_sub_8x1(s2, a, a + 8);           ///////// THIS COULD BE OPTIMIZED FOR LIMB SIZE 48
-    mp_add_8x1(s3, a, a);
+    mp_add_p_sub_8x1(s2, a, a + 8);
+    mp_dbl_8x1(s3, a);
     fp_mul_8x1(res, s1, s2);
     fp_mul_8x1(res + 8, s3, a + 8);
 }
