@@ -1680,18 +1680,6 @@ void ec_double_basis_pair_1x2x2x2(
     __m512i x[16], z[16], t0[16], t1[16], A24x8[16];
     __m512i idx0, idx1, idx2, idx3;
 
-    // TODO: Remove when unified Montgomery constant
-    // This is so bad, we are mutating inputs
-    fp2_frommont_2x2x2(B1, B1);
-    fp2_frommont_2x2x2(B1+4, B1+4);
-    fp2_frommont_2x2x2(B1+8, B1+8);
-    fp2_frommont_2x2x2(B2, B2);
-    fp2_frommont_2x2x2(B2+4, B2+4);
-    fp2_frommont_2x2x2(B2+8, B2+8);
-    fp2_frommont_2x2x2(A24_norm1, A24_norm1);
-    fp2_frommont_2x2x2(A24_norm2, A24_norm2);
-    // =======================================
-
     assert(n1 >= n2);
 
     idx0 = VSET(0, 8, 0, 0, 0, 0, 0, 0);
@@ -1757,14 +1745,6 @@ void ec_double_basis_pair_1x2x2x2(
         A24x8[i+12] = VBLENDPERM(idx3, A24_norm1[i], A24_norm2[i]);
     }
 
-    // TODO: Remove when unified Montgomery constant
-
-    fp2_tomont_8x1x1(x, x);
-    fp2_tomont_8x1x1(z, z);
-    fp2_tomont_8x1x1(A24x8, A24x8);
-
-    // ==========================================
-
     for (int i = 0; i < n2; i++) {
         ec_double_8x1x1x1(x, z, A24x8, x, z);
     }
@@ -1792,12 +1772,6 @@ void ec_double_basis_pair_1x2x2x2(
         res_B2[i+4] = VBLENDPERM(idx1, x[i+8], z[i+8]);
         res_B2[i+8] = VBLENDPERM(idx0, x[i+12], z[i+12]);
     }
-
-    // TODO: Remove when unified Montgomery constant
-    // Soooo bad
-    fp2_tomont_2x2x2(A24_norm1, A24_norm1);
-    fp2_tomont_2x2x2(A24_norm2, A24_norm2);
-    // ===============================================
 }
 
 void ec_scalar_mul_1x2x2x2(__m512i* res, __m512i* P, __m512i* A24, const digit_t* m, const unsigned int mbits)
@@ -1904,11 +1878,6 @@ static void ec_diff_add_1x2x2x2(__m512i* P_Q, __m512i* PmQ_A24)
     mask = 0x33;
     fp2_mixaddsub_4x2x1(t0, t0, t1, mask);
 
-    // TODO: When Montgomery constant fixed, remove this
-    fp2_frommont_4x2x1(t0, t0);
-    fp2_frommont_4x2x1(PmQ_A24, PmQ_A24);
-    // ================================================
-
     // t1 = (t0[3], t0[2])
     // t0 = (t0[0], t0[1])
     idx0 = VSET(6, 14, 7, 15, 4, 12, 5, 13);
@@ -1917,10 +1886,6 @@ static void ec_diff_add_1x2x2x2(__m512i* P_Q, __m512i* PmQ_A24)
         t1[i] = VBLENDPERM(idx0, t0[i], t0[i+4]);
         t0[i] = VBLENDPERM(idx1, t0[i], t0[i+4]);
     }
-    // TODO: When Montgomery constant fixed, remove this
-    fp2_tomont_2x2x2(t0, t0);
-    fp2_tomont_2x2x2(t1, t1);
-    // ================================================
 
     fp2_mul_2x2x2(t0, t0, t1);
 
@@ -1941,30 +1906,17 @@ static void ec_diff_add_1x2x2x2(__m512i* P_Q, __m512i* PmQ_A24)
     for (int i = 0; i < 4; i++) {
         t1[i] = VBLENDPERM(idx0, PmQ_A24[i], PmQ_A24[i+4]);
     }
-     // TODO: When Montgomery constant fixed, remove this
-    fp2_tomont_2x2x2(t1, t1);
-    // ================================================
 
     fp2_mul_2x2x2(t0, t0, t1); // Output t0 = ((P+Q).x, (P+Q).z)
 
-    // TODO: When Montgomery constant fixed, remove this
-    fp2_tomont_4x2x1(PmQ_A24, PmQ_A24);
-    fp2_frommont_2x2x2(t0, t0);
-    // ================================================
-
-    // Updating input (split the loop because of the Montgomery constant discrepancy)
+    // Updating input
     // PmQ_A24 = (Q, A24), P_Q = (P, P+Q)
     idx0 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
     idx1 = VSET(0, 1, 2, 3, 8, 10, 12, 14);
     for (int i = 0; i < 8; i++) {
         PmQ_A24[i] = VBLENDPERM(idx0, P_Q[i], PmQ_A24[i]);
-    }
-
-    fp2_frommont_4x2x1(P_Q, P_Q);
-    for (int i = 0; i < 8; i++) {
         P_Q[i] = VBLENDPERM(idx1, P_Q[i], t0[i]);
     }
-    fp2_tomont_4x2x1(P_Q, P_Q);
 
-    // NEXT STEP: TEST THIS IN THE 2x4x1 biscalar, probably messed up Montgomery rep conversions.
+    // NEXT STEP: TEST THIS IN THE 2x4x1 biscalar
 }

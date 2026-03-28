@@ -1985,6 +1985,7 @@ bool test_fp2(int iterations)
         fp2_2x2x2_to_4x2x1(e, d, d+4);
         if (fp2_is_equal_4x2x1(e, a) != 0xf) {
             passed = 0;
+            printf("id 4x2x1\n");
             break;
         }
 
@@ -1992,6 +1993,7 @@ bool test_fp2(int iterations)
         fp2_4x2x1_to_2x2x2(e, e+4, f);
         if (fp2_is_equal_2x2x2(e, b) != 0x3 || fp2_is_equal_2x2x2(e+4, b+4) != 0x3) {
             passed = 0;
+            printf("id 2x2x2 \n");
             break;
         }
 

@@ -685,44 +685,29 @@ void fp2_4x2x1_duplicate_to_8x1x1(__m512i* res, __m512i* src)
     }
 }
 
-// TODO: When we have the same Montgomery constant for Fp 8x1 and 4x2, 
-//       we can remove these costly conversions.
 
 void fp2_4x2x1_to_2x2x2(__m512i* res1, __m512i* res2, __m512i* src)
 {
-    __m512i tmp[8];
-    fp2_frommont_4x2x1(tmp, src);
 
     __m512i idx1 = VSET(0, 8, 1, 9, 2, 10, 3, 11);
     __m512i idx2 = VSET(4, 12, 5, 13, 6, 14, 7, 15);
     for (int i = 0; i < 4; i++) {
-        res1[i] = VBLENDPERM(idx1, tmp[i], tmp[i+4]);
-        res2[i] = VBLENDPERM(idx2, tmp[i], tmp[i+4]);
+        __m512i s = src[i], t = src[i+4];
+        res1[i] = VBLENDPERM(idx1, s, t);
+        res2[i] = VBLENDPERM(idx2, s, t);
     }
-
-    fp2_tomont_2x2x2(res1, res1);
-    fp2_tomont_2x2x2(res2, res2);
 }
-
-// TODO: When we have the same Montgomery constant for Fp 8x1 and 4x2, 
-//       we can remove these costly conversions.
 
 void fp2_2x2x2_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2)
 {
-    __m512i tmp1[4], tmp2[4];
-    fp2_frommont_2x2x2(tmp1, src1);
-    fp2_frommont_2x2x2(tmp2, src2);
-
     __m512i idx1 = VSET(0, 2, 4, 6, 8, 10, 12, 14);
     __m512i idx2 = VSET(1, 3, 5, 7, 9, 11, 13, 15);
 
     for (int i = 0; i < 4; i++) {
-        __m512i s = tmp1[i], t = tmp2[i];
+        __m512i s = src1[i], t = src2[i];
         res[i] = VBLENDPERM(idx1, s, t);
         res[i+4] = VBLENDPERM(idx2, s, t);
     }
-
-    fp2_tomont_4x2x1(res, res);
 }
 
 // Maps (a,b,c,d) in 4x2x1 to (a,b) and (c,d) in 2x4x1
@@ -767,38 +752,22 @@ void fp2_2x4x1_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2)
 //     }
 // }
 
-// TODO: When we have the same Montgomery constant for Fp 8x1 and 4x2, 
-//       we can remove these costly conversions.
-
 void fp2_2x2x2_to_2x4x1(__m512i* res, __m512i* src)
 {
-    __m512i tmp[4];
-    fp2_frommont_2x2x2(tmp, src);
-
     __m512i idx1 = VSET(0, 0, 2, 2, 4, 4, 6, 6);
     __m512i idx2 = VSET(1, 1, 3, 3, 5, 5, 7, 7);
 
     for (int i = 0; i < 4; i++) {
-        __m512i t = tmp[i];
+        __m512i t = src[i];
         res[i] = VPERM512MASKZ(0x55, t, idx1);
         res[i+4] = VPERM512MASKZ(0x55, t, idx2);
     }
-
-    fp2_tomont_2x4x1(res, res);
 }
-
-// TODO: When we have the same Montgomery constant for Fp 8x1 and 4x2, 
-//       we can remove these costly conversions.
 
 void fp2_2x4x1_to_2x2x2(__m512i* res, __m512i* src)
 {
-    __m512i tmp[8];
-    fp2_frommont_2x4x1(tmp, src);
-
     __m512i idx = VSET(0, 8, 2, 10, 4, 12, 6, 14);
     for (int i = 0; i < 4; i++) {
-        res[i] = VBLENDPERM(idx, tmp[i], tmp[i+4]);
+        res[i] = VBLENDPERM(idx, src[i], src[i+4]);
     }
-
-    fp2_tomont_2x2x2(res, res);
 }
