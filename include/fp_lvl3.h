@@ -157,6 +157,8 @@ void mp_dblsubx2_8x1(__m512i* res, __m512i* a, __m512i* b);
  */
 void mp_subx2_8x1(__m512i* res, __m512i* a);
 
+void mp_mixaddsubx2_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
+
 /**
  *  res = (a+p) - b, no correction. When the inputs are fully reduced, this is guaranteed >= 0
  */

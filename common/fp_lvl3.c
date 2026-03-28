@@ -974,6 +974,98 @@ void mp_subx2_8x1(__m512i* res, __m512i* a)
     res[15] = t15;
 }
 
+// Double-length multiprecision
+void mp_mixaddsubx2_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)
+{
+    __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15;
+    __m512i limb_mask = VSETALL(LIMB_MASK);
+    const __mmask8 sub_mask = ~add_mask;
+
+    t0 = VSUBMASK(a[0], sub_mask, a[0], b[0]);
+    t1 = VSUBMASK(a[1], sub_mask, a[1], b[1]);
+    t2 = VSUBMASK(a[2], sub_mask, a[2], b[2]);
+    t3 = VSUBMASK(a[3], sub_mask, a[3], b[3]);
+    t4 = VSUBMASK(a[4], sub_mask, a[4], b[4]);
+    t5 = VSUBMASK(a[5], sub_mask, a[5], b[5]);
+    t6 = VSUBMASK(a[6], sub_mask, a[6], b[6]);
+    t7 = VSUBMASK(a[7], sub_mask, a[7], b[7]);
+    t8 = VSUBMASK(a[8], sub_mask, a[8], b[8]);
+    t9 = VSUBMASK(a[9], sub_mask, a[9], b[9]);
+    t10 = VSUBMASK(a[10], sub_mask, a[10], b[10]);
+    t11 = VSUBMASK(a[11], sub_mask, a[11], b[11]);
+    t12 = VSUBMASK(a[12], sub_mask, a[12], b[12]);
+    t13 = VSUBMASK(a[13], sub_mask, a[13], b[13]);
+    t14 = VSUBMASK(a[14], sub_mask, a[14], b[14]);
+    t15 = VSUBMASK(a[15], sub_mask, a[15], b[15]);
+
+    t0 = VADDMASK(t0, add_mask, a[0], b[0]);
+    t1 = VADDMASK(t1, add_mask, a[1], b[1]);
+    t2 = VADDMASK(t2, add_mask, a[2], b[2]);
+    t3 = VADDMASK(t3, add_mask, a[3], b[3]);
+    t4 = VADDMASK(t4, add_mask, a[4], b[4]);
+    t5 = VADDMASK(t5, add_mask, a[5], b[5]);
+    t6 = VADDMASK(t6, add_mask, a[6], b[6]);
+    t7 = VADDMASK(t7, add_mask, a[7], b[7]);
+    t8 = VADDMASK(t8, add_mask, a[8], b[8]);
+    t9 = VADDMASK(t9, add_mask, a[9], b[9]);
+    t10 = VADDMASK(t10, add_mask, a[10], b[10]);
+    t11 = VADDMASK(t11, add_mask, a[11], b[11]);
+    t12 = VADDMASK(t12, add_mask, a[12], b[12]);
+    t13 = VADDMASK(t13, add_mask, a[13], b[13]);
+    t14 = VADDMASK(t14, add_mask, a[14], b[14]);
+    t15 = VADDMASK(t15, add_mask, a[15], b[15]);
+
+    // Carry propagation
+    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+    t5 = VADD(t5, VSRA(t4, LIMB_LEN));
+    t6 = VADD(t6, VSRA(t5, LIMB_LEN));
+    t7 = VADD(t7, VSRA(t6, LIMB_LEN));
+    t8 = VADD(t8, VSRA(t7, LIMB_LEN));
+    t9 = VADD(t9, VSRA(t8, LIMB_LEN));
+    t10 = VADD(t10, VSRA(t9, LIMB_LEN));
+    t11 = VADD(t11, VSRA(t10, LIMB_LEN));
+    t12 = VADD(t12, VSRA(t11, LIMB_LEN));
+    t13 = VADD(t13, VSRA(t12, LIMB_LEN));
+    t14 = VADD(t14, VSRA(t13, LIMB_LEN));
+    t15 = VADD(t15, VSRA(t14, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VAND(t3, limb_mask);
+    t4 = VAND(t4, limb_mask);
+    t5 = VAND(t5, limb_mask);
+    t6 = VAND(t6, limb_mask);
+    t7 = VAND(t7, limb_mask);
+    t8 = VAND(t8, limb_mask);
+    t9 = VAND(t9, limb_mask);
+    t10 = VAND(t10, limb_mask);
+    t11 = VAND(t11, limb_mask);
+    t12 = VAND(t12, limb_mask);
+    t13 = VAND(t13, limb_mask);
+    t14 = VAND(t14, limb_mask);
+
+    // Output result
+    res[0] = t0;
+    res[1] = t1;
+    res[2] = t2;
+    res[3] = t3;
+    res[4] = t4;
+    res[5] = t5;
+    res[6] = t6;
+    res[7] = t7;
+    res[8] = t8;
+    res[9] = t9;
+    res[10] = t10;
+    res[11] = t11;
+    res[12] = t12;
+    res[13] = t13;
+    res[14] = t14;
+    res[15] = t15;
+}
+
 // Computes res = a + p - b without any carry propagation or conditional masks
 void mp_add_p_sub_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
