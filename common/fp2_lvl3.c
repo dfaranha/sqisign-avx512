@@ -174,20 +174,26 @@ void fp2_neg_4x1x2(__m512i* res, __m512i* a)
 
 void fp2_mul_4x1x2(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i s1[4], s2[4], t1[4], t2[4], t3[4];
-    fp_add_4x2(s1, a, a+4);
-    fp_add_4x2(s2, b, b+4);
-    fp_mul_4x2(t1, a, b);
-    fp_mul_4x2(t2, a+4, b+4);
-    fp_mul_4x2(t3, s1, s2);
-    fp_sub_4x2(t3, t3, t1);
-    fp_sub_4x2(res+4, t3, t2);
-    fp_sub_4x2(res, t1, t2);
+    __m512i s1[4], s2[4], t1[13], t2[13], t3[13];
+    mp_add_4x2(s1, a, a+4);
+    mp_add_4x2(s2, b, b+4);
+    mp_mul_4x2(t1, a, b);
+    mp_mul_4x2(t2, a+4, b+4);
+    mp_mul_4x2(t3, s1, s2);
+    mp_dblsubx2_4x2(t3, t1, t2);
+    mp_subx2_4x2(t1, t2);
+    rdc_4x2(res+4, t3);
+    rdc_4x2(res, t1);
 }
 
 void fp2_sqr_4x1x2(__m512i* res, __m512i* a)
 {
-    fp2_mul_4x1x2(res, a, a);
+    __m512i s1[4], s2[4], s3[4];
+    mp_add_4x2(s1, a, a+4);
+    mp_add_p_sub_4x2(s2, a, a+4);
+    mp_add_4x2(s3, a, a);
+    fp_mul_4x2(res, s1, s2);
+    fp_mul_4x2(res+4, s3, a+4);
 }
  
 void fp2_tomont_4x1x2(__m512i* res, __m512i* a)

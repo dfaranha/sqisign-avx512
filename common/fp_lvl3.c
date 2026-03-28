@@ -2051,6 +2051,87 @@ void mp_mixaddsubx2_4x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add
     res[11] = t11;
 }
 
+// Double-length multiprecision subtraction res = res - a - b, no correction
+void mp_dblsubx2_4x2(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11;
+    __m512i limb_mask = VSETALL(LIMB_MASK);
+
+    t0 = VSUB(res[0], a[0]);
+    t1 = VSUB(res[1], a[1]);
+    t2 = VSUB(res[2], a[2]);
+    t3 = VSUB(res[3], a[3]);
+    t4 = VSUB(res[4], a[4]);
+    t5 = VSUB(res[5], a[5]);
+    t6 = VSUB(res[6], a[6]);
+    t7 = VSUB(res[7], a[7]);
+    t8 = VSUB(res[8], a[8]);
+    t9 = VSUB(res[9], a[9]);
+    t10 = VSUB(res[10], a[10]);
+    t11 = VSUB(res[11], a[11]);
+
+    t0 = VSUB(t0, b[0]);
+    t1 = VSUB(t1, b[1]);
+    t2 = VSUB(t2, b[2]);
+    t3 = VSUB(t3, b[3]);
+    t4 = VSUB(t4, b[4]);
+    t5 = VSUB(t5, b[5]);
+    t6 = VSUB(t6, b[6]);
+    t7 = VSUB(t7, b[7]);
+    t8 = VSUB(t8, b[8]);
+    t9 = VSUB(t9, b[9]);
+    t10 = VSUB(t10, b[10]);
+    t11 = VSUB(t11, b[11]);
+
+    // Output result
+    res[0] = t0;
+    res[1] = t1;
+    res[2] = t2;
+    res[3] = t3;
+    res[4] = t4;
+    res[5] = t5;
+    res[6] = t6;
+    res[7] = t7;
+    res[8] = t8;
+    res[9] = t9;
+    res[10] = t10;
+    res[11] = t11;
+}
+
+// Double-length multiprecision subtraction res = res - a
+void mp_subx2_4x2(__m512i* res, __m512i* a)
+{
+    __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11;
+    __m512i limb_mask = VSETALL(LIMB_MASK);
+
+    t0 = VSUB(res[0], a[0]);
+    t1 = VSUB(res[1], a[1]);
+    t2 = VSUB(res[2], a[2]);
+    t3 = VSUB(res[3], a[3]);
+    t4 = VSUB(res[4], a[4]);
+    t5 = VSUB(res[5], a[5]);
+    t6 = VSUB(res[6], a[6]);
+    t7 = VSUB(res[7], a[7]);
+    t8 = VSUB(res[8], a[8]);
+    t9 = VSUB(res[9], a[9]);
+    t10 = VSUB(res[10], a[10]);
+    t11 = VSUB(res[11], a[11]);
+
+    // Output result
+    res[0] = t0;
+    res[1] = t1;
+    res[2] = t2;
+    res[3] = t3;
+    res[4] = t4;
+    res[5] = t5;
+    res[6] = t6;
+    res[7] = t7;
+    res[8] = t8;
+    res[9] = t9;
+    res[10] = t10;
+    res[11] = t11;
+}
+
 void mp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t[12];

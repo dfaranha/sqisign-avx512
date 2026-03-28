@@ -214,6 +214,8 @@ void fp_neg_4x2(__m512i* res, __m512i* a);
 void mp_add_4x2(__m512i* res, __m512i* a, __m512i* b);
 void mp_add_p_sub_4x2(__m512i* res, __m512i* a, __m512i* b);
 void mp_mixaddsubx2_4x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
+void mp_dblsubx2_4x2(__m512i* res, __m512i* a, __m512i* b);
+void mp_subx2_4x2(__m512i* res, __m512i* a);
 void mp_mul_4x2(__m512i* res, __m512i* a, __m512i* b);
 void rdc_4x2(__m512i* res, __m512i* a);
 
