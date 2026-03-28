@@ -1469,6 +1469,74 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
     rdc_8x1(res, t);
 }
 
+// Montgomery reduction with R = 2^(9*48), loop-based.
+// Doesn't require carry propagation before being called.
+void rdc_loop_8x1(__m512i* res, __m512i* a)
+{
+    __m512i zero = VZERO();
+    __m512i one = VSETALL(1);
+    __m512i limb_mask = VSETALL(LIMB_MASK);
+    __m512i cnst = VSETALL((uint64_t)65 << 40);
+    __m512i carry, hi;
+    __mmask8 msb_mask;
+
+    // p' = -p^{-1} mod 2^48 = 1, so u_i = a[i] mod 2^48.
+    // A += u_i * p * 2^(48*i), where p = 65*2^376 - 1.
+    // The -u_i subtraction from limb i is skipped since limbs 0-8 are discarded.
+    for (int i = 0; i < 9; i++) {
+        carry = VSRA(a[i], LIMB_LEN);
+        a[i] = VAND(a[i], limb_mask);  // u_i
+        a[i+1] = VADD(a[i+1], carry);
+
+        // Add u_i * (65 << 40) to limb i+7, overflow to limb i+8
+        a[i+7] = VMULADDL(a[i+7], a[i], cnst);
+        hi = VMULADDH(zero, a[i], cnst);
+        a[i+8] = VADD(a[i+8], VSL(hi, LIMB_ALIGN));
+    }
+
+    // Carry propagation for result in a[9]..a[15], a16
+    a[10] = VADD(a[10], VSRA(a[9], LIMB_LEN));
+    a[11] = VADD(a[11], VSRA(a[10], LIMB_LEN));
+    a[12] = VADD(a[12], VSRA(a[11], LIMB_LEN));
+    a[13] = VADD(a[13], VSRA(a[12], LIMB_LEN));
+    a[14] = VADD(a[14], VSRA(a[13], LIMB_LEN));
+    a[15] = VADD(a[15], VSRA(a[14], LIMB_LEN));
+    a[16] = VADD(a[16], VSRA(a[15], LIMB_LEN));
+    a[9] = VAND(a[9], limb_mask);
+    a[10] = VAND(a[10], limb_mask);
+    a[11] = VAND(a[11], limb_mask);
+    a[12] = VAND(a[12], limb_mask);
+    a[13] = VAND(a[13], limb_mask);
+    a[14] = VAND(a[14], limb_mask);
+    a[15] = VAND(a[15], limb_mask);
+
+    // Final correction: 384 -> 383 bits
+    // If bit 383 is set, subtract (p+1) and add 1
+    hi = VSL(a[16], 16);  // bit 47 of limb 7 -> bit 63
+    msb_mask = VSIGN(hi);
+    a[16] = VSUBMASK(a[16], msb_mask, a[16], cnst);
+    a[9] = VADDMASK(a[9], msb_mask, a[9], one);
+
+    res[0] = a[9];
+    res[1] = a[10];
+    res[2] = a[11];
+    res[3] = a[12];
+    res[4] = a[13];
+    res[5] = a[14];
+    res[6] = a[15];
+    res[7] = a[16];
+}
+
+// Simplified fp_mul — no carry propagation between multiplication and reduction
+// but it is 2 cycles slower
+void fp_mul_loop_8x1(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t[17];
+    mp_mul_8x1_karat(t, a, b);
+    t[16] = VZERO();
+    rdc_loop_8x1(res, t);
+}
+
 void fp_8x1_to_unvectorized(fp_t* res, __m512i* src)
 {
     fp_t coeffs[8];
