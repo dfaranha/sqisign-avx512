@@ -196,7 +196,7 @@ bool test_fp2(int iterations)
     // Using Montgomery constant
     __m512i vR[16];
     fp2_setzero_8x1x1(vR);
-    fp_duplicate_8x1(vR, R_8x1);
+    fp_duplicate_8x1(vR, R);
 
     for(int i = 0; i < iterations && passed != 0; i++) {
         rand_fp2_8x1x1(a);
@@ -817,7 +817,7 @@ bool test_fp2(int iterations)
     // Using Montgomery constant
     fp2_setzero_4x2x1(vR);
     for(int i = 0; i < 8; i++) {
-        vR[i] = VSET(R_8x1[i], 0, R_8x1[i], 0, R_8x1[i], 0, R_8x1[i], 0);
+        vR[i] = VSET(R[i], 0, R[i], 0, R[i], 0, R[i], 0);
     }
 
     for(int i = 0; i < iterations && passed != 0; i++) {
@@ -1457,7 +1457,7 @@ bool test_fp2(int iterations)
     // Using Montgomery constant
     fp2_setzero_2x4x1(vR);
     for(int i = 0; i < 8; i++) {
-        vR[i] = VSET(R_8x1[i], 0, 0, 0, R_8x1[i], 0, 0, 0);
+        vR[i] = VSET(R[i], 0, 0, 0, R[i], 0, 0, 0);
     }
 
     for(int i = 0; i < iterations && passed != 0; i++) {

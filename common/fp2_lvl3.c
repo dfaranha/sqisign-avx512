@@ -385,15 +385,16 @@ void fp2_mixaddsub_2x2x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 ad
 
 void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i s1[4], s2[4], s3[4], t1[4], t2[4];
+    __m512i t0[13], t1[13];
     for(int i = 0; i < 4; i++) {
-        s1[i] = VPERM256(a[i], 0x44); // a0, a0
-        s2[i] = VPERM256(a[i], 0xee); // a1, a1
-        s3[i] = VPERM256(b[i], 0x4e); // b1, b0
+        t0[i] = VPERM256(a[i], 0x44); // a0, a0
+        t1[i] = VPERM256(a[i], 0xee); // a1, a1
+        t1[i+4] = VPERM256(b[i], 0x4e); // b1, b0
     }
-    fp_mul_4x2(t1, s1, b);
-    fp_mul_4x2(t2, s2, s3);
-    fp_mixaddsub_4x2(res, t1, t2, 0xcc);
+    mp_mul_4x2(t0, t0, b);
+    mp_mul_4x2(t1, t1, t1+4);
+    mp_mixaddsubx2_4x2(t0, t0, t1, 0xcc);
+    rdc_4x2(res, t0);
 }
 
 void fp2_sqr_2x2x2(__m512i* res, __m512i* a)
@@ -403,11 +404,11 @@ void fp2_sqr_2x2x2(__m512i* res, __m512i* a)
         t0[i] = VPERM256(a[i], 0x44); // a0, a0
         t1[i] = VPERM256(a[i], 0x4e); // a1, a0
     }
-    fp_add_4x2(t0, t0, t1); // a0 + a1, a0 + a0
+    mp_add_4x2(t0, t0, t1); // a0 + a1, a0 + a0
     for (int i = 0; i < 4; i++) {
         t1[i] = VPERM256MASKZ(0x33, a[i], 0x4e); // a1, 0
     }
-    fp_sub_4x2(t1, a, t1); // a0 - a1, a1
+    mp_add_p_sub_4x2(t1, a, t1); // a0 - a1, a1
     fp_mul_4x2(res, t0, t1);
 }
  

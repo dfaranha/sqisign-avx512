@@ -252,8 +252,8 @@ bool test_fp(int iterations)
     // Multiplication tests
     // Using Montgomery constant
     __m512i vR[8], vR2[8];
-    fp_duplicate_8x1(vR, R_8x1);
-    fp_duplicate_8x1(vR2, R2_8x1);
+    fp_duplicate_8x1(vR, R);
+    fp_duplicate_8x1(vR2, R2);
 
     // Montgomery representation of 1 is R mod p
     fp_tomont_8x1(d, one);
