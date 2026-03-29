@@ -299,4 +299,61 @@ bool ec_ladder_3pt_1x2x2x2(__m512i* res, __m512i* A24, __m512i* basis, const dig
  */
 bool ec_ladder_3pt_normA_1x2x2x2(__m512i* res, __m512i* A, __m512i* basis, const digit_t *m);
 
+/**
+ *  @param scalarP The scalar for P as an array of NWORDS_ORDER digits
+ *  @param scalarQ The scalar for Q as an array of NWORDS_ORDER digits
+ *  @param A24 The A24 of the curve in 2x2x2
+ *  @param basis The basis P, Q stored with three points x(P), x(Q), x(P-Q) as consecutive 2x2x2's
+ *  @param res Output: [scalarP]*P + [scalarQ]*Q in 2x2x2
+ */
+bool ec_biscalar_mul_1x2x2x2(
+    __m512i* res, 
+    const digit_t *scalarP,
+    const digit_t *scalarQ,
+    __m512i* A24,
+    __m512i* basis
+);
+
+/**
+ *  @param scalarP The scalar for P as an array of NWORDS_ORDER digits
+ *  @param scalarQ The scalar for Q as an array of NWORDS_ORDER digits
+ *  @param A The normalized A coefficient of the curve. Stored in a 2x2x2 where the second component is ignored.
+ *  @param A24 The A24 point of the curve in 2x2x2
+ *  @param basis The basis P, Q stored with three points x(P), x(Q), x(P-Q) as consecutive 2x2x2's
+ *  @param res Output: [scalarP]*P + [scalarQ]*Q in 2x2x2
+ */
+bool ec_biscalar_mul_normA_1x2x2x2(
+    __m512i* res, 
+    const digit_t *scalarP,
+    const digit_t *scalarQ,
+    __m512i* A,
+    __m512i* A24,
+    __m512i* basis
+);
+
+/**
+ * Computes res1 = mat[0,0]*P + mat[1,0]*Q and res2 = mat[0,1]*P + mat[1,1]*Q
+ */
+bool ec_biscalar_mul_pair_1x2x2x2(
+    __m512i* res1,
+    __m512i* res2,
+    scalar_mtx_2x2_t* mat,
+    __m512i* A24,
+    __m512i* basis
+);
+
+// Uses the normalized A-coefficient.
+bool ec_biscalar_mul_pair_normA_1x2x2x2(
+    __m512i* res1,
+    __m512i* res2,
+    scalar_mtx_2x2_t *mat,
+    __m512i* A,
+    __m512i* A24,
+    __m512i* basis
+);
+
+// Debugging functions
+bool test_point_order_twof_1x2x2x2(__m512i* P, __m512i* A24, unsigned int f);
+bool test_basis_order_twof_1x2x2x2(__m512i* B, __m512i* A24, unsigned int f);
+
 #endif

@@ -1,6 +1,5 @@
 #include "bench.h"
 #include "verif.h"
-#include "verif_2x2x2.h"
 
 #include <stdio.h>
 
@@ -45,7 +44,6 @@ void bench_verif(int iterations) {
     FILE                *fp_rsp;
     
     uint64_t            cycles[N_RUNS];
-    uint64_t            cycles_2x2x2[N_RUNS];
     uint64_t            start, end, tmp, i=0;
 
     sprintf(fn_rsp, "assets/PQCsignKAT_%d_%s.rsp", CRYPTO_SECRETKEYBYTES, CRYPTO_ALGNAME);
@@ -104,14 +102,6 @@ void bench_verif(int iterations) {
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
 
-        start = cpucycles();
-        for (int j = 0; j < iterations; j++) {
-            tmp += verify_2x2x2(m, mlen, sm_rsp, CRYPTO_BYTES, pk_rsp);
-        }
-        end = cpucycles();
-        cycles_2x2x2[i] = (end - start)/iterations;
-        i += 1;
-
         free(sm_rsp);
 
         if (i == N_RUNS) 
@@ -125,9 +115,6 @@ void bench_verif(int iterations) {
 
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("sqisign verif", cycles[(N_RUNS/2) -1], tmp);
-
-    qsort(cycles_2x2x2, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("sqisign verif 2x2x2", cycles_2x2x2[(N_RUNS/2) -1], tmp);
 }
 
 //

@@ -5,7 +5,6 @@
 #include <ctype.h>
 
 #include "verif.h"
-#include "verif_2x2x2.h"
 #include "test.h"
 
 // lvl 3 constants
@@ -103,11 +102,6 @@ static int test_verification_kat_single(int cnt) {
 
         if (!verify(m, mlen, sm_rsp, CRYPTO_BYTES, pk_rsp)) {
             printf("crypto_sign_open failed\n");
-            return KAT_CRYPTO_FAILURE;
-        }
-
-        if (!verify_2x2x2(m, mlen, sm_rsp, CRYPTO_BYTES, pk_rsp)) {
-            printf("crypto_sign_open 2x2x2 failed\n");
             return KAT_CRYPTO_FAILURE;
         }
 

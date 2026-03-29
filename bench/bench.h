@@ -6,6 +6,7 @@
 void bench_fp(int iterations);
 void bench_fp2(int iterations);
 void bench_ec(int iterations);
+void bench_1d_isog(int iterations);
 void bench_theta(int iterations);
 void bench_verif();
 
