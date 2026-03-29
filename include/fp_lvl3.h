@@ -276,8 +276,15 @@ void fp_sqr_2x4(__m512i* res, __m512i* a);
 void fp_tomont_2x4(__m512i* res, __m512i* a);
 void fp_frommont_2x4(__m512i* res, __m512i* a);
 
+void fp_48_to_64_bit_limbs_2x4(fp_t* res, __m512i* src);
+void fp_64_to_48_bit_limbs_2x4(__m512i* res, fp_t* src);
+
+void fp_2x4_to_unvectorized(fp_t* res, __m512i* src);
+void fp_unvectorized_to_2x4(__m512i* res, fp_t* src);
+
 void fp_sqrt_2x4(__m512i* res, __m512i* a);
 void fp_exp3div4_2x4(__m512i* res, __m512i* a);
+void fp_inv_2x4(__m512i* res, __m512i* a);
 
 void fp_4x2_to_2x4(__m512i* res1, __m512i* res2, __m512i* src);
 void fp_2x4_to_4x2(__m512i* res, __m512i* src1, __m512i* src2);

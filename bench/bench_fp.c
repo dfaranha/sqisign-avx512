@@ -189,4 +189,18 @@ void bench_fp(int iterations)
     tmp = fp_is_equal_2x4(c, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("sqrt", cycles[(N_RUNS/2) -1], tmp);
+
+    // Inverse
+    iterations = 20;
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int j = 0; j < iterations; j++) {
+            fp_inv_2x4(c, a);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp_is_equal_2x4(c, a);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("inv", cycles[(N_RUNS/2) -1], tmp);
 }

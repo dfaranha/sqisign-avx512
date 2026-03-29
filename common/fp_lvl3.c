@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdint.h>
 #include "fp_lvl3.h"
 #include "utils.h"
 
@@ -37,26 +38,36 @@ void fp_duplicate_8x1(__m512i* res, const uint64_t* a)
     }
 }
 
-// Assumes that elements are fully reduced mod p, so there is only one representative.
 int fp_is_equal_8x1(__m512i* a, __m512i* b)
 {
     __mmask8 mask, acc;
+    __m512i zero[8], norm_a[8], norm_b[8];
+    fp_setzero_8x1(zero);
+
+    // Normalize both to [0, p-1] by adding zero
+    fp_add_8x1(norm_a, a, zero);
+    fp_add_8x1(norm_b, b, zero);
+
     acc = 0xFF;
     for(int i = 0; i < 8; i++){
-        mask = VCMPEQ(a[i], b[i]);
+        mask = VCMPEQ(norm_a[i], norm_b[i]);
         acc = acc & mask;
     }
     return acc;
 }
 
-// Assumes that elements are fully reduced mod p, so there is only one representative.
 int fp_is_zero_8x1(__m512i* a)
 {
     __mmask8 mask, acc;
-    __m512i zero = VZERO();
+    __m512i zero[8], norm_a[8];
+    fp_setzero_8x1(zero);
+
+    // Normalize a to [0, p-1] by adding zero
+    fp_add_8x1(norm_a, a, zero);
+
     acc = 0xFF;
     for(int i = 0; i < 8; i++){
-        mask = VCMPEQ(a[i], zero);
+        mask = VCMPEQ(norm_a[i], zero[0]);
         acc = acc & mask;
     }
     return acc;
@@ -1751,38 +1762,48 @@ void fp_duplicate_4x2(__m512i* res, const uint64_t* a)
     }
 }
 
-// Assumes that elements are fully reduced mod p, so there is only one representative.
 int fp_is_equal_4x2(__m512i* a, __m512i* b)
 {
-    __mmask8 mask, acc, res;
-    acc = 0xff;
+    __m512i zero[4], norm_a[4], norm_b[4];
+    fp_setzero_4x2(zero);
+
+    // Normalize both to [0, p-1] by adding zero
+    fp_add_4x2(norm_a, a, zero);
+    fp_add_4x2(norm_b, b, zero);
+
+    __mmask8 mask, acc = 0xff;
     for(int i = 0; i < 4; i++){
-        mask = VCMPEQ(a[i], b[i]);
+        mask = VCMPEQ(norm_a[i], norm_b[i]); 
         acc = acc & mask;
     }
-    // a = b iff both halfs are equal
-    res = (acc & (acc >> 1) & 0x1) 
-        | ((acc >> 1) & (acc >> 2) & 0x2) 
-        | ((acc >> 2) & (acc >> 3) & 0x4) 
-        | ((acc >> 3) & (acc >> 4) & 0x8);
+    
+    // a = 0 iff both halves are equal
+    int res = (acc & (acc >> 1) & 0x1) 
+            | ((acc >> 1) & (acc >> 2) & 0x2) 
+            | ((acc >> 2) & (acc >> 3) & 0x4) 
+            | ((acc >> 3) & (acc >> 4) & 0x8);
     return res;
 }
 
-// Assumes that elements are fully reduced mod p, so there is only one representative.
 int fp_is_zero_4x2(__m512i* a)
 {
-    __m512i zero = VZERO();
-    __mmask8 mask, acc, res;
-    acc = 0xff;
+    __m512i zero[4], norm_a[4];
+    fp_setzero_4x2(zero);
+
+    // Normalize a to [0, p-1] by adding zero
+    fp_add_4x2(norm_a, a, zero);
+
+    __mmask8 mask, acc = 0xff;
     for(int i = 0; i < 4; i++){
-        mask = VCMPEQ(a[i], zero);
+        mask = VCMPEQ(norm_a[i], zero[0]); 
         acc = acc & mask;
     }
-    // a = b iff both halfs are equal
-    res = (acc & (acc >> 1) & 0x1) 
-        | ((acc >> 1) & (acc >> 2) & 0x2) 
-        | ((acc >> 2) & (acc >> 3) & 0x4) 
-        | ((acc >> 3) & (acc >> 4) & 0x8);
+    
+    // a = 0 iff both halves are equal
+    int res = (acc & (acc >> 1) & 0x1) 
+            | ((acc >> 1) & (acc >> 2) & 0x2) 
+            | ((acc >> 2) & (acc >> 3) & 0x4) 
+            | ((acc >> 3) & (acc >> 4) & 0x8);
     return res;
 }
 
@@ -2536,22 +2557,33 @@ void fp_duplicate_2x4(__m512i* res, const uint64_t* a)
     }
 }
 
-// Assumes that elements are fully reduced mod p, so there is only one representative.
 int fp_is_equal_2x4(__m512i* a, __m512i* b)
 {
-    __mmask8 acc = VCMPEQ(a[0], b[0]) & VCMPEQ(a[1], b[1]);
+    __m512i zero[2], norm_a[2], norm_b[2];
+    fp_setzero_2x4(zero);
+
+    // Normalize both to [0, p-1] by adding zero
+    fp_add_2x4(norm_a, a, zero);
+    fp_add_2x4(norm_b, b, zero);
+
+    __mmask8 acc = VCMPEQ(norm_a[0], norm_b[0]) & VCMPEQ(norm_a[1], norm_b[1]);
     
     return (acc & (acc >> 1) & (acc >> 2) & (acc >> 3) & 0x1) 
-        | ((acc >> 3) & (acc >> 4) & (acc >> 5) & (acc >> 6) & 0x2);
+         | ((acc >> 3) & (acc >> 4) & (acc >> 5) & (acc >> 6) & 0x2);
 }
 
-// Assumes that elements are fully reduced mod p, so there is only one representative.
 int fp_is_zero_2x4(__m512i* a)
 {
-    __mmask8 acc = VCMPEQ(a[0], VZERO()) & VCMPEQ(a[1], VZERO());
+    __m512i zero[2], norm_a[2];
+    fp_setzero_2x4(zero);
+
+    // Normalize a to [0, p-1] by adding zero
+    fp_add_2x4(norm_a, a, zero);
+
+    __mmask8 acc = VCMPEQ(norm_a[0], zero[0]) & VCMPEQ(norm_a[1], zero[1]);
     
     return (acc & (acc >> 1) & (acc >> 2) & (acc >> 3) & 0x1) 
-        | ((acc >> 3) & (acc >> 4) & (acc >> 5) & (acc >> 6) & 0x2);
+         | ((acc >> 3) & (acc >> 4) & (acc >> 5) & (acc >> 6) & 0x2);
 }
 
 void fp_select_2x4(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)
@@ -3101,6 +3133,43 @@ void fp_exp3div4_2x4(__m512i* res, __m512i* a)
     fp_mul_2x4(res, t1, z64);
 }
 
+// 2.5k slower than sqrt_2x4, 58k cycles
+// void fp_inv_2x4(__m512i* res, __m512i* a)
+// {
+//     __m512i t[2];
+
+//     // Compute a^((p-3)/4)
+//     fp_exp3div4_2x4(t, a);
+
+//     // Square twice to compute a^(p-3)
+//     fp_sqr_2x4(t, t);
+//     fp_sqr_2x4(t, t);
+
+//     // Multiply by a to compute a^(p-2) == a^(-1) mod p
+//     fp_mul_2x4(res, t, a);
+// }
+void fp_inv_2x4(__m512i* res, __m512i* a)
+{
+    fp_t t[2];
+    __m512i r[2];
+    __m512i idx = VSET(4, 5, 6, 7, 0, 1, 2, 3);
+    
+    // r = ((ab)^-1, (ab)^-1)
+    fp_2x4_to_unvectorized(t, a);
+    fp_mul(t, t, t+1);
+    fp_inv(t);
+    fp_copy(t+1, t);
+    fp_unvectorized_to_2x4(r, t);
+    
+    // r = (b^-1, a^-1)
+    fp_mul_2x4(r, r, a);
+
+    res[0] = VPERM512(idx, r[0]);
+    res[1] = VPERM512(idx, r[1]);
+
+
+}
+
 // Given src=(a, b, c, d), it computes res1 = (a, c) and res2 = (b, d)
 // We choose this interleaving pattern for the Fp2 2x2x2 sqrt,
 // where res1 = re and res2 = im
@@ -3125,4 +3194,98 @@ void fp_2x4_to_4x2(__m512i* res, __m512i* src1, __m512i* src2)
         res[i] = VBLENDPERM(idx1, s, t);
         res[i+2] = VBLENDPERM(idx2, s, t);
     }
+}
+
+void fp_48_to_64_bit_limbs_2x4(fp_t* res, __m512i* src)
+{
+    uint64_t t_even[8], t_odd[8];
+    VSTORE(t_even, src[0]); // Limbs 0, 2, 4, 6
+    VSTORE(t_odd, src[1]);  // Limbs 1, 3, 5, 7
+
+    for (int i = 0; i < 2; i++) {
+        int base = i * 4; // Element A starts at lane 0, Element B at lane 4
+        
+        uint64_t v0 = t_even[base + 0];
+        uint64_t v2 = t_even[base + 1];
+        uint64_t v4 = t_even[base + 2];
+        uint64_t v6 = t_even[base + 3];
+
+        uint64_t v1 = t_odd[base + 0];
+        uint64_t v3 = t_odd[base + 1];
+        uint64_t v5 = t_odd[base + 2];
+        uint64_t v7 = t_odd[base + 3];
+
+        // Lower 192 bits (Limbs 0, 1, 2, 3) mapped to 64-bit words 0, 1, 2
+        (res+i)->arr[0] = (v0 & LIMB_MASK) | ((v1 & 0xffff) << 48);
+        (res+i)->arr[1] = ((v1 >> 16) & 0xffffffff) | ((v2 & 0xffffffff) << 32);
+        (res+i)->arr[2] = ((v2 >> 32) & 0xffff) | ((v3 & LIMB_MASK) << 16);
+
+        // Upper 192 bits (Limbs 4, 5, 6, 7) mapped to 64-bit words 3, 4, 5
+        (res+i)->arr[3] = (v4 & LIMB_MASK) | ((v5 & 0xffff) << 48);
+        (res+i)->arr[4] = ((v5 >> 16) & 0xffffffff) | ((v6 & 0xffffffff) << 32);
+        (res+i)->arr[5] = ((v6 >> 32) & 0xffff) | ((v7 & LIMB_MASK) << 16);
+    }
+}
+
+void fp_64_to_48_bit_limbs_2x4(__m512i* res, fp_t* src)
+{
+    uint64_t t_even[8], t_odd[8];
+
+    for (int i = 0; i < 2; i++) {
+        int base = i * 4;
+        
+        uint64_t u0 = (src+i)->arr[0];
+        uint64_t u1 = (src+i)->arr[1];
+        uint64_t u2 = (src+i)->arr[2];
+        uint64_t u3 = (src+i)->arr[3];
+        uint64_t u4 = (src+i)->arr[4];
+        uint64_t u5 = (src+i)->arr[5];
+
+        // Unpack Lower 192 bits
+        t_even[base + 0] = u0 & LIMB_MASK;
+        t_odd[base + 0]  = ((u0 >> 48) & 0xffff) | ((u1 & 0xffffffff) << 16);
+        t_even[base + 1] = ((u1 >> 32) & 0xffffffff) | ((u2 & 0xffff) << 32);
+        t_odd[base + 1]  = (u2 >> 16) & LIMB_MASK;
+
+        // Unpack Upper 192 bits
+        t_even[base + 2] = u3 & LIMB_MASK;
+        t_odd[base + 2]  = ((u3 >> 48) & 0xffff) | ((u4 & 0xffffffff) << 16);
+        t_even[base + 3] = ((u4 >> 32) & 0xffffffff) | ((u5 & 0xffff) << 32);
+        t_odd[base + 3]  = (u5 >> 16) & LIMB_MASK;
+    }
+
+    // Since your VSET macro assigns from Right-to-Left (A is Lane 0, H is Lane 7),
+    // passing elements 0 to 7 iteratively places them perfectly.
+    res[0] = VSET(t_even[0], t_even[1], t_even[2], t_even[3], 
+                  t_even[4], t_even[5], t_even[6], t_even[7]);
+    
+    res[1] = VSET(t_odd[0], t_odd[1], t_odd[2], t_odd[3], 
+                  t_odd[4], t_odd[5], t_odd[6], t_odd[7]);
+}
+
+void fp_2x4_to_unvectorized(fp_t* res, __m512i* src)
+{
+    fp_t coeffs[2];
+    __m512i src_frommont[2];
+
+    fp_frommont_2x4(src_frommont, src);
+    fp_48_to_64_bit_limbs_2x4(coeffs, src_frommont);
+
+    // Convert to Montgomery representation (via the unvectorized API)
+    for (int i = 0; i < 2; i++) {
+        fp_decode(res+i, (const void *) coeffs[i].arr);
+    }
+}
+
+void fp_unvectorized_to_2x4(__m512i* res, fp_t* src)
+{
+    fp_t coeffs[2];
+
+    // Convert from Montgomery representation (via the unvectorized API)
+    for (int i = 0; i < 2; i++) {
+        fp_encode(coeffs[i].arr, src+i);
+    }
+
+    fp_64_to_48_bit_limbs_2x4(res, coeffs);
+    fp_tomont_2x4(res, res);
 }

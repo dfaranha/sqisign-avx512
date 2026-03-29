@@ -300,6 +300,19 @@ void bench_fp2(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("sqrt", cycles[(N_RUNS/2) -1], tmp);
 
+    // Inverse
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int j = 0; j < 20; j++) {
+            fp2_inv_2x2x2(c, a);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/20;
+    }
+    tmp = fp2_is_equal_2x2x2(c, a);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("inv", cycles[(N_RUNS/2) -1], tmp);
+
     printf("Fp2 lvl3 2x4x1 benchmarks:\n");
 
     // Addition

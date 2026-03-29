@@ -1241,6 +1241,27 @@ bool test_fp(int iterations)
         return false;
     }
 
+    // Inverse
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_2x4(a);
+
+        if (fp_is_zero_2x4(a))
+            continue;
+        
+        fp_inv_2x4(b, a);
+        fp_mul_2x4(b, b, a);
+        fp_tomont_2x4(c, one);
+
+        if (fp_is_equal_2x4(b, c) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("inv", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     for (int i = 0; i < iterations; i++) {
         rand_fp_4x2(a);
 

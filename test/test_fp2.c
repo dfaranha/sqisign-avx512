@@ -1289,6 +1289,29 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Inverse
+    fp2_setzero_2x2x2(one);
+    one[0] = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    fp2_tomont_2x2x2(c, one);
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_2x2x2(a);
+
+        if (fp2_is_zero_2x2x2(a))
+            continue;
+        
+        fp2_inv_2x2x2(b, a);
+        fp2_mul_2x2x2(b, b, a);
+
+        if (fp2_is_equal_2x2x2(b, c) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("inv", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     printf("Fp2 lvl3 2x4x1 tests:\n");
 
     // Equality test

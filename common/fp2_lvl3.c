@@ -344,29 +344,14 @@ void fp2_copy_2x2x2(__m512i* res, __m512i* a)
 
 int fp2_is_equal_2x2x2(__m512i* a, __m512i* b)
 {
-    __mmask8 mask, acc, res;
-    acc = 0xff;
-    for(int i = 0; i < 4; i++){
-        mask = VCMPEQ(a[i], b[i]);
-        acc = acc & mask;
-    }
-    res = (acc & (acc >> 1) & (acc >> 2) & (acc >> 3) & 0x1) 
-        | ((acc >> 3) & (acc >> 4) & (acc >> 5) & (acc >> 6) & 0x2);
-    return res;
+    int mask = fp_is_equal_4x2(a, b);
+    return (mask & (mask >> 1) & 0x1 ) | ((mask >> 1) & (mask >> 2) & 0x2); 
 }
 
 int fp2_is_zero_2x2x2(__m512i* a)
 {
-    __m512i zero = VZERO();
-    __mmask8 mask, acc, res;
-    acc = 0xff;
-    for(int i = 0; i < 4; i++){
-        mask = VCMPEQ(a[i], zero);
-        acc = acc & mask;
-    }
-    res = (acc & (acc >> 1) & (acc >> 2) & (acc >> 3) & 0x1) 
-        | ((acc >> 3) & (acc >> 4) & (acc >> 5) & (acc >> 6) & 0x2);
-    return res;
+    int mask = fp_is_zero_4x2(a);
+    return (mask & (mask >> 1) & 0x1 ) | ((mask >> 1) & (mask >> 2) & 0x2); 
 }
 
 void fp2_add_2x2x2(__m512i* res, __m512i* a, __m512i* b)
@@ -455,6 +440,22 @@ void fp2_sqrt_2x2x2(__m512i* res, __m512i* a)
     fp_copy_2x4(t0, x1);
     fp_select_2x4(re, t0, x0, is_zero);
     fp_select_2x4(im, t1, x1, is_zero);
+
+    fp_2x4_to_4x2(res, re, im);
+}
+
+void fp2_inv_2x2x2(__m512i* res, __m512i* a)
+{
+    __m512i re[2], im[2], t0[2], t1[2];
+    fp_4x2_to_2x4(re, im, a);
+
+    fp_sqr_2x4(t0, re);
+    fp_sqr_2x4(t1, im);
+    fp_add_2x4(t0, t0, t1);
+    fp_inv_2x4(t0, t0); // batched unvectorized impl
+    fp_mul_2x4(re, re, t0);
+    fp_mul_2x4(im, im, t0);
+    fp_neg_2x4(im, im);
 
     fp_2x4_to_4x2(res, re, im);
 }
