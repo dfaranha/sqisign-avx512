@@ -2554,6 +2554,15 @@ int fp_is_zero_2x4(__m512i* a)
         | ((acc >> 3) & (acc >> 4) & (acc >> 5) & (acc >> 6) & 0x2);
 }
 
+void fp_select_2x4(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)
+{
+    __mmask8 bit0 = s & 0x1, bit1 = (s >> 1) & 0x1;
+    __mmask8 mask = bit0 | (bit0 << 1) | (bit0 << 2) | (bit0 << 3) 
+                    | (bit1 << 4) | (bit1 << 5) | (bit1 << 6) | (bit1 << 7);
+    res[0] = VBLEND(mask, a0[0], a1[0]);
+    res[1] = VBLEND(mask, a0[1], a1[1]);
+}
+
 void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t0, t1, carry, sign_mask;
@@ -2976,7 +2985,10 @@ void fp_mul_2x4(__m512i* res, __m512i* a, __m512i* b)
 
 void fp_sqr_2x4(__m512i* res, __m512i* a)
 {
-    fp_mul_2x4(res, a, a);
+    __m512i t[17];
+
+    mp_mul_2x4(t, a, a);
+    rdc_2x4(res, t);
 }
 
 void fp_tomont_2x4(__m512i* res, __m512i* a)
@@ -2994,11 +3006,108 @@ void fp_frommont_2x4(__m512i* res, __m512i* a)
     fp_mul_2x4(res, a, one);
 }
 
-// Given src=(a, b, c, d), it computes res1 = (a, b) and res2 = (c, d)
+void fp_sqrt_2x4(__m512i* res, __m512i* a)
+{
+    // Candidate root is a^((q+1)/4), with (q+1)/4 = 65*2^374
+    __m512i t[2];
+
+    fp_sqr_2x4(t, a);
+    for (int i = 1; i < 6; i++) {
+    	fp_sqr_2x4(t, t);
+    }
+    fp_mul_2x4(t, t, a);
+    for (int i = 0; i < 373; i++) {
+    	fp_sqr_2x4(t, t);
+    }
+    fp_sqr_2x4(res, t);
+}
+
+void fp_exp3div4_2x4(__m512i* res, __m512i* a)
+{
+    //
+    // We optimise this by using the shape of the prime
+    // to avoid almost all multiplications:
+    //
+    // We write:
+    //     (p - 3) / 4 = (65*2^376 - 4) / 4
+    //                 = 65*2^374 - 1
+    //                 = 65*(2^374 - 1) + 64
+    // Then we first compute:
+    //     a374 = a**(2^374 - 1)
+    // Then from this we get the desired result as:
+    //     a**((p-3)/4) = a374**65 * a**64
+    // We can compute this with 13 multiplications and 383 squares.
+    __m512i z3[2], z64[2], t11[2], t0[2], t1[2];
+    // Compute a**3, a**4 and a**64
+    fp_sqr_2x4(z64, a);
+    fp_mul_2x4(z3, a, z64);
+    fp_sqr_2x4(z64, z64);
+    // Compute t11 = a^3 * a^4 = a**(2^3 - 1) = a**7
+    fp_mul_2x4(t11, z3, z64);
+    fp_sqr_2x4(z64, z64);
+    fp_sqr_2x4(z64, z64);
+    fp_sqr_2x4(z64, z64);
+    fp_sqr_2x4(z64, z64);
+    // Compute a**(2^4 - 1) = a**15
+    fp_sqr_2x4(t0, t11);
+    fp_mul_2x4(t1, a, t0);
+    // Compute a**(2^8 - 1)
+    fp_sqr_2x4(t0, t1);
+    for (int i = 1; i < 4; i++)
+        fp_sqr_2x4(t0, t0);
+    fp_mul_2x4(t1, t1, t0);
+    // Compute a**(2^11 - 1)
+    for (int i = 0; i < 3; i++)
+        fp_sqr_2x4(t1, t1);
+    fp_mul_2x4(t11, t11, t1);
+    // Compute a**(2^22 - 1)
+    fp_sqr_2x4(t0, t11);
+    for (int i = 1; i < 11; i++)
+        fp_sqr_2x4(t0, t0);
+    fp_mul_2x4(t1, t11, t0);
+    // Compute a**(2^44 - 1)
+    fp_sqr_2x4(t0, t1);
+    for (int i = 1; i < 22; i++)
+        fp_sqr_2x4(t0, t0);
+    fp_mul_2x4(t1, t1, t0);
+    // Compute a**(2^88 - 1)
+    fp_sqr_2x4(t0, t1);
+    for (int i = 1; i < 44; i++)
+        fp_sqr_2x4(t0, t0);
+    fp_mul_2x4(t1, t1, t0);
+    // Compute a**(2^176 - 1)'
+    fp_sqr_2x4(t0, t1);
+    for (int i = 1; i < 88; i++)
+        fp_sqr_2x4(t0, t0);
+    fp_mul_2x4(t1, t1, t0);
+    // Compute a**(2^187 - 1)
+    for (int i = 0; i < 11; i++)
+        fp_sqr_2x4(t1, t1);
+    fp_mul_2x4(t1, t1, t11);
+    // Compute a**(2^374 - 1)
+    fp_sqr_2x4(t0, t1);
+    for (int i = 1; i < 187; i++)
+        fp_sqr_2x4(t0, t0);
+    fp_mul_2x4(t1, t1, t0);
+    // Compute a**(65*(2^374 - 1))
+    fp_sqr_2x4(t0, t1);
+    fp_sqr_2x4(t0, t0);
+    fp_sqr_2x4(t0, t0);
+    fp_sqr_2x4(t0, t0);
+    fp_sqr_2x4(t0, t0);
+    fp_sqr_2x4(t0, t0);
+    fp_mul_2x4(t1, t1, t0);
+    // Compute a**(65*(2^374 - 1) + 64)
+    fp_mul_2x4(res, t1, z64);
+}
+
+// Given src=(a, b, c, d), it computes res1 = (a, c) and res2 = (b, d)
+// We choose this interleaving pattern for the Fp2 2x2x2 sqrt,
+// where res1 = re and res2 = im
 void fp_4x2_to_2x4(__m512i* res1, __m512i* res2, __m512i* src)
 {
-    __m512i idx1 = VSET(0, 8, 1, 9, 2, 10, 3, 11);
-    __m512i idx2 = VSET(4, 12, 5, 13, 6, 14, 7, 15);
+    __m512i idx1 = VSET(0, 8, 1, 9, 4, 12, 5, 13);
+    __m512i idx2 = VSET(2, 10, 3, 11, 6, 14, 7, 15);
     for (int i = 0; i < 2; i++) {
         __m512i s = src[i], t = src[i+2];
         res1[i] = VBLENDPERM(idx1, s, t);
@@ -3008,8 +3117,8 @@ void fp_4x2_to_2x4(__m512i* res1, __m512i* res2, __m512i* src)
 
 void fp_2x4_to_4x2(__m512i* res, __m512i* src1, __m512i* src2)
 {
-    __m512i idx1 = VSET(0, 2, 4, 6, 8, 10, 12, 14);
-    __m512i idx2 = VSET(1, 3, 5, 7, 9, 11, 13, 15);
+    __m512i idx1 = VSET(0, 2, 8, 10, 4, 6, 12, 14);
+    __m512i idx2 = VSET(1, 3, 9, 11, 5, 7, 13, 15);
 
     for (int i = 0; i < 2; i++) {
         __m512i s = src1[i], t = src2[i];

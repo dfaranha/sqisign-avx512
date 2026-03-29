@@ -1271,6 +1271,24 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Square root
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_2x2x2(a);
+        
+        fp2_sqr_2x2x2(b, a);
+        fp2_sqrt_2x2x2(c, b);
+        fp2_sqr_2x2x2(d, c);
+
+        if (fp2_is_equal_2x2x2(b, d) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("sqrt", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     printf("Fp2 lvl3 2x4x1 tests:\n");
 
     // Equality test

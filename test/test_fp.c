@@ -1102,8 +1102,8 @@ bool test_fp(int iterations)
         rand_fp_4x2(b);
         fp_4x2_to_2x4(c, c+2, a);
         fp_4x2_to_2x4(d, d+2, b);
-        fp_mixaddsub_2x4(c, c, d, 0xf);
-        fp_mixaddsub_2x4(c+2, c+2, d+2, 0xf);
+        fp_mixaddsub_2x4(c, c, d, 0xff);
+        fp_mixaddsub_2x4(c+2, c+2, d+2, 0x0);
         fp_2x4_to_4x2(c, c, c+2);
         fp_mixaddsub_4x2(e, a, b, 0x33);
 
@@ -1219,6 +1219,24 @@ bool test_fp(int iterations)
         }
     }
     print_test_res("squaring", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Square root
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_2x4(a);
+        
+        fp_sqr_2x4(b, a);
+        fp_sqrt_2x4(c, b);
+        fp_sqr_2x4(d, c);
+
+        if (fp_is_equal_2x4(b, d) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("sqrt", passed);
     if (passed == 0) {
         return false;
     }

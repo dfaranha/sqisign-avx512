@@ -417,6 +417,47 @@ void fp2_sqr_2x2x2(__m512i* res, __m512i* a)
     mp_add_p_sub_4x2(t1, a, t1); // a0 - a1, a1
     fp_mul_4x2(res, t0, t1);
 }
+
+void fp2_sqrt_2x2x2(__m512i* res, __m512i* a)
+{
+    __m512i re[2], im[2], x0[2], x1[2], t0[2], t1[2];
+    __mmask8 is_zero;
+
+    /* From "Optimized One-Dimensional SQIsign Verification on Intel and
+     * Cortex-M4" by Aardal et al: https://eprint.iacr.org/2024/1563 */
+
+    fp_4x2_to_2x4(re, im, a);
+    
+    // x0 = \delta = sqrt(a0^2 + a1^2).
+    fp_sqr_2x4(x0, re);
+    fp_sqr_2x4(x1, im);
+    fp_add_2x4(x0, x0, x1);
+    fp_sqrt_2x4(x0, x0);
+    // If a1 = 0, there is a risk of \delta = -a0, which makes x0 = 0 below.
+    // In that case, we restore the value \delta = a0.
+    is_zero = fp_is_zero_2x4(im);
+    fp_select_2x4(x0, x0, re, is_zero);
+    // x0 = \delta + a0, t0 = 2 * x0.
+    fp_add_2x4(x0, x0, re);
+    fp_add_2x4(t0, x0, x0);
+    // x1 = t0^(p-3)/4.
+    fp_copy_2x4(x1, t0);
+    fp_exp3div4_2x4(x1, x1);
+    // x0 = x0 * x1, x1 = x1 * a1, t1 = (2x0)^2.
+    fp_mul_2x4(x0, x0, x1);
+    fp_mul_2x4(x1, x1, im);
+    fp_add_2x4(t1, x0, x0);
+    fp_sqr_2x4(t1, t1);
+    // If t1 = t0, return x0 + x1*i, otherwise x1 - x0*i.
+    fp_sub_2x4(t0, t0, t1);
+    is_zero = fp_is_zero_2x4(t0);
+    fp_neg_2x4(t1, x0);
+    fp_copy_2x4(t0, x1);
+    fp_select_2x4(re, t0, x0, is_zero);
+    fp_select_2x4(im, t1, x1, is_zero);
+
+    fp_2x4_to_4x2(res, re, im);
+}
  
 void fp2_tomont_2x2x2(__m512i* res, __m512i* a)
 {

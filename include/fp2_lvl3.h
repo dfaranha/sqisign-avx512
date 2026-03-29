@@ -186,6 +186,8 @@ void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b);
 
 void fp2_sqr_2x2x2(__m512i* res, __m512i* a);
 
+void fp2_sqrt_2x2x2(__m512i* res, __m512i* a);
+
 void fp2_tomont_2x2x2(__m512i* res, __m512i* a);
 
 void fp2_frommont_2x2x2(__m512i*res, __m512i* a);

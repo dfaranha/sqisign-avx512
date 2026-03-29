@@ -260,6 +260,11 @@ int fp_is_equal_2x4(__m512i* a, __m512i* b);
  */
 int fp_is_zero_2x4(__m512i* a);
 
+/**
+ * Copies the i-th Fp element from a1 to res if the i-th bit of s is set, else it copies from a0.
+ */
+void fp_select_2x4(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s);
+
 void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b);
 void fp_sub_2x4(__m512i* res, __m512i* a, __m512i* b);
 void fp_neg_2x4(__m512i* res, __m512i* a);
@@ -270,6 +275,9 @@ void fp_sqr_2x4(__m512i* res, __m512i* a);
 
 void fp_tomont_2x4(__m512i* res, __m512i* a);
 void fp_frommont_2x4(__m512i* res, __m512i* a);
+
+void fp_sqrt_2x4(__m512i* res, __m512i* a);
+void fp_exp3div4_2x4(__m512i* res, __m512i* a);
 
 void fp_4x2_to_2x4(__m512i* res1, __m512i* res2, __m512i* src);
 void fp_2x4_to_4x2(__m512i* res, __m512i* src1, __m512i* src2);
