@@ -2215,10 +2215,10 @@ void mp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
     sl2 = VSHUFFLE(b[2], 0x44);
     sl3 = VSHUFFLE(b[3], 0x44);
     //// If b[0] = {a_0, a_4, b_0, b_4, ...} then sh0 = {a_4, a_4, b_4, b_4, ...}
-    sh0 = VSHUFFLE(b[0], 0xEE);
-    sh1 = VSHUFFLE(b[1], 0xEE);
-    sh2 = VSHUFFLE(b[2], 0xEE);
-    sh3 = VSHUFFLE(b[3], 0xEE);
+    sh0 = VSHUFFLE(b[0], 0xee);
+    sh1 = VSHUFFLE(b[1], 0xee);
+    sh2 = VSHUFFLE(b[2], 0xee);
+    sh3 = VSHUFFLE(b[3], 0xee);
 
     // left i+j = 0 right i+j = 4
     t[0] = VMULADDL(zero, a[0], sl0);
@@ -2349,14 +2349,14 @@ void rdc_4x2(__m512i* res, __m512i* a)
         a[i] = VAND(a[i], limb_mask); // Left slot is u_i = t_i mod 2^48
         a[i+1] = VADD(a[i+1], carry);
 
-        // t = t + u_i * p * 2^(48*i) 
+        // a = a + u_i * p * 2^(48*i) 
         // p = (p+1) - 1 = 2^(48*7) * (65 << 40) -1
         shuf = VSHUFFLEMASKZ(0xcccc, a[i], 0x4e); // shuf = {0, u_i, 0, ...}
         a[i+3] = VMULADDL(a[i+3], shuf, cnst);
         hi = VMULADDH(zero, shuf, cnst);
         hi = VSL(hi, LIMB_ALIGN);
         a[i+4] = VADD(a[i+4], hi);
-        //a[i] = VSHUFFLEMASKZ(0xcc, a[i], 0xe4); // Would need to do t - 2^(48*i)*u_i, but we will drop vector when dividing, so can skip
+        //a[i] = VSHUFFLEMASKZ(0xcc, a[i], 0xe4); // Would need to do a - 2^(48*i)*u_i, but we will drop vector when dividing, so can skip
         a[i+4] = VADDMASK(a[i+4], 0x55, a[i+4], VSHUFFLE(a[i], 0x4e));
     }
 
@@ -2379,7 +2379,6 @@ void rdc_4x2(__m512i* res, __m512i* a)
 
     // The result is in a[9] - a[12], and it is 8 * 48 = 384 bits
     // We do a final reduction step, to get the result down to 383 bits    
-    // Bit 383 is bit 47 of limb 7 (odd lanes of t[12])
     hi = VSL(a[12], 16);                        
     __mmask8 msb_mask = VSIGN(hi); 
     __mmask8 mask_odd  = msb_mask & 0xaa;
@@ -2512,4 +2511,509 @@ void fp_unvectorized_to_4x2(__m512i* res, fp_t* src)
 
     fp_64_to_48_bit_limbs_4x2(res, coeffs);
     fp_tomont_4x2(res, res);
+}
+
+// ======================================================================================================
+//                                                 2x4
+// ======================================================================================================
+
+void fp_setzero_2x4(__m512i* res)
+{
+    res[0] = VZERO();
+    res[1] = VZERO();
+}
+
+void fp_copy_2x4(__m512i* res, __m512i* a)
+{
+    res[0] = a[0];
+    res[1] = a[1];
+}
+
+void fp_duplicate_2x4(__m512i* res, const uint64_t* a)
+{
+    for(int i = 0; i < 2; i++) {
+        res[i] = VSET(a[i], a[i+2], a[i+4], a[i+6], a[i], a[i+2], a[i+4], a[i+6]);
+    }
+}
+
+// Assumes that elements are fully reduced mod p, so there is only one representative.
+int fp_is_equal_2x4(__m512i* a, __m512i* b)
+{
+    __mmask8 acc = VCMPEQ(a[0], b[0]) & VCMPEQ(a[1], b[1]);
+    
+    return (acc & (acc >> 1) & (acc >> 2) & (acc >> 3) & 0x1) 
+        | ((acc >> 3) & (acc >> 4) & (acc >> 5) & (acc >> 6) & 0x2);
+}
+
+// Assumes that elements are fully reduced mod p, so there is only one representative.
+int fp_is_zero_2x4(__m512i* a)
+{
+    __mmask8 acc = VCMPEQ(a[0], VZERO()) & VCMPEQ(a[1], VZERO());
+    
+    return (acc & (acc >> 1) & (acc >> 2) & (acc >> 3) & 0x1) 
+        | ((acc >> 3) & (acc >> 4) & (acc >> 5) & (acc >> 6) & 0x2);
+}
+
+void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t0, t1, carry, sign_mask;
+    __m512i limb_mask = VSETALL(LIMB_MASK);
+    uint64_t p_plus_1_top = 65ULL << 40;
+
+    __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    __m512i p_top = VSET(0, 0, 0, p_plus_1_top, 0, 0, 0, p_plus_1_top);
+    
+    // idx_shift: Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
+    __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
+
+    __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);
+
+    // Add limbs
+    t0 = VADD(a[0], b[0]);
+    t1 = VADD(a[1], b[1]);
+
+    // Subtract p using the special shape of p
+    t0 = VADD(t0, p_bot);
+    t1 = VSUB(t1, p_top);
+
+    // Carry propagation (7 steps to ripple from limb 0 to 7)
+    for (int i = 0; i < 3; i++) {
+        // Step 1: Even -> Odd
+        carry = VSRA(t0, LIMB_LEN);
+        t0 = VAND(t0, limb_mask);
+        t1 = VADD(t1, carry);
+
+        // Step 2: Odd -> Even (Mask 0xee preserves base lanes 0 and 4 from getting cross-contamination)
+        carry = VSRA(t1, LIMB_LEN);
+        t1 = VANDMASK(t1, 0x77, t1, limb_mask); // 0x77 preserves the sign bit on top limbs (Lanes 3 and 7)
+        carry = VPERM512MASKZ(0xee, carry, idx_shift);
+        t0 = VADD(t0, carry);
+    }
+    carry = VSRA(t0, LIMB_LEN);
+    t0 = VAND(t0, limb_mask);
+    t1 = VADD(t1, carry);
+
+    // If result is negative, undo the subtraction
+    sign_mask = VSRA(t1, 63);                    
+    sign_mask = VPERM256(sign_mask, 0xff);
+    
+    t1 = VADD(t1, VAND(p_top, sign_mask));
+    t0 = VSUB(t0, VAND(p_bot, sign_mask));
+
+    // Second carry propagation
+    for (int i = 0; i < 3; i++) {
+        carry = VSRA(t0, LIMB_LEN);
+        t0 = VAND(t0, limb_mask);
+        t1 = VADD(t1, carry);
+
+        carry = VSRA(t1, LIMB_LEN);
+        t1 = VANDMASK(t1, 0x77, t1, limb_mask);
+        carry = VPERM512MASKZ(0xee, carry, idx_shift);
+        t0 = VADD(t0, carry);
+    }
+    carry = VSRA(t0, LIMB_LEN);
+    t0 = VAND(t0, limb_mask);
+    t1 = VADD(t1, carry);
+    t1 = VAND(t1, limb_mask);
+
+    res[0] = t0;
+    res[1] = t1;
+}
+
+void fp_sub_2x4(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t0, t1, carry, sign_mask;
+    __m512i limb_mask = VSETALL(LIMB_MASK);
+    uint64_t p_plus_1_top = 65ULL << 40;
+
+    __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    __m512i p_top = VSET(0, 0, 0, p_plus_1_top, 0, 0, 0, p_plus_1_top);
+    
+    // idx_shift: Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
+    __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
+
+    // Subtract limbs
+    t0 = VSUB(a[0], b[0]);
+    t1 = VSUB(a[1], b[1]);
+
+    // Carry propagation (7 steps to ripple from limb 0 to 7)
+    for (int i = 0; i < 3; i++) {
+        // Step 1: Even -> Odd
+        carry = VSRA(t0, LIMB_LEN);
+        t0 = VAND(t0, limb_mask);
+        t1 = VADD(t1, carry);
+
+        // Step 2: Odd -> Even (Mask 0xee preserves base lanes 0 and 4 from getting cross-contamination)
+        carry = VSRA(t1, LIMB_LEN);
+        t1 = VANDMASK(t1, 0x77, t1, limb_mask); // 0x77 preserves the sign bit on top limbs (Lanes 3 and 7)
+        carry = VPERM512MASKZ(0xee, carry, idx_shift);
+        t0 = VADD(t0, carry);
+    }
+    carry = VSRA(t0, LIMB_LEN);
+    t0 = VAND(t0, limb_mask);
+    t1 = VADD(t1, carry);
+
+    // If result is negative, add p
+    sign_mask = VSRA(t1, 63);                    
+    sign_mask = VPERM256(sign_mask, 0xff);
+    
+    t1 = VADD(t1, VAND(p_top, sign_mask));
+    t0 = VSUB(t0, VAND(p_bot, sign_mask));
+
+    // Second carry propagation
+    for (int i = 0; i < 3; i++) {
+        carry = VSRA(t0, LIMB_LEN);
+        t0 = VAND(t0, limb_mask);
+        t1 = VADD(t1, carry);
+
+        carry = VSRA(t1, LIMB_LEN);
+        t1 = VANDMASK(t1, 0x77, t1, limb_mask);
+        carry = VPERM512MASKZ(0xee, carry, idx_shift);
+        t0 = VADD(t0, carry);
+    }
+    carry = VSRA(t0, LIMB_LEN);
+    t0 = VAND(t0, limb_mask);
+    t1 = VADD(t1, carry);
+    t1 = VAND(t1, limb_mask);
+
+    res[0] = t0;
+    res[1] = t1;
+}
+
+void fp_neg_2x4(__m512i* res, __m512i* a)
+{
+    __m512i t0, t1, carry, sign_mask;
+    __m512i limb_mask = VSETALL(LIMB_MASK);
+    uint64_t p_plus_1_top = 65ULL << 40;
+
+    __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    __m512i p_top = VSET(0, 0, 0, p_plus_1_top, 0, 0, 0, p_plus_1_top);
+    
+    // idx_shift: Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
+    __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
+
+    // Subtract limbs
+    t0 = VSUB(VZERO(), a[0]);
+    t1 = VSUB(VZERO(), a[1]);
+
+    // Carry propagation (7 steps to ripple from limb 0 to 7)
+    for (int i = 0; i < 3; i++) {
+        // Step 1: Even -> Odd
+        carry = VSRA(t0, LIMB_LEN);
+        t0 = VAND(t0, limb_mask);
+        t1 = VADD(t1, carry);
+
+        // Step 2: Odd -> Even (Mask 0xee preserves base lanes 0 and 4 from getting cross-contamination)
+        carry = VSRA(t1, LIMB_LEN);
+        t1 = VANDMASK(t1, 0x77, t1, limb_mask); // 0x77 preserves the sign bit on top limbs (Lanes 3 and 7)
+        carry = VPERM512MASKZ(0xee, carry, idx_shift);
+        t0 = VADD(t0, carry);
+    }
+    carry = VSRA(t0, LIMB_LEN);
+    t0 = VAND(t0, limb_mask);
+    t1 = VADD(t1, carry);
+
+    // If result is negative, add p
+    sign_mask = VSRA(t1, 63);                    
+    sign_mask = VPERM256(sign_mask, 0xff);
+    
+    t1 = VADD(t1, VAND(p_top, sign_mask));
+    t0 = VSUB(t0, VAND(p_bot, sign_mask));
+
+    // Second carry propagation
+    for (int i = 0; i < 3; i++) {
+        carry = VSRA(t0, LIMB_LEN);
+        t0 = VAND(t0, limb_mask);
+        t1 = VADD(t1, carry);
+
+        carry = VSRA(t1, LIMB_LEN);
+        t1 = VANDMASK(t1, 0x77, t1, limb_mask);
+        carry = VPERM512MASKZ(0xee, carry, idx_shift);
+        t0 = VADD(t0, carry);
+    }
+    carry = VSRA(t0, LIMB_LEN);
+    t0 = VAND(t0, limb_mask);
+    t1 = VADD(t1, carry);
+    t1 = VAND(t1, limb_mask);
+
+    res[0] = t0;
+    res[1] = t1;
+}
+
+void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)
+{
+    __m512i t0, t1, carry, sign_mask;
+    __m512i limb_mask = VSETALL(LIMB_MASK);
+    uint64_t p_plus_1_top = 65ULL << 40;
+    const __mmask8 sub_mask = ~add_mask;
+
+    __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    __m512i p_top = VSET(0, 0, 0, p_plus_1_top, 0, 0, 0, p_plus_1_top);
+    
+    // idx_shift: Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
+    __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
+
+    t0 = VSUBMASK(a[0], sub_mask, a[0], b[0]);
+    t1 = VSUBMASK(a[0], sub_mask, a[1], b[1]);
+
+    t0 = VADDMASK(t0, add_mask, a[0], b[0]);
+    t1 = VADDMASK(t1, add_mask, a[1], b[1]);
+
+    // Subtract p using the special shape of p
+    t0 = VADDMASK(t0, add_mask, t0, p_bot);
+    t1 = VSUBMASK(t1, add_mask, t1, p_top);
+
+    // Carry propagation (7 steps to ripple from limb 0 to 7)
+    for (int i = 0; i < 3; i++) {
+        // Step 1: Even -> Odd
+        carry = VSRA(t0, LIMB_LEN);
+        t0 = VAND(t0, limb_mask);
+        t1 = VADD(t1, carry);
+
+        // Step 2: Odd -> Even (Mask 0xee preserves base lanes 0 and 4 from getting cross-contamination)
+        carry = VSRA(t1, LIMB_LEN);
+        t1 = VANDMASK(t1, 0x77, t1, limb_mask); // 0x77 preserves the sign bit on top limbs (Lanes 3 and 7)
+        carry = VPERM512MASKZ(0xee, carry, idx_shift);
+        t0 = VADD(t0, carry);
+    }
+    carry = VSRA(t0, LIMB_LEN);
+    t0 = VAND(t0, limb_mask);
+    t1 = VADD(t1, carry);
+
+    // If result is negative, add p
+    sign_mask = VSRA(t1, 63);                    
+    sign_mask = VPERM256(sign_mask, 0xff);
+    
+    t1 = VADD(t1, VAND(p_top, sign_mask));
+    t0 = VSUB(t0, VAND(p_bot, sign_mask));
+
+    // Second carry propagation
+    for (int i = 0; i < 3; i++) {
+        carry = VSRA(t0, LIMB_LEN);
+        t0 = VAND(t0, limb_mask);
+        t1 = VADD(t1, carry);
+
+        carry = VSRA(t1, LIMB_LEN);
+        t1 = VANDMASK(t1, 0x77, t1, limb_mask);
+        carry = VPERM512MASKZ(0xee, carry, idx_shift);
+        t0 = VADD(t0, carry);
+    }
+    carry = VSRA(t0, LIMB_LEN);
+    t0 = VAND(t0, limb_mask);
+    t1 = VADD(t1, carry);
+    t1 = VAND(t1, limb_mask);
+
+    res[0] = t0;
+    res[1] = t1;
+}
+
+void mp_mul_2x4(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t[10];
+    __m512i b0, b1, b2, b3, b4, b5, b6, b7;
+    __m512i zero = VZERO();
+
+    // Duplicating limbs of b
+    b0 = VPERM256(b[0], 0x00);
+    b2 = VPERM256(b[0], 0x55);
+    b4 = VPERM256(b[0], 0xaa);
+    b6 = VPERM256(b[0], 0xff);
+    b1 = VPERM256(b[1], 0x00);
+    b3 = VPERM256(b[1], 0x55);
+    b5 = VPERM256(b[1], 0xaa);
+    b7 = VPERM256(b[1], 0xff);
+
+    // pos0 i+j=0, pos1 i+j=2, pos2 i+j=8, pos3 i+j=10
+    t[0] = VMULADDL(zero, a[0], b0);
+    t[1] = VMULADDH(zero, a[0], b0);
+    t[1] = VSL(t[1], LIMB_ALIGN);
+
+    // i+j=1
+    t[1] = VMULADDL(t[1], a[0], b1);
+    t[2] = VMULADDH(zero, a[0], b1);
+    t[1] = VMULADDL(t[1], a[1], b0);
+    t[2] = VMULADDH(t[2], a[1], b0);
+    t[2] = VSL(t[2], LIMB_ALIGN);
+
+    // i+j=2
+    t[2] = VMULADDL(t[2], a[0], b2);
+    t[3] = VMULADDH(zero, a[0], b2);
+    t[2] = VMULADDL(t[2], a[1], b1);
+    t[3] = VMULADDH(t[3], a[1], b1);
+    t[3] = VSL(t[3], LIMB_ALIGN);
+
+    // i+j=3
+    t[3] = VMULADDL(t[3], a[0], b3);
+    t[4] = VMULADDH(zero, a[0], b3);
+    t[3] = VMULADDL(t[3], a[1], b2);
+    t[4] = VMULADDH(t[4], a[1], b2);
+    t[4] = VSL(t[4], LIMB_ALIGN);
+
+    // i+j=4
+    t[4] = VMULADDL(t[4], a[0], b4);
+    t[5] = VMULADDH(zero, a[0], b4);
+    t[4] = VMULADDL(t[4], a[1], b3);
+    t[5] = VMULADDH(t[5], a[1], b3);
+    t[5] = VSL(t[5], LIMB_ALIGN);
+
+    // i+j=5
+    t[5] = VMULADDL(t[5], a[0], b5);
+    t[6] = VMULADDH(zero, a[0], b5);
+    t[5] = VMULADDL(t[5], a[1], b4);
+    t[6] = VMULADDH(t[6], a[1], b4);
+    t[6] = VSL(t[6], LIMB_ALIGN);
+
+    // i+j=6
+    t[6] = VMULADDL(t[6], a[0], b6);
+    t[7] = VMULADDH(zero, a[0], b6);
+    t[6] = VMULADDL(t[6], a[1], b5);
+    t[7] = VMULADDH(t[7], a[1], b5);
+    t[7] = VSL(t[7], LIMB_ALIGN);
+
+    // i+j=7
+    t[7] = VMULADDL(t[7], a[0], b7);
+    t[8] = VMULADDH(zero, a[0], b7);
+    t[7] = VMULADDL(t[7], a[1], b6);
+    t[8] = VMULADDH(t[8], a[1], b6);
+    t[8] = VSL(t[8], LIMB_ALIGN);
+
+    // i+j=8
+    t[8] = VMULADDL(t[8], a[1], b7);
+    t[9] = VMULADDH(zero, a[1], b7);
+    t[9] = VSL(t[9], LIMB_ALIGN);
+
+    // Output
+    res[0] = t[0]; 
+    res[1] = t[1]; 
+    res[2] = t[2];
+    res[3] = t[3]; 
+    res[4] = t[4]; 
+    res[5] = t[5];
+    res[6] = t[6];
+    res[7] = t[7];
+    res[8] = t[8];
+    res[9] = t[9];
+}
+
+// Modifies a in-place. a must have at least 17 elements.
+void rdc_2x4(__m512i* res, __m512i* a)
+{
+    __m512i carry, hi, shuf;
+    __m512i zero = VZERO();
+    __m512i one = VSETALL(1);
+    __m512i cnst = VSETALL((uint64_t)65 << 40);
+    __m512i limb_mask = VSETALL(LIMB_MASK);
+    __mmask8 msb_mask;
+
+    for (int i = 10; i < 17; i++) 
+        a[i] = zero;
+
+    // Move each limb one step to the left, for each half
+    __m512i idx = VSET(1, 2, 3, 0, 5, 6, 7, 0);
+
+    // Modified version of the 4x2 Montgomery reduction loop
+    for (int i = 0; i < 9; i++) {
+        // compute u_i
+        carry = VSRA(a[i], LIMB_LEN);
+        a[i] = VAND(a[i], limb_mask);
+        a[i+1] = VADD(a[i+1], carry);
+
+        // a = a + u_i * p * 2^(48*i) 
+        // p = (p+1) - 1 = 2^(48*7) * (65 << 40) -1
+        // We don't need to do the subtraction, as we will drop the 9 lowest words.
+        shuf = VSHUFFLEMASKZ(0x0c0c, a[i], 0x4e);
+        a[i+5] = VMULADDL(a[i+5], shuf, cnst);
+        hi = VMULADDH(zero, shuf, cnst);
+        a[i+6] = VADD(a[i+6], VSL(hi, LIMB_ALIGN));
+
+        // Fold Track K into Track K-1 across the entire 512-bit vector
+        a[i+2] = VADD(a[i+2], VPERM512MASKZ(0x77, a[i], idx));
+    }
+
+    // Propogate carries
+    // We do mask a[16] yet, as we need bit 47 for the sign check.
+    for (int i = 9; i < 16; i++) {
+        carry = VSRA(a[i], LIMB_LEN);
+        a[i] = VAND(a[i], limb_mask);
+        a[i+1] = VADD(a[i+1], carry);
+
+        if (i != 15) {
+            a[i+2] = VADD(a[i+2], VPERM512MASKZ(0x77, a[i], idx));
+        }
+    }
+
+    // We do a final reduction step, to get the result down to 383 bits 
+    hi = VSL(a[16], 16);                   
+    msb_mask = VSIGN(hi);
+    __mmask8 mask_top = msb_mask & 0x11;   // Isolate pos 0 per element (bits 0 and 4)
+
+    // If bit 383 set: subtract (p+1) and add 1
+    a[16] = VSUBMASK(a[16], mask_top, a[16], cnst);
+    a[9]  = VADDMASK(a[9], mask_top, a[9], one);
+    a[16] = VAND(a[16], limb_mask);
+
+    // 4. Pack result from pos 0 of the accumulators back into 2x4 format:
+    // res[0] = {L9, L11, L13, L15, L9_B, L11_B, L13_B, L15_B}
+    // res[1] = {L10, L12, L14, L16, L10_B, L12_B, L14_B, L16_B}
+    __m512i idx_pack = VSET(0, 1, 8, 9, 4, 5, 12, 13);
+    
+    __m512i lo0 = VUNPACKLO(a[9],  a[11]);
+    __m512i hi0 = VUNPACKLO(a[13], a[15]);
+    res[0] = VBLENDPERM(idx_pack, lo0, hi0);
+
+    __m512i lo1 = VUNPACKLO(a[10], a[12]);
+    __m512i hi1 = VUNPACKLO(a[14], a[16]);
+    res[1] = VBLENDPERM(idx_pack, lo1, hi1);
+}
+
+void fp_mul_2x4(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t[17];
+
+    mp_mul_2x4(t, a, b);
+    rdc_2x4(res, t);
+}
+
+void fp_sqr_2x4(__m512i* res, __m512i* a)
+{
+    fp_mul_2x4(res, a, a);
+}
+
+void fp_tomont_2x4(__m512i* res, __m512i* a)
+{
+    __m512i vR2[2];
+    fp_duplicate_2x4(vR2, R2);
+    fp_mul_2x4(res, a, vR2);
+}
+
+void fp_frommont_2x4(__m512i* res, __m512i* a)
+{
+    __m512i one[4];
+    fp_setzero_2x4(one);
+    one[0] = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    fp_mul_2x4(res, a, one);
+}
+
+// Given src=(a, b, c, d), it computes res1 = (a, b) and res2 = (c, d)
+void fp_4x2_to_2x4(__m512i* res1, __m512i* res2, __m512i* src)
+{
+    __m512i idx1 = VSET(0, 8, 1, 9, 2, 10, 3, 11);
+    __m512i idx2 = VSET(4, 12, 5, 13, 6, 14, 7, 15);
+    for (int i = 0; i < 2; i++) {
+        __m512i s = src[i], t = src[i+2];
+        res1[i] = VBLENDPERM(idx1, s, t);
+        res2[i] = VBLENDPERM(idx2, s, t);
+    }
+}
+
+void fp_2x4_to_4x2(__m512i* res, __m512i* src1, __m512i* src2)
+{
+    __m512i idx1 = VSET(0, 2, 4, 6, 8, 10, 12, 14);
+    __m512i idx2 = VSET(1, 3, 5, 7, 9, 11, 13, 15);
+
+    for (int i = 0; i < 2; i++) {
+        __m512i s = src1[i], t = src2[i];
+        res[i] = VBLENDPERM(idx1, s, t);
+        res[i+2] = VBLENDPERM(idx2, s, t);
+    }
 }

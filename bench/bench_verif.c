@@ -101,6 +101,7 @@ void bench_verif(int iterations) {
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
+        i += 1;
 
         free(sm_rsp);
 

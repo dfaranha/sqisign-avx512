@@ -100,6 +100,18 @@ void print_fp_4x2_index(__m512i* a, int index)
     printf("\n");
 }
 
+void print_fp_2x4_index(__m512i* a, int index)
+{
+    uint64_t v0[8], v1[8];
+    memcpy(v0, &a[0], sizeof(v0));
+    memcpy(v1, &a[1], sizeof(v1));
+    for(int i = 0; i < 4; i++) {
+        printf("%d: %lx   ", 2*i, v0[4*index + i]);
+        printf("%d: %lx   ", 2*i+1, v1[4*index + i]);
+    }
+    printf("\n");
+}
+
 void rand_fp_8x1(__m512i* res)
 {
     __m512i mask, zero[8];
@@ -130,6 +142,20 @@ void rand_fp_4x2(__m512i* res)
     res[3] = VAND(rand_512i(), mask);
     //Reduction
     fp_add_4x2(res, res, zero);
+}
+
+void rand_fp_2x4(__m512i* res)
+{
+    __m512i mask, zero[2];
+    fp_setzero_2x4(zero);
+
+    mask = VSETALL(LIMB_MASK);
+    res[0] = VAND(rand_512i(), mask);
+    mask = VSET(LIMB_MASK, LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK);
+    res[1] = VAND(rand_512i(), mask);
+
+    //Reduction
+    fp_add_2x4(res, res, zero);
 }
 
 void rand_fp2_8x1x1(__m512i* res)

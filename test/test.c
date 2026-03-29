@@ -33,10 +33,10 @@ int main()
     int n_tests = 1000;
     bool passed;
 
-    // passed = test_fp(n_tests);
-    // if(!passed) {
-    //     return 0;
-    // }
+    passed = test_fp(n_tests);
+    if(!passed) {
+        return 0;
+    }
     // passed = test_fp2(n_tests);
     // if(!passed)
     // {

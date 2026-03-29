@@ -706,7 +706,7 @@ bool test_fp(int iterations)
             break;
         }
     }
-    print_test_res("mixed sub add", passed);
+    print_test_res("mixed add sub", passed);
     if (passed == 0) {
         return false;
     }
@@ -1022,6 +1022,244 @@ bool test_fp(int iterations)
         }
     }
     print_test_res("unvectorized <-> 4x2", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    printf("Fp lvl3 2x4 tests:\n");
+
+    // Addition
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_4x2(a);
+        rand_fp_4x2(b);
+        fp_4x2_to_2x4(c, c+2, a);
+        fp_4x2_to_2x4(d, d+2, b);
+        fp_add_2x4(c, c, d);
+        fp_add_2x4(c+2, c+2, d+2);
+        fp_2x4_to_4x2(c, c, c+2);
+        fp_add_4x2(e, a, b);
+
+        if (fp_is_equal_4x2(c, e) != 0xf) {
+            print_fp_4x2_index(c, 0);
+            print_fp_4x2_index(e, 0);
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("addition", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Subtraction
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_4x2(a);
+        rand_fp_4x2(b);
+        fp_4x2_to_2x4(c, c+2, a);
+        fp_4x2_to_2x4(d, d+2, b);
+        fp_sub_2x4(c, c, d);
+        fp_sub_2x4(c+2, c+2, d+2);
+        fp_2x4_to_4x2(c, c, c+2);
+        fp_sub_4x2(e, a, b);
+
+        if (fp_is_equal_4x2(c, e) != 0xf) {
+            print_fp_4x2_index(c, 0);
+            print_fp_4x2_index(e, 0);
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("subtraction", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Negation
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_4x2(a);
+
+        fp_4x2_to_2x4(c, c+2, a);
+        fp_neg_2x4(c, c);
+        fp_neg_2x4(c+2, c+2);
+        fp_2x4_to_4x2(c, c, c+2);
+        fp_neg_4x2(e, a);
+
+        if (fp_is_equal_4x2(c, e) != 0xf) {
+            print_fp_4x2_index(c, 0);
+            print_fp_4x2_index(e, 0);
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("negation", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Mixed add sub
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_4x2(a);
+        rand_fp_4x2(b);
+        fp_4x2_to_2x4(c, c+2, a);
+        fp_4x2_to_2x4(d, d+2, b);
+        fp_mixaddsub_2x4(c, c, d, 0xf);
+        fp_mixaddsub_2x4(c+2, c+2, d+2, 0xf);
+        fp_2x4_to_4x2(c, c, c+2);
+        fp_mixaddsub_4x2(e, a, b, 0x33);
+
+        if (fp_is_equal_4x2(c, e) != 0xf) {
+            print_fp_4x2_index(c, 0);
+            print_fp_4x2_index(e, 0);
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("mix add sub", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Multiplication tests
+    // Using Montgomery constant
+    one[0] = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    fp_duplicate_2x4(vR, R);
+    fp_duplicate_2x4(vR2, R2);
+
+    // Montgomery representation of 1 is R mod p
+    fp_tomont_2x4(d, one);
+    if (fp_is_equal_2x4(d, vR) != 0x3) {
+        passed = 0;
+    }
+
+    // Montgomery representation of R is R2 mod p
+    fp_tomont_2x4(d, vR);
+    if (fp_is_equal_2x4(d, vR2) != 0x3) {
+        passed = 0;
+    }
+
+    for(int i = 0; i < iterations && passed != 0; i++) {
+        rand_fp_2x4(a);
+        rand_fp_2x4(b);
+        rand_fp_2x4(c);
+
+        //  a * 0  == 0
+        fp_mul_2x4(d, a, zero);
+        if (fp_is_zero_2x4(d) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        // (a * R)/R == a
+        fp_mul_2x4(d, a, vR);
+        if (fp_is_equal_2x4(d, a) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        // Transforms cancel
+        fp_tomont_2x4(d, a);
+        fp_frommont_2x4(e, d);
+        if (fp_is_equal_2x4(a, e) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        fp_frommont_2x4(d, a);
+        fp_tomont_2x4(e, d);
+        if (fp_is_equal_2x4(a, e) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        // a * b == b * a
+        fp_mul_2x4(d, a, b);
+        fp_mul_2x4(e, b, a);
+        if (fp_is_equal_2x4(d, e) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        // a * (b * c) == (a * b) * c
+        fp_mul_2x4(d, b, c);
+        fp_mul_2x4(d, d, a);
+        fp_mul_2x4(e, a, b);
+        fp_mul_2x4(e, e, c);
+        if (fp_is_equal_2x4(d, e) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        // a * (b+c) == a*b + a*c
+        fp_add_2x4(d, b, c);
+        fp_mul_2x4(d, d, a);
+        fp_mul_2x4(e, a, b),
+        fp_mul_2x4(f, a, c);
+        fp_add_2x4(e, e, f);
+        if (fp_is_equal_2x4(d, e) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+    }
+    print_test_res("multiplication", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Squaring
+    for(int i = 0; i < iterations && passed != 0; i++) {
+        rand_fp_2x4(a);
+
+        //  a^2  == a * a
+        fp_sqr_2x4(c, a);
+        fp_mul_2x4(d, a, a);
+        if (fp_is_equal_2x4(c,d) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("squaring", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_4x2(a);
+
+        // back and forth does nothing
+        fp_4x2_to_2x4(b, b+2, a);
+        fp_2x4_to_4x2(b, b, b+2);
+
+        if (fp_is_equal_4x2(b, a) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+        rand_fp_2x4(a);
+        rand_fp_2x4(a+2);
+        fp_2x4_to_4x2(b, a, a+2);
+        fp_4x2_to_2x4(b, b+2, b);
+
+        if (fp_is_equal_2x4(b, a) != 0x3 || fp_is_equal_2x4(b+2, a+2) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+        rand_fp_4x2(a);
+        rand_fp_4x2(b);
+        fp_mul_4x2(c, a, b);
+        fp_4x2_to_2x4(d, d+2, a);
+        fp_4x2_to_2x4(e, e+2, b);
+        fp_mul_2x4(d, d, e);
+        fp_mul_2x4(d+2, d+2, e+2);
+        fp_2x4_to_4x2(d, d, d+2);
+
+        if (fp_is_equal_4x2(c, d) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("2x4 <-> 4x2", passed);
     if (passed == 0) {
         return false;
     }

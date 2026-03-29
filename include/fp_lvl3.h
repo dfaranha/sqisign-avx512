@@ -231,4 +231,47 @@ void fp_64_to_48_bit_limbs_4x2(__m512i* res, fp_t* src);
 void fp_4x2_to_unvectorized(fp_t* res, __m512i* src);
 void fp_unvectorized_to_4x2(__m512i* res, fp_t* src);
 
+// ======================================================================================================
+//                                                 2x4
+// ======================================================================================================
+
+/*  2x4 = 2 Fp elements a, b, c, d, interleaved as follows:
+ *  v0 = (a0, a2, a4, a6, b0, b2, b4, b6)
+ *  v1 = (a1, a3, a5, a7, b1, b3, b5, b7)
+ */
+
+void fp_setzero_2x4(__m512i* res);
+void fp_copy_2x4(__m512i* res, __m512i* a);
+
+
+/**
+ * @param a - Fp element stored in 51-bit limbs
+ * @result 2 copies of a, stored in res
+ */
+void fp_duplicate_2x4(__m512i* res, const uint64_t* a);
+
+/**
+ *   Returns a 2-bit mask which is 1 iff the i-th Fp elements are equal
+ */
+int fp_is_equal_2x4(__m512i* a, __m512i* b);
+
+/**
+ *   Returns a 2-bit mask which is 1 iff the i-th Fp element is zero
+ */
+int fp_is_zero_2x4(__m512i* a);
+
+void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b);
+void fp_sub_2x4(__m512i* res, __m512i* a, __m512i* b);
+void fp_neg_2x4(__m512i* res, __m512i* a);
+void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
+
+void fp_mul_2x4(__m512i* res, __m512i* a, __m512i* b);
+void fp_sqr_2x4(__m512i* res, __m512i* a);
+
+void fp_tomont_2x4(__m512i* res, __m512i* a);
+void fp_frommont_2x4(__m512i* res, __m512i* a);
+
+void fp_4x2_to_2x4(__m512i* res1, __m512i* res2, __m512i* src);
+void fp_2x4_to_4x2(__m512i* res, __m512i* src1, __m512i* src2);
+
 #endif

@@ -148,4 +148,31 @@ void bench_fp(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
 
+    printf("Fp lvl3 2x4 benchmarks:\n");
+
+    // Multiplication
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int j = 0; j < iterations; j++) {
+            fp_mul_2x4(c, b, a);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp_is_equal_2x4(c, b);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("multiplication", cycles[(N_RUNS/2) -1], tmp);
+
+    // Squaring
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int j = 0; j < iterations; j++) {
+            fp_mul_2x4(c, b, a);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp_is_equal_2x4(c, a);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
 }
