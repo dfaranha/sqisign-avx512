@@ -1,4 +1,4 @@
-from sage.all import (ZZ, Matrix)
+from sage.all import ZZ, Matrix
 
 from hashlib import shake_256
 
@@ -345,7 +345,6 @@ class SQIsign:
         # Convert to Curve type... should do this in chain...
         A3, C3 = E3
         E3 = Curve(A3, C3, (A3 + 2 * C3), 4 * C3)
-
 
         # Compute the hash from the codomain
         chl_prime = self._hash_challenge(public_key, E3, message)

@@ -7,15 +7,10 @@ from avx_arithmetic import (
     avx_421_mul,
     avx_421_add,
     avx_421_sub,
-    avx_421_neg,
     avx_811_mul,
-    avx_811_sub,
-    avx_421_pair_mul,
-    avx_811_sqr,
+    avx_811_add,
+    avx_421_add_sub,
     avx_811_add_sub,
-    avx_421_all_zero,
-    avx_421_any_zero,
-    avx_421_eq,
     avx_421_to_811,
 )
 from theta_structure import (
@@ -195,114 +190,97 @@ def compute_superglue_coefficients(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
     assert position in [1, 4, 7]
 
     # 8M
-    # a = delta + g1_1[0] * g1_2[0], g1_2[0] is 0 and we skip this to save a way mul
-    a = g0_1[0] * g0_2[0]
-    b = g0_1[0] * g0_2[1]
-    c = g0_1[1] * g0_2[0]
-    d = g0_1[1] * g0_2[1]
-    delta = delta_1 * delta_2
-    t0 = g1_1[0] * g1_2[1]
-    t1 = g1_1[1] * g1_2[0]  # g1_2[0] is 0, we could skip this
-    t2 = g1_1[1] * g1_2[1]
+    T0 = AVX_8x1x1(
+        g0_1[0], g0_1[0], g0_1[1], g0_1[1], delta_1, g1_1[0], g1_1[1], g1_1[1]
+    )
+    T1 = AVX_8x1x1(
+        g0_2[0], g0_2[1], g0_2[0], g0_2[1], delta_2, g1_2[1], g1_2[0], g1_2[1]
+    )
+    T2 = avx_811_mul(T0, T1)
 
     # 4a
-    a += delta
-    b += t0
-    c += t1
-    d += t2
-
-    # T1+T2
-    # 4M
-    r0 = g2_1[0] * g2_2[0]
-    r1 = g2_1[0] * g2_2[1]
-    r2 = g2_1[1] * g2_2[0]
-    r3 = g2_1[1] * g2_2[1]
-
-    # 4a
-    a -= r0
-    b -= r1
-    c -= r2
-    d -= r3
+    abcd = AVX_4x2x1(T2[0], T2[1], T2[2], T2[3])
+    S0 = AVX_4x2x1(T2[4], T2[5], T2[6], T2[7])
+    abcd = avx_421_add(abcd, S0)
 
     # 4M
-    t0 = g1_2[0] * a  # g1_2[0] is 0, we could skip this
-    t1 = g1_2[2] * b
-    t2 = g0_1[0] * a
-    t3 = g0_1[2] * c
+    S1 = AVX_4x2x1(g2_1[0], g2_1[0], g2_1[1], g2_1[1])
+    S2 = AVX_4x2x1(g2_2[0], g2_2[1], g2_2[0], g2_2[1])
+    S3 = avx_421_mul(S1, S2)
+    abcd = avx_421_sub(abcd, S3)
+
+    # 4M
+    S4 = AVX_4x2x1(g1_2[0], g1_2[2], g0_1[0], g0_1[2])
+    S5 = AVX_4x2x1(abcd[0], abcd[1], abcd[0], abcd[2])
+    S6 = avx_421_mul(S4, S5)
 
     # 2a
-    t4 = t0 + t1
-    t5 = t2 + t3
+    R0 = AVX_2x4x1(S6[0], S6[2])
+    R1 = AVX_2x4x1(S6[1], S6[3])
+    R2 = avx_241_add(R0, R1)
 
     # These first two are optional, but fit in a 4-way
     # 4M
-    t6 = g0_1[0] * b
-    t7 = g0_1[2] * d
-    a1 = delta_1 * t4
-    a2 = delta_2 * t5
+    S7 = AVX_4x2x1(g0_1[0], g0_1[2], delta_1, delta_2)
+    S8 = AVX_4x2x1(abcd[1], abcd[3], R2[0], R2[1])
+    S9 = avx_421_mul(S7, S8)
 
     # This only needs to be done 1/3 of the time
     sgl_val = 0
     if position == 4:
         # Another 1a + 1M
-        t8 = t6 + t7
-        sgl_val = delta_2 * t8
+        R3 = AVX_2x4x1(S9[0], 0)
+        R4 = AVX_2x4x1(S9[1], 0)
+        R5 = avx_241_add(R3, R4)
+        R6 = AVX_2x4x1(delta_2, 0)
+        R7 = avx_241_mul(R5, R6)
+        sgl_val = R7[0]
 
     # 4M
-    a *= delta
-    b *= delta
-    c *= delta
-    d *= delta
+    S10 = AVX_4x2x1(S0[0], S0[0], S0[0], S0[0])
+    abcd = avx_421_mul(abcd, S10)
 
     # Compute dual_theta_null_square for later
     # 3S
-    a1sq = a1**2
-    a2sq = a2**2
-    asq = a**2
+    S11 = AVX_4x2x1(S9[2], S9[3], abcd[0], 0)
+    S12 = avx_421_sqr(S11)
 
     # 3a
-    A_inv = a1sq + a2sq
-    B_inv = asq - a1sq
-    C_inv = asq - a2sq
+    S13 = AVX_4x2x1(S12[0], 0, S12[2], S12[2])
+    S14 = AVX_4x2x1(S12[1], 0, S12[0], S12[1])
+    S15 = avx_421_add_sub(S13, S14)
 
-    dual_theta_null_square = [A_inv, B_inv, C_inv, 0]
+    dual_theta_null_square = [S15[0], S15[2], S15[3], 0]
 
     match position:
         case 1 | 7:
             # Standard case: all four coordinates are nonzero
             # 6M + 6a
-            t0 = a * b
-            t1 = c * d
-            t2 = a * c
-            t3 = b * d
-            t4 = a * d
-            t5 = b * c
+            T3 = AVX_8x1x1(abcd[0], abcd[2], abcd[0], abcd[1], abcd[0], abcd[1], 0, 0)
+            T4 = AVX_8x1x1(abcd[1], abcd[3], abcd[2], abcd[3], abcd[3], abcd[2], 0, 0)
+            T5 = avx_811_mul(T3, T4)
 
-            e0 = t0 + t1
-            e2 = t2 + t3
-            e4 = t4 + t5
-            e1 = t0 - t1
-            e3 = t2 - t3
-            e5 = t4 - t5
+            T6 = AVX_8x1x1(T5[0], T5[2], T5[4], 0, T5[0], T5[2], T5[4], 0)
+            T7 = AVX_8x1x1(T5[1], T5[3], T5[5], 0, T5[1], T5[3], T5[5], 0)
+            T8 = avx_811_add_sub(T6, T7)
 
-            elements = [e0, e1, e2, e3, e4, e5]
+            elements = [T8[0], T8[4], T8[1], T8[5], T8[2], T8[6]]
             sign_flip = False
 
         case 4:
             # Special case: one coordinate vanishes, sign_flip encodes
             # which square root branch to take
             # 4M + 3a
-            t0 = a * b
-            t1 = a2 * sgl_val
-            t2 = a * b
-            t3 = a * c
+            S16 = AVX_4x2x1(abcd[0], S9[3], abcd[0], abcd[0])
+            S17 = AVX_4x2x1(abcd[1], sgl_val, abcd[1], abcd[2])
+            S18 = avx_421_mul(S16, S17)
 
-            e0 = t0 + t1
-            e1 = t0 - t1
-            cc = t2 - t3
+            S19 = AVX_4x2x1(S18[0], 0, S18[0], S18[2])
+            S20 = AVX_4x2x1(S18[1], 0, S18[1], S18[3])
+            S21 = avx_421_add_sub(S19, S20)
 
-            elements = [e0, e1, 0, 0, 0, 0]
-            sign_flip = cc != 0
+            elements = [S21[0], S21[2], 0, 0, 0, 0]
+            sign_flip = S21[3] != 0
 
         case _:
             raise ValueError("unsupported case for SQIsign verification")
@@ -397,86 +375,52 @@ def superglue_evaluaton_pair(
     dual_theta_null_square,
     elements,
 ) -> tuple[AVX_4x2x1]:
-
+    # TODO: for codomain vi is zero, we might find a nice
+    # optimization here?
     u1, u3, u2, u4 = U
     v1, v3, v2, v4 = V
     w1, w3, w2, w4 = W
 
-    # undo this packing
-    b1 = (u1, v1, w1)
-    b2 = (u2, v2, w2)
-    b3 = (u3, v3, w3)
-    b4 = (u4, v4, w4)
-
-    w1 = b1[2]
-    w3 = b3[2]
     if sign_flip:
         w1 = -w1
         w3 = -w3
 
     # 8 adds
-    # TODO: for codomain bi[1] is zero
-    s0 = b1[0] + b1[1]
-    s1 = b2[0] + b2[1]
-    t0 = b1[0] - b1[1]
-    t1 = b2[0] - b2[1]
-    r0 = b3[0] + b3[1]
-    r1 = b4[0] + b4[1]
-    t5 = b3[0] - b3[1]
-    t6 = b4[0] - b4[1]
+    T0 = AVX_8x1x1(u1, u2, u3, u4, u1, u2, u3, u4)
+    T1 = AVX_8x1x1(v1, v2, v3, v4, v1, v2, v3, v4)
+    T2 = avx_811_add_sub(T0, T1)
 
     # 4M + 4S
-    s0 = s0 * t0
-    s1 = s1 * t1
-    t2 = b1[2] ** 2
-    t3 = b2[2] ** 2
-    r0 = r0 * t5
-    r1 = r1 * t6
-    t7 = b3[2] ** 2
-    t8 = b4[2] ** 2
+    T0 = AVX_8x1x1(T2[0], T2[1], w1, w2, T2[2], T2[3], w3, w4)
+    T1 = AVX_8x1x1(T2[4], T2[5], w1, w2, T2[6], T2[7], w3, w4)
+    T2 = avx_811_mul(T0, T1)
 
     # 8 adds
-    s2 = s0 - t2
-    s0 = s0 + t2
-    s3 = s1 - t3
-    s1 = s1 + t3
-    r2 = r0 - t7
-    r0 = r0 + t7
-    r3 = r1 - t8
-    r1 = r1 + t8
+    T0 = AVX_8x1x1(T2[0], T2[1], T2[4], T2[5], T2[0], T2[1], T2[4], T2[5])
+    T1 = AVX_8x1x1(T2[2], T2[3], T2[6], T2[7], T2[2], T2[3], T2[6], T2[7])
+    T2 = avx_811_add_sub(T0, T1)
 
     # 8M
-    # TODO: for codomain bi[1] is zero
-    s4 = b1[0] * w1
-    s5 = b2[0] * b2[2]
-    s6 = b1[1] * b2[1]
-    t4 = b2[2] * w1
-    r4 = b3[0] * w3
-    r5 = b4[0] * b4[2]
-    r6 = b3[1] * b4[1]
-    t9 = b4[2] * w3
+    T0 = AVX_8x1x1(u1, u2, v1, w2, u3, u4, v3, w4)
+    T1 = AVX_8x1x1(w1, w2, v2, w1, w3, w4, v4, w3)
+    T3 = avx_811_mul(T0, T1)
 
     # 4M (s7, r7 only used for case 4 though)
-    s6 = s6 * t4
-    s7 = s3 * s2
-    r6 = r6 * t9
-    r7 = r3 * r2
+    S0 = AVX_4x2x1(T3[2], T2[5], T3[6], T2[7])
+    S1 = AVX_4x2x1(T3[3], T2[4], T3[7], T2[6])
+    S2 = avx_421_mul(S0, S1)
 
-    # 6 adds
-    s4 = s4 + s4
-    s5 = s5 + s5
-    s6 = s6 + s6
-    r4 = r4 + r4
-    r5 = r5 + r5
-    r6 = r6 + r6
+    # 8 adds (2 wasted)
+    T0 = AVX_8x1x1(T3[0], T3[1], S2[0], T3[4], T3[5], S2[2], 0, 0)
+    T4 = avx_811_add(T0, T0)
 
     # 2 adds
-    s6 = s6 + s6
-    r6 = r6 + r6
+    T0 = AVX_2x4x1(T4[2], T4[5])
+    T5 = avx_241_add(T0, T0)
 
     # Package data to send to superglue_evaluation_on_position
-    data_1 = s0, s1, s2, s3, s4, s5, s6, s7
-    data_2 = r0, r1, r2, r3, r4, r5, r6, r7
+    data_1 = AVX_8x1x1(T2[0], T2[1], T2[4], T2[5], T4[0], T4[1], T5[0], S2[1])
+    data_2 = AVX_8x1x1(T2[2], T2[3], T2[6], T2[7], T4[3], T4[4], T5[1], S2[3])
 
     # This could also be batched, but when case is 1 | 7 we do a 8 way then 7 way mul
     # when case is 4 we do an 8 way then 6 way mul, we could only save time with batched
@@ -512,13 +456,10 @@ def superglue_codomain(
     # Unpack the insane precomputation
     position, sign_flip, dual_theta_null_square, elements = precomputation
 
-    x1, x2, x3, x4 = X_8
-    z1, z2, z3, z4 = Z_8
-
     # Pack the (u, v, w) coordinates directly from the 8 torsion
-    U = AVX_4x2x1(x1, x2, x3, x4)
+    U = X_8
     V = AVX_4x2x1(0, 0, 0, 0)
-    W = AVX_4x2x1(z1, z2, z3, z4)
+    W = Z_8
 
     # 20M + 24a
     A1, A2 = superglue_evaluaton_pair(

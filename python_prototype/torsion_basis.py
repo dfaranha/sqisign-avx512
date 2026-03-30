@@ -38,31 +38,31 @@ def projective_difference(E: Curve, xP: PointX, xQ: PointX):
     t6 = t4 - t5
 
     # 4M parallel (uses 2S)
-    t8 = t3 * t7 
+    t8 = t3 * t7
     t9 = t0 * t1
-    b_xx = t2 ** 2 # This could be done later
-    b_zz = t6 ** 2 # This could be done later
+    b_xx = t2**2  # This could be done later
+    b_zz = t6**2  # This could be done later
 
     # No need to mul, we have t11 from t1 directly with one fp negation
     # t11 = ZP.conjugate() * ZQ.conjugate()
     F = t1.parent()
-    t11 = F([t1[0],  -t1[1]])
+    t11 = F([t1[0], -t1[1]])
     assert t11 == ZP.conjugate() * ZQ.conjugate()
 
     # 2M (wasteful)
-    t10 = A * t9 # This has do be done after the last mul and before the next
-    lam = t11 ** 2 # This could be done earlier
-    
+    t10 = A * t9  # This has do be done after the last mul and before the next
+    lam = t11**2  # This could be done earlier
+
     # Annoying add
     b_xz = t8 + t10 + t10
 
-    # 3M parallel (wasteful)    
+    # 3M parallel (wasteful)
     b_xx = lam * b_xx
     b_xz = lam * b_xz
     b_zz = lam * b_zz
 
     # 2M parallel
-    t12 = b_xz ** 2
+    t12 = b_xz**2
     t13 = b_xx * b_zz
 
     # Annoying add
@@ -105,7 +105,7 @@ def torsion_basis_from_hint(E: Curve, hint: ZZ, e: ZZ) -> BasisX:
     if hint_P:
         if hint_A:
             xP, zP = -A, Fp2([1, hint_P])
-            xQ, zQ = -(xP + A*zP), zP
+            xQ, zQ = -(xP + A * zP), zP
         else:
             xP, zP = hint_P * A, Fp2.one()
             xQ, zQ = -(xP + A), Fp2.one()
