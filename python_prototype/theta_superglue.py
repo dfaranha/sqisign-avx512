@@ -1,6 +1,8 @@
-from elliptic_types import PointX
-from avx_types import AVX_4x2x1, AVX_8x1x1
+from avx_types import AVX_2x4x1, AVX_4x2x1, AVX_8x1x1
 from avx_arithmetic import (
+    avx_241_add,
+    avx_241_mul,
+    avx_241_add_sub,
     avx_421_sqr,
     avx_421_mul,
     avx_421_add,
@@ -10,6 +12,7 @@ from avx_arithmetic import (
     avx_811_sub,
     avx_421_pair_mul,
     avx_811_sqr,
+    avx_811_add_sub,
     avx_421_all_zero,
     avx_421_any_zero,
     avx_421_eq,
@@ -32,33 +35,24 @@ def gluing_kernel_to_x_only(X: AVX_4x2x1, Z: AVX_4x2x1) -> tuple[AVX_4x2x1, AVX_
     return X, avx_421_sqr(Z)
 
 
-def compute_symmetric_position(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
+def compute_symmetric_position(X_4: AVX_4x2x1, Z_4: AVX_4x2x1) -> tuple[int]:
     """
-    2M + 10a
+    Compute the position from the four torsion. In SQIsign, the position of
+    E2[4] is either 2 or 3, but for E1[4] the position can be any of the six
+    possibilities.
     """
     x1, x2, x3, x4 = X_4
     z1, z2, z3, z4 = Z_4
-
-    # TODO: in SQIsign we know pos_2 will be 3 or 4 only, which
-    # helps, but not all that much and I wont include this saving
-    # for now (until I understand how this works)
 
     # The positions we will find
     pos_1 = None
     pos_2 = None
 
-    # 8 parallel additions
-    r1 = x1 + z1
-    s1 = x1 - z1
-
-    r2 = x2 + z2
-    s2 = x2 - z2
-
-    r3 = x3 + z3
-    s3 = x3 - z3
-
-    r4 = x4 + z4
-    s4 = x4 - z4
+    # 8a
+    T0 = AVX_8x1x1(x1, x2, x3, x4, x1, x2, x3, x4)
+    T1 = AVX_8x1x1(z1, z2, z3, z4, z1, z2, z3, z4)
+    T2 = avx_811_add_sub(T0, T1)
+    r1, r2, r3, r4, s1, s2, s3, s4 = T2
 
     def find_pos_early(s, r, s_other, r_other):
         if s == 0:
@@ -85,13 +79,18 @@ def compute_symmetric_position(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
     # If we've reached here, we need to do extra work to find pos_1
     # at a cost of 2M and 2a
     zeta = x1.parent().gen()
-    t1 = zeta * r1 * s2
-    t2 = r2 * s1
+    ir1 = zeta * r1
 
-    # Four parallel additions
-    u1 = t1 + t2
-    u2 = t1 - t2
+    T0 = AVX_2x4x1(ir1, r2)
+    T1 = AVX_2x4x1(s2, s1)
+    T2 = avx_241_mul(T0, T1)
 
+    t1, t2 = T2
+    T0 = AVX_2x4x1(t1, t1)
+    T1 = AVX_2x4x1(t2, t2)
+    u1, u2 = avx_241_add_sub(T0, T1)
+
+    # Find the position in the case where neither P or Q is above (0 : 1)
     if u1 == 0:
         pos_1 = 4
     elif u2 == 0:
@@ -102,29 +101,22 @@ def compute_symmetric_position(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
     return pos_1, pos_2
 
 
-def compute_matrix_coefficients(x1, z1, x2, z2):
+def compute_matrix_coefficients(four_torsion: AVX_4x2x1) -> AVX_8x1x1:
     """
     2M + 4S + 6a
     """
-    # 2M + 4S parallel computations
-    s1 = x1**2
-    s2 = z1**2
-    s3 = x2**2
-    s4 = z2**2
+    x1, z1, x2, z2 = four_torsion
 
-    r2 = x1 * z1
-    r4 = x2 * z2
+    # 8M (2M wasted)
+    T0 = AVX_8x1x1(x1, z1, x2, z2, x1, x2, 0, 0)
+    T1 = AVX_8x1x1(x1, z1, x2, z2, z1, z2, 0, 0)
+    T2 = avx_811_mul(T0, T1)
+    s1, s2, s3, s4, r2, r4, _, _ = T2
 
-    # 4s + 2s parallel computations
-    r1 = s1 + s2
-    r2 = r2 + r2
-    r3 = s3 + s4
-    r4 = r4 + r4
-
-    delta_1 = s1 - s2
-    delta_2 = s3 - s4
-
-    return ((r1, r2, delta_1), (r3, r4, delta_2))
+    # 8a (2a wasted)
+    T0 = AVX_8x1x1(s1, r2, s3, r4, s1, s3, 0, 0)
+    T1 = AVX_8x1x1(s2, r2, s4, r4, s2, s4, 0, 0)
+    return avx_811_add_sub(T0, T1)
 
 
 def compute_symmetric_elements(r1, r2, delta, pos):
@@ -176,23 +168,21 @@ def compute_superglue_coefficients(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
 
     # Memory management for what we send into compute_matrix_coefficients
     # based on pos_1 and pos_2
-    x1, x2, x3, x4 = X_4
-    z1, z2, z3, z4 = Z_4
-    if pos_1 == 0 or pos_1 == 1:
-        X1, Z1 = x2, z2
-    else:
-        X1, Z1 = x1, z1
-
-    # For the pos_2 case, we always have pos_2 in (2, 3)
     assert pos_2 in [2, 3]
-    X2, Z2 = x3, z3
+    x1, x2, x3, _ = X_4
+    z1, z2, z3, _ = Z_4
+    if pos_1 == 0 or pos_1 == 1:
+        four_torsion = AVX_4x2x1(x2, z2, x3, z3)
+    else:
+        four_torsion = AVX_4x2x1(x1, z1, x3, z3)
 
     # Compute the unique elements which we use to file the symmetric elements
     # 2M + 4S + 6a
-    ((r1, r2, delta_1), (r3, r4, delta_2)) = compute_matrix_coefficients(X1, Z1, X2, Z2)
+    coefficients = compute_matrix_coefficients(four_torsion)
 
     # TODO: this can be done in parallel, but there is no arithmetic, only
     # memory management so maybe it's not worth it
+    r1, r2, r3, r4, delta_1, delta_2, _, _ = coefficients
     g0_1, g1_1, g2_1 = compute_symmetric_elements(r1, r2, delta_1, pos_1)
     g0_2, g1_2, g2_2 = compute_symmetric_elements(r3, r4, delta_2, pos_2)
 
@@ -289,10 +279,10 @@ def compute_superglue_coefficients(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
             t5 = b * c
 
             e0 = t0 + t1
-            e1 = t0 - t1
             e2 = t2 + t3
-            e3 = t2 - t3
             e4 = t4 + t5
+            e1 = t0 - t1
+            e3 = t2 - t3
             e5 = t4 - t5
 
             elements = [e0, e1, e2, e3, e4, e5]
@@ -335,79 +325,63 @@ def superglue_evaluation_on_position(data, position, dual_theta_null_square, ele
         case 4:
             e0, e1, _, _, _, _ = elements
 
-            # 8 way mul
-            t0 = s1 * A_inv
-            t1 = s5 * e0
-            t4 = s1 * e1
-            t5 = s5 * C_inv
-            t8 = s1 * C_inv
-            t9 = s5 * e1
-            t12 = s1 * e0
-            t13 = s5 * A_inv
+            # 8M
+            T0 = AVX_8x1x1(s1, s5, s1, s5, s1, s5, s1, s5)
+            T1 = AVX_8x1x1(A_inv, e0, e1, C_inv, C_inv, e1, e0, A_inv)
+            T2 = avx_811_mul(T0, T1)
 
-            # 4 adds
-            t2 = t0 + t1
-            t6 = t4 + t5
-            t10 = t8 + t9
-            t14 = t12 + t13
+            # 4a
+            T0 = AVX_4x2x1(T2[0], T2[2], T2[4], T2[6])
+            T1 = AVX_4x2x1(T2[1], T2[3], T2[5], T2[7])
+            T2 = avx_421_add(T0, T1)
 
-            # 6 muls
-            t3 = s0 * t2
-            t7 = s4 * t6
-            t11 = s0 * t10
-            t15 = s4 * t14
-            T = s6 * B_inv
-            Y = s7 * B_inv
+            # 8M (2 wasted)
+            T0 = AVX_8x1x1(s0, s4, s0, s4, s6, s7, 0, 0)
+            T1 = AVX_8x1x1(T2[0], T2[1], T2[2], T2[3], B_inv, B_inv, 0, 0)
+            T2 = avx_811_mul(T0, T1)
 
-            # 2 adds
-            X = t3 + t7
-            Z = t11 + t15
+            # 4a
+            T0 = AVX_2x4x1(T2[0], T2[2])
+            T1 = AVX_2x4x1(T2[1], T2[3])
+            T3 = avx_241_add(T0, T1)
 
-            return AVX_4x2x1(X, Y, Z, T)
+            return AVX_4x2x1(T3[0], T2[5], T3[1], T2[4])
 
         # Cases 1 and 7 are nearly identical
         case 1 | 7:
             e0, e1, e2, e3, e4, e5 = elements
 
+            # 8M
+            T0 = AVX_8x1x1(s1, s5, s1, s5, s0, s4, s1, s5)
             # For positions 1, 7 only the role of A_inv and C_inv
             # and then X, Z are reversed.
             if position == 7:
-                A_inv, C_inv = C_inv, A_inv
+                T1 = AVX_8x1x1(C_inv, e0, e2, e4, B_inv, e3, A_inv, e1)
+            else:
+                T1 = AVX_8x1x1(A_inv, e0, e2, e4, B_inv, e3, C_inv, e1)
+            T2 = avx_811_mul(T0, T1)
 
-            # 8 way multiplications with precomputations
-            t0 = s1 * A_inv
-            t1 = s5 * e0
-            t4 = s1 * e2
-            t5 = s5 * e4
-            t8 = s0 * B_inv
-            t9 = s4 * e3
-            t12 = s1 * C_inv
-            t13 = s5 * e1
+            # 4a
+            T3 = AVX_2x4x1(T2[0], T2[2])
+            T4 = AVX_2x4x1(T2[1], T2[3])
+            T5 = avx_241_add(T3, T4)
 
-            # Two adds
-            t2 = t0 + t1
-            t6 = t4 + t5
+            # 8M (1 wasted)
+            T6 = AVX_8x1x1(s0, s4, s3, s3, s2, s2, s6, 0)
+            T7 = AVX_8x1x1(T5[0], T5[1], T2[4], T2[5], T2[6], T2[7], e5, 0)
+            T8 = avx_811_mul(T6, T7)
 
-            # 7 multiplications
-            t3 = s0 * t2
-            t7 = s4 * t6
-            t10 = t8 * s3
-            t11 = t9 * s3
-            t14 = t12 * s2
-            t15 = t13 * s2
-            T = s6 * e5
-
-            # three adds
-            X = t3 + t7
-            Y = t10 + t11
-            Z = t14 + t15
+            # 4a (1 wasted)
+            T9 = AVX_4x2x1(T8[0], T8[2], T8[4], 0)
+            Ta = AVX_4x2x1(T8[1], T8[3], T8[5], 0)
+            Tb = avx_421_add(T9, Ta)
 
             # For positions 1, 7 only the role of A_inv and C_inv
             # and then X, Z are reversed.
             if position == 7:
-                X, Z = Z, X
-
-            return AVX_4x2x1(X, Y, Z, T)
+                return AVX_4x2x1(Tb[2], Tb[1], Tb[0], T8[6])
+            else:
+                return AVX_4x2x1(Tb[0], Tb[1], Tb[2], T8[6])
 
         # All other cases wont be touched by SQIsign
         case _:
@@ -415,15 +389,25 @@ def superglue_evaluation_on_position(data, position, dual_theta_null_square, ele
 
 
 def superglue_evaluaton_pair(
-    b1,
-    b2,
-    b3,
-    b4,
-    position,
-    sign_flip,
+    U: AVX_4x2x1,
+    V: AVX_4x2x1,
+    W: AVX_4x2x1,
+    position: int,
+    sign_flip: bool,
     dual_theta_null_square,
     elements,
-):
+) -> tuple[AVX_4x2x1]:
+
+    u1, u3, u2, u4 = U
+    v1, v3, v2, v4 = V
+    w1, w3, w2, w4 = W
+
+    # undo this packing
+    b1 = (u1, v1, w1)
+    b2 = (u2, v2, w2)
+    b3 = (u3, v3, w3)
+    b4 = (u4, v4, w4)
+
     w1 = b1[2]
     w3 = b3[2]
     if sign_flip:
@@ -531,40 +515,38 @@ def superglue_codomain(
     x1, x2, x3, x4 = X_8
     z1, z2, z3, z4 = Z_8
 
-    bary_P1 = [x1, 0, z1]
-    bary_P2 = [x3, 0, z3]
-    bary_Q1 = [x2, 0, z2]
-    bary_Q2 = [x4, 0, z4]
+    # Pack the (u, v, w) coordinates directly from the 8 torsion
+    U = AVX_4x2x1(x1, x2, x3, x4)
+    V = AVX_4x2x1(0, 0, 0, 0)
+    W = AVX_4x2x1(z1, z2, z3, z4)
 
     # 20M + 24a
-    xAxByCyD, zAtBzYtD = superglue_evaluaton_pair(
-        bary_P1,
-        bary_P2,
-        bary_Q1,
-        bary_Q2,
+    A1, A2 = superglue_evaluaton_pair(
+        U,
+        V,
+        W,
         position,
         sign_flip,
         dual_theta_null_square,
         elements,
     )
 
-    # Codomain coefficients
-    ABCD = [0, 0, 0, 0]
-
     # 4M
-    ABCD[0] = xAxByCyD[0] * zAtBzYtD[0]
-    ABCD[1] = xAxByCyD[1] * zAtBzYtD[0]
-    ABCD[2] = xAxByCyD[0] * zAtBzYtD[2]
-    alpha_inv = xAxByCyD[1] * zAtBzYtD[2]
+    T0 = AVX_4x2x1(A1[0], A1[1], A1[0], A1[1])
+    T1 = AVX_4x2x1(A2[0], A2[0], A2[2], A2[2])
+    T2 = avx_421_mul(T0, T1)
+
+    ABCD = AVX_4x2x1(T2[0], T2[1], T2[2], 0)
 
     # 2M
-    a = xAxByCyD[0] * alpha_inv
-    b = xAxByCyD[2] * ABCD[1]
+    T0 = AVX_2x4x1(A1[0], A1[2])
+    T1 = AVX_2x4x1(T2[3], ABCD[1])
+    ab = avx_241_mul(T0, T1)
 
     # 8a
-    codomain = hadamard(AVX_4x2x1(*ABCD))
+    codomain = hadamard(ABCD)
 
-    return codomain, (a, b), precomputation
+    return codomain, ab, precomputation
 
 
 def superglue_eval_pair(
@@ -575,19 +557,15 @@ def superglue_eval_pair(
     """
     # 16S + 48M + 28a
     U, V, W = four_add_components(A_12, P, T8)
-    u1, u3, u2, u4 = U
-    v1, v3, v2, v4 = V
-    w1, w3, w2, w4 = W
 
     # Unpack the insane precomputation
     position, sign_flip, dual_theta_null_square, elements = precomputation
 
     # 20M + 24a
     P1, P2 = superglue_evaluaton_pair(
-        (u1, v1, w1),
-        (u2, v2, w2),
-        (u3, v3, w3),
-        (u4, v4, w4),
+        U,
+        V,
+        W,
         position,
         sign_flip,
         dual_theta_null_square,
