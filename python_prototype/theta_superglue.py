@@ -34,7 +34,7 @@ def gluing_kernel_to_x_only(X: AVX_4x2x1, Z: AVX_4x2x1) -> tuple[AVX_4x2x1, AVX_
 
 def compute_symmetric_position(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
     """
-    4M + 8a
+    2M + 10a
     """
     x1, x2, x3, x4 = X_4
     z1, z2, z3, z4 = Z_4
@@ -60,26 +60,7 @@ def compute_symmetric_position(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
     r4 = x4 + z4
     s4 = x4 - z4
 
-    # TODO: here we could check 4 of the 6 conditions
-    # and exit early if we want, saving 1 4 way mul
-    # and 1 4-way add
-
-    # Four parallel multiplications
-    # TODO: mul by zeta is just rearranging memory and a
-    # sign flip
-    zeta = x1.parent().gen()
-    t1 = zeta * r1 * s2
-    t2 = r2 * s1
-    t3 = zeta * r3 * s4
-    t4 = r4 * s3
-
-    # Four parallel additions
-    u1 = t1 + t2
-    u2 = t1 - t2
-    u3 = t3 + t4
-    u4 = t3 - t4
-
-    def find_pos(s, r, s_other, r_other, u_plus, u_minus):
+    def find_pos_early(s, r, s_other, r_other):
         if s == 0:
             return 0
         elif r == 0:
@@ -88,15 +69,35 @@ def compute_symmetric_position(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
             return 2
         elif r_other == 0:
             return 3
-        elif u_plus == 0:
-            return 4
-        elif u_minus == 0:
-            return 5
         else:
-            raise ValueError("No vanishing coordinate found in 4-torsion")
+            return None
 
-    pos_1 = find_pos(s1, r1, s2, r2, u1, u2)
-    pos_2 = find_pos(s3, r3, s4, r4, u3, u4)
+    # For SQIsign, pos_2 is always 2 or 3, but pos_1
+    # is unbounded. We can return early here if we're
+    # in the lucky 2/3 cases
+    pos_1 = find_pos_early(s1, r1, s2, r2)
+    pos_2 = find_pos_early(s3, r3, s4, r4)
+    assert pos_2 in [2, 3]
+
+    if pos_1 is not None:
+        return pos_1, pos_2
+
+    # If we've reached here, we need to do extra work to find pos_1
+    # at a cost of 2M and 2a
+    zeta = x1.parent().gen()
+    t1 = zeta * r1 * s2
+    t2 = r2 * s1
+
+    # Four parallel additions
+    u1 = t1 + t2
+    u2 = t1 - t2
+
+    if u1 == 0:
+        pos_1 = 4
+    elif u2 == 0:
+        pos_1 = 5
+    else:
+        raise ValueError("No vanishing coordinate found in 4-torsion")
 
     return pos_1, pos_2
 
@@ -166,7 +167,11 @@ def compute_symmetric_elements(r1, r2, delta, pos):
 
 
 def compute_superglue_coefficients(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
+    """
+    35M + 7S + 36a
+    """
     # Compute the positions of each element
+    # 2M + 10a
     pos_1, pos_2 = compute_symmetric_position(X_4, Z_4)
 
     # Memory management for what we send into compute_matrix_coefficients
@@ -177,82 +182,105 @@ def compute_superglue_coefficients(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
         X1, Z1 = x2, z2
     else:
         X1, Z1 = x1, z1
-    if pos_2 == 0 or pos_2 == 1:
-        X2, Z2 = x4, z4
-    else:
-        X2, Z2 = x3, z3
+
+    # For the pos_2 case, we always have pos_2 in (2, 3)
+    assert pos_2 in [2, 3]
+    X2, Z2 = x3, z3
+
+    # Compute the unique elements which we use to file the symmetric elements
+    # 2M + 4S + 6a
     ((r1, r2, delta_1), (r3, r4, delta_2)) = compute_matrix_coefficients(X1, Z1, X2, Z2)
 
     # TODO: this can be done in parallel, but there is no arithmetic, only
-    # memory management
+    # memory management so maybe it's not worth it
     g0_1, g1_1, g2_1 = compute_symmetric_elements(r1, r2, delta_1, pos_1)
     g0_2, g1_2, g2_2 = compute_symmetric_elements(r3, r4, delta_2, pos_2)
 
-    # Combined projective factor and position
-    delta = delta_1 * delta_2
+    # Generically there's 9 elements here for the Q basis, but we actually only need 7
+    assert g1_2[0] == 0
+    assert g1_2[1] == g1_2[2]
 
     # Handle special cases for positions
     position = 3 * (pos_1 >> 1) + (pos_2 >> 1)
-    superglue_case = {0: 1, 4: 2, 8: 3}.get(position, 0)
+    assert position in [1, 4, 7]
 
-    # Init first values
-    a = delta
-    b = 0
-    c = 0
-    d = 0
+    # 8M
+    # a = delta + g1_1[0] * g1_2[0], g1_2[0] is 0 and we skip this to save a way mul
+    a = g0_1[0] * g0_2[0]
+    b = g0_1[0] * g0_2[1]
+    c = g0_1[1] * g0_2[0]
+    d = g0_1[1] * g0_2[1]
+    delta = delta_1 * delta_2
+    t0 = g1_1[0] * g1_2[1]
+    t1 = g1_1[1] * g1_2[0]  # g1_2[0] is 0, we could skip this
+    t2 = g1_1[1] * g1_2[1]
 
-    # T1
-    a += g0_1[0] * g0_2[0]
-    b += g0_1[0] * g0_2[1]
-    c += g0_1[1] * g0_2[0]
-    d += g0_1[1] * g0_2[1]
-
-    # T2
-    a += g1_1[0] * g1_2[0]
-    b += g1_1[0] * g1_2[1]
-    c += g1_1[1] * g1_2[0]
-    d += g1_1[1] * g1_2[1]
+    # 4a
+    a += delta
+    b += t0
+    c += t1
+    d += t2
 
     # T1+T2
-    a -= g2_1[0] * g2_2[0]
-    b -= g2_1[0] * g2_2[1]
-    c -= g2_1[1] * g2_2[0]
-    d -= g2_1[1] * g2_2[1]
+    # 4M
+    r0 = g2_1[0] * g2_2[0]
+    r1 = g2_1[0] * g2_2[1]
+    r2 = g2_1[1] * g2_2[0]
+    r3 = g2_1[1] * g2_2[1]
 
-    t0 = g1_2[0] * a
+    # 4a
+    a -= r0
+    b -= r1
+    c -= r2
+    d -= r3
+
+    # 4M
+    t0 = g1_2[0] * a  # g1_2[0] is 0, we could skip this
     t1 = g1_2[2] * b
     t2 = g0_1[0] * a
     t3 = g0_1[2] * c
 
-    # 2 more M, annoying can be paired with optional 2 below
-    # Now we act by (0, Q2)
-    a1 = delta_1 * (t0 + t1)
+    # 2a
+    t4 = t0 + t1
+    t5 = t2 + t3
 
-    # Now we act by (P1, 0)
-    a2 = delta_2 * (t2 + t3)
+    # These first two are optional, but fit in a 4-way
+    # 4M
+    t6 = g0_1[0] * b
+    t7 = g0_1[2] * d
+    a1 = delta_1 * t4
+    a2 = delta_2 * t5
 
-    # Special value needed for case 1, 2, 3
-    # In SQIsign we are only in case 0 or 2
+    # This only needs to be done 1/3 of the time
     sgl_val = 0
-    if superglue_case in [1, 3]:  # Never happens in sqisign
-        sgl_val = delta_1 * (g1_2[1] * a - g1_2[0] * b)
-    elif superglue_case == 2:
-        # 3 more M... annoying
-        sgl_val = delta_2 * (g0_1[0] * b + g0_1[2] * d)
+    if position == 4:
+        # Another 1a + 1M
+        t8 = t6 + t7
+        sgl_val = delta_2 * t8
 
-    # Projective factor, 4M is nice
+    # 4M
     a *= delta
     b *= delta
     c *= delta
     d *= delta
 
     # Compute dual_theta_null_square for later
-    a1sq, a2sq, asq = a1**2, a2**2, a**2
-    dual_theta_null_square = [a1sq + a2sq, asq - a1sq, asq - a2sq, 0]
+    # 3S
+    a1sq = a1**2
+    a2sq = a2**2
+    asq = a**2
 
-    match superglue_case:
-        case 0:
+    # 3a
+    A_inv = a1sq + a2sq
+    B_inv = asq - a1sq
+    C_inv = asq - a2sq
+
+    dual_theta_null_square = [A_inv, B_inv, C_inv, 0]
+
+    match position:
+        case 1 | 7:
             # Standard case: all four coordinates are nonzero
+            # 6M + 6a
             t0 = a * b
             t1 = c * d
             t2 = a * c
@@ -260,128 +288,62 @@ def compute_superglue_coefficients(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
             t4 = a * d
             t5 = b * c
 
-            element_01 = [t0 + t1, t0 - t1]
-            element_02 = [t2 + t3, t2 - t3]
-            element_03 = [t4 + t5, t4 - t5]
+            e0 = t0 + t1
+            e1 = t0 - t1
+            e2 = t2 + t3
+            e3 = t2 - t3
+            e4 = t4 + t5
+            e5 = t4 - t5
+
+            elements = [e0, e1, e2, e3, e4, e5]
             sign_flip = False
 
-        case 1 | 2 | 3:
+        case 4:
             # Special case: one coordinate vanishes, sign_flip encodes
             # which square root branch to take
-            alpha = a1 if superglue_case != 2 else a2
-
+            # 4M + 3a
             t0 = a * b
-            t1 = alpha * sgl_val
+            t1 = a2 * sgl_val
             t2 = a * b
             t3 = a * c
 
-            element_01 = [t0 + t1, t0 - t1]
-            sign_flip = (t2 - t3) != 0
-            # element_02 and element_03 are not used in these cases
-            element_02 = element_03 = None
+            e0 = t0 + t1
+            e1 = t0 - t1
+            cc = t2 - t3
+
+            elements = [e0, e1, 0, 0, 0, 0]
+            sign_flip = cc != 0
+
+        case _:
+            raise ValueError("unsupported case for SQIsign verification")
 
     return (
         position,
         sign_flip,
         dual_theta_null_square,
-        element_01,
-        element_02,
-        element_03,
+        elements,
     )
 
 
-def superglue_evaluaton(
-    barycentric_1,
-    barycentric_2,
-    position,
-    sign_flip,
-    dual_theta_null_square,
-    element_01,
-    element_02,
-    element_03,
-):
-    # NOTE: this is always called in pairs, so we can make this
-    # a pair function and do 8 way instead of 4 way as seen below.
+def superglue_evaluation_on_position(data, position, dual_theta_null_square, elements):
+    s0, s1, s2, s3, s4, s5, s6, s7 = data
+    A_inv, B_inv, C_inv, _ = dual_theta_null_square
 
-    tmp3 = barycentric_1[2]
-    if sign_flip:
-        tmp3 = -tmp3
-
-    # 4 adds
-    uuvv_p_ww1 = barycentric_1[0] + barycentric_1[1]
-    tmp1 = barycentric_1[0] - barycentric_1[1]
-    uuvv_p_ww2 = barycentric_2[0] + barycentric_2[1]
-    tmp2 = barycentric_2[0] - barycentric_2[1]
-
-    # 2M + 2S
-    uuvv_p_ww1 = uuvv_p_ww1 * tmp1
-    uuvv_p_ww2 = uuvv_p_ww2 * tmp2
-    tmp1 = barycentric_1[2] ** 2
-    tmp2 = barycentric_2[2] ** 2
-
-    # 4 adds
-    uuvv_m_ww1 = uuvv_p_ww1 - tmp1
-    uuvv_p_ww1 = uuvv_p_ww1 + tmp1
-    uuvv_m_ww2 = uuvv_p_ww2 - tmp2
-    uuvv_p_ww2 = uuvv_p_ww2 + tmp2
-
-    # 4M
-    uw1 = barycentric_1[0] * tmp3
-    uw2 = barycentric_2[0] * barycentric_2[2]
-    vw12 = barycentric_1[1] * barycentric_2[1]
-    tmp1 = tmp3 * barycentric_2[2]
-
-    vw12 = vw12 * tmp1  # Annoying one on its own
-
-    uw1 = uw1 + uw1
-    uw2 = uw2 + uw2
-    vw12 = vw12 + vw12
-    vw12 = vw12 + vw12
-
-    # WARNING No refactoring from max has happened below.
     # SQIsign has only position 1, 4, 7 (to save time when writing code)
     match position:
-        case 1:
-            # 8 way multiplications with precomputations
-            t0 = uuvv_p_ww2 * dual_theta_null_square[0]
-            t1 = uw2 * element_01[0]
-            t4 = uuvv_p_ww2 * element_02[0]
-            t5 = uw2 * element_03[0]
-            t8 = uuvv_p_ww1 * dual_theta_null_square[1]
-            t9 = uw1 * element_02[1]
-            t12 = uuvv_p_ww2 * dual_theta_null_square[2]
-            t13 = uw2 * element_01[1]
-
-            # Two adds
-            t2 = t0 + t1
-            t6 = t4 + t5
-
-            # 7 multiplications
-            t3 = uuvv_p_ww1 * t2
-            t7 = uw1 * t6
-            t10 = t8 * uuvv_m_ww2
-            t11 = t9 * uuvv_m_ww2
-            t14 = t12 * uuvv_m_ww1
-            t15 = t13 * uuvv_m_ww1
-            T = vw12 * element_03[1]
-
-            # three adds
-            X = t3 + t7
-            Y = t10 + t11
-            Z = t14 + t15
-
-            return (X, Y, Z, T)
-
+        # Special case where we need to handle the zero
         case 4:
+            e0, e1, _, _, _, _ = elements
+
             # 8 way mul
-            t0 = uuvv_p_ww2 * dual_theta_null_square[0]
-            t1 = uw2 * element_01[0]
-            t4 = uuvv_p_ww2 * element_01[1]
-            t5 = uw2 * dual_theta_null_square[2]
-            t8 = uuvv_p_ww2 * dual_theta_null_square[2]
-            t9 = uw2 * element_01[1]
-            t12 = uuvv_p_ww2 * element_01[0]
-            t13 = uw2 * dual_theta_null_square[0]
+            t0 = s1 * A_inv
+            t1 = s5 * e0
+            t4 = s1 * e1
+            t5 = s5 * C_inv
+            t8 = s1 * C_inv
+            t9 = s5 * e1
+            t12 = s1 * e0
+            t13 = s5 * A_inv
 
             # 4 adds
             t2 = t0 + t1
@@ -390,271 +352,159 @@ def superglue_evaluaton(
             t14 = t12 + t13
 
             # 6 muls
-            t3 = uuvv_p_ww1 * t2
-            t7 = uw1 * t6
-            t11 = uuvv_p_ww1 * t10
-            t15 = uw1 * t14
-            t16 = uuvv_m_ww2 * uuvv_m_ww1
-            T = vw12 * dual_theta_null_square[1]
+            t3 = s0 * t2
+            t7 = s4 * t6
+            t11 = s0 * t10
+            t15 = s4 * t14
+            T = s6 * B_inv
+            Y = s7 * B_inv
 
-            # 3 adds
+            # 2 adds
             X = t3 + t7
             Z = t11 + t15
 
-            # 1 mul left over, can we refactor this?
-            Y = t16 * dual_theta_null_square[1]
+            return AVX_4x2x1(X, Y, Z, T)
 
-            return (X, Y, Z, T)
+        # Cases 1 and 7 are nearly identical
+        case 1 | 7:
+            e0, e1, e2, e3, e4, e5 = elements
 
-        case 7:
+            # For positions 1, 7 only the role of A_inv and C_inv
+            # and then X, Z are reversed.
+            if position == 7:
+                A_inv, C_inv = C_inv, A_inv
 
-            # Compute third element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[2]
-            tmp2 = uw2 * element_01[0]
-            tmp1 = tmp1 + tmp2
-            tmp3 = uuvv_p_ww1 * tmp1
+            # 8 way multiplications with precomputations
+            t0 = s1 * A_inv
+            t1 = s5 * e0
+            t4 = s1 * e2
+            t5 = s5 * e4
+            t8 = s0 * B_inv
+            t9 = s4 * e3
+            t12 = s1 * C_inv
+            t13 = s5 * e1
 
-            tmp1 = uuvv_p_ww2 * element_02[0]
-            tmp2 = uw2 * element_03[0]
-            tmp1 = tmp1 + tmp2
-            tmp1 = uw1 * tmp1
-            Z = tmp3 + tmp1
+            # Two adds
+            t2 = t0 + t1
+            t6 = t4 + t5
 
-            # Compute second element
-            tmp1 = uuvv_p_ww1 * dual_theta_null_square[1]
-            tmp2 = uw1 * element_02[1]
-            tmp1 = tmp1 * uuvv_m_ww2
-            tmp2 = tmp2 * uuvv_m_ww2
-            tmp1 = tmp1 + tmp2
-            Y = 0 + tmp1
+            # 7 multiplications
+            t3 = s0 * t2
+            t7 = s4 * t6
+            t10 = t8 * s3
+            t11 = t9 * s3
+            t14 = t12 * s2
+            t15 = t13 * s2
+            T = s6 * e5
 
-            # Compute first element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[0]
-            tmp2 = uw2 * element_01[1]
-            tmp1 = tmp1 * uuvv_m_ww1
-            tmp2 = tmp2 * uuvv_m_ww1
-            X = tmp1 + tmp2
+            # three adds
+            X = t3 + t7
+            Y = t10 + t11
+            Z = t14 + t15
 
-            # Compute the last point.
-            T = vw12 * element_03[1]
+            # For positions 1, 7 only the role of A_inv and C_inv
+            # and then X, Z are reversed.
+            if position == 7:
+                X, Z = Z, X
 
-            return (X, Y, Z, T)
+            return AVX_4x2x1(X, Y, Z, T)
 
         # All other cases wont be touched by SQIsign
-
-        case 2:
-            # Compute second element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[1]
-            tmp2 = uw2 * element_01[0]
-            tmp1 = tmp1 + tmp2
-            tmp3 = uuvv_p_ww1 * tmp1
-
-            tmp1 = uuvv_p_ww2 * element_02[0]
-            tmp2 = uw2 * element_03[0]
-            tmp1 = tmp1 + tmp2
-            tmp1 = uw1 * tmp1
-            Y = tmp3 + tmp1
-
-            # Compute first element
-            tmp1 = uuvv_p_ww1 * dual_theta_null_square[0]
-            tmp2 = uw1 * element_02[1]
-
-            tmp1 = tmp1 * uuvv_m_ww2
-            tmp2 = tmp2 * uuvv_m_ww2
-            tmp1 = tmp1 + tmp2
-            X = 0 + tmp1
-
-            # Compute third element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[2]
-            tmp2 = uw2 * element_01[1]
-            tmp1 = tmp1 * uuvv_m_ww1
-            tmp2 = tmp2 * uuvv_m_ww1
-            Z = tmp1 + tmp2
-
-            # Compute the last point.
-            T = vw12 * element_03[1]
-
-            return (X, Y, Z, T)
-
-        case 3:
-            # Compute first element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[0]
-            tmp2 = uw2 * element_01[0]
-            tmp1 = tmp1 + tmp2
-            tmp3 = uuvv_p_ww1 * tmp1
-
-            tmp1 = uuvv_p_ww2 * element_02[0]
-            tmp2 = uw2 * element_03[0]
-            tmp1 = tmp1 + tmp2
-            tmp1 = uw1 * tmp1
-            X = tmp3 + tmp1
-
-            # Compute third element
-            tmp1 = uuvv_p_ww1 * dual_theta_null_square[2]
-            tmp2 = uw1 * element_02[1]
-            tmp1 = tmp1 * uuvv_m_ww2
-            tmp2 = tmp2 * uuvv_m_ww2
-            tmp1 = tmp1 + tmp2
-            Z = 0 + tmp1
-
-            # Compute second element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[1]
-            tmp2 = uw2 * element_01[1]
-            tmp1 = tmp1 * uuvv_m_ww1
-            tmp2 = tmp2 * uuvv_m_ww1
-            Y = tmp1 + tmp2
-
-            # Compute the last point.
-            T = vw12 * element_03[1]
-
-            return (X, Y, Z, T)
-
-        case 5:
-
-            # Compute third element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[2]
-            tmp2 = uw2 * element_01[0]
-            tmp1 = tmp1 + tmp2
-            tmp3 = uuvv_p_ww1 * tmp1
-
-            tmp1 = uuvv_p_ww2 * element_02[0]
-            tmp2 = uw2 * element_03[0]
-            tmp1 = tmp1 + tmp2
-            tmp1 = uw1 * tmp1
-            Z = tmp3 + tmp1
-
-            # Compute first element
-            tmp1 = uuvv_p_ww1 * dual_theta_null_square[0]
-            tmp2 = uw1 * element_02[1]
-            tmp1 = tmp1 * uuvv_m_ww2
-            tmp2 = tmp2 * uuvv_m_ww2
-            tmp1 = tmp1 + tmp2
-            X = 0 + tmp1
-
-            # Compute second element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[1]
-            tmp2 = uw2 * element_01[1]
-            tmp1 = tmp1 * uuvv_m_ww1
-            tmp2 = tmp2 * uuvv_m_ww1
-            Y = tmp1 + tmp2
-
-            # Compute the last point.
-            T = vw12 * element_03[1]
-
-            return (X, Y, Z, T)
-
-        case 6:
-
-            # Compute second element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[1]
-            tmp2 = uw2 * element_01[0]
-            tmp1 = tmp1 + tmp2
-            tmp3 = uuvv_p_ww1 * tmp1
-
-            tmp1 = uuvv_p_ww2 * element_02[0]
-            tmp2 = uw2 * element_03[0]
-            tmp1 = tmp1 + tmp2
-            tmp1 = uw1 * tmp1
-            Y = tmp3 + tmp1
-
-            # Compute third element
-            tmp1 = uuvv_p_ww1 * dual_theta_null_square[2]
-            tmp2 = uw1 * element_02[1]
-            tmp1 = tmp1 * uuvv_m_ww2
-            tmp2 = tmp2 * uuvv_m_ww2
-            tmp1 = tmp1 + tmp2
-            Z = 0 + tmp1
-
-            # Compute first element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[0]
-            tmp2 = uw2 * element_01[1]
-            tmp1 = tmp1 * uuvv_m_ww1
-            tmp2 = tmp2 * uuvv_m_ww1
-            X = tmp1 + tmp2
-
-            # Compute the last point.
-            T = vw12 * element_03[1]
-
-            return (X, Y, Z, T)
-
-        case 0:
-            # Compute first element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[0]
-            tmp2 = uw2 * element_01[0]
-            tmp1 = tmp1 + tmp2
-            tmp3 = uuvv_p_ww1 * tmp1
-
-            tmp1 = uuvv_p_ww2 * element_01[1]
-            tmp2 = uw2 * dual_theta_null_square[1]
-            tmp1 = tmp1 + tmp2
-            tmp1 = uw1 * tmp1
-            X = tmp3 + tmp1
-
-            # Compute second element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[1]
-            tmp2 = uw2 * element_01[1]
-            tmp1 = tmp1 + tmp2
-            tmp3 = uuvv_p_ww1 * tmp1
-
-            tmp1 = uuvv_p_ww2 * element_01[0]
-            tmp2 = uw2 * dual_theta_null_square[0]
-            tmp1 = tmp1 + tmp2
-            tmp1 = uw1 * tmp1
-            Y = tmp3 + tmp1
-
-            # Compute third element
-            tmp1 = uuvv_m_ww2 * uuvv_m_ww1
-            Z = tmp1 * dual_theta_null_square[2]
-
-            # Compute the last point.
-            T = vw12 * dual_theta_null_square[2]
-
-            return (X, Y, Z, T)
-
-        case 8:
-            # Compute second element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[1]
-            tmp2 = uw2 * element_01[1]
-            tmp1 += tmp2
-            tmp3 = uuvv_p_ww1 * tmp1
-
-            tmp1 = uuvv_p_ww2 * element_01[0]
-            tmp2 = uw2 * dual_theta_null_square[2]
-            tmp1 += tmp2
-            tmp1 = uw1 * tmp1
-            Y = tmp3 + tmp1
-
-            # Compute third element
-            tmp1 = uuvv_p_ww2 * dual_theta_null_square[2]
-            tmp2 = uw2 * element_01[0]
-            tmp1 = tmp1 + tmp2
-            tmp3 = uuvv_p_ww1 * tmp1
-
-            tmp1 = uuvv_p_ww2 * element_01[1]
-            tmp2 = uw2 * dual_theta_null_square[1]
-            tmp1 = tmp1 + tmp2
-            tmp1 = uw1 * tmp1
-            Z = tmp3 + tmp1
-
-            # Compute third element
-            tmp1 = uuvv_m_ww2 * uuvv_m_ww1
-            X = tmp1 * dual_theta_null_square[0]
-
-            # Compute the last point.
-            T = vw12 * dual_theta_null_square[0]
-
-            return (X, Y, Z, T)
+        case _:
+            raise ValueError("evaluation failed due to unsupported case")
 
 
-def superglue_precomputation(A24_12: AVX_4x2x1, X_8: AVX_4x2x1, Z_8: AVX_4x2x1):
-    X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)
+def superglue_evaluaton_pair(
+    b1,
+    b2,
+    b3,
+    b4,
+    position,
+    sign_flip,
+    dual_theta_null_square,
+    elements,
+):
+    w1 = b1[2]
+    w3 = b3[2]
+    if sign_flip:
+        w1 = -w1
+        w3 = -w3
 
-    # Double points to recover 4-torsion for change of basis
-    X_4, Z_4 = x_double_4x4x2x1(A24_12, X_8, Z_8)
+    # 8 adds
+    # TODO: for codomain bi[1] is zero
+    s0 = b1[0] + b1[1]
+    s1 = b2[0] + b2[1]
+    t0 = b1[0] - b1[1]
+    t1 = b2[0] - b2[1]
+    r0 = b3[0] + b3[1]
+    r1 = b4[0] + b4[1]
+    t5 = b3[0] - b3[1]
+    t6 = b4[0] - b4[1]
 
-    # Compute all the precomputations needed for superglue
-    # position, sign_flip, dual_theta_null_square, element_01, element_02, element_03
-    return compute_superglue_coefficients(X_4, Z_4)
+    # 4M + 4S
+    s0 = s0 * t0
+    s1 = s1 * t1
+    t2 = b1[2] ** 2
+    t3 = b2[2] ** 2
+    r0 = r0 * t5
+    r1 = r1 * t6
+    t7 = b3[2] ** 2
+    t8 = b4[2] ** 2
+
+    # 8 adds
+    s2 = s0 - t2
+    s0 = s0 + t2
+    s3 = s1 - t3
+    s1 = s1 + t3
+    r2 = r0 - t7
+    r0 = r0 + t7
+    r3 = r1 - t8
+    r1 = r1 + t8
+
+    # 8M
+    # TODO: for codomain bi[1] is zero
+    s4 = b1[0] * w1
+    s5 = b2[0] * b2[2]
+    s6 = b1[1] * b2[1]
+    t4 = b2[2] * w1
+    r4 = b3[0] * w3
+    r5 = b4[0] * b4[2]
+    r6 = b3[1] * b4[1]
+    t9 = b4[2] * w3
+
+    # 4M (s7, r7 only used for case 4 though)
+    s6 = s6 * t4
+    s7 = s3 * s2
+    r6 = r6 * t9
+    r7 = r3 * r2
+
+    # 6 adds
+    s4 = s4 + s4
+    s5 = s5 + s5
+    s6 = s6 + s6
+    r4 = r4 + r4
+    r5 = r5 + r5
+    r6 = r6 + r6
+
+    # 2 adds
+    s6 = s6 + s6
+    r6 = r6 + r6
+
+    # Package data to send to superglue_evaluation_on_position
+    data_1 = s0, s1, s2, s3, s4, s5, s6, s7
+    data_2 = r0, r1, r2, r3, r4, r5, r6, r7
+
+    # This could also be batched, but when case is 1 | 7 we do a 8 way then 7 way mul
+    # when case is 4 we do an 8 way then 6 way mul, we could only save time with batched
+    # additions and the code would be so much harder to read.#
+    P1 = superglue_evaluation_on_position(
+        data_1, position, dual_theta_null_square, elements
+    )
+    P2 = superglue_evaluation_on_position(
+        data_2, position, dual_theta_null_square, elements
+    )
+
+    return P1, P2
 
 
 def superglue_codomain(
@@ -662,17 +512,21 @@ def superglue_codomain(
     X_8: AVX_4x2x1,
     Z_8: AVX_4x2x1,
 ):
-    # TODO: avoid computing this twice
+    """
+    19S + 69M + 84a
+    """
+    # 4S
     X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)
 
     # Double points to recover 4-torsion for change of basis
+    # 8S + 8M + 16a
     X_4, Z_4 = x_double_4x4x2x1(A24_12, X_8, Z_8)
 
-    # Unpack the insane precomputation
+    # 7S + 35M + 36a
     precomputation = compute_superglue_coefficients(X_4, Z_4)
-    position, sign_flip, dual_theta_null_square, element_01, element_02, element_03 = (
-        precomputation
-    )
+
+    # Unpack the insane precomputation
+    position, sign_flip, dual_theta_null_square, elements = precomputation
 
     x1, x2, x3, x4 = X_8
     z1, z2, z3, z4 = Z_8
@@ -682,38 +536,32 @@ def superglue_codomain(
     bary_Q1 = [x2, 0, z2]
     bary_Q2 = [x4, 0, z4]
 
-    xAxByCyD = superglue_evaluaton(
+    # 20M + 24a
+    xAxByCyD, zAtBzYtD = superglue_evaluaton_pair(
         bary_P1,
         bary_P2,
-        position,
-        sign_flip,
-        dual_theta_null_square,
-        element_01,
-        element_02,
-        element_03,
-    )
-    zAtBzYtD = superglue_evaluaton(
         bary_Q1,
         bary_Q2,
         position,
         sign_flip,
         dual_theta_null_square,
-        element_01,
-        element_02,
-        element_03,
+        elements,
     )
 
     # Codomain coefficients
     ABCD = [0, 0, 0, 0]
+
+    # 4M
     ABCD[0] = xAxByCyD[0] * zAtBzYtD[0]
     ABCD[1] = xAxByCyD[1] * zAtBzYtD[0]
     ABCD[2] = xAxByCyD[0] * zAtBzYtD[2]
-
     alpha_inv = xAxByCyD[1] * zAtBzYtD[2]
 
+    # 2M
     a = xAxByCyD[0] * alpha_inv
     b = xAxByCyD[2] * ABCD[1]
 
+    # 8a
     codomain = hadamard(AVX_4x2x1(*ABCD))
 
     return codomain, (a, b), precomputation
@@ -722,40 +570,36 @@ def superglue_codomain(
 def superglue_eval_pair(
     A_12: AVX_4x2x1, P: tuple[AVX_4x2x1], T8: tuple[AVX_4x2x1], a, b, precomputation
 ):
+    """
+    16S + 76M + 68a
+    """
+    # 16S + 48M + 28a
     U, V, W = four_add_components(A_12, P, T8)
     u1, u3, u2, u4 = U
     v1, v3, v2, v4 = V
     w1, w3, w2, w4 = W
 
     # Unpack the insane precomputation
-    position, sign_flip, dual_theta_null_square, element_01, element_02, element_03 = (
-        precomputation
-    )
+    position, sign_flip, dual_theta_null_square, elements = precomputation
 
-    XaYaZbWb = superglue_evaluaton(
+    # 20M + 24a
+    P1, P2 = superglue_evaluaton_pair(
         (u1, v1, w1),
         (u2, v2, w2),
-        position,
-        sign_flip,
-        dual_theta_null_square,
-        element_01,
-        element_02,
-        element_03,
-    )
-    xyzt_1 = [XaYaZbWb[0] * b, XaYaZbWb[1] * b, XaYaZbWb[2] * a, XaYaZbWb[3] * a]
-    xyzt_1 = hadamard(AVX_4x2x1(*xyzt_1))
-
-    XaYaZbWb = superglue_evaluaton(
         (u3, v3, w3),
         (u4, v4, w4),
         position,
         sign_flip,
         dual_theta_null_square,
-        element_01,
-        element_02,
-        element_03,
+        elements,
     )
-    xyzt_2 = [XaYaZbWb[0] * b, XaYaZbWb[1] * b, XaYaZbWb[2] * a, XaYaZbWb[3] * a]
-    xyzt_2 = hadamard(AVX_4x2x1(*xyzt_2))
 
-    return avx_421_to_811(xyzt_1, xyzt_2)
+    imP_Q = avx_421_to_811(P1, P2)
+    J = AVX_8x1x1(b, b, a, a, b, b, a, a)
+
+    # 8M
+    imP_Q = avx_811_mul(imP_Q, J)
+
+    # 16a
+    imP_Q = hadamard_pair(imP_Q)
+    return imP_Q

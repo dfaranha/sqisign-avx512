@@ -589,8 +589,7 @@ def theta_isogeny_chain_with_torsion_8x1x1(
 
     # Compute the gluing codomain
     X_8, Y_8, Z_8 = strat_points[k]
-
-    OA, (a, b), precomputation = superglue_codomain(A24_12, X_8, Z_8)
+    OA, OA_inv, J, N = gluing_codomain(A24_12, X_8, Z_8)
 
     # Package the point we use for translation
     T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
@@ -601,18 +600,17 @@ def theta_isogeny_chain_with_torsion_8x1x1(
     # Push kernel though the gluing isogeny
     for i in range(k):
         P = strat_points[i]
-        imP_Q = superglue_eval_pair(A_12, P, T8, a, b, precomputation)
+        imP_Q = gluing_eval_pair(A_12, P, T8, J, N)
         strat_points[i] = imP_Q
         orders[i] = orders[i] - 1
 
     # Push other points through gluing isogeny
-    # TODO fix images for generic points? We dont need it for verification
-    # OA_inv_inv = avx_421_to_811(OA_inv, OA_inv)
-    # eval_pairs = [
-    #     gluing_eval_special_pair(P1, P2, Q1, Q2, OA_inv_inv, N)
-    #     for ((P1, P2), (Q1, Q2)) in eval_pairs
-    # ]
-    # eval_single = [gluing_eval_special(P1, P2, OA_inv, N) for (P1, P2) in eval_single]
+    OA_inv_inv = avx_421_to_811(OA_inv, OA_inv)
+    eval_pairs = [
+        gluing_eval_special_pair(P1, P2, Q1, Q2, OA_inv_inv, N)
+        for ((P1, P2), (Q1, Q2)) in eval_pairs
+    ]
+    eval_single = [gluing_eval_special(P1, P2, OA_inv, N) for (P1, P2) in eval_single]
 
     # Step Two: Main loop
     # Compute length - 1 (2, 2)-isogenies in the theta model
@@ -700,13 +698,123 @@ def theta_isogeny_chain_with_torsion_8x1x1(
 
 
 def theta_isogeny_chain_verification_8x1x1(
-    domain: tuple[Curve], kernel: tuple[BasisX, BasisX], length: int
+    domain: tuple[Curve],
+    kernel: tuple[BasisX, BasisX],
+    length: int,
 ):
     """
     Specialised (2,2) chain which performs additional checks required
-    by SQIsign and returns only the codomain
+    by SQIsign and returns only the codomain and uses a variable time
+    superglue for the gluing isogeny
     """
-    (A1, C1), (A2, C2), _ = theta_isogeny_chain_with_torsion_8x1x1(
-        domain, kernel, length, [], randomise=False, verify=True
-    )
+
+    # We normalise points and the curve parameters the below functions stay with
+    # 64 bit limbs to make use of the faster(?) sqrt we have available
+    E1, E2, B1, B2 = normalise_chain_input(domain, kernel)
+    P1, Q1 = lift_normalised_basis_to_jacobian(E1, B1)
+    P2, Q2 = lift_normalised_basis_to_jacobian(E2, B2)
+
+    # We are now in the position to convert from 64 to 51 bit limbs
+    # For the curve we need to pack the Montgomery coefficient for
+    # arithmetic.
+    A_12 = AVX_4x2x1(E1.A, E1.A, E2.A, E2.A)
+    A24_12 = AVX_4x2x1(E1.A24, E1.A24, E2.A24, E2.A24)
+
+    # For the Jacobian points, we pack the coordinates into three blobs
+    ker_X = AVX_4x2x1(P1.X, Q1.X, P2.X, Q2.X)
+    ker_Y = AVX_4x2x1(P1.Y, Q1.Y, P2.Y, Q2.Y)
+    ker_Z = AVX_4x2x1(P1.Z, Q1.Z, P2.Z, Q2.Z)
+
+    # Initalise the strategy arrays
+    space = length.bit_length() + 1
+    strat_points = [(None, None, None)] * space
+    orders = [0] * space
+
+    # Set the first values
+    strat_points[0] = [ker_X, ker_Y, ker_Z]
+    orders[0] = length
+    k = 0
+
+    # Step One:
+    # Perform repeated doubling of the Jacobian points and store intermediate results
+    # to push through the isogeny.
+    strat_points, orders, k = compute_product_doubles(A_12, strat_points, orders, k)
+
+    # Compute the gluing codomain
+    X_8, Y_8, Z_8 = strat_points[k]
+
+    OA, (a, b), precomputation = superglue_codomain(A24_12, X_8, Z_8)
+
+    # Package the point we use for translation
+    T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
+    T8_Y = AVX_4x2x1(Y_8[0], Y_8[0], Y_8[2], Y_8[2])
+    T8_Z = AVX_4x2x1(Z_8[0], Z_8[0], Z_8[2], Z_8[2])
+    T8 = (T8_X, T8_Y, T8_Z)
+
+    # Push kernel though the gluing isogeny
+    for i in range(k):
+        P = strat_points[i]
+        imP_Q = superglue_eval_pair(A_12, P, T8, a, b, precomputation)
+        strat_points[i] = imP_Q
+        orders[i] = orders[i] - 1
+
+    # Step Two: Main loop
+    # Compute length - 1 (2, 2)-isogenies in the theta model
+    k = k - 1
+    j = 0
+    while k >= 0 and orders[k] != 0:
+        j = j + 1
+        C1, C2 = theta_precompute(OA, use_wide=True)
+
+        # Perform the doubling
+        while orders[k] != 1:
+            k = k + 1
+            n = orders[k - 1] // 2
+            ker = strat_points[k - 1]
+            for _ in range(n):
+                ker = theta_double_pair(ker, C1, C2)
+            strat_points[k] = ker
+            orders[k] = orders[k - 1] - n
+
+        # We cannot perform verification of codomain on the last step
+        # instead we find errors from the splitting isomorphism
+        if j == length - 1:
+            codomain_verify = False
+        else:
+            codomain_verify = True
+
+        # For the ultimate and penultimate steps we do extra / less Hadamards
+        # to avoid zeros from the product structure
+        if j == length - 1:
+            h1, h2 = True, False
+        elif j == length - 2:
+            h1, h2 = False, False
+        else:
+            h1, h2 = False, True
+
+        # Compute the codomain from the kernel
+        ker = strat_points[k]
+        OA, inv = theta_codomain_8x1x1(ker, h1, h2, codomain_verify)
+        inv_inv = avx_421_to_811(inv, inv)
+
+        # Push kernel though the gluing isogeny
+        for i in range(k):
+            P = strat_points[i]
+            strat_points[i] = theta_eval_pair(P, inv_inv, h1, h2)
+            orders[i] = orders[i] - 1
+        k = k - 1
+
+    # Step Three:
+    # Finish the chain with an isomorphism to a theta point with a product
+    # structure for efficient splitting
+
+    # Compute the splitting isomorphism
+    M = splitting_isomorphism_matrix(OA)
+
+    # Apply the splitting isomorphism
+    OA = apply_isomorphism(OA, M)
+
+    # Split the null point to the Montgomery coefficients
+    (A1, C1), (A2, C2) = theta_to_product(OA, True)
+
     return (A1, C1), (A2, C2)

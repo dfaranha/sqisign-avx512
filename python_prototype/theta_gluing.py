@@ -48,6 +48,8 @@ def _compute_matrix(
 
     With inverses precomputed we need five calls to "pairwise_mul" so there
     is an extra cost of a single avx_sqr call
+
+    24M + 12a
     """
     # ============================================================================
     # For the ith coordinate of X, Z, U, W we compute ai, bi, ci, di as:
@@ -96,12 +98,20 @@ def action_by_translation(
 
     Compute the translation matrix induced by the generator of our order 4
     isotropic basis <(P1,P2)x(Q1,Q2)> in E_1 x E_2.
+
+    40M + 8S + 32a
     """
+    # 8S + 8M + 16a
     U, W = x_double_4x4x2x1(A24, X_4, Z_4)
+
+    # 8M
     t1, t2 = avx_421_pair_mul(W, X_4, U, Z_4)
+
+    # 4a
     D = avx_421_sub(t1, t2)
 
     # Compute matrices from points
+    # 24M + 12a
     g1, g2, h1, h2, proj = _compute_matrix(X_4, Z_4, U, W, D)
 
     return g1, g2, h1, h2, proj
@@ -134,6 +144,10 @@ def theta_change_of_basis(
     An interesting thing to explore is `avx_pairwise_mul` where one of the AVX blobs
     is four copies of the same element. This happens for 6 of the 9 total calls for
     avx_pairwise_mul.
+
+    # 40M + 8S + 32a for action_by_translation
+    # 80M + 28a
+    # 120M + 8S + 60a
     """
     # NOTE
     #
@@ -161,6 +175,7 @@ def theta_change_of_basis(
     # the choice has been made to absorb this loss to make it easier to follow.
 
     # Compute the action by translation on all four elements of E[4] simultaneously
+    # 40M + 8S + 32a
     G1, G2, H1, H2, PI = action_by_translation(A24, X_4, Z_4)
 
     # Computation of S0
@@ -247,6 +262,8 @@ def product_to_theta_pair(
 ) -> tuple[AVX_4x2x1]:
     """
     Algorithm 8.38 of the SQISign spec.
+
+    40M + 24a
     """
     # extract X,Z coordinates on pairs of points
     X1, X2, X3, X4 = X
@@ -266,25 +283,33 @@ def gluing_codomain(
 ) -> tuple[AVX_4x2x1, AVX_4x2x1, AVX_8x1x1, tuple[AVX_8x1x1, AVX_8x1x1]]:
     """
     Algorithm 8.39 of the SQIsign spec.
+
+    28S + 180M + 136a
     """
+    # 4S
     X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)
 
     # Double points to recover 4-torsion for change of basis
+    # 8S + 8M + 16a
     X_4, Z_4 = x_double_4x4x2x1(A24_12, X_8, Z_8)
 
     # Compute the change of basis for our theta structure
+    # 120M + 8S + 60a
     N = theta_change_of_basis(A24_12, X_4, Z_4)
 
     # Lift both 8-torsion points above the generator of our basis in the theta model.
+    # 40M + 24a
     P12 = product_to_theta_pair(X_8, Z_8, N)
 
     # compute their dual-image.
+    # 8S + 16a
     P12 = avx_811_sqr(P12)
     P12 = hadamard_pair(P12)
 
     X1, Y1, Z1, W1, X2, _, Z2, W2 = P12
 
     if verify:
+        # 8a
         all_zero = AVX_4x2x1(W1, W2, W1, W2)
         no_zero = AVX_4x2x1(X1, X2, Y1, Z2)
 
@@ -315,10 +340,12 @@ def gluing_codomain(
     # from this function)
     # ============================================================
 
+    # 4M
     t1 = AVX_4x2x1(X1, Y1, X1, 1)
     t2 = AVX_4x2x1(X2, X2, Z2, 1)
     A, B, C, _ = avx_421_mul(t1, t2)
 
+    # 4M
     t1 = AVX_4x2x1(Y1, C, B, 1)
     t2 = AVX_4x2x1(Z2, Y1, Z1, 1)
     A_inv, x, y, _ = avx_421_mul(t1, t2)
@@ -327,6 +354,7 @@ def gluing_codomain(
 
     # Ensure that Y1 * B_inv == x and X2 * A_inv == Z2 * C_inv
     if verify:
+        # 4M + 4a
         T1 = AVX_4x2x1(Y1, X2, Z2, 1)
         T2 = AVX_4x2x1(B_inv, A_inv, C_inv, 1)
         T3 = avx_421_mul(T1, T2)
@@ -336,6 +364,7 @@ def gluing_codomain(
         if not avx_421_eq(T1, T2):
             raise ValueError("input kernel is not isotropic")
 
+    # 8a
     OA = hadamard(AVX_4x2x1(A, B, C, 0))
     OA_dual_inv = AVX_4x2x1(A_inv, B_inv, C_inv, 0)
     J_prime = AVX_8x1x1(y, y, x, x, y, y, x, x)
@@ -353,6 +382,8 @@ def gluing_eval_pair(
     """
     Same as the above but accepts a pair of points on E1 x E2 as
     (P1, P2) and (Q1, Q2)
+
+    32S + 138M + 124a
     """
     # Add components
     # u1, v1, w1 = add_components(E1, P1, T1_8)
@@ -360,6 +391,7 @@ def gluing_eval_pair(
     # u2, v2, w2 = add_components(E2, P2, T2_8)
     # u4, v4, w4 = add_components(E2, Q2, T2_8)
 
+    # 16S + 48M + 28a
     U, V, W = four_add_components(A_12, P, T8)
 
     # ===============================================================
@@ -376,18 +408,22 @@ def gluing_eval_pair(
     v1, v3, v2, v4 = V
     w1, w3, w2, w4 = W
 
+    # 8M
     TT0 = AVX_8x1x1(u1, u1, w1, w1, u3, u3, w3, w3)
     TT1 = AVX_8x1x1(u2, w2, u2, w2, u4, w4, u4, w4)
     u1u2, u1w2, w1u2, w1w2, u3u4, u3w4, w3u4, w3w4 = avx_811_mul(TT0, TT1)
 
+    # 8M
     TT0 = AVX_8x1x1(v1, u1, v1, w1, v3, u3, v3, w3)
     TT1 = AVX_8x1x1(u2, v2, w2, v2, u4, v4, w4, v4)
     v1u2, u1v2, v1w2, w1v2, v3u4, u3v4, v3w4, w3v4 = avx_811_mul(TT0, TT1)
 
+    # 2M
     T0 = AVX_4x2x1(v1, v3, 0, 0)
     T1 = AVX_4x2x1(v2, v4, 0, 0)
     v1v2, v3v4, _, _ = avx_421_mul(T0, T1)  # Two redundant mul here.
 
+    # 8a
     T0 = AVX_4x2x1(u1u2, u3u4, v1u2, v3u4)
     T1 = AVX_4x2x1(v1v2, v3v4, u1v2, u3v4)
     u1u2_v1v2, u3u4_v3v4, v1u2_u1v2, v3u4_u3v4 = avx_421_add(T0, T1)
@@ -396,20 +432,25 @@ def gluing_eval_pair(
     V12 = AVX_8x1x1(v1u2_u1v2, v1w2, w1v2, 0, v3u4_u3v4, v3w4, w3v4, 0)
 
     # Apply the isomorphism by N on U1, U2, V1, V2
+    # 64 M + 48a
     U12 = apply_isomorphism_pair(U12, N)
     V12 = apply_isomorphism_pair(V12, N)
 
+    # 16S
     U12 = avx_811_sqr(U12)
     V12 = avx_811_sqr(V12)
 
     # Hadamard of component wise subtraction of U, V
+    # 24a
     im_PQ = avx_811_sub(U12, V12)
     im_PQ = hadamard_pair(im_PQ)
 
     # Scaling by (y : y : x : x) | (y : y : x : x)
+    # 8M
     im_PQ = avx_811_mul(im_PQ, J_prime)
 
     # Final Hadamard
+    # 16a
     im_PQ = hadamard_pair(im_PQ)
 
     return im_PQ
@@ -419,6 +460,8 @@ def eval_product_to_theta(P1: PointX, P2: PointX, N: tuple[AVX_8x1x1]):
     """
     Given a pair of x-only points, compute the corresponding theta point
     NOTE: here we translate from 64 to 51 bit limbs.
+
+    36M + 24a
     """
     X1, Z1 = P1
     X2, Z2 = P2
@@ -435,6 +478,8 @@ def eval_product_to_theta_pair(
     """
     Given a pair of x-only points, compute the corresponding theta point
     NOTE: here we translate from 64 to 51 bit limbs.
+
+    40M + 24a
     """
     X1, Z1 = P1
     X2, Z2 = P2
