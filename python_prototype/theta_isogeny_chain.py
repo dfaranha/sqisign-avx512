@@ -743,7 +743,7 @@ def theta_isogeny_chain_verification_8x1x1(
     # Compute the gluing codomain
     X_8, Y_8, Z_8 = strat_points[k]
 
-    OA, (a, b), precomputation = superglue_codomain(A24_12, X_8, Z_8)
+    OA, ab, precomputation = superglue_codomain(A24_12, X_8, Z_8)
 
     # Package the point we use for translation
     T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
@@ -754,7 +754,7 @@ def theta_isogeny_chain_verification_8x1x1(
     # Push kernel though the gluing isogeny
     for i in range(k):
         P = strat_points[i]
-        imP_Q = superglue_eval_pair(A_12, P, T8, a, b, precomputation)
+        imP_Q = superglue_eval_pair(A_12, P, T8, ab, precomputation)
         strat_points[i] = imP_Q
         orders[i] = orders[i] - 1
 

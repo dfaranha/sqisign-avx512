@@ -550,7 +550,11 @@ def superglue_codomain(
 
 
 def superglue_eval_pair(
-    A_12: AVX_4x2x1, P: tuple[AVX_4x2x1], T8: tuple[AVX_4x2x1], a, b, precomputation
+    A_12: AVX_4x2x1,
+    P: tuple[AVX_4x2x1],
+    T8: tuple[AVX_4x2x1],
+    ab: AVX_2x4x1,
+    precomputation,
 ):
     """
     16S + 76M + 68a
@@ -573,6 +577,7 @@ def superglue_eval_pair(
     )
 
     imP_Q = avx_421_to_811(P1, P2)
+    a, b = ab
     J = AVX_8x1x1(b, b, a, a, b, b, a, a)
 
     # 8M
