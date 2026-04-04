@@ -40,8 +40,8 @@ void fp_duplicate_8x1(__m512i* res, const uint64_t* a)
 
 int fp_is_equal_8x1(__m512i* a, __m512i* b)
 {
-    __mmask8 mask, acc;
     __m512i zero[8], norm_a[8], norm_b[8];
+    __mmask8 acc;
     fp_setzero_8x1(zero);
 
     // Normalize both to [0, p-1] by adding zero
@@ -50,16 +50,15 @@ int fp_is_equal_8x1(__m512i* a, __m512i* b)
 
     acc = 0xFF;
     for(int i = 0; i < 8; i++){
-        mask = VCMPEQ(norm_a[i], norm_b[i]);
-        acc = acc & mask;
+        acc &= VCMPEQ(norm_a[i], norm_b[i]);
     }
     return acc;
 }
 
 int fp_is_zero_8x1(__m512i* a)
 {
-    __mmask8 mask, acc;
     __m512i zero[8], norm_a[8];
+    __mmask8 acc;
     fp_setzero_8x1(zero);
 
     // Normalize a to [0, p-1] by adding zero
@@ -67,8 +66,7 @@ int fp_is_zero_8x1(__m512i* a)
 
     acc = 0xFF;
     for(int i = 0; i < 8; i++){
-        mask = VCMPEQ(norm_a[i], zero[0]);
-        acc = acc & mask;
+        acc &= VCMPEQ(norm_a[i], zero[0]);
     }
     return acc;
 }
@@ -1348,7 +1346,7 @@ void rdc_8x1(__m512i* res, __m512i* a)
     // Then m * low = (a0:a1 * 65 * 2^376) + low mod 2^432.
     // Thus, we only need to update the top two limbs.
     // s0 = a0, s1 = a1, ... , s6 = a6
-    cnst = VSETALL((uint64_t)65 << 40);
+    cnst = VSETALL(p_plus_1_top);
     s7 = VMULADDL(a7, a0, cnst);
     s8 = VMULADDH(zero, a0, cnst);
     s8 = VADD(a8, VSL(s8, LIMB_ALIGN));
@@ -1421,8 +1419,8 @@ void rdc_8x1(__m512i* res, __m512i* a)
     // If bit383 = 1 then subtract by (p + 1) - 1 => r - (65*2^376) + 1 
     hi = VSL(r16, 16);                      // 64 - (384 - (7*48)) = 16
     msb_mask = VSIGN(hi);
-    VSUBMASK(r16, msb_mask, r16, cnst);
-    VADDMASK(r9, msb_mask, r9, one);
+    r16 = VSUBMASK(r16, msb_mask, r16, cnst);
+    r9 = VADDMASK(r9, msb_mask, r9, one);
 
     // Output result: final carry propagation is left for the final result. 
     //                Bottom limb can have up to 49 bits.
@@ -1582,11 +1580,10 @@ void fp_48_to_64_bit_limbs_8x1(fp_t* res, __m512i* src)
     VSTORE(t, src[3]);
     for (int i = 0; i < 8; i++) {
         (res+i)->arr[2] |= (t[i] & 0xffffffffffff) << 16;
-        (res+i)->arr[3] = (t[i] >> 48) & 0xffff;
     }
     VSTORE(t, src[4]);
     for (int i = 0; i < 8; i++) {
-        (res+i)->arr[3] |= t[i] & 0xffffffffffff;
+        (res+i)->arr[3] = t[i] & 0xffffffffffff;
     }
     VSTORE(t, src[5]);
     for (int i = 0; i < 8; i++) {
@@ -1624,11 +1621,10 @@ void fp_48_to_64_bit_limbs_8x1_only_even_idx(fp_t* res, __m512i* src)
     VSTORE(t, src[3]);
     for (int i = 0; i < 4; i++) {
         (res+i)->arr[2] |= (t[2*i] & 0xffffffffffff) << 16;
-        (res+i)->arr[3] = (t[2*i] >> 48) & 0xffff;
     }
     VSTORE(t, src[4]);
     for (int i = 0; i < 4; i++) {
-        (res+i)->arr[3] |= t[2*i] & 0xffffffffffff;
+        (res+i)->arr[3] = t[2*i] & 0xffffffffffff;
     }
     VSTORE(t, src[5]);
     for (int i = 0; i < 4; i++) {
@@ -1771,18 +1767,16 @@ int fp_is_equal_4x2(__m512i* a, __m512i* b)
     fp_add_4x2(norm_a, a, zero);
     fp_add_4x2(norm_b, b, zero);
 
-    __mmask8 mask, acc = 0xff;
+    __mmask8 acc = 0xff;
     for(int i = 0; i < 4; i++){
-        mask = VCMPEQ(norm_a[i], norm_b[i]); 
-        acc = acc & mask;
+        acc &= VCMPEQ(norm_a[i], norm_b[i]); 
     }
     
-    // a = 0 iff both halves are equal
-    int res = (acc & (acc >> 1) & 0x1) 
-            | ((acc >> 1) & (acc >> 2) & 0x2) 
-            | ((acc >> 2) & (acc >> 3) & 0x4) 
-            | ((acc >> 3) & (acc >> 4) & 0x8);
-    return res;
+    // a = b iff both halves are equal
+    return (acc & (acc >> 1) & 0x1) 
+        | ((acc >> 1) & (acc >> 2) & 0x2) 
+        | ((acc >> 2) & (acc >> 3) & 0x4) 
+        | ((acc >> 3) & (acc >> 4) & 0x8);
 }
 
 int fp_is_zero_4x2(__m512i* a)
@@ -1800,11 +1794,10 @@ int fp_is_zero_4x2(__m512i* a)
     }
     
     // a = 0 iff both halves are equal
-    int res = (acc & (acc >> 1) & 0x1) 
-            | ((acc >> 1) & (acc >> 2) & 0x2) 
-            | ((acc >> 2) & (acc >> 3) & 0x4) 
-            | ((acc >> 3) & (acc >> 4) & 0x8);
-    return res;
+    return (acc & (acc >> 1) & 0x1) 
+        | ((acc >> 1) & (acc >> 2) & 0x2) 
+        | ((acc >> 2) & (acc >> 3) & 0x4) 
+        | ((acc >> 3) & (acc >> 4) & 0x8);
 }
 
 void fp_add_4x2(__m512i* res, __m512i* a, __m512i* b)
@@ -2073,7 +2066,6 @@ void mp_add_4x2(__m512i* res, __m512i* a, __m512i* b)
     res[3] = t3;
 }
 
-// Single-length multiprecision subtraction, no correction, no carry propagation
 void mp_add_p_sub_4x2(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i p_bod = VSETALL(LIMB_MASK);
@@ -2229,7 +2221,7 @@ void mp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
 
     // Algorithm 2 from "Finite Field Arithmetic Using AVX-512 For Isogeny-Based Cryptography" by Orisaka, Aranha and López
 
-    // Duplicating limbs of b with shuffles:
+    // Duplicating limbs of b with shuffles
     // If b[0] = {a_0, a_4, b_0, b_4, ...} then sl0 = {a_0, a_0, b_0, b_0, ...}
     sl0 = VSHUFFLE(b[0], 0x44);
     sl1 = VSHUFFLE(b[1], 0x44);
@@ -2359,7 +2351,7 @@ void mp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
 // Modifies a
 void rdc_4x2(__m512i* res, __m512i* a)
 {
-    __m512i carry, hi, shuf, quo, rem;
+    
     __m512i zero = VZERO();
     __m512i cnst = VSETALL((uint64_t) 65 << 40); // top limb of (p+1)
     __m512i limb_mask = VSETALL(LIMB_MASK);
@@ -2452,6 +2444,7 @@ void fp_48_to_64_bit_limbs_4x2(fp_t* res, __m512i* src)
     VSTORE(t, src[0]);
     for (int i = 0; i < 4; i++) {
         (res+i)->arr[0] = t[2*i] & LIMB_MASK;
+
         (res+i)->arr[3] = t[2*i+1] & 0xffffffffffff;
     } 
     VSTORE(t, src[1]);
@@ -2473,7 +2466,6 @@ void fp_48_to_64_bit_limbs_4x2(fp_t* res, __m512i* src)
     VSTORE(t, src[3]);
     for (int i = 0; i < 4; i++) {
         (res+i)->arr[2] |= (t[2*i] & 0xffffffffffff) << 16;
-        (res+i)->arr[3] |= (t[2*i] >> 48) & 0xffff;
 
         (res+i)->arr[5] |= t[2*i+1] << 16;
     }

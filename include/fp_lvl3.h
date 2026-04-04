@@ -21,12 +21,8 @@ static const uint64_t LIMB_LEN = 48;
 static const uint64_t LIMB_ALIGN = 52 - LIMB_LEN;
 static const uint64_t LIMB_MASK = 0xffffffffffff;
 static const uint64_t LAST_LIMB_MASK = 0x7fffffffffff;    ///////// IS THIS USED SOMEWHERE?
-// p in radix 2^48
-static const uint64_t p[8] = { 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0x40ffffffffff };
 
 static const uint64_t p_plus_1_top = 0x410000000000;
-// 2*p in radix 2^48
-static const uint64_t p2[8] = { 0xfffffffffffe, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0xffffffffffff, 0x81ffffffffff };
 
 // We use the Montgomery representation with R = 2^(9*48) = 2^384
 // R2 is R^2 mod p, which is needed to convert to the representation.

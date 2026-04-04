@@ -2279,3 +2279,57 @@ bool test_basis_order_twof_1x2x2x2(__m512i* B, __m512i* A24, unsigned int f)
         test_point_order_twof_1x2x2x2(B+4, A24, f) &
         test_point_order_twof_1x2x2x2(B+8, A24, f);
 }
+
+void difference_point_normA_1x2x2x2(ec_point_t *PQ, const ec_point_t *P, const ec_point_t *Q, const ec_curve_t *curve)
+{
+    // Given P,Q in projective x-only, computes a deterministic choice for (P-Q)
+    // Based on Proposition 3 of https://eprint.iacr.org/2017/518.pdf
+
+    fp2_t Bxx, Bxz, Bzz, t0, t1;
+
+    fp2_mul(&t0, &P->x, &Q->x);
+    fp2_mul(&t1, &P->z, &Q->z);
+    fp2_sub(&Bxx, &t0, &t1);
+    fp2_sqr(&Bxx, &Bxx);
+    fp2_mul(&Bxx, &Bxx, &curve->C); // C*(P.x*Q.x-P.z*Q.z)^2
+    fp2_add(&Bxz, &t0, &t1);
+    fp2_mul(&t0, &P->x, &Q->z);
+    fp2_mul(&t1, &P->z, &Q->x);
+    fp2_add(&Bzz, &t0, &t1);
+    fp2_mul(&Bxz, &Bxz, &Bzz); // (P.x*Q.x+P.z*Q.z)(P.x*Q.z+P.z*Q.x)
+    fp2_sub(&Bzz, &t0, &t1);
+    fp2_sqr(&Bzz, &Bzz);
+    fp2_mul(&Bzz, &Bzz, &curve->C); // C*(P.x*Q.z-P.z*Q.x)^2
+    fp2_mul(&Bxz, &Bxz, &curve->C); // C*(P.x*Q.x+P.z*Q.z)(P.x*Q.z+P.z*Q.x)
+    fp2_mul(&t0, &t0, &t1);
+    fp2_mul(&t0, &t0, &curve->A);
+    fp2_add(&t0, &t0, &t0);
+    fp2_add(&Bxz, &Bxz, &t0); // C*(P.x*Q.x+P.z*Q.z)(P.x*Q.z+P.z*Q.x) + 2*A*P.x*Q.z*P.z*Q.x
+
+    // To ensure that the denominator is a fourth power in Fp, we normalize by
+    // C*C_bar^2*(P.z)_bar^2*(Q.z)_bar^2
+    fp_copy(&t0.re, &curve->C.re);
+    fp_neg(&t0.im, &curve->C.im);
+    fp2_sqr(&t0, &t0);
+    fp2_mul(&t0, &t0, &curve->C);
+    fp_copy(&t1.re, &P->z.re);
+    fp_neg(&t1.im, &P->z.im);
+    fp2_sqr(&t1, &t1);
+    fp2_mul(&t0, &t0, &t1);
+    fp_copy(&t1.re, &Q->z.re);
+    fp_neg(&t1.im, &Q->z.im);
+    fp2_sqr(&t1, &t1);
+    fp2_mul(&t0, &t0, &t1);
+    fp2_mul(&Bxx, &Bxx, &t0);
+    fp2_mul(&Bxz, &Bxz, &t0);
+    fp2_mul(&Bzz, &Bzz, &t0);
+
+    // Solving quadratic equation
+    fp2_sqr(&t0, &Bxz);
+    fp2_mul(&t1, &Bxx, &Bzz);
+    fp2_sub(&t0, &t0, &t1);
+    // No need to check if t0 is square, as per the entangled basis algorithm.
+    fp2_sqrt(&t0);
+    fp2_add(&PQ->x, &Bxz, &t0);
+    fp2_copy(&PQ->z, &Bzz);
+}

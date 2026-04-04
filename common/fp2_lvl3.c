@@ -374,6 +374,16 @@ void fp2_mixaddsub_2x2x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 ad
     fp_mixaddsub_4x2(res, a, b, add_mask);
 }
 
+// Computes res = a_re - a_im * i
+void fp2_conj_2x2x2(__m512i* res, __m512i* a)
+{
+    __m512i re[2], im[2];
+    
+    fp_4x2_to_2x4(re, im, a);
+    fp_neg_2x4(im, im);
+    fp_2x4_to_4x2(res, re, im);
+}
+
 void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t0[13], t1[13];
