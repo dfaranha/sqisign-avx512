@@ -2351,7 +2351,7 @@ void mp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)
 // Modifies a
 void rdc_4x2(__m512i* res, __m512i* a)
 {
-    
+    __m512i carry, hi, shuf;
     __m512i zero = VZERO();
     __m512i cnst = VSETALL((uint64_t) 65 << 40); // top limb of (p+1)
     __m512i limb_mask = VSETALL(LIMB_MASK);
@@ -2625,6 +2625,7 @@ void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)
     carry = VSRA(t0, LIMB_LEN);
     t0 = VAND(t0, limb_mask);
     t1 = VADD(t1, carry);
+    t1 = VANDMASK(t1, 0x77, t1, limb_mask);
 
     // If result is negative, undo the subtraction
     sign_mask = VSRA(t1, 63);                    
@@ -2647,7 +2648,7 @@ void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)
     carry = VSRA(t0, LIMB_LEN);
     t0 = VAND(t0, limb_mask);
     t1 = VADD(t1, carry);
-    t1 = VAND(t1, limb_mask);
+    t1 = VANDMASK(t1, 0x77, t1, limb_mask);
 
     res[0] = t0;
     res[1] = t1;
@@ -2787,7 +2788,7 @@ void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
 
     t0 = VSUBMASK(a[0], sub_mask, a[0], b[0]);
-    t1 = VSUBMASK(a[0], sub_mask, a[1], b[1]);
+    t1 = VSUBMASK(a[1], sub_mask, a[1], b[1]);
 
     t0 = VADDMASK(t0, add_mask, a[0], b[0]);
     t1 = VADDMASK(t1, add_mask, a[1], b[1]);
@@ -3024,7 +3025,7 @@ void fp_tomont_2x4(__m512i* res, __m512i* a)
 
 void fp_frommont_2x4(__m512i* res, __m512i* a)
 {
-    __m512i one[4];
+    __m512i one[2];
     fp_setzero_2x4(one);
     one[0] = VSET(1, 0, 0, 0, 1, 0, 0, 0);
     fp_mul_2x4(res, a, one);
@@ -3158,8 +3159,6 @@ void fp_inv_2x4(__m512i* res, __m512i* a)
 
     res[0] = VPERM512(idx, r[0]);
     res[1] = VPERM512(idx, r[1]);
-
-
 }
 
 // Given src=(a, b, c, d), it computes res1 = (a, c) and res2 = (b, d)

@@ -63,6 +63,24 @@ def get_mont_const(p, num_limbs, limb_len):
     R2 = ZZ(pow(R, 2, p))
     return R, R2
 
+def get_limb_mask(pp):
+    limb_mask = (1 << pp.limb_len) - 1
+    last_limb_mask = (1 << pp.last_limb_len) - 1
+    return limb_mask, last_limb_mask
+
+def int_to_limbs(n, pp):
+    if n == 0:
+        return [0]
+    limbs = []
+    val = n
+    i = 0
+    while val > 0:
+        # Mask out the bottom bits and append
+        limbs.append((val & ((1 << pp.limb_len) - 1)))
+        val >>= pp.limb_len
+        i += 1
+    return limbs
+
 def get_fp_params(e, c):
     p, pbits = get_p(e, c)
     num_limbs, limb_len, last_limb_len, num_limbs64 = get_limb_params(pbits, e, c)

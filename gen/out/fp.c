@@ -1,34 +1,9 @@
 #include <stdio.h>
-#include <stdint.h>
 
-#include "fp_lvl3.h"
+#include "fp.h"
+#include "fp_consts.h"
 #include "intrinsics_avx512.h"
 #include "utils.h"
-
-#define LIMB_LEN 48
-#define NUM_LIMBS 8
-#define LIMB_LEN 52 - LIMB_LEN
-#define NUM_LIMBS_64 6
-
-#define N4x2 4
-#define N2x4 2
-
-#define LIMB_MASK 0xffffffffffffULL
-#define LAST_LIMB_MASK 0x7fffffffffffULL
-
-#define P_PLUS_1_TOP 0x410000000000ULL
-
-// Montgomery constant R = 2^(9*48) mod p
-static const uint64_t R[NUM_LIMBS] = {
-    0xf03f03f03f03, 0x3, 0x0, 0x0,
-    0x0, 0x0, 0x0, 0x3d0000000000
-};
-
-// R2 = R^2 mod p
-static const uint64_t R2[NUM_LIMBS] = {
-    0x7b0fd07f000f, 0x732f52771f91, 0xf03f03f03f13, 0xf03f03f03f03,
-    0xf03f03f03f03, 0xf03f03f03f03, 0xf03f03f03f03, 0x213f03f03f03
-};
 
 // ====================================================================================================
 //                                                 8x1                                                
@@ -2193,5 +2168,1481 @@ void fp_select_2x4(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)
     
     res[0] = t[0];
     res[1] = t[1];
+}
+
+void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t[2], carry, sign_mask;
+    const __m512i limb_mask = VSETALL(LIMB_MASK);
+    const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    const __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
+    // Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
+    const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
+    // Broadcasts the sign bits from lanes 3 and 7 to their respective elements
+    const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);
+    
+    t[0] = VADD(a[0], b[0]);
+    t[1] = VADD(a[1], b[1]);
+    
+    // Subtract p using the special shape of p
+    t[0] = VADD(t[0], p_bot);
+    t[1] = VSUB(t[1], p_top);
+    
+    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
+    // Straight ripple through the vectors
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    // Cross-lane ripple from the last vector back to the first
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    
+    // If the result is negative, we add p
+    sign_mask = VSRA(t[1], 63);
+    sign_mask = VPERMV(idx_sign, sign_mask);
+    t[1] = VADD(t[1], VAND(p_top, sign_mask));
+    t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
+    
+    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
+    // Straight ripple through the vectors
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    // Cross-lane ripple from the last vector back to the first
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    
+    res[0] = t[0];
+    res[1] = t[1];
+}
+
+void fp_sub_2x4(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t[2], carry, sign_mask;
+    const __m512i limb_mask = VSETALL(LIMB_MASK);
+    const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    const __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
+    // Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
+    const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
+    // Broadcasts the sign bits from lanes 3 and 7 to their respective elements
+    const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);
+    
+    t[0] = VSUB(a[0], b[0]);
+    t[1] = VSUB(a[1], b[1]);
+    
+    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
+    // Straight ripple through the vectors
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    // Cross-lane ripple from the last vector back to the first
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    
+    // If the result is negative, we add p
+    sign_mask = VSRA(t[1], 63);
+    sign_mask = VPERMV(idx_sign, sign_mask);
+    t[1] = VADD(t[1], VAND(p_top, sign_mask));
+    t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
+    
+    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
+    // Straight ripple through the vectors
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    // Cross-lane ripple from the last vector back to the first
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    
+    res[0] = t[0];
+    res[1] = t[1];
+}
+
+void fp_neg_2x4(__m512i* res, __m512i* a)
+{
+    __m512i t[2], carry, sign_mask;
+    const __m512i limb_mask = VSETALL(LIMB_MASK);
+    const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    const __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
+    // Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
+    const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
+    // Broadcasts the sign bits from lanes 3 and 7 to their respective elements
+    const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);
+    const __m512i zero = VZERO();
+    
+    t[0] = VSUB(zero, a[0]);
+    t[1] = VSUB(zero, a[1]);
+    
+    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
+    // Straight ripple through the vectors
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    // Cross-lane ripple from the last vector back to the first
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    
+    // If the result is negative, we add p
+    sign_mask = VSRA(t[1], 63);
+    sign_mask = VPERMV(idx_sign, sign_mask);
+    t[1] = VADD(t[1], VAND(p_top, sign_mask));
+    t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
+    
+    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
+    // Straight ripple through the vectors
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    // Cross-lane ripple from the last vector back to the first
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    
+    res[0] = t[0];
+    res[1] = t[1];
+}
+
+void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)
+{
+    __m512i t[2], carry, sign_mask;
+    const __m512i limb_mask = VSETALL(LIMB_MASK);
+    const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    const __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
+    // Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
+    const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
+    // Broadcasts the sign bits from lanes 3 and 7 to their respective elements
+    const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);
+    const __mmask8 sub_mask = ~add_mask;
+    
+    t[0] = VSUBMASK(a[0], sub_mask, a[0], b[0]);
+    t[1] = VSUBMASK(a[1], sub_mask, a[1], b[1]);
+    
+    t[0] = VADDMASK(t[0], add_mask, a[0], b[0]);
+    t[1] = VADDMASK(t[1], add_mask, a[1], b[1]);
+    // Subtract p using the special shape of p
+    t[0] = VADDMASK(t[0], add_mask, t[0], p_bot);
+    t[1] = VSUBMASK(t[1], add_mask, t[1], p_top);
+    
+    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
+    // Straight ripple through the vectors
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    // Cross-lane ripple from the last vector back to the first
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    
+    // If the result is negative, we add p
+    sign_mask = VSRA(t[1], 63);
+    sign_mask = VPERMV(idx_sign, sign_mask);
+    t[1] = VADD(t[1], VAND(p_top, sign_mask));
+    t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
+    
+    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
+    // Straight ripple through the vectors
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    // Cross-lane ripple from the last vector back to the first
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    
+    res[0] = t[0];
+    res[1] = t[1];
+}
+
+void mp_mul_2x4(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t[10];
+    __m512i B[8];
+    const __m512i zero = VZERO();
+    
+    // Create a vector for each limb of b
+    B[0] = VPERM256(b[0], 0x0);
+    B[1] = VPERM256(b[1], 0x0);
+    B[2] = VPERM256(b[0], 0x55);
+    B[3] = VPERM256(b[1], 0x55);
+    B[4] = VPERM256(b[0], 0xaa);
+    B[5] = VPERM256(b[1], 0xaa);
+    B[6] = VPERM256(b[0], 0xff);
+    B[7] = VPERM256(b[1], 0xff);
+    
+    // Schoolbook
+    t[0] = VMULADDL(zero, a[0], B[0]);
+    t[1] = VMULADDH(zero, a[0], B[0]);
+    t[1] = VSL(t[1], LIMB_ALIGN);
+    
+    t[1] = VMULADDL(t[1], a[0], B[1]);
+    t[2] = VMULADDH(zero, a[0], B[1]);
+    t[1] = VMULADDL(t[1], a[1], B[0]);
+    t[2] = VMULADDH(t[2], a[1], B[0]);
+    t[2] = VSL(t[2], LIMB_ALIGN);
+    
+    t[2] = VMULADDL(t[2], a[0], B[2]);
+    t[3] = VMULADDH(zero, a[0], B[2]);
+    t[2] = VMULADDL(t[2], a[1], B[1]);
+    t[3] = VMULADDH(t[3], a[1], B[1]);
+    t[3] = VSL(t[3], LIMB_ALIGN);
+    
+    t[3] = VMULADDL(t[3], a[0], B[3]);
+    t[4] = VMULADDH(zero, a[0], B[3]);
+    t[3] = VMULADDL(t[3], a[1], B[2]);
+    t[4] = VMULADDH(t[4], a[1], B[2]);
+    t[4] = VSL(t[4], LIMB_ALIGN);
+    
+    t[4] = VMULADDL(t[4], a[0], B[4]);
+    t[5] = VMULADDH(zero, a[0], B[4]);
+    t[4] = VMULADDL(t[4], a[1], B[3]);
+    t[5] = VMULADDH(t[5], a[1], B[3]);
+    t[5] = VSL(t[5], LIMB_ALIGN);
+    
+    t[5] = VMULADDL(t[5], a[0], B[5]);
+    t[6] = VMULADDH(zero, a[0], B[5]);
+    t[5] = VMULADDL(t[5], a[1], B[4]);
+    t[6] = VMULADDH(t[6], a[1], B[4]);
+    t[6] = VSL(t[6], LIMB_ALIGN);
+    
+    t[6] = VMULADDL(t[6], a[0], B[6]);
+    t[7] = VMULADDH(zero, a[0], B[6]);
+    t[6] = VMULADDL(t[6], a[1], B[5]);
+    t[7] = VMULADDH(t[7], a[1], B[5]);
+    t[7] = VSL(t[7], LIMB_ALIGN);
+    
+    t[7] = VMULADDL(t[7], a[0], B[7]);
+    t[8] = VMULADDH(zero, a[0], B[7]);
+    t[7] = VMULADDL(t[7], a[1], B[6]);
+    t[8] = VMULADDH(t[8], a[1], B[6]);
+    t[8] = VSL(t[8], LIMB_ALIGN);
+    
+    t[8] = VMULADDL(t[8], a[1], B[7]);
+    t[9] = VMULADDH(zero, a[1], B[7]);
+    t[9] = VSL(t[9], LIMB_ALIGN);
+    
+    res[0] = t[0];
+    res[1] = t[1];
+    res[2] = t[2];
+    res[3] = t[3];
+    res[4] = t[4];
+    res[5] = t[5];
+    res[6] = t[6];
+    res[7] = t[7];
+    res[8] = t[8];
+    res[9] = t[9];
+}
+
+// Modfies a. Its length must be 17.
+void rdc_2x4(__m512i* res, __m512i* a)
+{
+    __m512i carry, lo, hi, shuf;
+    const __m512i zero = VZERO();
+    const __m512i one = VSETALL(1);
+    const __m512i cnst = VSETALL((uint64_t)65 << 40);
+    const __m512i limb_mask = VSETALL(LIMB_MASK);
+    __mmask8 msb_mask;
+    
+    // Initialize the upper accumulators to zero
+    a[10] = zero;
+    a[11] = zero;
+    a[12] = zero;
+    a[13] = zero;
+    a[14] = zero;
+    a[15] = zero;
+    a[16] = zero;
+    
+    // Move each limb one step to the left, for each half
+    const __m512i idx = VSET(1, 2, 3, 0, 5, 6, 7, 0);
+    
+    // Generalized Montgomery reduction loop
+    carry = VSRA(a[0], LIMB_LEN);
+    a[0] = VAND(a[0], limb_mask);
+    a[1] = VADD(a[1], carry);
+    shuf = VSHUFFLEMASKZ(0x0c0c, a[0], 0x4e);
+    a[5] = VMULADDL(a[5], shuf, cnst);
+    hi = VMULADDH(zero, shuf, cnst);
+    a[6] = VADD(a[6], VSL(hi, LIMB_ALIGN));
+    a[2] = VADD(a[2], VPERM512MASKZ(0x77, a[0], idx));
+    
+    carry = VSRA(a[1], LIMB_LEN);
+    a[1] = VAND(a[1], limb_mask);
+    a[2] = VADD(a[2], carry);
+    shuf = VSHUFFLEMASKZ(0x0c0c, a[1], 0x4e);
+    a[6] = VMULADDL(a[6], shuf, cnst);
+    hi = VMULADDH(zero, shuf, cnst);
+    a[7] = VADD(a[7], VSL(hi, LIMB_ALIGN));
+    a[3] = VADD(a[3], VPERM512MASKZ(0x77, a[1], idx));
+    
+    carry = VSRA(a[2], LIMB_LEN);
+    a[2] = VAND(a[2], limb_mask);
+    a[3] = VADD(a[3], carry);
+    shuf = VSHUFFLEMASKZ(0x0c0c, a[2], 0x4e);
+    a[7] = VMULADDL(a[7], shuf, cnst);
+    hi = VMULADDH(zero, shuf, cnst);
+    a[8] = VADD(a[8], VSL(hi, LIMB_ALIGN));
+    a[4] = VADD(a[4], VPERM512MASKZ(0x77, a[2], idx));
+    
+    carry = VSRA(a[3], LIMB_LEN);
+    a[3] = VAND(a[3], limb_mask);
+    a[4] = VADD(a[4], carry);
+    shuf = VSHUFFLEMASKZ(0x0c0c, a[3], 0x4e);
+    a[8] = VMULADDL(a[8], shuf, cnst);
+    hi = VMULADDH(zero, shuf, cnst);
+    a[9] = VADD(a[9], VSL(hi, LIMB_ALIGN));
+    a[5] = VADD(a[5], VPERM512MASKZ(0x77, a[3], idx));
+    
+    carry = VSRA(a[4], LIMB_LEN);
+    a[4] = VAND(a[4], limb_mask);
+    a[5] = VADD(a[5], carry);
+    shuf = VSHUFFLEMASKZ(0x0c0c, a[4], 0x4e);
+    a[9] = VMULADDL(a[9], shuf, cnst);
+    hi = VMULADDH(zero, shuf, cnst);
+    a[10] = VADD(a[10], VSL(hi, LIMB_ALIGN));
+    a[6] = VADD(a[6], VPERM512MASKZ(0x77, a[4], idx));
+    
+    carry = VSRA(a[5], LIMB_LEN);
+    a[5] = VAND(a[5], limb_mask);
+    a[6] = VADD(a[6], carry);
+    shuf = VSHUFFLEMASKZ(0x0c0c, a[5], 0x4e);
+    a[10] = VMULADDL(a[10], shuf, cnst);
+    hi = VMULADDH(zero, shuf, cnst);
+    a[11] = VADD(a[11], VSL(hi, LIMB_ALIGN));
+    a[7] = VADD(a[7], VPERM512MASKZ(0x77, a[5], idx));
+    
+    carry = VSRA(a[6], LIMB_LEN);
+    a[6] = VAND(a[6], limb_mask);
+    a[7] = VADD(a[7], carry);
+    shuf = VSHUFFLEMASKZ(0x0c0c, a[6], 0x4e);
+    a[11] = VMULADDL(a[11], shuf, cnst);
+    hi = VMULADDH(zero, shuf, cnst);
+    a[12] = VADD(a[12], VSL(hi, LIMB_ALIGN));
+    a[8] = VADD(a[8], VPERM512MASKZ(0x77, a[6], idx));
+    
+    carry = VSRA(a[7], LIMB_LEN);
+    a[7] = VAND(a[7], limb_mask);
+    a[8] = VADD(a[8], carry);
+    shuf = VSHUFFLEMASKZ(0x0c0c, a[7], 0x4e);
+    a[12] = VMULADDL(a[12], shuf, cnst);
+    hi = VMULADDH(zero, shuf, cnst);
+    a[13] = VADD(a[13], VSL(hi, LIMB_ALIGN));
+    a[9] = VADD(a[9], VPERM512MASKZ(0x77, a[7], idx));
+    
+    carry = VSRA(a[8], LIMB_LEN);
+    a[8] = VAND(a[8], limb_mask);
+    a[9] = VADD(a[9], carry);
+    shuf = VSHUFFLEMASKZ(0x0c0c, a[8], 0x4e);
+    a[13] = VMULADDL(a[13], shuf, cnst);
+    hi = VMULADDH(zero, shuf, cnst);
+    a[14] = VADD(a[14], VSL(hi, LIMB_ALIGN));
+    a[10] = VADD(a[10], VPERM512MASKZ(0x77, a[8], idx));
+    
+    // Propagate carries
+    carry = VSRA(a[9], LIMB_LEN);
+    a[9] = VAND(a[9], limb_mask);
+    a[10] = VADD(a[10], carry);
+    a[11] = VADD(a[11], VPERM512MASKZ(0x77, a[9], idx));
+    
+    carry = VSRA(a[10], LIMB_LEN);
+    a[10] = VAND(a[10], limb_mask);
+    a[11] = VADD(a[11], carry);
+    a[12] = VADD(a[12], VPERM512MASKZ(0x77, a[10], idx));
+    
+    carry = VSRA(a[11], LIMB_LEN);
+    a[11] = VAND(a[11], limb_mask);
+    a[12] = VADD(a[12], carry);
+    a[13] = VADD(a[13], VPERM512MASKZ(0x77, a[11], idx));
+    
+    carry = VSRA(a[12], LIMB_LEN);
+    a[12] = VAND(a[12], limb_mask);
+    a[13] = VADD(a[13], carry);
+    a[14] = VADD(a[14], VPERM512MASKZ(0x77, a[12], idx));
+    
+    carry = VSRA(a[13], LIMB_LEN);
+    a[13] = VAND(a[13], limb_mask);
+    a[14] = VADD(a[14], carry);
+    a[15] = VADD(a[15], VPERM512MASKZ(0x77, a[13], idx));
+    
+    carry = VSRA(a[14], LIMB_LEN);
+    a[14] = VAND(a[14], limb_mask);
+    a[15] = VADD(a[15], carry);
+    a[16] = VADD(a[16], VPERM512MASKZ(0x77, a[14], idx));
+    
+    carry = VSRA(a[15], LIMB_LEN);
+    a[15] = VAND(a[15], limb_mask);
+    a[16] = VADD(a[16], carry);
+    
+    // Final reduction step to get the result down to the strict bit boundary
+    hi = VSL(a[16], 16);
+    msb_mask = VSIGN(hi);
+    __mmask8 mask_top = msb_mask & 0x11;
+    
+    a[16] = VSUBMASK(a[16], mask_top, a[16], cnst);
+    a[9] = VADDMASK(a[9], mask_top, a[9], one);
+    a[16] = VAND(a[16], limb_mask);
+    
+    // Pack result from pos 0 of the accumulators back into 2x4 format
+    const __m512i idx_pack = VSET(0, 1, 8, 9, 4, 5, 12, 13);
+    lo = VUNPACKLO(a[9], a[11]);
+    hi = VUNPACKLO(a[13], a[15]);
+    res[0] = VBLENDPERM(idx_pack, lo, hi);
+    
+    lo = VUNPACKLO(a[10], a[12]);
+    hi = VUNPACKLO(a[14], a[16]);
+    res[1] = VBLENDPERM(idx_pack, lo, hi);
+}
+
+void fp_mul_2x4(__m512i* res, __m512i* a, __m512i* b)
+{
+    __m512i t[17];
+    
+    mp_mul_2x4(t, a, b);
+    rdc_2x4(res, t);
+}
+
+void fp_sqr_2x4(__m512i* res, __m512i* a)
+{
+    __m512i t[17];
+    
+    mp_mul_2x4(t, a, a);
+    rdc_2x4(res, t);
+}
+
+void fp_tomont_2x4(__m512i* res, __m512i* a)
+{
+    __m512i vR2[2];
+    fp_duplicate_2x4(vR2, R2);
+    fp_mul_2x4(res, a, vR2);
+}
+
+void fp_frommont_2x4(__m512i* res, __m512i* a)
+{
+    __m512i one[2];
+    fp_setzero_2x4(one);
+    one[0] = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    fp_mul_2x4(res, a, one);
+}
+
+void fp_sqrt_2x4(__m512i* res, __m512i* a)
+{
+    // Candidate root is a^((p+1)/4), with (p+1)/4 = 65*2^374
+    __m512i t[2];
+    
+    fp_sqr_2x4(t, a);
+    for (int i = 1; i < 6; i++) {
+        fp_sqr_2x4(t, t);
+    }
+    fp_mul_2x4(t, t, a);
+    for (int i = 0; i < 373; i++) {
+        fp_sqr_2x4(t, t);
+    }
+    fp_sqr_2x4(res, t);
+}
+
+void fp_exp3div4_2x4(__m512i* res, __m512i* a)
+{
+    fp_sqr_2x4(t, a);
+    for (int i = 1; i < 7; i++) {
+        fp_sqr_2x4(t, t);
+    }
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(t, t, a);
+    fp_sqr_2x4(t, t);
+    fp_mul_2x4(res, t, a);
+}
+
+// Given src=(a, b, c, d), it computes res1 = (a, c) and res2 = (b, d)
+// We choose this interleaving pattern for the Fp2 2x2x2 sqrt,
+// where res1 = re and res2 = im
+void fp_4x2_to_2x4(__m512i* res1, __m512i* res2, __m512i* src)
+{
+    const __m512i idx1 = VSET(0, 8, 1, 9, 4, 12, 5, 13);
+    const __m512i idx2 = VSET(2, 10, 3, 11, 6, 14, 7, 15);
+    for (int i = 0; i < 2; i++) {
+        __m512i s = src[i], t = src[i+2];
+        res1[i] = VBLENDPERM(idx1, s, t);
+        res2[i] = VBLENDPERM(idx2, s, t);
+    }
+}
+
+void fp_2x4_to_4x2(__m512i* res, __m512i* src1, __m512i* src2)
+{
+    __m512i idx1 = VSET(0, 2, 8, 10, 4, 6, 12, 14);
+    __m512i idx2 = VSET(1, 3, 9, 11, 5, 7, 13, 15);
+    for (int i = 0; i < 2; i++) {
+        __m512i s = src1[i], t = src2[i];
+        res[i] = VBLENDPERM(idx1, s, t);
+        res[i+2] = VBLENDPERM(idx2, s, t);
+    }
+}
+
+// Assumes unvec is an array of 2 * NUM_LIMBS_64 64-bit ints
+void fp_64_to_limbs_2x4(__m512i* res, uint64_t* unvec)
+{
+    uint64_t t[8];
+    
+    for (int i = 0; i < 2; i++) {
+        t[4*i] = unvec[NUM_LIMBS_64 * i] & LIMB_MASK;
+        t[4*i + 1] = ((unvec[NUM_LIMBS_64 * i + 1] >> 32) & 0xffffffffULL) | ((unvec[NUM_LIMBS_64 * i + 2] & 0xffffULL) << 32);
+        t[4*i + 2] = unvec[NUM_LIMBS_64 * i + 3] & LIMB_MASK;
+        t[4*i+3] = ((unvec[NUM_LIMBS_64 * i + 4] >> 32) & 0xffffffffULL) | ((unvec[NUM_LIMBS_64 * i + 5] & 0xffffULL) << 32);
+    }
+    res[0] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+    for (int i = 0; i < 2; i++) {
+        t[4*i] = ((unvec[NUM_LIMBS_64 * i] >> 48) & 0xffffULL) | ((unvec[NUM_LIMBS_64 * i + 1] & 0xffffffffULL) << 16);
+        t[4*i + 1] = (unvec[NUM_LIMBS_64 * i + 2] >> 16) & LIMB_MASK;
+        t[4*i + 2] = ((unvec[NUM_LIMBS_64 * i + 3] >> 48) & 0xffffULL) | ((unvec[NUM_LIMBS_64 * i + 4] & 0xffffffffULL) << 16);
+        t[4*i+3] = (unvec[NUM_LIMBS_64 * i + 5] >> 16) & LIMB_MASK;
+    }
+    res[1] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
+}
+
+void fp_limbs_to_64_2x4(uint64_t* res, __m512i* src)
+{
+    uint64_t t[8];
+    
+    VSTORE(t, src[0]);
+    for (int i = 0; i < 2; i++) {
+        res[NUM_LIMBS_64 * i] = t[4*i] & LIMB_MASK;
+        res[NUM_LIMBS_64 * i + 1] = (t[4*i + 1] & 0xffffffffULL) << 32;
+        res[NUM_LIMBS_64 * i + 2] = (t[4*i + 1] >> 32) & 0xffffULL;
+        res[NUM_LIMBS_64 * i + 3] = t[4*i + 2] & LIMB_MASK;
+        res[NUM_LIMBS_64 * i + 4] = (t[4*i+3] & 0xffffffffULL) << 32;
+        res[NUM_LIMBS_64 * i + 5] = (t[4*i+3] >> 32) & 0xffffULL;
+    }
+    VSTORE(t, src[1]);
+    for (int i = 0; i < 2; i++) {
+        res[NUM_LIMBS_64 * i] |= (t[4*i] & 0xffffULL) << 48;
+        res[NUM_LIMBS_64 * i + 1] |= (t[4*i] >> 16) & 0xffffffffULL;
+        res[NUM_LIMBS_64 * i + 2] |= (t[4*i + 1] & LIMB_MASK) << 16;
+        res[NUM_LIMBS_64 * i + 3] |= (t[4*i + 2] & 0xffffULL) << 48;
+        res[NUM_LIMBS_64 * i + 4] |= (t[4*i + 2] >> 16) & 0xffffffffULL;
+        res[NUM_LIMBS_64 * i + 5] |= (t[4*i+3] & LIMB_MASK) << 16;
+    }
+}
+
+void rand_fp_2x4(__m512i* res)
+{
+    __m512i zero[2];
+    __m512i mask = VSETALL(LIMB_MASK);
+    fp_setzero_2x4(zero);
+    
+    for (int i = 0; i < 1; i++) {
+        res[i] = VAND(rand_512i(), mask);
+    }
+    
+    // Last limb is shorter
+    mask = VSET(LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK);
+    res[1] = VAND(rand_512i(), mask);
+    
+    // Reduction
+    fp_add_2x4(res, res, zero);
 }
 

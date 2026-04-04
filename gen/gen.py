@@ -1,5 +1,8 @@
+import os
 from gen_fp import write_fp_file
+from gen_fp_header import write_fp_header_file
 from gen_fp_test import write_fp_test_file
+from params import (get_fp_params, get_param_names)
 
 
 # TODO:
@@ -11,27 +14,36 @@ from gen_fp_test import write_fp_test_file
 #   Find out how to generate inversion code?
 #   8x1 <-> 4x2 functions
 #   Optimize 2x4 when num_limbs % 4 != 0
+#   Optimize with addition chain for pow3div4
+#   inv
 
 ### input ###
+dir = "out"
 
-name = "lvl3"
+# lvl3
 e = 376
 c = 65
 
-# name = "lvl5"
+# lvl5
 # e = 500
 # c = 27
 
-# name = "noshift"
+# no shift
 # e = 2601
 # c = 609
 
-# name = "mersenne"
+# mersenne
 # e = 521
 # c = 1
 
 #############
 
+pp = get_fp_params(e, c)
+v = get_param_names()
 
-write_fp_file(name, e, c)
-#write_fp_test_file(name, e, c)
+if not os.path.exists(dir):
+    os.mkdir(dir)
+
+write_fp_header_file(dir, pp, v)
+write_fp_file(dir, pp, v)
+write_fp_test_file(dir, pp, v)

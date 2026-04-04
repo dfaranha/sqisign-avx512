@@ -348,7 +348,7 @@ def mp_mul_4x2(f, pp, v):
     f.start("void mp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)")
 
     #TODO: Might be suboptimal for odd number of limbs
-    n_prod = 3*pp.n42
+    n_prod = pp.n42 + pp.num_limbs
     f.line(f"__m512i t[{n_prod}], sl[{pp.n42}], sh[{pp.n42-pp.rem42}];")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i zero = VZERO();")
@@ -367,9 +367,9 @@ def mp_mul_4x2(f, pp, v):
     # i in [0, n42-1], j in [0, 2*n42-1-rem42]
     # sum is at most (n42-1) + (2*n42 - 1 - rem42) = 3*n42 -2 - rem42
     n_i_max = pp.n42 - 1
-    n_j_max = 2 * pp.n42 - 1 - pp.rem42
+    n_j_max = pp.num_limbs - 1
 
-    for k in range(3*pp.n42 - 1 - pp.rem42):
+    for k in range(pp.n42 + pp.num_limbs - 1):
         i_min = max(0, k - n_j_max)
         i_max = min(n_i_max, k)
         src_lo = "zero" if k == 0 else f"t[{k}]"
@@ -409,7 +409,7 @@ def rdc_4x2(f, pp, v):
     f.comment("Montgomery reduction loop")
     top_idx = pp.n42 - 1 - pp.rem42
     #TODO it is only + 1 when R is larger to allow lazy red
-    for i in range(2*pp.n42+1):
+    for i in range(pp.num_limbs+1):
         if i == 0:
             f.comment("using the fact that -p^{-1} mod 2^(limb_len) = 1 + c* 2^f mod 2^(limb_len) = 1 as f > limb_len")
         f.line(f"carry = VSRA(a[{i}], {v.limb_len});")
@@ -430,8 +430,8 @@ def rdc_4x2(f, pp, v):
         f.line(f"a[{i+4}] = VADDMASK(a[{i+4}], 0x55, a[{i+4}], VSHUFFLE(a[{i}], 0x4e));")
         f.line()
 
-    f.comment(f"Result is now in a[{2*pp.n42+1}], ..., a[{3*pp.n42}]")
-    start_idx = 2*pp.n42+1
+    f.comment(f"Result is now in a[{pp.num_limbs+1}], ..., a[{pp.num_limbs + pp.n42}]")
+    start_idx = pp.num_limbs+1
     carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
 
     f.comment(f"The result can be {pp.pbits+1} bits.")
@@ -628,7 +628,7 @@ def fp_limbs_to_64_4x2(f, pp, v):
 def rand_fp_4x2(f, pp, v):
     f.start(f"void rand_fp_4x2(__m512i* res)")
 
-    f.line(f"__m512i zero[4];")
+    f.line(f"__m512i zero[{pp.n42}];")
     f.line(f"__m512i mask = VSETALL({v.limb_mask});")
     f.line(f"fp_setzero_4x2(zero);")
     f.line()
