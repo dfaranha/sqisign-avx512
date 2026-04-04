@@ -17,7 +17,7 @@ from limb_conversion import (
     basis_from_51_to_64_bit,
     curve_to_2x4x1_data,
 )
-from torsion_basis import torsion_basis_from_hint
+from torsion_basis import torsion_basis_from_hint, normalize_curve_constants
 from elliptic_isogeny import (
     two_isogeny_chain_1x2x4x1,
     two_isogeny_chain_codomain_1x2x4x1,
@@ -284,6 +284,7 @@ class SQIsign:
 
         # Create the torsion basis for the aux curve using the signature hint
         aux_basis = torsion_basis_from_hint(E_aux, hint_aux, self.f)
+        E_chl = normalize_curve_constants(E_chl)
 
         # Create the torsion basis for the challenge curve using the signature hint
         chl_basis = torsion_basis_from_hint(E_chl, hint_chl, self.f)
