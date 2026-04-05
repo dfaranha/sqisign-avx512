@@ -1,7 +1,9 @@
 import os
 from gen_fp import write_fp_file
+from gen_fp2 import write_fp2_file
 from gen_fp_header import write_fp_header_file
-from gen_fp_test import write_fp_test_file
+from gen_fp_kat import write_fp_kat_file
+from gen_fp2_kat import write_fp2_kat_file
 from params import (get_fp_params, get_param_names)
 
 
@@ -19,6 +21,7 @@ from params import (get_fp_params, get_param_names)
 
 ### input ###
 dir = "out"
+num_kat = 20
 
 # lvl3
 e = 376
@@ -38,7 +41,7 @@ c = 65
 
 #############
 
-pp = get_fp_params(e, c)
+pp = get_fp_params(e, c, num_kat)
 v = get_param_names()
 
 if not os.path.exists(dir):
@@ -46,4 +49,6 @@ if not os.path.exists(dir):
 
 write_fp_header_file(dir, pp, v)
 write_fp_file(dir, pp, v)
-write_fp_test_file(dir, pp, v)
+write_fp2_file(dir, pp, v)
+write_fp_kat_file(dir, pp, v)
+write_fp2_kat_file(dir, pp, v)

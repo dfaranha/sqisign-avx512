@@ -10,7 +10,6 @@ def write_fp_include(f):
     f.line()
     f.line("#include \"fp.h\"")
     f.line("#include \"fp_consts.h\"")
-    f.line("#include \"intrinsics_avx512.h\"")
     f.line("#include \"utils.h\"")
     f.line()
 

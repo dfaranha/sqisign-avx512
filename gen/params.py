@@ -18,6 +18,7 @@ class FpParams:
     rem24: int
     R: ZZ
     R2: ZZ
+    num_kat: int
 
 @dataclass
 class FpParamNames:
@@ -32,6 +33,7 @@ class FpParamNames:
     p_plus_1_top: str
     R: str
     R2: str
+    num_kat: str
 
 
 def get_p(e, c):
@@ -57,6 +59,13 @@ def get_limb_params(pbits, e, c):
 
     return num_limbs, limb_len, last_limb_len, num_limbs64
 
+def get_len_42_24(num_limbs):
+    n42 = ceil(num_limbs/2)
+    n24 = ceil(num_limbs/4)
+    rem42 = num_limbs % 2
+    rem24 = num_limbs % 4
+    return n42, n24, rem42, rem24
+
 # TODO: Optimize Montgomery constant for lazy reduction like 48-bit limb case    
 def get_mont_const(p, num_limbs, limb_len):
     R = ZZ(pow(2, (num_limbs+1) * limb_len, p))
@@ -68,22 +77,10 @@ def get_limb_mask(pp):
     last_limb_mask = (1 << pp.last_limb_len) - 1
     return limb_mask, last_limb_mask
 
-def int_to_limbs(n, pp):
-    if n == 0:
-        return [0]
-    limbs = []
-    val = n
-    i = 0
-    while val > 0:
-        # Mask out the bottom bits and append
-        limbs.append((val & ((1 << pp.limb_len) - 1)))
-        val >>= pp.limb_len
-        i += 1
-    return limbs
-
-def get_fp_params(e, c):
+def get_fp_params(e, c, num_kat):
     p, pbits = get_p(e, c)
     num_limbs, limb_len, last_limb_len, num_limbs64 = get_limb_params(pbits, e, c)
+    n42, n24, rem42, rem24 = get_len_42_24(num_limbs)
     R, R2 = get_mont_const(p, num_limbs, limb_len)
 
     return FpParams(
@@ -95,12 +92,13 @@ def get_fp_params(e, c):
         limb_len = limb_len, 
         last_limb_len = last_limb_len, 
         num_limbs64 = num_limbs64, 
-        n42 = ceil(num_limbs/2),
-        rem42 = num_limbs % 2,
-        n24 = ceil(num_limbs/4), 
-        rem24 = num_limbs % 4,
+        n42 = n42,
+        rem42 = rem42,
+        n24 = n24, 
+        rem24 = rem24,
         R = R, 
-        R2 = R2
+        R2 = R2,
+        num_kat=num_kat
     )
 
 def get_param_names():
@@ -115,5 +113,6 @@ def get_param_names():
         last_limb_mask = "LAST_LIMB_MASK",
         p_plus_1_top = "P_PLUS_1_TOP",
         R = "R",
-        R2 = "R2"
+        R2 = "R2",
+        num_kat="NUM_FP_KAT"
     )

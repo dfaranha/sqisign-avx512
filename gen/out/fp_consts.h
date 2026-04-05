@@ -17,13 +17,15 @@
 #define P_PLUS_1_TOP 0x410000000000ULL
 
 // Montgomery constant R = 2^(9*48) mod p
-static const uint64_t R[NUM_LIMBS] = {
+static const uint64_t R[NUM_LIMBS] =
+{
     0xf03f03f03f03, 0x3, 0x0, 0x0,
     0x0, 0x0, 0x0, 0x3d0000000000
 };
 
 // R2 = R^2 mod p
-static const uint64_t R2[NUM_LIMBS] = {
+static const uint64_t R2[NUM_LIMBS] =
+{
     0x7b0fd07f000f, 0x732f52771f91, 0xf03f03f03f13, 0xf03f03f03f03,
     0xf03f03f03f03, 0xf03f03f03f03, 0xf03f03f03f03, 0x213f03f03f03
 };

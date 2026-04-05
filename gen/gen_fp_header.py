@@ -1,28 +1,5 @@
-from file_writer import FileWriter
-from params import (int_to_limbs, get_limb_mask)
-
-# Converts the integer n to a limb array, then writes it as a uint64_t array
-def write_const_array(f, n, arr_name, pp, v):
-    limbs = int_to_limbs(n, pp)
-    limbs += (pp.num_limbs-len(limbs)) * [0]
-
-    hex_limbs = [f"0x{l:x}" for l in limbs]
-    
-    f.line(f"static const uint64_t {arr_name}[{v.num_limbs}] = {{")
-
-    limbs_per_line = 4
-    f.indent()
-    for i in range(0, pp.num_limbs, limbs_per_line):
-        chunk = hex_limbs[i : i + limbs_per_line]
-        line = ", ".join(chunk)
-        
-        suffix = "," if i + limbs_per_line < pp.num_limbs else ""
-        f.line(f"{line}{suffix}")
-
-    f.unindent()
-    f.line("};")
-    f.line()
-
+from file_writer import (FileWriter, int_to_limbs)
+from params import (get_limb_mask)
 
 def write_fp_consts(f, pp, v):
     f.line(f"#define {v.limb_len} {pp.limb_len}")
@@ -40,14 +17,14 @@ def write_fp_consts(f, pp, v):
     f.line(f"#define {v.last_limb_mask} 0x{last_limb_mask:x}ULL")
     f.line()
 
-    p_plus_1_limbs = int_to_limbs(pp.p+1, pp)
+    p_plus_1_limbs = int_to_limbs(pp.p+1, pp.limb_len)
     f.line(f"#define {v.p_plus_1_top} 0x{p_plus_1_limbs[-1]:x}ULL")
     f.line()
     
     f.comment(f"Montgomery constant {v.R} = 2^({pp.num_limbs+1}*{pp.limb_len}) mod p")
-    write_const_array(f, pp.R, v.R, pp, v)
+    f.limb_array_1d(pp.R, pp.num_limbs, pp.limb_len, v.R, v.num_limbs)
     f.comment(f"{v.R2} = {v.R}^2 mod p")
-    write_const_array(f, pp.R2, v.R2, pp, v)
+    f.limb_array_1d(pp.R2, pp.num_limbs, pp.limb_len, v.R2, v.num_limbs)
 
 def write_fp_header_file(dir, pp, v):
     path = f"{dir}/fp_consts.h"
