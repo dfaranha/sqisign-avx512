@@ -31,7 +31,7 @@ def gen_test_cases(f, pp, v, Fp, n, op, op_name, format):
     B = []
     C = []
 
-    for i in range(pp.num_kat):
+    for _ in range(pp.num_kat):
         if num_operands == 1:
             a, c = gen_test_case(Fp, n, 1, op)
         else:
@@ -39,18 +39,11 @@ def gen_test_cases(f, pp, v, Fp, n, op, op_name, format):
             B.append(b)
         A.append(a)
         C.append(c)
-
-    if n == 8:
-        size2_name = v.num_limbs
-    elif n == 4:
-        size2_name = v.n42
-    else: # n == 2
-        size2_name = v.n24
     
-    f.vec_array_2d(A, pp.num_limbs, pp.limb_len, f"a_{op_name}_{format}", size1_name = v.num_kat, size2_name = size2_name)
+    f.fp_array_2d(A, pp, v, f"a_{op_name}_{format}", size1_name = v.num_kat_fp)
     if num_operands == 2:
-        f.vec_array_2d(B, pp.num_limbs, pp.limb_len, f"b_{op_name}_{format}", size1_name = v.num_kat, size2_name = size2_name)
-    f.vec_array_2d(C, pp.num_limbs, pp.limb_len, f"c_{op_name}_{format}", size1_name = v.num_kat, size2_name = size2_name)
+        f.fp_array_2d(B, pp, v, f"b_{op_name}_{format}", size1_name = v.num_kat_fp)
+    f.fp_array_2d(C, pp, v, f"c_{op_name}_{format}", size1_name = v.num_kat_fp)
 
 def fp_kat(f, pp, v, Fp, n, format):
     f.banner(format)
@@ -64,7 +57,7 @@ def fp_kat(f, pp, v, Fp, n, format):
     gen_test_cases(f, pp, v, Fp, n, op, "sub", format)
 
     f.comment("Multiplication")
-    op = lambda x,y: x*y
+    op = lambda x,y: x*y/Fp(pp.R)
     gen_test_cases(f, pp, v, Fp, n, op, "mul", format)
 
 
@@ -77,7 +70,7 @@ def write_fp_kat_file(dir, pp, v):
 
     write_fp_kat_include(f, pp, v)
 
-    f.line(f"#define {v.num_kat} {pp.num_kat}")
+    f.line(f"#define {v.num_kat_fp} {pp.num_kat}")
     f.line()
 
     fp_kat(f, pp, v, Fp, 8, "8x1")

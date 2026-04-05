@@ -1,7 +1,9 @@
 #include <stdio.h>
 
 #include "fp_lvl3.h"
+#include "fp_consts.h"
 #include "fp2_lvl3.h"
+#include "fp2_kat.h"
 #include "test.h"
 #include "utils.h"
 #include "sqi_test_extras.h"
@@ -84,6 +86,18 @@ bool test_fp2(int iterations)
             break;
         }
     }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_add_8x1x1[i];
+        __m512i* B = b_add_8x1x1[i];
+        __m512i* C = c_add_8x1x1[i];
+
+        fp2_add_8x1x1(c, A, B);
+        if (fp2_is_equal_8x1x1(c, C) != 0xff) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
     print_test_res("addition", passed);
     if (passed == 0) {
         return false;
@@ -123,6 +137,18 @@ bool test_fp2(int iterations)
         fp2_sub_8x1x1(e, a, e);
         if (fp2_is_equal_8x1x1(d, e) != 0xff) {
             passed = 0;
+            break;
+        }
+    }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_sub_8x1x1[i];
+        __m512i* B = b_sub_8x1x1[i];
+        __m512i* C = c_sub_8x1x1[i];
+
+        fp2_sub_8x1x1(c, A, B);
+        if (fp2_is_equal_8x1x1(c, C) != 0xff) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
             break;
         }
     }
@@ -262,6 +288,18 @@ bool test_fp2(int iterations)
         }
 
     }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_mul_8x1x1[i];
+        __m512i* B = b_mul_8x1x1[i];
+        __m512i* C = c_mul_8x1x1[i];
+
+        fp2_mul_8x1x1(c, A, B);
+        if (fp2_is_equal_8x1x1(c, C) != 0xff) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
     print_test_res("multiplication", passed);
     if (passed == 0) {
         return false;
@@ -302,7 +340,17 @@ bool test_fp2(int iterations)
             break;
         }
     }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_sqr_8x1x1[i];
+        __m512i* C = c_sqr_8x1x1[i];
 
+        fp2_sqr_8x1x1(c, A);
+        if (fp2_is_equal_8x1x1(c, C) != 0xff) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
     print_test_res("squaring", passed);
     if (passed == 0) {
         return false;
@@ -416,6 +464,18 @@ bool test_fp2(int iterations)
             break;
         }
     }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_add_4x1x2[i];
+        __m512i* B = b_add_4x1x2[i];
+        __m512i* C = c_add_4x1x2[i];
+
+        fp2_add_4x1x2(c, A, B);
+        if (fp2_is_equal_4x1x2(c, C) != 0xf) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
     print_test_res("addition", passed);
     if (passed == 0) {
         return false;
@@ -455,6 +515,18 @@ bool test_fp2(int iterations)
         fp2_sub_4x1x2(e, a, e);
         if (fp2_is_equal_4x1x2(d, e) != 0xf) {
             passed = 0;
+            break;
+        }
+    }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_sub_4x1x2[i];
+        __m512i* B = b_sub_4x1x2[i];
+        __m512i* C = c_sub_4x1x2[i];
+
+        fp2_sub_4x1x2(c, A, B);
+        if (fp2_is_equal_4x1x2(c, C) != 0xf) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
             break;
         }
     }
@@ -593,6 +665,18 @@ bool test_fp2(int iterations)
         }
 
     }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_mul_4x1x2[i];
+        __m512i* B = b_mul_4x1x2[i];
+        __m512i* C = c_mul_4x1x2[i];
+
+        fp2_mul_4x1x2(c, A, B);
+        if (fp2_is_equal_4x1x2(c, C) != 0xf) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
     print_test_res("multiplication", passed);
     if (passed == 0) {
         return false;
@@ -633,7 +717,17 @@ bool test_fp2(int iterations)
             break;
         }
     }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_sqr_4x1x2[i];
+        __m512i* C = c_sqr_4x1x2[i];
 
+        fp2_sqr_4x1x2(c, A);
+        if (fp2_is_equal_4x1x2(c, C) != 0xf) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
     print_test_res("squaring", passed);
     if (passed == 0) {
         return false;
@@ -705,6 +799,18 @@ bool test_fp2(int iterations)
             break;
         }
     }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_add_4x2x1[i];
+        __m512i* B = b_add_4x2x1[i];
+        __m512i* C = c_add_4x2x1[i];
+
+        fp2_add_4x2x1(c, A, B);
+        if (fp2_is_equal_4x2x1(c, C) != 0xf) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
     print_test_res("addition", passed);
     if (passed == 0) {
         return false;
@@ -744,6 +850,18 @@ bool test_fp2(int iterations)
         fp2_sub_4x2x1(e, a, e);
         if (fp2_is_equal_4x2x1(d, e) != 0xf) {
             passed = 0;
+            break;
+        }
+    }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_sub_4x2x1[i];
+        __m512i* B = b_sub_4x2x1[i];
+        __m512i* C = c_sub_4x2x1[i];
+
+        fp2_sub_4x2x1(c, A, B);
+        if (fp2_is_equal_4x2x1(c, C) != 0xf) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
             break;
         }
     }
@@ -884,6 +1002,18 @@ bool test_fp2(int iterations)
         }
 
     }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_mul_4x2x1[i];
+        __m512i* B = b_mul_4x2x1[i];
+        __m512i* C = c_mul_4x2x1[i];
+
+        fp2_mul_4x2x1(c, A, B);
+        if (fp2_is_equal_4x2x1(c, C) != 0xf) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
     print_test_res("multiplication", passed);
     if (passed == 0) {
         return false;
@@ -924,7 +1054,17 @@ bool test_fp2(int iterations)
             break;
         }
     }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_sqr_4x2x1[i];
+        __m512i* C = c_sqr_4x2x1[i];
 
+        fp2_sqr_4x2x1(c, A);
+        if (fp2_is_equal_4x2x1(c, C) != 0xf) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
     print_test_res("squaring", passed);
     if (passed == 0) {
         return false;
@@ -1046,6 +1186,18 @@ bool test_fp2(int iterations)
             break;
         }
     }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_add_2x2x2[i];
+        __m512i* B = b_add_2x2x2[i];
+        __m512i* C = c_add_2x2x2[i];
+
+        fp2_add_2x2x2(c, A, B);
+        if (fp2_is_equal_2x2x2(c, C) != 0x3) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
     print_test_res("addition", passed);
     if (passed == 0) {
         return false;
@@ -1085,6 +1237,18 @@ bool test_fp2(int iterations)
         fp2_sub_2x2x2(e, a, e);
         if (fp2_is_equal_2x2x2(d, e) != 0x3) {
             passed = 0;
+            break;
+        }
+    }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_sub_2x2x2[i];
+        __m512i* B = b_sub_2x2x2[i];
+        __m512i* C = c_sub_2x2x2[i];
+
+        fp2_sub_2x2x2(c, A, B);
+        if (fp2_is_equal_2x2x2(c, C) != 0x3) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
             break;
         }
     }
@@ -1223,7 +1387,18 @@ bool test_fp2(int iterations)
             passed = 0;
             break;
         }
+    }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_mul_2x2x2[i];
+        __m512i* B = b_mul_2x2x2[i];
+        __m512i* C = c_mul_2x2x2[i];
 
+        fp2_mul_2x2x2(c, A, B);
+        if (fp2_is_equal_2x2x2(c, C) != 0x3) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
     }
     print_test_res("multiplication", passed);
     if (passed == 0) {
@@ -1265,7 +1440,17 @@ bool test_fp2(int iterations)
             break;
         }
     }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_sqr_2x2x2[i];
+        __m512i* C = c_sqr_2x2x2[i];
 
+        fp2_sqr_2x2x2(c, A);
+        if (fp2_is_equal_2x2x2(c, C) != 0x3) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
     print_test_res("squaring", passed);
     if (passed == 0) {
         return false;
@@ -1386,6 +1571,18 @@ bool test_fp2(int iterations)
             break;
         }
     }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_add_2x4x1[i];
+        __m512i* B = b_add_2x4x1[i];
+        __m512i* C = c_add_2x4x1[i];
+
+        fp2_add_2x4x1(c, A, B);
+        if (fp2_is_equal_2x4x1(c, C) != 0x3) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
     print_test_res("addition", passed);
     if (passed == 0) {
         return false;
@@ -1425,6 +1622,18 @@ bool test_fp2(int iterations)
         fp2_sub_2x4x1(e, a, e);
         if (fp2_is_equal_2x4x1(d, e) != 0x3) {
             passed = 0;
+            break;
+        }
+    }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_sub_2x4x1[i];
+        __m512i* B = b_sub_2x4x1[i];
+        __m512i* C = c_sub_2x4x1[i];
+
+        fp2_sub_2x4x1(c, A, B);
+        if (fp2_is_equal_2x4x1(c, C) != 0x3) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
             break;
         }
     }
@@ -1563,7 +1772,18 @@ bool test_fp2(int iterations)
             passed = 0;
             break;
         }
+    }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_mul_2x4x1[i];
+        __m512i* B = b_mul_2x4x1[i];
+        __m512i* C = c_mul_2x4x1[i];
 
+        fp2_mul_2x4x1(c, A, B);
+        if (fp2_is_equal_2x4x1(c, C) != 0x3) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
     }
     print_test_res("multiplication", passed);
     if (passed == 0) {
@@ -1605,7 +1825,17 @@ bool test_fp2(int iterations)
             break;
         }
     }
+    for (int i = 0; i < NUM_FP2_KAT; i++) {
+        __m512i* A = a_sqr_2x4x1[i];
+        __m512i* C = c_sqr_2x4x1[i];
 
+        fp2_sqr_2x4x1(c, A);
+        if (fp2_is_equal_2x4x1(c, C) != 0x3) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
     print_test_res("squaring", passed);
     if (passed == 0) {
         return false;

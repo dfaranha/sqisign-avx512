@@ -1,17 +1,17 @@
-from math import ceil
-from params import get_len_42_24
+from params import (get_fp_vec_params, get_fp_num_vec_name, get_fp2_num_vec_name)
 
 def int_to_limbs(n, limb_len, num_limbs=None):
     if n == 0:
-        return [0]
-    limbs = []
-    val = n
-    i = 0
-    while val > 0:
-        # Mask out the bottom bits and append
-        limbs.append((val & ((1 << limb_len) - 1)))
-        val >>= limb_len
-        i += 1
+        limbs = [0]
+    else:
+        limbs = []
+        val = n
+        i = 0
+        while val > 0:
+            # Mask out the bottom bits and append
+            limbs.append((val & ((1 << limb_len) - 1)))
+            val >>= limb_len
+            i += 1
     if num_limbs is not None:
         assert len(limbs) <= num_limbs
         limbs += (num_limbs-len(limbs)) * [0]
@@ -19,6 +19,42 @@ def int_to_limbs(n, limb_len, num_limbs=None):
 
 def limbs_to_hex(limbs):
     return [f"0x{l:x}" for l in limbs]
+
+def fp_array_1d_inner(f, a_list, num_limbs, limb_len, last_comma = False):
+    n, limbs_per_vec = get_fp_vec_params(len(a_list), num_limbs)
+
+    # pad with 0s using n*k
+    limbs = [limbs_to_hex(int_to_limbs(a, limb_len, n*limbs_per_vec)) for a in a_list]
+
+    if limbs_per_vec == 1: 
+        for i in range(n):
+            suffix = "," if i < n-1 or last_comma else ""
+            f.line(f"{{{limbs[0][i]}, {limbs[1][i]}, {limbs[2][i]}, {limbs[3][i]}, {limbs[4][i]}, {limbs[5][i]}, {limbs[6][i]}, {limbs[7][i]}}}{suffix}")
+    elif limbs_per_vec == 2:
+        for i in range(n):
+            suffix = "," if i < n-1 or last_comma else ""
+            f.line(f"{{{limbs[0][i]}, {limbs[0][i+n]}, {limbs[1][i]}, {limbs[1][i+n]}, {limbs[2][i]}, {limbs[2][i+n]}, {limbs[3][i]}, {limbs[3][i+n]}}}{suffix}")
+    else:
+        for i in range(n):
+            suffix = "," if i < n-1 or last_comma else ""
+            f.line(f"{{{limbs[0][i]}, {limbs[0][i+n]}, {limbs[0][i+2*n]}, {limbs[0][i+3*n]}, {limbs[1][i]}, {limbs[1][i+n]}, {limbs[1][i+2*n]}, {limbs[1][i+3*n]}}}{suffix}")
+
+def interleave_lists(list_a, list_b):
+    return [item for pair in zip(list_a, list_b) for item in pair]
+
+def convert_fp2_list_to_fp1_lists(a_list, format):
+    re = [a[0] for a in a_list]
+    im = [a[1] for a in a_list]
+
+    if format in ["8x1x1", "4x1x2"]:
+        return [re, im]
+    elif format in ["4x2x1", "2x2x2"]:
+        return [interleave_lists(re, im)]
+    else: # 2x4x1
+        inter = interleave_lists(re, im)
+        zero = [0] * 4
+        return [interleave_lists(inter, zero)]
+
 
 class FileWriter:
     def __init__(self, file_name):
@@ -56,83 +92,81 @@ class FileWriter:
         self.indent()
 
     # end the current block
-    def end(self, suffix=None):
+    def end(self, suffix=None, newline=True):
         self.unindent()
         if suffix is None:
             self.line("}")
         else:
             self.line(f"}}{suffix}")
-        self.line()
+        if newline:
+            self.line()
 
     # Converts the integer "a" to a limb array, then writes it as a uint64_t array
-    def limb_array_1d(self, a, num_limbs, limb_len, arr_name=None, size_name=None, limbs_per_line=4):
-        limbs = int_to_limbs(a, limb_len, num_limbs)
+    def limb_array_1d(self, a, pp, arr_name=None, size_name=None, limbs_per_line=4):
+        limbs = int_to_limbs(a, pp.limb_len, pp.num_limbs)
         hex_limbs = limbs_to_hex(limbs)
 
         if arr_name is None:
             self.start()
         elif size_name is None:
-            self.start(f"static const uint64_t {arr_name}[{num_limbs}] =")
+            self.start(f"static const uint64_t {arr_name}[{pp.num_limbs}] =")
         else:
             self.start(f"static const uint64_t {arr_name}[{size_name}] =")
-        for i in range(0, num_limbs, limbs_per_line):
+        for i in range(0, pp.num_limbs, limbs_per_line):
             chunk = hex_limbs[i : i + limbs_per_line]
             line = ", ".join(chunk)
             
-            suffix = "," if i + limbs_per_line < num_limbs else ""
+            suffix = "," if i + limbs_per_line < pp.num_limbs else ""
             self.line(f"{line}{suffix}")
         self.end(";")
 
-    def vec_array_1d(self, a_list, num_limbs, limb_len, arr_name=None, end_suffix=";"):
-        len_a = len(a_list)
-        assert len_a in [2, 4, 8]
-        n42, n24, rem42, rem24 = get_len_42_24(num_limbs)
+    def fp_array_1d(self, a_list, pp, v, arr_name=None, end_suffix=";", end_newline=True):
+        size_name = get_fp_num_vec_name(v, len(a_list))
         
-        # n is the number of vectors, k the number of limbs per Fp elem per vector
-        if len_a == 8: #8x1
-            n = num_limbs
-            k = 1
-        elif len_a == 4: #4x2
-            n = n42
-            k = 2
-        else: #2x4
-            n = n24
-            k = 4
+        if arr_name is None:
+            self.start()
+        else:
+            self.start(f"static __m512i {arr_name}[{size_name}] =")
 
-        # pad with 0s using n*k
-        limbs = [limbs_to_hex(int_to_limbs(a, limb_len, n*k)) for a in a_list]
+        fp_array_1d_inner(self, a_list, pp.num_limbs, pp.limb_len)
+            
+        self.end(suffix=end_suffix, newline=end_newline)
+
+
+    def fp_array_2d(self, a_2d_list, pp, v, arr_name, size1_name):
+        size1 = len(a_2d_list)
+        size2_name = get_fp_num_vec_name(v, len(a_2d_list[0]))
+
+        self.start(f"static __m512i {arr_name}[{size1_name}][{size2_name}] = ")
+        for i in range(size1):
+            end_suffix = "," if i < size1-1 else ""
+            self.fp_array_1d(a_2d_list[i], pp, v, arr_name=None, end_suffix=end_suffix, end_newline=False)
+        self.end(";")
+        
+    def fp2_array_1d(self, a_list, pp, v, format, arr_name=None, end_suffix=";", end_newline=True):
+        fp_lists = convert_fp2_list_to_fp1_lists(a_list, format)
+        size_name = get_fp2_num_vec_name(v, format)
 
         if arr_name is None:
             self.start()
         else:
-            self.start(f"static const __m512i {arr_name}[{n}] =")
+            self.start(f"static __m512i {arr_name}[{size_name}] =")
 
-        if len_a == 8: 
-            for i in range(n):
-                suffix = "," if i < n-1 else ""
-                self.line(f"VSET({limbs[0][i]}, {limbs[1][i]}, {limbs[2][i]}, {limbs[3][i]}, {limbs[4][i]}, {limbs[5][i]}, {limbs[6][i]}, {limbs[7][i]}){suffix}")
-        elif len_a == 4:
-            for i in range(n):
-                suffix = "," if i < n-1 else ""
-                self.line(f"VSET({limbs[0][i]}, {limbs[0][i+n]}, {limbs[1][i]}, {limbs[1][i+n]}, {limbs[2][i]}, {limbs[2][i+n]}, {limbs[3][i]}, {limbs[3][i+n]}){suffix}")
+        if len(fp_lists) == 1:
+            fp_array_1d_inner(self, fp_lists[0], pp.num_limbs, pp.limb_len)
         else:
-            for i in range(n):
-                suffix = "," if i < n-1 else ""
-                self.line(f"VSET({limbs[0][i]}, {limbs[0][i+n]}, {limbs[0][i+2*n]}, {limbs[0][i+3*n]}, {limbs[1][i]}, {limbs[1][i+n]}, {limbs[1][i+2*n]}, {limbs[1][i+3*n]}){suffix}")
-            
-        self.end(end_suffix)
+            fp_array_1d_inner(self, fp_lists[0], pp.num_limbs, pp.limb_len, last_comma=True)
+            fp_array_1d_inner(self, fp_lists[1], pp.num_limbs, pp.limb_len, last_comma=False)
+
+        self.end(suffix=end_suffix, newline=end_newline)
 
 
-    def vec_array_2d(self, a_2d_list, num_limbs, limb_len, arr_name, size1_name=None, size2_name=None):
+    def fp2_array_2d(self, a_2d_list, pp, v, format, arr_name, size1_name):
         size1 = len(a_2d_list)
-        size2 = len(a_2d_list[0])
+        size2_name = get_fp2_num_vec_name(v, format)
 
-        size1_name = f"{size1}" if size1_name is None else size1_name
-        size2_name = f"{size2}" if size2_name is None else size2_name
-
-        self.start(f"static const __m512i {arr_name}[{size1_name}][{size2_name}] = ")
+        self.start(f"static __m512i {arr_name}[{size1_name}][{size2_name}] = ")
         for i in range(size1):
             end_suffix = "," if i < size1-1 else ""
-            self.vec_array_1d(a_2d_list[i], num_limbs, limb_len, arr_name=None, end_suffix=end_suffix)
+            self.fp2_array_1d(a_2d_list[i], pp, v, format, arr_name=None, end_suffix=end_suffix, end_newline=False)
         self.end(";")
-        

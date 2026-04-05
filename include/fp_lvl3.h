@@ -14,28 +14,6 @@
 
 #include "sqi_fp_lvl3.h"
 
-#define FP_NUM_64LIMBS 6
-#define FP_NUM_AVXLIMBS 8
-
-static const uint64_t LIMB_LEN = 48;
-static const uint64_t LIMB_ALIGN = 52 - LIMB_LEN;
-static const uint64_t LIMB_MASK = 0xffffffffffff;
-static const uint64_t LAST_LIMB_MASK = 0x7fffffffffff;    ///////// IS THIS USED SOMEWHERE?
-
-static const uint64_t p_plus_1_top = 0x410000000000;
-
-// We use the Montgomery representation with R = 2^(9*48) = 2^384
-// R2 is R^2 mod p, which is needed to convert to the representation.
-static const uint64_t R[8] = {
-    0xF03F03F03F03, 0x03, 0x0, 0x0, 
-    0x0, 0x0, 0x0, 0x3D0000000000
-};
-
-static const uint64_t R2[8] = { 
-    0x7B0FD07F000F, 0x732F52771F91, 0xF03F03F03F13, 0xF03F03F03F03, 
-    0xF03F03F03F03, 0xF03F03F03F03, 0xF03F03F03F03, 0x213F03F03F03 
-};
-
 // ======================================================================================================
 //                                                 8x1
 // ======================================================================================================
@@ -164,6 +142,8 @@ void mp_mul_8x1_karat(__m512i* res, __m512i* a, __m512i* b);
  */
 void rdc_8x1(__m512i* res, __m512i* a);
 
+void rand_fp_8x1(__m512i* res);
+
 // ======================================================================================================
 //                                                 4x2
 // ======================================================================================================
@@ -227,6 +207,8 @@ void fp_64_to_48_bit_limbs_4x2(__m512i* res, fp_t* src);
 void fp_4x2_to_unvectorized(fp_t* res, __m512i* src);
 void fp_unvectorized_to_4x2(__m512i* res, fp_t* src);
 
+void rand_fp_4x2(__m512i* res);
+
 // ======================================================================================================
 //                                                 2x4
 // ======================================================================================================
@@ -284,5 +266,7 @@ void fp_inv_2x4(__m512i* res, __m512i* a);
 
 void fp_4x2_to_2x4(__m512i* res1, __m512i* res2, __m512i* src);
 void fp_2x4_to_4x2(__m512i* res, __m512i* src1, __m512i* src2);
+
+void rand_fp_2x4(__m512i* res);
 
 #endif

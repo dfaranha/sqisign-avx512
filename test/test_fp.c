@@ -3,8 +3,11 @@
 #include "fp_lvl3.h"
 #include "test.h"
 #include "utils.h"
+#include "fp_kat.h"
 
 #include "sqi_test_extras.h"
+
+// TODO: 8x1 div3 test duplicated
 
 bool test_fp(int iterations)
 {
@@ -22,11 +25,13 @@ bool test_fp(int iterations)
         rand_fp_8x1(a);
         if (fp_is_equal_8x1(a, a) != 0xff) {
             passed = 0;
+            printf("a != a\n");
             break;
         }
         fp_copy_8x1(b, a);
         if (fp_is_equal_8x1(a, b) != 0xff) {
             passed = 0;
+            printf("copy of a != a\n");
             break;
         }
 
@@ -88,6 +93,7 @@ bool test_fp(int iterations)
         fp_add_8x1(d, a, zero);
         if(fp_is_equal_8x1(a, d) != 0xff) {
             passed = 0;
+            printf("a + 0 != a\n");
             break;
         }
 
@@ -95,6 +101,7 @@ bool test_fp(int iterations)
         fp_add_8x1(e, a, one);
         if (fp_is_equal_8x1(a, e) != 0) {
             passed = 0;
+            printf("a + 1 = a\n");
             break;
         }
 
@@ -103,6 +110,7 @@ bool test_fp(int iterations)
         fp_add_8x1(e, b, a);
         if (fp_is_equal_8x1(d, e) != 0xff) {
             passed = 0;
+            printf("a + b != b + a\n");
             break;
         }
 
@@ -113,9 +121,23 @@ bool test_fp(int iterations)
         fp_add_8x1(e, e, a);
         if (fp_is_equal_8x1(d, e) != 0xff) {
             passed = 0;
+            printf("(a + b) + c != a + (b + c)\n");
             break;
         }
     }
+    for (int i = 0; i < NUM_FP_KAT; i++) {
+        __m512i* A = a_add_8x1[i];
+        __m512i* B = b_add_8x1[i];
+        __m512i* C = c_add_8x1[i];
+
+        fp_add_8x1(c, A, B);
+        if (fp_is_equal_8x1(c, C) != 0xff) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
+
     print_test_res("addition", passed);
     if (passed == 0) {
         return false;
@@ -131,6 +153,7 @@ bool test_fp(int iterations)
         fp_sub_8x1(d, a, zero);
         if(fp_is_equal_8x1(a, d) != 0xff) {
             passed = 0;
+            printf("a - 0 != a\n");
             break;
         }
 
@@ -138,6 +161,7 @@ bool test_fp(int iterations)
         fp_sub_8x1(e, a, one);
         if (fp_is_equal_8x1(a, e) != 0) {
             passed = 0;
+            printf("a - 1 = a\n");
             break;
         }
 
@@ -145,6 +169,7 @@ bool test_fp(int iterations)
         fp_sub_8x1(d, a, a);
         if (fp_is_zero_8x1(d) != 0xff) {
             passed = 0;
+            printf("a - a != 0\n");
             break;
         }
 
@@ -155,6 +180,19 @@ bool test_fp(int iterations)
         fp_sub_8x1(e, a, e);
         if (fp_is_equal_8x1(d, e) != 0xff) {
             passed = 0;
+            printf("(a-b) - c != a - (b+c)\n");
+            break;
+        }
+    }
+    for (int i = 0; i < NUM_FP_KAT; i++) {
+        __m512i* A = a_sub_8x1[i];
+        __m512i* B = b_sub_8x1[i];
+        __m512i* C = c_sub_8x1[i];
+
+        fp_sub_8x1(c, A, B);
+        if (fp_is_equal_8x1(c, C) != 0xff) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
             break;
         }
     }
@@ -173,6 +211,7 @@ bool test_fp(int iterations)
         fp_sub_8x1(e, zero, a);
         if (fp_is_equal_8x1(d, e) != 0xff) {
             passed = 0;
+            printf("-a != 0 - a\n");
             break;
         }
 
@@ -181,6 +220,7 @@ bool test_fp(int iterations)
         fp_neg_8x1(e, d);
         if (fp_is_equal_8x1(e, a) != 0xff) {
             passed = 0;
+            printf("-(-a) != a\n");
             break;
         }
 
@@ -189,6 +229,7 @@ bool test_fp(int iterations)
         fp_add_8x1(e, a, d);
         if (fp_is_zero_8x1(e) != 0xff) {
             passed = 0;
+            printf("a + (-a) != 0\n");
             break;
         }
 
@@ -198,6 +239,7 @@ bool test_fp(int iterations)
         fp_add_8x1(f, e, a);
         if (fp_is_equal_8x1(d, f) != 0xff) {
             passed = 0;
+            printf("a - b != (-b) + a\n");
             break;
         }
 
@@ -207,6 +249,7 @@ bool test_fp(int iterations)
         fp_neg_8x1(f, e);
         if (fp_is_equal_8x1(d, f) != 0xff) {
             passed = 0;
+            printf("a-b != -(b-a)\n");
             break;
         }
 
@@ -214,6 +257,7 @@ bool test_fp(int iterations)
         fp_neg_8x1(d, zero);
         if (fp_is_zero_8x1(d) != 0xff) {
             passed = 0;
+            printf("-0 != 0\n");
             break;
         }
 
@@ -258,12 +302,14 @@ bool test_fp(int iterations)
     // Montgomery representation of 1 is R mod p
     fp_tomont_8x1(d, one);
     if (fp_is_equal_8x1(d, vR) != 0xff) {
+        printf("The Montgomery representation of 1 is not R mod p\n");
         passed = 0;
     }
 
     // Montgomery representation of R is R2 mod p
     fp_tomont_8x1(d, vR);
     if (fp_is_equal_8x1(d, vR2) != 0xff) {
+        printf("The Montgomery representation of R is not R^2 mod p\n");
         passed = 0;
     }
 
@@ -276,12 +322,14 @@ bool test_fp(int iterations)
         fp_mul_8x1(d, a, zero);
         if (fp_is_zero_8x1(d) != 0xff) {
             passed = 0;
+            printf("a * 0 != 0\n");
             break;
         }
 
         // (a * R)/R == a
         fp_mul_8x1(d, a, vR);
         if (fp_is_equal_8x1(d, a) != 0xff) {
+            printf("(a * R)/ R != a\n");
             passed = 0;
             break;
         }
@@ -291,12 +339,14 @@ bool test_fp(int iterations)
         fp_frommont_8x1(e, d);
         if (fp_is_equal_8x1(a, e) != 0xff) {
             passed = 0;
+            printf("tomont then frommont != identity\n");
             break;
         }
 
         fp_frommont_8x1(d, a);
         fp_tomont_8x1(e, d);
         if (fp_is_equal_8x1(a, e) != 0xff) {
+            printf("frommon then tomont != identity\n");
             passed = 0;
             break;
         }
@@ -306,6 +356,7 @@ bool test_fp(int iterations)
         fp_mul_8x1(e, b, a);
         if (fp_is_equal_8x1(d, e) != 0xff) {
             passed = 0;
+            printf("a * b != b * a\n");
             break;
         }
 
@@ -316,6 +367,7 @@ bool test_fp(int iterations)
         fp_mul_8x1(e, e, c);
         if (fp_is_equal_8x1(d, e) != 0xff) {
             passed = 0;
+            printf("a * (b * c) != (a * b) * c\n");
             break;
         }
 
@@ -327,9 +379,22 @@ bool test_fp(int iterations)
         fp_add_8x1(e, e, f);
         if (fp_is_equal_8x1(d, e) != 0xff) {
             passed = 0;
+            printf("a * (b+c) != a*b + a*c\n");
             break;
         }
 
+    }
+    for (int i = 0; i < NUM_FP_KAT; i++) {
+        __m512i* A = a_mul_8x1[i];
+        __m512i* B = b_mul_8x1[i];
+        __m512i* C = c_mul_8x1[i];
+
+        fp_mul_8x1(c, A, B);
+        if (fp_is_equal_8x1(c, C) != 0xff) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
     }
     print_test_res("multiplication", passed);
     if (passed == 0) {
@@ -339,6 +404,7 @@ bool test_fp(int iterations)
     // Squaring tests
     fp_sqr_8x1(d, vR);
     if (fp_is_equal_8x1(d, vR) != 0xff) {
+        printf("R^2 / R != R mod p\n");
         passed = 0;
     }
 
@@ -351,6 +417,7 @@ bool test_fp(int iterations)
         fp_sqr_8x1(d, zero);
         if (fp_is_zero_8x1(d) != 0xff) {
             passed = 0;
+            printf("0^2 != 0\n");
             break;
         }
 
@@ -359,6 +426,7 @@ bool test_fp(int iterations)
         fp_mul_8x1(e, a, a);
         if (fp_is_equal_8x1(d, e) != 0xff) {
             passed = 0;
+            printf("a^2 != a * a\n");
             break;
         }
 
@@ -373,6 +441,7 @@ bool test_fp(int iterations)
         fp_add_8x1(e, e, f);
         if (fp_is_equal_8x1(d, e) != 0xff) {
             passed = 0;
+            printf("(a+b)^2 != a^2 + 2ab + b^2\n");
             break;
         }
     }
@@ -488,11 +557,13 @@ bool test_fp(int iterations)
         rand_fp_4x2(a);
         if (fp_is_equal_4x2(a, a) != 0xf) {
             passed = 0;
+            printf("a != a\n");
             break;
         }
         fp_copy_4x2(b, a);
         if (fp_is_equal_4x2(a, b) != 0xf) {
             passed = 0;
+            printf("copy of a != a\n");
             break;
         }
 
@@ -558,6 +629,7 @@ bool test_fp(int iterations)
         fp_add_4x2(d, a, zero);
         if(fp_is_equal_4x2(a, d) != 0xf) {
             passed = 0;
+            printf("a + 0 != a\n");
             break;
         }
 
@@ -565,6 +637,7 @@ bool test_fp(int iterations)
         fp_add_4x2(e, a, one);
         if (fp_is_equal_4x2(a, e) != 0) {
             passed = 0;
+            printf("a + 1 = a\n");
             break;
         }
 
@@ -573,6 +646,7 @@ bool test_fp(int iterations)
         fp_add_4x2(e, b, a);
         if (fp_is_equal_4x2(d, e) != 0xf) {
             passed = 0;
+            printf("a + b != b + a\n");
             break;
         }
 
@@ -583,6 +657,19 @@ bool test_fp(int iterations)
         fp_add_4x2(e, e, a);
         if (fp_is_equal_4x2(d, e) != 0xf) {
             passed = 0;
+            printf("(a+b) + c != a + (b+c)\n");
+            break;
+        }
+    }
+    for (int i = 0; i < NUM_FP_KAT; i++) {
+        __m512i* A = a_add_4x2[i];
+        __m512i* B = b_add_4x2[i];
+        __m512i* C = c_add_4x2[i];
+
+        fp_add_4x2(c, A, B);
+        if (fp_is_equal_4x2(c, C) != 0xf) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
             break;
         }
     }
@@ -601,6 +688,7 @@ bool test_fp(int iterations)
         fp_sub_4x2(d, a, zero);
         if(fp_is_equal_4x2(a, d) != 0xf) {
             passed = 0;
+            printf("a - 0 != 0\n");
             break;
         }
 
@@ -608,6 +696,7 @@ bool test_fp(int iterations)
         fp_sub_4x2(e, a, one);
         if (fp_is_equal_4x2(a, e) != 0) {
             passed = 0;
+            printf("a - 1 != a\n");
             break;
         }
 
@@ -615,6 +704,7 @@ bool test_fp(int iterations)
         fp_sub_4x2(d, a, a);
         if (fp_is_zero_4x2(d) != 0xf) {
             passed = 0;
+            printf("a - a != 0\n");
             break;
         }
 
@@ -625,6 +715,19 @@ bool test_fp(int iterations)
         fp_sub_4x2(e, a, e);
         if (fp_is_equal_4x2(d, e) != 0xf) {
             passed = 0;
+            printf("(a - b) - c != a - (b+c)\n");
+            break;
+        }
+    }
+    for (int i = 0; i < NUM_FP_KAT; i++) {
+        __m512i* A = a_sub_4x2[i];
+        __m512i* B = b_sub_4x2[i];
+        __m512i* C = c_sub_4x2[i];
+
+        fp_sub_4x2(c, A, B);
+        if (fp_is_equal_4x2(c, C) != 0xf) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
             break;
         }
     }
@@ -643,6 +746,7 @@ bool test_fp(int iterations)
         fp_sub_4x2(e, zero, a);
         if (fp_is_equal_4x2(d, e) != 0xf) {
             passed = 0;
+            printf("(-a) != 0 - a\n");
             break;
         }
 
@@ -651,6 +755,7 @@ bool test_fp(int iterations)
         fp_neg_4x2(e, d);
         if (fp_is_equal_4x2(e, a) != 0xf) {
             passed = 0;
+            printf("-(-a) != a\n");
             break;
         }
 
@@ -659,6 +764,7 @@ bool test_fp(int iterations)
         fp_add_4x2(e, a, d);
         if (fp_is_zero_4x2(e) != 0xf) {
             passed = 0;
+            printf("a + (-a) != 0\n");
             break;
         }
 
@@ -668,6 +774,7 @@ bool test_fp(int iterations)
         fp_add_4x2(f, e, a);
         if (fp_is_equal_4x2(d, f) != 0xf) {
             passed = 0;
+            printf("a - b != (-b) + a\n");
             break;
         }
 
@@ -677,6 +784,7 @@ bool test_fp(int iterations)
         fp_neg_4x2(f, e);
         if (fp_is_equal_4x2(d, f) != 0xf) {
             passed = 0;
+            printf("a-b != -(b-a)\n");
             break;
         }
 
@@ -684,6 +792,7 @@ bool test_fp(int iterations)
         fp_neg_4x2(d, zero);
         if (fp_is_zero_4x2(d) != 0xf) {
             passed = 0;
+            printf("-0 != 0\n");
             break;
         }
 
@@ -722,6 +831,7 @@ bool test_fp(int iterations)
 		print_fp_4x2_index(d, 0);
 		print_fp_4x2_index(vR, 0);
         passed = 0;
+        printf("Montgomery representation of 1 is not R mod p\n");
     }
 
     // Montgomery representation of R is R2 mod p
@@ -730,6 +840,7 @@ bool test_fp(int iterations)
 		print_fp_4x2_index(d, 0);
 		print_fp_4x2_index(vR2, 0);
         passed = 0;
+        printf("Montgomery representation of R is not R^2 mod p\n");
     }
 
     for(int i = 0; i < iterations && passed != 0; i++) {
@@ -741,6 +852,7 @@ bool test_fp(int iterations)
         fp_mul_4x2(d, a, zero);
         if (fp_is_zero_4x2(d) != 0xf) {
             passed = 0;
+            printf("a * 0 != 0\n");
             break;
         }
 
@@ -748,6 +860,7 @@ bool test_fp(int iterations)
         fp_mul_4x2(d, a, vR);
         if (fp_is_equal_4x2(d, a) != 0xf) {
             passed = 0;
+            printf("(a * R)/R != a\n");
             break;
         }
 
@@ -755,14 +868,16 @@ bool test_fp(int iterations)
         fp_tomont_4x2(d, a);
         fp_frommont_4x2(e, d);
         if (fp_is_equal_4x2(a, e) != 0xf) {
-            //passed = 0;
+            passed = 0;
+            printf("tomont then frommont is not identity\n");
             break;
         }
 
         fp_frommont_4x2(d, a);
         fp_tomont_4x2(e, d);
         if (fp_is_equal_4x2(a, e) != 0xf) {
-            //passed = 0;
+            passed = 0;
+            printf("frommont then tomont is not identity\n");
             break;
         }
 
@@ -770,7 +885,8 @@ bool test_fp(int iterations)
         fp_mul_4x2(d, a, b);
         fp_mul_4x2(e, b, a);
         if (fp_is_equal_4x2(d, e) != 0xf) {
-            //passed = 0;
+            passed = 0;
+            printf("a * b != b * a\n");
             break;
         }
 
@@ -780,7 +896,8 @@ bool test_fp(int iterations)
         fp_mul_4x2(e, a, b);
         fp_mul_4x2(e, e, c);
         if (fp_is_equal_4x2(d, e) != 0xf) {
-            //passed = 0;
+            passed = 0;
+            printf("a * (b*c) != (a*b) * c\n");
             break;
         }
 
@@ -791,10 +908,23 @@ bool test_fp(int iterations)
         fp_mul_4x2(f, a, c);
         fp_add_4x2(e, e, f);
         if (fp_is_equal_4x2(d, e) != 0xf) {
-            //passed = 0;
+            passed = 0;
+            printf("a * (b+c) != a*b + a*c\n");
             break;
         }
 
+    }
+    for (int i = 0; i < NUM_FP_KAT; i++) {
+        __m512i* A = a_mul_4x2[i];
+        __m512i* B = b_mul_4x2[i];
+        __m512i* C = c_mul_4x2[i];
+
+        fp_mul_4x2(c, A, B);
+        if (fp_is_equal_4x2(c, C) != 0xf) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
     }
     print_test_res("multiplication", passed);
     if (passed == 0) {
@@ -816,6 +946,7 @@ bool test_fp(int iterations)
         fp_sqr_4x2(d, zero);
         if (fp_is_zero_4x2(d) != 0xf) {
             passed = 0;
+            printf("0^2 != 0\n");
             break;
         }
 
@@ -824,6 +955,7 @@ bool test_fp(int iterations)
         fp_mul_4x2(e, a, a);
         if (fp_is_equal_4x2(d, e) != 0xf) {
             passed = 0;
+            printf("a^2 != a * a\n");
             break;
         }
 
@@ -838,6 +970,7 @@ bool test_fp(int iterations)
         fp_add_4x2(e, e, f);
         if (fp_is_equal_4x2(d, e) != 0xf) {
             passed = 0;
+            printf("(a+b)^2 != a^2 + 2ab + b^2\n");
             break;
         }
     }
@@ -1046,6 +1179,18 @@ bool test_fp(int iterations)
             break;
         }
     }
+    for (int i = 0; i < NUM_FP_KAT; i++) {
+        __m512i* A = a_add_2x4[i];
+        __m512i* B = b_add_2x4[i];
+        __m512i* C = c_add_2x4[i];
+
+        fp_add_2x4(c, A, B);
+        if (fp_is_equal_2x4(c, C) != 0x3) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
+    }
     print_test_res("addition", passed);
     if (passed == 0) {
         return false;
@@ -1066,6 +1211,18 @@ bool test_fp(int iterations)
             print_fp_4x2_index(c, 0);
             print_fp_4x2_index(e, 0);
             passed = 0;
+            break;
+        }
+    }
+    for (int i = 0; i < NUM_FP_KAT; i++) {
+        __m512i* A = a_sub_2x4[i];
+        __m512i* B = b_sub_2x4[i];
+        __m512i* C = c_sub_2x4[i];
+
+        fp_sub_2x4(c, A, B);
+        if (fp_is_equal_2x4(c, C) != 0x3) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
             break;
         }
     }
@@ -1128,12 +1285,14 @@ bool test_fp(int iterations)
     // Montgomery representation of 1 is R mod p
     fp_tomont_2x4(d, one);
     if (fp_is_equal_2x4(d, vR) != 0x3) {
+        printf("Montgomery representation of 1 is not R mod p\n");
         passed = 0;
     }
 
     // Montgomery representation of R is R2 mod p
     fp_tomont_2x4(d, vR);
     if (fp_is_equal_2x4(d, vR2) != 0x3) {
+        printf("Montgomery representation of R is not R^2 mod p\n");
         passed = 0;
     }
 
@@ -1146,6 +1305,7 @@ bool test_fp(int iterations)
         fp_mul_2x4(d, a, zero);
         if (fp_is_zero_2x4(d) != 0x3) {
             passed = 0;
+            printf("a * 0 != 0\n");
             break;
         }
 
@@ -1153,6 +1313,7 @@ bool test_fp(int iterations)
         fp_mul_2x4(d, a, vR);
         if (fp_is_equal_2x4(d, a) != 0x3) {
             passed = 0;
+            printf("(a * R)/R != 0\n");
             break;
         }
 
@@ -1161,6 +1322,7 @@ bool test_fp(int iterations)
         fp_frommont_2x4(e, d);
         if (fp_is_equal_2x4(a, e) != 0x3) {
             passed = 0;
+            printf("tomont then frommont is not identity\n");
             break;
         }
 
@@ -1168,6 +1330,7 @@ bool test_fp(int iterations)
         fp_tomont_2x4(e, d);
         if (fp_is_equal_2x4(a, e) != 0x3) {
             passed = 0;
+            printf("frommont then tomont is not identity\n");
             break;
         }
 
@@ -1176,6 +1339,7 @@ bool test_fp(int iterations)
         fp_mul_2x4(e, b, a);
         if (fp_is_equal_2x4(d, e) != 0x3) {
             passed = 0;
+            printf("a * b != b * a\n");
             break;
         }
 
@@ -1186,6 +1350,7 @@ bool test_fp(int iterations)
         fp_mul_2x4(e, e, c);
         if (fp_is_equal_2x4(d, e) != 0x3) {
             passed = 0;
+            printf("a * (b * c) != (a * b) * c\n");
             break;
         }
 
@@ -1197,9 +1362,21 @@ bool test_fp(int iterations)
         fp_add_2x4(e, e, f);
         if (fp_is_equal_2x4(d, e) != 0x3) {
             passed = 0;
+            printf("a * (b+c) != a*b + a*c\n");
             break;
         }
+    }
+    for (int i = 0; i < NUM_FP_KAT; i++) {
+        __m512i* A = a_mul_2x4[i];
+        __m512i* B = b_mul_2x4[i];
+        __m512i* C = c_mul_2x4[i];
 
+        fp_mul_2x4(c, A, B);
+        if (fp_is_equal_2x4(c, C) != 0x3) {
+            passed = 0;
+            printf("Failed KAT #%d\n", i);
+            break;
+        }
     }
     print_test_res("multiplication", passed);
     if (passed == 0) {
@@ -1215,6 +1392,7 @@ bool test_fp(int iterations)
         fp_mul_2x4(d, a, a);
         if (fp_is_equal_2x4(c,d) != 0x3) {
             passed = 0;
+            printf("a^2  != a * a\n");
             break;
         }
     }

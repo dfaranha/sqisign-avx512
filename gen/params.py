@@ -33,7 +33,8 @@ class FpParamNames:
     p_plus_1_top: str
     R: str
     R2: str
-    num_kat: str
+    num_kat_fp: str
+    num_kat_fp2: str
 
 
 def get_p(e, c):
@@ -114,5 +115,42 @@ def get_param_names():
         p_plus_1_top = "P_PLUS_1_TOP",
         R = "R",
         R2 = "R2",
-        num_kat="NUM_FP_KAT"
+        num_kat_fp="NUM_FP_KAT",
+        num_kat_fp2="NUM_FP2_KAT"
     )
+
+def get_fp_vec_params(num_fp, num_limbs):
+    assert num_fp in [2, 4, 8]
+
+    n42, n24, _, _ = get_len_42_24(num_limbs)
+
+    if num_fp == 8:
+        num_vec = num_limbs
+        limbs_per_vec = 1
+    elif num_fp == 4:
+        num_vec = n42
+        limbs_per_vec = 2
+    else:
+        num_vec = n24
+        limbs_per_vec = 4
+    return num_vec, limbs_per_vec
+
+def get_fp_num_vec_name(v, nump_fp):
+    assert nump_fp in [2, 4, 8]
+    if nump_fp == 8:
+        return v.num_limbs
+    elif nump_fp == 4:
+        return v.n42
+    else:
+        return v.n24
+    
+def get_fp2_num_vec_name(v, format):
+    if format == "8x1x1":
+        return f"2*{v.num_limbs}"
+    elif format == "4x1x2":
+        return f"2*{v.n42}"
+    elif format == "4x2x1" or format == "2x4x1":
+        return v.num_limbs
+    else: # 2x4x1
+        return v.n42
+    

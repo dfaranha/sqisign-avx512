@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "fp_lvl3.h"
+#include "fp_consts.h"
 #include "utils.h"
 
 // ======================================================================================================
@@ -79,7 +80,7 @@ void fp_add_8x1(__m512i* res, __m512i* a, __m512i* b)
     __m512i t0, t1, t2, t3, t4, t5, t6, t7, sign_mask;
     __m512i limb_mask = VSETALL(LIMB_MASK);
     __m512i p_bot = VSETALL(1);
-    __m512i p_top = VSETALL(p_plus_1_top);
+    __m512i p_top = VSETALL(P_PLUS_1_TOP);
     
     // Add 48-bit limbs
     t0 = VADD(a[0], b[0]);
@@ -154,7 +155,7 @@ void fp_sub_8x1(__m512i* res, __m512i* a, __m512i* b)
     __m512i t0, t1, t2, t3, t4, t5, t6, t7, sign_mask;
     __m512i limb_mask = VSETALL(LIMB_MASK);
     __m512i p_bot = VSETALL(1);
-    __m512i p_top = VSETALL(p_plus_1_top);
+    __m512i p_top = VSETALL(P_PLUS_1_TOP);
 
     // a - b
     t0 = VSUB(a[0], b[0]);
@@ -221,7 +222,7 @@ void fp_neg_8x1(__m512i* res, __m512i* a)
     __m512i t0, t1, t2, t3, t4, t5, t6, t7, sign_mask;
     __m512i limb_mask = VSETALL(LIMB_MASK);
     __m512i p_bot = VSETALL(1);
-    __m512i p_top = VSETALL(p_plus_1_top);
+    __m512i p_top = VSETALL(P_PLUS_1_TOP);
     __m512i zero = VZERO();
 
     // 0 - a
@@ -290,7 +291,7 @@ void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     __m512i t[8], sign_mask;
     __m512i limb_mask = VSETALL(LIMB_MASK);
     __m512i p_bot = VSETALL(1);
-    __m512i p_top = VSETALL(p_plus_1_top);
+    __m512i p_top = VSETALL(P_PLUS_1_TOP);
     const __mmask8 sub_mask = ~add_mask;
 
     t[0] = VSUBMASK(a[0], sub_mask, a[0], b[0]);
@@ -1346,7 +1347,7 @@ void rdc_8x1(__m512i* res, __m512i* a)
     // Then m * low = (a0:a1 * 65 * 2^376) + low mod 2^432.
     // Thus, we only need to update the top two limbs.
     // s0 = a0, s1 = a1, ... , s6 = a6
-    cnst = VSETALL(p_plus_1_top);
+    cnst = VSETALL(P_PLUS_1_TOP);
     s7 = VMULADDL(a7, a0, cnst);
     s8 = VMULADDH(zero, a0, cnst);
     s8 = VADD(a8, VSL(s8, LIMB_ALIGN));
@@ -1731,6 +1732,22 @@ void fp_64_to_48_bit_limbs_8x1_only_even_idx(__m512i* res, fp_t* src)
     res[7] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
 }
 
+void rand_fp_8x1(__m512i* res)
+{
+    __m512i mask, zero[8];
+    mask = VSETALL(LIMB_MASK);
+    fp_setzero_8x1(zero);
+
+    for(int i = 0; i < 7; i++) {
+        res[i] = VAND(rand_512i(), mask);
+    }
+    // Last limb is shorter
+    mask = VSETALL(LAST_LIMB_MASK);
+    res[7] = VAND(rand_512i(), mask);
+    //Reduction
+    fp_add_8x1(res, res, zero);
+}
+
 // ======================================================================================================
 //                                                 4x2
 // ======================================================================================================
@@ -1805,7 +1822,7 @@ void fp_add_4x2(__m512i* res, __m512i* a, __m512i* b)
     __m512i t0, t1, t2, t3, carry, sign_mask;
     __m512i limb_mask = VSETALL(LIMB_MASK);
     __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);
-    __m512i p_top = VSET(0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top);
+    __m512i p_top = VSET(0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP);
     
     // Add 51-bit limbs
     t0 = VADD(a[0], b[0]);
@@ -1867,7 +1884,7 @@ void fp_sub_4x2(__m512i* res, __m512i* a, __m512i* b)
     __m512i t0, t1, t2, t3, carry, sign_mask;
     __m512i limb_mask = VSETALL(LIMB_MASK);
     __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);
-    __m512i p_top = VSET(0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top);
+    __m512i p_top = VSET(0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP);
 
     // Subtract 51-bit limbs
     t0 = VSUB(a[0], b[0]);
@@ -1925,7 +1942,7 @@ void fp_neg_4x2(__m512i* res, __m512i* a)
     __m512i t0, t1, t2, t3, carry, sign_mask;
     __m512i limb_mask = VSETALL(LIMB_MASK);
     __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);
-    __m512i p_top = VSET(0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top);
+    __m512i p_top = VSET(0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP);
     __m512i zero = VZERO();
 
     // Subtract 51-bit limbs
@@ -1985,7 +2002,7 @@ void fp_mixaddsub_4x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     __m512i t[8], sign_mask, carry;
     __m512i limb_mask = VSETALL(LIMB_MASK);
     __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);
-    __m512i p_top = VSET(0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top, 0, p_plus_1_top);
+    __m512i p_top = VSET(0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP);
     const __mmask8 sub_mask = ~add_mask;
 
     t[0] = VSUBMASK(a[0], sub_mask, a[0], b[0]);
@@ -2526,6 +2543,22 @@ void fp_unvectorized_to_4x2(__m512i* res, fp_t* src)
     fp_tomont_4x2(res, res);
 }
 
+void rand_fp_4x2(__m512i* res)
+{
+    __m512i mask, zero[4];
+    mask = VSETALL(LIMB_MASK);
+    fp_setzero_4x2(zero);
+
+    for(int i = 0; i < 3; i++) {
+        res[i] = VAND(rand_512i(), mask);
+    }
+    // Last limb is shorter
+    mask = VSET(LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK);
+    res[3] = VAND(rand_512i(), mask);
+    //Reduction
+    fp_add_4x2(res, res, zero);
+}
+
 // ======================================================================================================
 //                                                 2x4
 // ======================================================================================================
@@ -2591,10 +2624,9 @@ void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t0, t1, carry, sign_mask;
     __m512i limb_mask = VSETALL(LIMB_MASK);
-    uint64_t p_plus_1_top = 65ULL << 40;
 
     __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
-    __m512i p_top = VSET(0, 0, 0, p_plus_1_top, 0, 0, 0, p_plus_1_top);
+    __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
     
     // idx_shift: Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
     __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
@@ -2658,10 +2690,9 @@ void fp_sub_2x4(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t0, t1, carry, sign_mask;
     __m512i limb_mask = VSETALL(LIMB_MASK);
-    uint64_t p_plus_1_top = 65ULL << 40;
 
     __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
-    __m512i p_top = VSET(0, 0, 0, p_plus_1_top, 0, 0, 0, p_plus_1_top);
+    __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
     
     // idx_shift: Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
     __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
@@ -2718,10 +2749,9 @@ void fp_neg_2x4(__m512i* res, __m512i* a)
 {
     __m512i t0, t1, carry, sign_mask;
     __m512i limb_mask = VSETALL(LIMB_MASK);
-    uint64_t p_plus_1_top = 65ULL << 40;
 
     __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
-    __m512i p_top = VSET(0, 0, 0, p_plus_1_top, 0, 0, 0, p_plus_1_top);
+    __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
     
     // idx_shift: Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
     __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
@@ -2778,11 +2808,10 @@ void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
 {
     __m512i t0, t1, carry, sign_mask;
     __m512i limb_mask = VSETALL(LIMB_MASK);
-    uint64_t p_plus_1_top = 65ULL << 40;
     const __mmask8 sub_mask = ~add_mask;
 
     __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
-    __m512i p_top = VSET(0, 0, 0, p_plus_1_top, 0, 0, 0, p_plus_1_top);
+    __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
     
     // idx_shift: Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
     __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
@@ -3279,4 +3308,18 @@ void fp_unvectorized_to_2x4(__m512i* res, fp_t* src)
 
     fp_64_to_48_bit_limbs_2x4(res, coeffs);
     fp_tomont_2x4(res, res);
+}
+
+void rand_fp_2x4(__m512i* res)
+{
+    __m512i mask, zero[2];
+    fp_setzero_2x4(zero);
+
+    mask = VSETALL(LIMB_MASK);
+    res[0] = VAND(rand_512i(), mask);
+    mask = VSET(LIMB_MASK, LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK);
+    res[1] = VAND(rand_512i(), mask);
+
+    //Reduction
+    fp_add_2x4(res, res, zero);
 }

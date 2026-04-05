@@ -5,7 +5,7 @@
 
 #define LIMB_LEN 48
 #define NUM_LIMBS 8
-#define LIMB_LEN 52 - LIMB_LEN
+#define LIMB_ALIGN 52 - LIMB_LEN
 #define NUM_LIMBS_64 6
 
 #define N4x2 4
