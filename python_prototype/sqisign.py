@@ -199,7 +199,7 @@ class SQIsign:
 
     @staticmethod
     def apply_change_of_basis(
-        A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], M: Matrix, order: ZZ
+        A: AVX_2x4x1, A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], M: Matrix, order: ZZ
     ):
         """
         Evaluate a 2x2 matrix A on the vector of elliptic
@@ -213,13 +213,13 @@ class SQIsign:
         # Compute the new scaled basis
         # xR = ladder_biscalar_1x2x4x1(A24, basis, a00, a10)
         # xS = ladder_biscalar_1x2x4x1(A24, basis, a01, a11)
-        xR, xS = ladder_double_biscalar_1x2x4x1(A24, basis, a00, a10, a01, a11)
+        xR, xS = ladder_double_biscalar_1x2x4x1(A, basis, a00, a10, a01, a11)
 
         # For the difference point we must be careful the result
         # is positive, so we work modulo the point order
         diff_m = (a00 - a01) % order
         diff_n = (a10 - a11) % order
-        xRS = ladder_biscalar_1x2x4x1(A24, basis, diff_m, diff_n)
+        xRS = ladder_biscalar_1x2x4x1(A, basis, diff_m, diff_n)
 
         return xR, xS, xRS
 
@@ -295,8 +295,8 @@ class SQIsign:
         # computation
         # ================================================================================
 
-        _, A24_aux = curve_to_2x4x1_data(E_aux)
-        _, A24_chl = curve_to_2x4x1_data(E_chl)
+        A_aux, A24_aux = curve_to_2x4x1_data(E_aux)
+        A_chl, A24_chl = curve_to_2x4x1_data(E_chl)
 
         aux_basis = basis_from_64_to_51_bit(aux_basis)
         chl_basis = basis_from_64_to_51_bit(chl_basis)
@@ -309,7 +309,7 @@ class SQIsign:
         )
 
         # Apply the change of basis matrix
-        chl_basis = self.apply_change_of_basis(A24_chl, chl_basis, M_chl, chl_order)
+        chl_basis = self.apply_change_of_basis(A_chl, A24_chl, chl_basis, M_chl, chl_order)
 
         # Compute the short 2^r_rsp isogeny and push through points
         if r_rsp > 0:
