@@ -139,7 +139,7 @@ def fp_add_2x4(f, pp, v):
 
     f.comment("If the result is negative, we add p")
     f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);")
-    f.line(f"sign_mask = VPERMV(idx_sign, sign_mask);")
+    f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
     f.line(f"t[{pp.n24-1}] = VADD(t[{pp.n24-1}], VAND(p_top, sign_mask));")
     f.line(f"t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
     f.line()
@@ -172,7 +172,7 @@ def fp_sub_2x4(f, pp, v):
 
     f.comment("If the result is negative, we add p")
     f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);")
-    f.line(f"sign_mask = VPERMV(idx_sign, sign_mask);")
+    f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
     f.line(f"t[{pp.n24-1}] = VADD(t[{pp.n24-1}], VAND(p_top, sign_mask));")
     f.line(f"t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
     f.line()
@@ -206,7 +206,7 @@ def fp_neg_2x4(f, pp, v):
 
     f.comment("If the result is negative, we add p")
     f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);")
-    f.line(f"sign_mask = VPERMV(idx_sign, sign_mask);")
+    f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
     f.line(f"t[{pp.n24-1}] = VADD(t[{pp.n24-1}], VAND(p_top, sign_mask));")
     f.line(f"t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
     f.line()
@@ -248,7 +248,7 @@ def fp_mixaddsub_2x4(f, pp, v):
 
     f.comment("If the result is negative, we add p")
     f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);")
-    f.line(f"sign_mask = VPERMV(idx_sign, sign_mask);")
+    f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
     f.line(f"t[{pp.n24-1}] = VADD(t[{pp.n24-1}], VAND(p_top, sign_mask));")
     f.line(f"t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
     f.line()
@@ -398,6 +398,54 @@ def fp_sqr_2x4(f, pp, v):
 
     f.end()
 
+def fp_div3_2x4(f, pp, v):
+    f.start("void fp_div3_2x4(__m512i* res, __m512i* src)")
+
+    f.line(f"__m512i t[{pp.n24}];")
+    f.line(f"fp_duplicate_2x4(t, {v.inv3});")
+    f.line("fp_mul_2x4(res, src, t);")
+
+    f.end()
+
+def fp_inv_2x4(f, pp, v):
+    f.comment("Batched inversion.")
+    f.start("void fp_inv_2x4(__m512i* res, __m512i* a)")
+
+    f.line(f"uint64_t r_64[{2*pp.num_words64}];")
+    f.line(f"__m512i s[{pp.n24}], r[{pp.n24}];")
+    f.line("__m512i idx0, idx1;")
+    f.line()
+
+    f.comment("r = a0a1 (wastes one mul)")
+    f.line("idx1 = VSET(4, 5, 6, 7, 0, 0, 0, 0);")
+    f.line(f"for (int i = 0; i < {pp.n24}; i++) {{")
+    f.indent()
+    f.line("r[i] = VPERM512(idx1, a[i]);")
+    f.unindent()
+    f.line("}")
+    f.line("fp_mul_2x4(r, r, a);")
+    f.line()
+
+    f.comment("Computing r^-1 mod p")
+    f.line("fp_limbs_to_64_2x4(r_64, r);")
+    f.line("fp_inv_64(r_64, r_64);")
+    f.line("fp_64_to_limbs_2x4(r, r_64);")
+    f.line()
+
+    f.comment("res = (inv_0, inv_1)")
+    f.line("idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);")
+    f.line("idx1 = VSET(0, 1, 2, 3, 0, 1, 2, 3);")
+    f.line(f"for (int i = 0; i < {pp.n24}; i++) {{")
+    f.indent()
+    f.line("s[i] = VPERM512(idx0, a[i]);")
+    f.line("r[i] = VPERM512(idx1, r[i]);")
+    f.unindent()
+    f.line("}")
+    f.line("fp_mul_2x4(res, r, s);")
+    f.line()
+
+    f.end()
+
 # Computes t = a^k (or res = a^k if copy_to_res=True)
 def dbl_and_add(f, pp, v, k, copy_to_res=False):
     assert k > 1
@@ -523,6 +571,8 @@ def fp_sqrt_2x4(f, pp, v):
 def fp_exp3div4_2x4(f, pp, v):
     f.start("void fp_exp3div4_2x4(__m512i* res, __m512i* a)")
 
+    f.line(f"__m512i t[{pp.n24}];")
+
     exponent = (pp.p - 3) // 4
     assert exponent == pp.c * 2**374 - 1
     dbl_and_add(f, pp, v, exponent, copy_to_res=True)
@@ -551,7 +601,7 @@ def fp_frommont_2x4(f, pp, v):
 #TODO: Assumes fully reduced, but after mul lowest limb can be one bit larger
 #TODO: Also assumes all vectors full.
 def fp_64_to_limbs_2x4(f, pp, v):
-    f.comment(f"Assumes unvec is an array of 2 * {v.num_limbs64} 64-bit ints")
+    f.comment(f"Assumes unvec is an array of 2 * {v.num_words64} 64-bit ints")
     f.start("void fp_64_to_limbs_2x4(__m512i* res, uint64_t* unvec)")
 
     f.line("uint64_t t[8];")
@@ -566,16 +616,16 @@ def fp_64_to_limbs_2x4(f, pp, v):
         plusi64 = "" if i64 == 0 else f" + {i64}"
         t_idx = "4*i" if j < n else f"4*i + {j // n}"
         if leftover == 64:
-            line = f"t[{t_idx}] = unvec[{v.num_limbs64} * i{plusi64}] & {v.limb_mask};"
+            line = f"t[{t_idx}] = unvec[{v.num_words64} * i{plusi64}] & {v.limb_mask};"
         elif leftover >= l:
             shift = 64 - leftover
-            line = f"t[{t_idx}] = (unvec[{v.num_limbs64} * i{plusi64}] >> {shift}) & {v.limb_mask};"
+            line = f"t[{t_idx}] = (unvec[{v.num_words64} * i{plusi64}] >> {shift}) & {v.limb_mask};"
         else: #leftover < l
             rshift = 64 - leftover
             lshift = leftover
             rmask = (1 << leftover) - 1
             lmask = (1 << (l-leftover)) - 1
-            line = f"t[{t_idx}] = ((unvec[{v.num_limbs64} * i{plusi64}] >> {rshift}) & 0x{rmask:x}ULL) | ((unvec[{v.num_limbs64} * i + {i64+1}] & 0x{lmask:x}ULL) << {lshift});"
+            line = f"t[{t_idx}] = ((unvec[{v.num_words64} * i{plusi64}] >> {rshift}) & 0x{rmask:x}ULL) | ((unvec[{v.num_words64} * i + {i64+1}] & 0x{lmask:x}ULL) << {lshift});"
         lines[j % n].append(line)
 
         leftover -= l
@@ -591,16 +641,16 @@ def fp_64_to_limbs_2x4(f, pp, v):
 
         plusi64 = "" if i64 == 0 else f" + {i64}"
         if leftover == 64:
-            f.line(f"t[4*i+3] = unvec[{v.num_limbs64} * i{plusi64}] & {v.limb_mask};")
+            f.line(f"t[4*i+3] = unvec[{v.num_words64} * i{plusi64}] & {v.limb_mask};")
         elif leftover >= l or j == n-1:
            shift = 64 - leftover
-           f.line(f"t[4*i+3] = (unvec[{v.num_limbs64} * i{plusi64}] >> {shift}) & {v.limb_mask};")
+           f.line(f"t[4*i+3] = (unvec[{v.num_words64} * i{plusi64}] >> {shift}) & {v.limb_mask};")
         else: #leftover < l and j < n-1
             rshift = 64 - leftover
             lshift = leftover
             rmask = (1 << leftover) - 1
             lmask = (1 << (l-leftover)) - 1
-            f.line(f"t[4*i+3] = ((unvec[{v.num_limbs64} * i{plusi64}] >> {rshift}) & 0x{rmask:x}ULL) | ((unvec[{v.num_limbs64} * i + {i64+1}] & 0x{lmask:x}ULL) << {lshift});")
+            f.line(f"t[4*i+3] = ((unvec[{v.num_words64} * i{plusi64}] >> {rshift}) & 0x{rmask:x}ULL) | ((unvec[{v.num_words64} * i + {i64+1}] & 0x{lmask:x}ULL) << {lshift});")
         
         leftover -= l
         if leftover <= 0:
@@ -633,12 +683,12 @@ def fp_limbs_to_64_2x4(f, pp, v):
         plusi64 = "" if i64 == 0 else f" + {i64}"
         if leftover == 64:
             indices[idx].append(i64)
-            lines_l[idx].append(f"res[{v.num_limbs64} * i{plusi64}]")
+            lines_l[idx].append(f"res[{v.num_words64} * i{plusi64}]")
             lines_r[idx].append(f"t[{t_idx}] & {v.limb_mask};")
         elif leftover >= l:
             shift = 64 - leftover
             indices[idx].append(i64)
-            lines_l[idx].append(f"res[{v.num_limbs64} * i{plusi64}]")
+            lines_l[idx].append(f"res[{v.num_words64} * i{plusi64}]")
             lines_r[idx].append(f"(t[{t_idx}] & {v.limb_mask}) << {shift};")
         else: #leftover < l
             lshift = 64 - leftover
@@ -646,10 +696,10 @@ def fp_limbs_to_64_2x4(f, pp, v):
             lmask = (1 << leftover) - 1
             rmask = (1 << (l - leftover)) - 1
             indices[idx].append(i64)
-            lines_l[idx].append(f"res[{v.num_limbs64} * i{plusi64}]")
+            lines_l[idx].append(f"res[{v.num_words64} * i{plusi64}]")
             lines_r[idx].append(f"(t[{t_idx}] & 0x{lmask:x}ULL) << {lshift};")
             indices[idx].append(i64+1)
-            lines_l[idx].append(f"res[{v.num_limbs64} * i + {i64+1}]")
+            lines_l[idx].append(f"res[{v.num_words64} * i + {i64+1}]")
             lines_r[idx].append(f"(t[{t_idx}] >> {rshift}) & 0x{rmask:x}ULL;")
 
         leftover -= l
@@ -676,10 +726,10 @@ def fp_limbs_to_64_2x4(f, pp, v):
         seen.add(i64)
 
         if leftover == 64:
-            f.line(f"res[{v.num_limbs64} * i{plusi64}] {op} t[4*i+3] & {v.limb_mask};")
+            f.line(f"res[{v.num_words64} * i{plusi64}] {op} t[4*i+3] & {v.limb_mask};")
         elif leftover >= l or j == n-1:
             shift = 64 - leftover
-            f.line(f"res[{v.num_limbs64} * i{plusi64}] {op} (t[4*i+3] & {v.limb_mask}) << {shift};")
+            f.line(f"res[{v.num_words64} * i{plusi64}] {op} (t[4*i+3] & {v.limb_mask}) << {shift};")
         else: #leftover < l and j < n-1
             lshift = 64 - leftover
             rshift = leftover
@@ -687,8 +737,8 @@ def fp_limbs_to_64_2x4(f, pp, v):
             rmask = (1 << (l - leftover)) - 1
             op_next = "|=" if (i64+1) in seen else "="
             seen.add(i64+1)
-            f.line(f"res[{v.num_limbs64} * i{plusi64}] {op} (t[4*i+3] & 0x{lmask:x}ULL) << {lshift};")
-            f.line(f"res[{v.num_limbs64} * i + {i64+1}] {op_next} (t[4*i+3] >> {rshift}) & 0x{rmask:x}ULL;")
+            f.line(f"res[{v.num_words64} * i{plusi64}] {op} (t[4*i+3] & 0x{lmask:x}ULL) << {lshift};")
+            f.line(f"res[{v.num_words64} * i + {i64+1}] {op_next} (t[4*i+3] >> {rshift}) & 0x{rmask:x}ULL;")
 
         leftover -= l
         if leftover <= 0:
@@ -697,41 +747,6 @@ def fp_limbs_to_64_2x4(f, pp, v):
 
         f.unindent()
         f.line("}")
-
-    f.end()
-
-def fp_4x2_to_2x4(f, pp, v):
-    f.comment("Given src=(a, b, c, d), it computes res1 = (a, c) and res2 = (b, d)")
-    f.comment("We choose this interleaving pattern for the Fp2 2x2x2 sqrt,")
-    f.comment("where res1 = re and res2 = im")
-    f.start("void fp_4x2_to_2x4(__m512i* res1, __m512i* res2, __m512i* src)")
-
-    f.line("const __m512i idx1 = VSET(0, 8, 1, 9, 4, 12, 5, 13);")
-    f.line("const __m512i idx2 = VSET(2, 10, 3, 11, 6, 14, 7, 15);")
-
-    f.line(f"for (int i = 0; i < {pp.n24}; i++) {{")
-    f.indent()
-    f.line(f"__m512i s = src[i], t = src[i+2];")
-    f.line(f"res1[i] = VBLENDPERM(idx1, s, t);")
-    f.line(f"res2[i] = VBLENDPERM(idx2, s, t);")
-    f.unindent()
-    f.line("}")
-
-    f.end()
-
-def fp_2x4_to_4x2(f, pp, v):
-    f.start("void fp_2x4_to_4x2(__m512i* res, __m512i* src1, __m512i* src2)")
-
-    f.line("__m512i idx1 = VSET(0, 2, 8, 10, 4, 6, 12, 14);")
-    f.line("__m512i idx2 = VSET(1, 3, 9, 11, 5, 7, 13, 15);")
-    
-    f.line(f"for (int i = 0; i < {pp.n24}; i++) {{")
-    f.indent()
-    f.line("__m512i s = src1[i], t = src2[i];")
-    f.line("res[i] = VBLENDPERM(idx1, s, t);")
-    f.line("res[i+2] = VBLENDPERM(idx2, s, t);")
-    f.unindent()
-    f.line("}")
 
     f.end()
 
@@ -783,11 +798,11 @@ def write_fp_2x4(f, pp, v):
     fp_tomont_2x4(f, pp, v)
     fp_frommont_2x4(f, pp, v)
 
+    fp_div3_2x4(f, pp, v)
+    fp_inv_2x4(f, pp, v)
     fp_sqrt_2x4(f, pp, v)
     fp_exp3div4_2x4(f, pp, v)
 
-    fp_4x2_to_2x4(f, pp, v)
-    fp_2x4_to_4x2(f, pp, v)
     fp_64_to_limbs_2x4(f, pp, v)
     fp_limbs_to_64_2x4(f, pp, v)
 

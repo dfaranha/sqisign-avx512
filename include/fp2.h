@@ -1,5 +1,5 @@
-#ifndef _FP2_LVL3_H
-#define _FP2_LVL3_H
+#ifndef _FP2_H
+#define _FP2_H
 
 #include <stdint.h>
 
@@ -58,7 +58,6 @@ void fp2_div3_8x1x1(__m512i* res, __m512i* src);
 void fp2_muli_8x1x1(__m512i* res, __m512i* a);
 
 void fp2_tomont_8x1x1(__m512i* res, __m512i* a);
-
 void fp2_frommont_8x1x1(__m512i*res, __m512i* a);
 
 void rand_fp2_8x1x1(__m512i* res);
@@ -87,17 +86,16 @@ void fp2_copy_4x1x2(__m512i* res, __m512i* a);
  int fp2_is_zero_4x1x2(__m512i* a);
 
  void fp2_add_4x1x2(__m512i* res, __m512i* a, __m512i* b);
- 
  void fp2_sub_4x1x2(__m512i* res, __m512i* a, __m512i* b);
- 
  void fp2_neg_4x1x2(__m512i* res, __m512i* a);
  
  void fp2_mul_4x1x2(__m512i* res, __m512i* a, __m512i* b);
- 
  void fp2_sqr_4x1x2(__m512i* res, __m512i* a);
+
+ void fp2_muli_4x1x2(__m512i* res, __m512i* a);
+ void fp2_div3_4x1x2(__m512i* res, __m512i* src);
  
  void fp2_tomont_4x1x2(__m512i* res, __m512i* a);
- 
  void fp2_frommont_4x1x2(__m512i*res, __m512i* a);
 
  void rand_fp2_4x1x2(__m512i* res);
@@ -189,6 +187,8 @@ void fp2_conj_2x2x2(__m512i* res, __m512i* a);
 void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b);
 void fp2_sqr_2x2x2(__m512i* res, __m512i* a);
 
+void fp2_muli_2x2x2(__m512i* res, __m512i* a);
+void fp2_div3_2x2x2(__m512i* res, __m512i* src);
 void fp2_sqrt_2x2x2(__m512i* res, __m512i* a);
 void fp2_inv_2x2x2(__m512i* res, __m512i* a);
 
@@ -233,11 +233,13 @@ void fp2_neg_2x4x1(__m512i* res, __m512i* a);
 void fp2_mixaddsub_2x4x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
 
 void fp2_mul_2x4x1(__m512i* res, __m512i* a, __m512i* b);
-
 void fp2_sqr_2x4x1(__m512i* res, __m512i* a);
 
-void fp2_tomont_2x4x1(__m512i* res, __m512i* a);
+void fp2_muli_2x4x1(__m512i* res, __m512i* a);
+void fp2_div3_2x4x1(__m512i* res, __m512i* src);
+void fp2_inv_2x4x1(__m512i* res, __m512i* src);
 
+void fp2_tomont_2x4x1(__m512i* res, __m512i* a);
 void fp2_frommont_2x4x1(__m512i* res, __m512i* a);
 
 void rand_fp2_2x4x1(__m512i* res);
@@ -245,15 +247,6 @@ void rand_fp2_2x4x1(__m512i* res);
 // ======================================================================================================
 //                                      Conversions between representations
 // ======================================================================================================
-
-void fp2_unvectorized_to_8x1x1(__m512i* res, fp2_t* src);
-void fp2_unvectorized_to_4x2x1(__m512i* res, fp2_t* src);
-void fp2_unvectorized_to_2x2x2(__m512i* res, fp2_t* src);
-void fp2_unvectorized_to_2x4x1(__m512i* res, fp2_t* src);
-void fp2_8x1x1_to_unvectorized(fp2_t* res, __m512i* src);
-void fp2_4x2x1_to_unvectorized(fp2_t* res, __m512i* src);
-void fp2_2x2x2_to_unvectorized(fp2_t* res, __m512i* src);
-void fp2_2x4x1_to_unvectorized(fp2_t* res, __m512i* src);
 
 /**
  * Converts an Fp2 8x1x1 to two 4x2x1's.

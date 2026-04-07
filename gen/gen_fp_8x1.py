@@ -516,7 +516,8 @@ def rdc_8x1_shift0_sat(f, pp, v):
 
 # c != 1, e % limb_len == 0, last_limb_len < limb_len
 def rdc_8x1_shift0(f, pp, v):
-    f.line(f"__m512i t[{pp.num_limbs+2}], s{pp.num_limbs}, hi, msb_mask;")
+    f.line(f"__m512i t[{pp.num_limbs+2}], s{pp.num_limbs}, hi;")
+    f.line("__mmask8 msb_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
     f.line(f"const __m512i zero = VZERO();")
@@ -555,7 +556,7 @@ def rdc_8x1_shift0(f, pp, v):
     f.line(f"hi = VSL(t[{pp.num_limbs+1}], {shift});")
     f.line(f"msb_mask = VSIGN(hi);")
     f.line(f"t[{pp.num_limbs+1}] = VSUBMASK(t[{pp.num_limbs+1}], msb_mask, t[{pp.num_limbs+1}], top);")
-    f.line(f"t[2] = VADDMASK(t[2], msb_mask, [t2], one);")
+    f.line(f"t[2] = VADDMASK(t[2], msb_mask, t[2], one);")
     f.line()
 
     f.comment(f"We do not propogate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
@@ -569,7 +570,8 @@ def rdc_8x1_sat(f, pp, v):
 # c = 1, e % limb_len != 0, last_limb_len < limb_len
 def rdc_8x1_c1(f, pp, v):
 
-    f.line(f"__m512i t[{pp.num_limbs+2}], s{pp.num_limbs-1}, s{pp.num_limbs}, hi, msb_mask;")
+    f.line(f"__m512i t[{pp.num_limbs+2}], s{pp.num_limbs-1}, s{pp.num_limbs}, hi;")
+    f.line("__mmask8 msb_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
     f.line(f"const __m512i zero = VZERO();")
@@ -587,7 +589,7 @@ def rdc_8x1_c1(f, pp, v):
     f.line()
 
     f.line(f"t[1] = VADD(a[{pp.num_limbs}], VSL(a[1], {lshift}));")
-    f.line(f"t[1] = VADD(t[1], VSR(a[0], {rshift}));")
+    f.line(f"t[1] = VADD(t[1], VSRA(a[0], {rshift}));")
     f.line(f"s{pp.num_limbs} = VAND(t[1], limb_mask);")
     f.line()
 
@@ -596,18 +598,18 @@ def rdc_8x1_c1(f, pp, v):
 
     for i in range(2, pp.num_limbs-1):
         f.line(f"t[{i}] = VADD(a[{i + pp.num_limbs-1}], VSL(a[{i}], {lshift}));")
-        f.line(f"t[{i}] = VADD(t[{i}], VSR(a[{i-1}], {rshift}));")
+        f.line(f"t[{i}] = VADD(t[{i}], VSRA(a[{i-1}], {rshift}));")
         f.line()
 
     f.line(f"t[{pp.num_limbs-1}] = VADD(a[{2*pp.num_limbs-2}], VSL(s{pp.num_limbs-1}, {lshift}));")
-    f.line(f"t[{pp.num_limbs-1}] = VADD(t[{pp.num_limbs-1}], VSR(a[{pp.num_limbs-2}], {rshift}));")
+    f.line(f"t[{pp.num_limbs-1}] = VADD(t[{pp.num_limbs-1}], VSRA(a[{pp.num_limbs-2}], {rshift}));")
     f.line()
 
     f.line(f"t[{pp.num_limbs}] = VADD(a[{2*pp.num_limbs-1}], VSL(s{pp.num_limbs}, {lshift}));")
-    f.line(f"t[{pp.num_limbs}] = VADD(t[{pp.num_limbs}], VSR(s{pp.num_limbs-1}, {rshift}));")
+    f.line(f"t[{pp.num_limbs}] = VADD(t[{pp.num_limbs}], VSRA(s{pp.num_limbs-1}, {rshift}));")
     f.line()
 
-    f.line(f"t[{pp.num_limbs+1}] = VSR(s{pp.num_limbs}, {rshift});")
+    f.line(f"t[{pp.num_limbs+1}] = VSRA(s{pp.num_limbs}, {rshift});")
 
     carry_prop_8x1(f, pp, v, pp.num_limbs+2, "t", "limb_mask")
 
@@ -619,7 +621,7 @@ def rdc_8x1_c1(f, pp, v):
     f.line(f"hi = VSL(t[{pp.num_limbs+1}], {shift});")
     f.line(f"msb_mask = VSIGN(hi);")
     f.line(f"t[{pp.num_limbs+1}] = VSUBMASK(t[{pp.num_limbs+1}], msb_mask, t[{pp.num_limbs+1}], top);")
-    f.line(f"t[2] = VADDMASK(t[2], msb_mask, [t2], one);")
+    f.line(f"t[2] = VADDMASK(t[2], msb_mask, t[2], one);")
     f.line()
 
     f.comment(f"We do not propogate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
@@ -627,7 +629,8 @@ def rdc_8x1_c1(f, pp, v):
         f.line(f"res[{i}] = t[{i+2}];")
 
 def rdc_8x1_standard(f, pp, v):
-    f.line(f"__m512i t[{pp.num_limbs+2}], s{pp.num_limbs-1}, s{pp.num_limbs}, hi, msb_mask;")
+    f.line(f"__m512i t[{pp.num_limbs+2}], s{pp.num_limbs-1}, s{pp.num_limbs}, hi;")
+    f.line("__mmask8 msb_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
     f.line(f"const __m512i zero = VZERO();")
@@ -640,7 +643,7 @@ def rdc_8x1_standard(f, pp, v):
     f.line(f"s{pp.num_limbs} = VMULADDH(zero, a[0], top);")
     f.line(f"s{pp.num_limbs} = VADD(a[{pp.num_limbs}], VSL(s{pp.num_limbs}, {v.limb_align}));")
     f.line(f"s{pp.num_limbs} = VMULADDL(s{pp.num_limbs}, a[1], top);")
-    f.line(f"s{pp.num_limbs} = VADD(s{pp.num_limbs}, VSR(s{pp.num_limbs-1}, {v.limb_len}));")
+    f.line(f"s{pp.num_limbs} = VADD(s{pp.num_limbs}, VSRA(s{pp.num_limbs-1}, {v.limb_len}));")
     f.line(f"s{pp.num_limbs-1} = VAND(s{pp.num_limbs-1}, limb_mask);")
     f.line(f"s{pp.num_limbs} = VAND(s{pp.num_limbs}, limb_mask);")
     f.line()
@@ -684,7 +687,7 @@ def rdc_8x1_standard(f, pp, v):
     f.line(f"hi = VSL(t[{pp.num_limbs+1}], {shift});")
     f.line(f"msb_mask = VSIGN(hi);")
     f.line(f"t[{pp.num_limbs+1}] = VSUBMASK(t[{pp.num_limbs+1}], msb_mask, t[{pp.num_limbs+1}], top);")
-    f.line(f"t[2] = VADDMASK(t[2], msb_mask, [t2], one);")
+    f.line(f"t[2] = VADDMASK(t[2], msb_mask, t[2], one);")
     f.line()
 
     f.comment(f"We do not propogate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
@@ -708,8 +711,80 @@ def fp_mul_8x1(f, pp, v):
 
     f.end()
 
+def fp_div3_8x1(f, pp, v):
+    f.start("void fp_div3_8x1(__m512i* res, __m512i* src)")
+
+    f.line(f"__m512i t[{pp.num_limbs}];")
+    f.line(f"fp_duplicate_8x1(t, {v.inv3});")
+    f.line("fp_mul_8x1(res, src, t);")
+
+    f.end()
+
+def fp_inv_8x1(f, pp, v):
+    f.comment("Batched inversion invoking a single call to fp_inv_64.")
+    f.start("void fp_inv_8x1(__m512i* res, __m512i* a)")
+
+    f.line(f"uint64_t r_64[{2*pp.num_words64}];")
+    f.line(f"__m512i u[{pp.num_limbs}], t0[{pp.n42}], t1[{pp.n42}], s0[{pp.n24}], s1[{pp.n24}], r[{pp.n24}];")
+    f.line("__m512i idx0, idx1;")
+    f.line()
+    f.line(f"fp_8x1_to_4x2(t0, t1, a);")
+    f.comment("t0 = (a0a1, a2a3, a4a5, a6a7)")
+    f.line(f"fp_mul_4x2(t0, t0, t1);")
+    f.line("fp_4x2_to_2x4(s0, s1, t0);")
+    f.comment("s0 = (a0a1a2a3, a4a5a6a7)")
+    f.line("fp_mul_2x4(s0, s0, s1);")
+    f.line("idx1 = VSET(4, 5, 6, 7, 0, 0, 0, 0);")
+    f.line(f"for (int i = 0; i < {pp.n24}; i++) {{")
+    f.indent()
+    f.line("s1[i] = VPERM512(idx1, s0[i]);")
+    f.unindent()
+    f.line("}")
+    f.comment("r = a0a1a2a3a4a5a6a7 (wastes a mul)")
+    f.line("fp_mul_2x4(r, s0, s1);")
+    f.line()
+
+    f.comment("Unvectorized inversion of r")
+    f.line("fp_limbs_to_64_2x4(r_64, r);")
+    f.line("fp_inv_64(r_64, r_64);")
+    f.line("fp_64_to_limbs_2x4(r, r_64);")
+    f.line()
+    
+    f.comment("s0 = (inv_0123, inv_4567)")
+    f.line("idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);")
+    f.line("idx1 = VSET(0, 1, 2, 3, 0, 1, 2, 3);")
+    f.line(f"for (int i = 0; i < {pp.n24}; i++) {{")
+    f.indent()
+    f.line("s0[i] = VPERM512(idx0, s0[i]);")
+    f.line("s1[i] = VPERM512(idx1, r[i]);")
+    f.unindent()
+    f.line("}")
+    f.line("fp_mul_2x4(s0, s0, s1);")
+
+    f.comment("t0 = (inv01, inv23, inv45, inv67)")
+    f.line("fp_2x4_to_4x2(t1, s0, s0); // (inv_0123, inv_0123, inv_4567, inv_4567)")
+    f.line("idx0 = VSET(2, 3, 0, 1, 6, 7, 4, 5);")
+    f.line(f"for (int i = 0; i < {pp.n42}; i++) {{")
+    f.indent()
+    f.line("t0[i] = VPERM512(idx0, t0[i]);")
+    f.unindent()
+    f.line("}")
+    f.line("fp_mul_4x2(t0, t0, t1);")
+
+    f.comment("res = (inv0, inv1, inv2, ...)")
+    f.line("fp_4x2_to_8x1(u, t0, t0);")
+    f.line("idx0 = VSET(1, 0, 3, 2, 5, 4, 7, 6);")
+    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.indent()
+    f.line("res[i] = VPERM512(idx0, a[i]);")
+    f.unindent()
+    f.line("}")
+    f.line("fp_mul_8x1(res, res, u);")
+
+    f.end()
+
 def fp_64_to_limbs_8x1(f, pp, v):
-    f.comment(f"Assumes unvec is an array of 8 * {v.num_limbs64} 64-bit ints")
+    f.comment(f"Assumes unvec is an array of 8 * {v.num_words64} 64-bit ints")
     f.start("void fp_64_to_limbs_8x1(__m512i* res, uint64_t* unvec)")
 
     f.line("uint64_t t[8];")
@@ -724,16 +799,16 @@ def fp_64_to_limbs_8x1(f, pp, v):
         f.indent()
         plusi64 = "" if i64 == 0 else f" + {i64}"
         if leftover == 64:
-            f.line(f"t[i] = unvec[{v.num_limbs64} * i{plusi64}] & {v.limb_mask};")
+            f.line(f"t[i] = unvec[{v.num_words64} * i{plusi64}] & {v.limb_mask};")
         elif leftover >= l or j == n-1:
            shift = 64 - leftover
-           f.line(f"t[i] = (unvec[{v.num_limbs64} * i{plusi64} >> {shift}) & {v.limb_mask};")
+           f.line(f"t[i] = (unvec[{v.num_words64} * i{plusi64}] >> {shift}) & {v.limb_mask};")
         else: #leftover < l and j < n-1
             rshift = 64 - leftover
             lshift = leftover
             rmask = (1 << leftover) - 1
             lmask = (1 << (l-leftover)) - 1
-            f.line(f"t[i] = ((unvec[{v.num_limbs64} * i{plusi64}] >> {rshift}) & 0x{rmask:x}ULL) | ((unvec[{v.num_limbs64} * i + {i64+1}] & 0x{lmask:x}ULL) << {lshift});")
+            f.line(f"t[i] = ((unvec[{v.num_words64} * i{plusi64}] >> {rshift}) & 0x{rmask:x}ULL) | ((unvec[{v.num_words64} * i + {i64+1}] & 0x{lmask:x}ULL) << {lshift});")
         
         leftover -= l
         if leftover <= 0:
@@ -747,7 +822,7 @@ def fp_64_to_limbs_8x1(f, pp, v):
     f.end()
 
 def fp_64_to_limbs_8x1_only_even_idx(f, pp, v):
-    f.comment(f"Assumes unvec is an array of 4 * {v.num_limbs64} 64-bit ints")
+    f.comment(f"Assumes unvec is an array of 4 * {v.num_words64} 64-bit ints")
     f.start("void fp_64_to_limbs_8x1_only_even_idx(__m512i* res, uint64_t* unvec)")
 
     f.line("uint64_t t[4];")
@@ -762,16 +837,16 @@ def fp_64_to_limbs_8x1_only_even_idx(f, pp, v):
         f.indent()
         plusi64 = "" if i64 == 0 else f" + {i64}"
         if leftover == 64:
-            f.line(f"t[i] = unvec[{v.num_limbs64} * i{plusi64}] & {v.limb_mask};")
+            f.line(f"t[i] = unvec[{v.num_words64} * i{plusi64}] & {v.limb_mask};")
         elif leftover >= l or j == n-1:
            shift = 64 - leftover
-           f.line(f"t[i] = (unvec[{v.num_limbs64} * i{plusi64}] >> {shift}) & {v.limb_mask};")
+           f.line(f"t[i] = (unvec[{v.num_words64} * i{plusi64}] >> {shift}) & {v.limb_mask};")
         else: #leftover < l and j < n-1
             rshift = 64 - leftover
             lshift = leftover
             rmask = (1 << leftover) - 1
             lmask = (1 << (l-leftover)) - 1
-            f.line(f"t[i] = ((unvec[{v.num_limbs64} * i{plusi64}] >> {rshift}) & 0x{rmask:x}ULL) | ((unvec[{v.num_limbs64} * i + {i64+1}] & 0x{lmask:x}ULL) << {lshift});")
+            f.line(f"t[i] = ((unvec[{v.num_words64} * i{plusi64}] >> {rshift}) & 0x{rmask:x}ULL) | ((unvec[{v.num_words64} * i + {i64+1}] & 0x{lmask:x}ULL) << {lshift});")
         
         leftover -= l
         if leftover <= 0:
@@ -802,17 +877,17 @@ def fp_limbs_to_64_8x1(f, pp, v):
 
         plusi64 = "" if i64 == 0 else f" + {i64}"
         if leftover == 64:
-            f.line(f"res[{v.num_limbs64} * i{plusi64}] = t[i] & {v.limb_mask};")
+            f.line(f"res[{v.num_words64} * i{plusi64}] = t[i] & {v.limb_mask};")
         elif leftover >= l or j == n - 1:
             shift = 64 - leftover
-            f.line(f"res[{v.num_limbs64} * i{plusi64}] |= (t[i] & {v.limb_mask}) << {shift};")
+            f.line(f"res[{v.num_words64} * i{plusi64}] |= (t[i] & {v.limb_mask}) << {shift};")
         else: #leftover < l and j < n-1
             lshift = 64 - leftover
             rshift = leftover
             lmask = (1 << leftover) - 1
             rmask = (1 << (l - leftover)) - 1
-            f.line(f"res[{v.num_limbs64} * i{plusi64}] |= (t[i] & 0x{lmask:x}ULL) << {lshift};")
-            f.line(f"res[{v.num_limbs64} * i + {i64 + 1}] = (t[i] >> {rshift}) & 0x{rmask:x}ULL;")
+            f.line(f"res[{v.num_words64} * i{plusi64}] |= (t[i] & 0x{lmask:x}ULL) << {lshift};")
+            f.line(f"res[{v.num_words64} * i + {i64 + 1}] = (t[i] >> {rshift}) & 0x{rmask:x}ULL;")
 
         leftover -= l
         if leftover <= 0:
@@ -842,17 +917,17 @@ def fp_limbs_to_64_8x1_only_even_idx(f, pp, v):
 
         plusi64 = "" if i64 == 0 else f" + {i64}"
         if leftover == 64:
-            f.line(f"res[{v.num_limbs64} * i{plusi64}] = t[2*i] & {v.limb_mask};")
+            f.line(f"res[{v.num_words64} * i{plusi64}] = t[2*i] & {v.limb_mask};")
         elif leftover >= l or j == n - 1:
             shift = 64 - leftover
-            f.line(f"res[{v.num_limbs64} * i{plusi64}] |= (t[2*i] & {v.limb_mask}) << {shift};")
+            f.line(f"res[{v.num_words64} * i{plusi64}] |= (t[2*i] & {v.limb_mask}) << {shift};")
         else: #leftover < l and j < n-1
             lshift = 64 - leftover
             rshift = leftover
             lmask = (1 << leftover) - 1
             rmask = (1 << (l - leftover)) - 1
-            f.line(f"res[{v.num_limbs64} * i{plusi64}] |= (t[2*i] & 0x{lmask:x}ULL) << {lshift};")
-            f.line(f"res[{v.num_limbs64} * i + {i64+1}] = (t[2*i] >> {rshift}) & 0x{rmask:x}ULL;")
+            f.line(f"res[{v.num_words64} * i{plusi64}] |= (t[2*i] & 0x{lmask:x}ULL) << {lshift};")
+            f.line(f"res[{v.num_words64} * i + {i64+1}] = (t[2*i] >> {rshift}) & 0x{rmask:x}ULL;")
 
         leftover -= l
         if leftover <= 0:
@@ -916,9 +991,12 @@ def write_fp_8x1(f, pp, v):
     mp_dbl_8x1(f, pp, v)
     mp_mul_8x1_karat(f, pp, v)
     rdc_8x1(f, pp, v)
-    fp_mul_8x1(f, pp, v)
 
+    fp_mul_8x1(f, pp, v)
     fp_sqr_8x1(f, pp, v)
+    fp_div3_8x1(f, pp, v)
+    fp_inv_8x1(f, pp, v)
+
     fp_tomont_8x1(f, pp, v)
     fp_frommont_8x1(f, pp, v)
 

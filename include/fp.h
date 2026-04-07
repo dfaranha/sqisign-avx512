@@ -1,18 +1,8 @@
-/**
- *   The SQISign lvl3 prime is p = 65 * 2^376 - 1
- *   It is 383 bits, so the number of 48-bit limbs needed is 383/48 < 8
- *   
- *   Formats: a x b = a vectors of b Fp limbs
- */
-
-#ifndef _FP_LVL3_H
-#define _FP_LVL3_H
+#ifndef _FP_H
+#define _FP_H
 
 #include <stdint.h>
-
 #include "intrinsics_avx512.h"
-
-#include "sqi_fp_lvl3.h"
 
 // ======================================================================================================
 //                                                 8x1
@@ -81,6 +71,11 @@ void fp_sqr_8x1(__m512i* res, __m512i* a);
 void fp_div3_8x1(__m512i* res, __m512i* src);
 
 /**
+ * res = a^(-1) (mod p)
+ */
+void fp_inv_8x1(__m512i* res, __m512i* src);
+
+/**
  * res = a * R (mod p)
  */
 void fp_tomont_8x1(__m512i* res, __m512i* a);
@@ -89,16 +84,6 @@ void fp_tomont_8x1(__m512i* res, __m512i* a);
  * res = a * R^(-1) (mod p)
  */
 void fp_frommont_8x1(__m512i* res, __m512i* a);
-
-void fp_8x1_to_unvectorized(fp_t* res, __m512i* src);
-// helper function, also used in fp2 conversions.
-void fp_48_to_64_bit_limbs_8x1(fp_t* res, __m512i* src);
-void fp_48_to_64_bit_limbs_8x1_only_even_idx(fp_t* res, __m512i* src);
-
-void fp_unvectorized_to_8x1(__m512i* res, fp_t* src);
-// helper function, also used in fp2 conversions.
-void fp_64_to_48_bit_limbs_8x1(__m512i* res, fp_t* src);
-void fp_64_to_48_bit_limbs_8x1_only_even_idx(__m512i* res, fp_t* src);
 
 /**
  *  res = a + b, multiprecision addition, no correction, no carry propagation
@@ -143,6 +128,11 @@ void mp_mul_8x1_karat(__m512i* res, __m512i* a, __m512i* b);
 void rdc_8x1(__m512i* res, __m512i* a);
 
 void rand_fp_8x1(__m512i* res);
+
+void fp_64_to_limbs_8x1(__m512i* res, uint64_t* unvec);
+void fp_64_to_limbs_8x1_only_even_idx(__m512i* res, uint64_t* unvec);
+void fp_limbs_to_64_8x1(uint64_t* res, __m512i* src);
+void fp_limbs_to_64_8x1_only_even_idx(uint64_t* res, __m512i* src);
 
 // ======================================================================================================
 //                                                 4x2
@@ -201,13 +191,13 @@ void fp_sqr_4x2(__m512i* res, __m512i* a);
 void fp_tomont_4x2(__m512i* res, __m512i* a);
 void fp_frommont_4x2(__m512i* res, __m512i* a);
 
-void fp_48_to_64_bit_limbs_4x2(fp_t* res, __m512i* src);
-void fp_64_to_48_bit_limbs_4x2(__m512i* res, fp_t* src);
-
-void fp_4x2_to_unvectorized(fp_t* res, __m512i* src);
-void fp_unvectorized_to_4x2(__m512i* res, fp_t* src);
+void fp_div3_4x2(__m512i* res, __m512i* a);
+void fp_inv_4x2(__m512i* res, __m512i* src);
 
 void rand_fp_4x2(__m512i* res);
+
+void fp_64_to_limbs_4x2(__m512i* res, uint64_t* unvec);
+void fp_limbs_to_64_4x2(uint64_t* res, __m512i* src);
 
 // ======================================================================================================
 //                                                 2x4
@@ -254,19 +244,41 @@ void fp_sqr_2x4(__m512i* res, __m512i* a);
 void fp_tomont_2x4(__m512i* res, __m512i* a);
 void fp_frommont_2x4(__m512i* res, __m512i* a);
 
-void fp_48_to_64_bit_limbs_2x4(fp_t* res, __m512i* src);
-void fp_64_to_48_bit_limbs_2x4(__m512i* res, fp_t* src);
-
-void fp_2x4_to_unvectorized(fp_t* res, __m512i* src);
-void fp_unvectorized_to_2x4(__m512i* res, fp_t* src);
-
+void fp_div3_2x4(__m512i* res, __m512i* a);
+void fp_inv_2x4(__m512i* res, __m512i* a);
 void fp_sqrt_2x4(__m512i* res, __m512i* a);
 void fp_exp3div4_2x4(__m512i* res, __m512i* a);
-void fp_inv_2x4(__m512i* res, __m512i* a);
 
 void fp_4x2_to_2x4(__m512i* res1, __m512i* res2, __m512i* src);
 void fp_2x4_to_4x2(__m512i* res, __m512i* src1, __m512i* src2);
 
 void rand_fp_2x4(__m512i* res);
+
+void fp_64_to_limbs_2x4(__m512i* res, uint64_t* unvec);
+void fp_limbs_to_64_2x4(uint64_t* res, __m512i* src);
+
+// ====================================================================================================
+//                                Conversions between Fp representations                               
+// ====================================================================================================
+
+// Given src = (a, b, c, d, e, f, g, h),
+// it computes res1 = (a, c, e, g) and res2 = (b, d, f, h).
+void fp_8x1_to_4x2(__m512i* res1, __m512i* res2, __m512i* src);
+
+// Given src1 = (a1, b1, c1, d1) and src2 = (a2, b2, c2, d2),
+// it computes res = (a1, a2, b1, b2, c1, c2, d1, d2).
+void fp_4x2_to_8x1(__m512i* res, __m512i* src1, __m512i* src2);
+
+// Given src=(a, b, c, d), it computes res1 = (a, c) and res2 = (b, d).
+// We choose this interleaving pattern for the Fp2 2x2x2 sqrt,
+// where res1 = re and res2 = im.
+void fp_4x2_to_2x4(__m512i* res1, __m512i* res2, __m512i* src);
+void fp_2x4_to_4x2(__m512i* res, __m512i* src1, __m512i* src2);
+
+// ====================================================================================================
+//                                      Unvectorized Fp inversion                                     
+// ====================================================================================================
+
+void fp_inv_64(uint64_t* res, const uint64_t* src);
 
 #endif

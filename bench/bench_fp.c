@@ -1,12 +1,13 @@
 #include <stdio.h>
 #include "bench.h"
-#include "fp_lvl3.h"
+#include "fp.h"
 #include "utils.h"
 
 #define N_RUNS 10
 
 void bench_fp(int iterations) 
 {
+    int iterations_inv = 20;
     uint64_t cycles[N_RUNS];
     uint64_t start, end, tmp;
     __m512i a[8], b[8], c[8];
@@ -81,6 +82,19 @@ void bench_fp(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
 
+    // Inv
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int j = 0; j < iterations_inv; j++) {
+            fp_inv_8x1(c, a);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations_inv;
+    }
+    tmp = fp_is_equal_8x1(c, a);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("inversion", cycles[(N_RUNS/2) -1], tmp);
+
     printf("Fp lvl3 4x2 benchmarks:\n");
 
     // Addition
@@ -148,6 +162,19 @@ void bench_fp(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
 
+    // Inv
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int j = 0; j < iterations_inv; j++) {
+            fp_inv_4x2(c, a);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations_inv;
+    }
+    tmp = fp_is_equal_4x2(c, a);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("inversion", cycles[(N_RUNS/2) -1], tmp);
+
     printf("Fp lvl3 2x4 benchmarks:\n");
 
     // Multiplication
@@ -190,15 +217,14 @@ void bench_fp(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("sqrt", cycles[(N_RUNS/2) -1], tmp);
 
-    // Inverse
-    iterations = 20;
+    // Inversion
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
-        for(int j = 0; j < iterations; j++) {
+        for(int j = 0; j < iterations_inv; j++) {
             fp_inv_2x4(c, a);
         }
         end = cpucycles();
-        cycles[i] = (end - start)/iterations;
+        cycles[i] = (end - start)/iterations_inv;
     }
     tmp = fp_is_equal_2x4(c, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);

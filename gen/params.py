@@ -11,7 +11,7 @@ class FpParams:
     num_limbs: int
     limb_len: int
     last_limb_len: int
-    num_limbs64: int
+    num_words64: int
     n42: int
     rem42: int
     n24: int
@@ -27,12 +27,16 @@ class FpParamNames:
     limb_align: str
     limb_mask: str
     last_limb_mask: str
-    num_limbs64: str
+    num_words64: str
     n42: str
     n24: str
     p_plus_1_top: str
     R: str
     R2: str
+    inv3: str
+    p_64: str
+    R_64: str
+    inv_const_64: str
     num_kat_fp: str
     num_kat_fp2: str
 
@@ -48,7 +52,7 @@ def get_p(e, c):
 
 def get_limb_params(pbits, e, c):
     num_limbs = ceil(pbits/51)
-    num_limbs64 = ceil(pbits/64)
+    num_words64 = ceil(pbits/64)
 
     # TODO: Can it sometimes be worth it to pick a larger limb size that divides pp.e?
     limb_len = ceil(pbits/num_limbs)
@@ -58,7 +62,7 @@ def get_limb_params(pbits, e, c):
     # TODO: Do we want to handle larger c?
     assert ZZ(c).nbits() + (e % limb_len ) < 52
 
-    return num_limbs, limb_len, last_limb_len, num_limbs64
+    return num_limbs, limb_len, last_limb_len, num_words64
 
 def get_len_42_24(num_limbs):
     n42 = ceil(num_limbs/2)
@@ -80,7 +84,7 @@ def get_limb_mask(pp):
 
 def get_fp_params(e, c, num_kat):
     p, pbits = get_p(e, c)
-    num_limbs, limb_len, last_limb_len, num_limbs64 = get_limb_params(pbits, e, c)
+    num_limbs, limb_len, last_limb_len, num_words64 = get_limb_params(pbits, e, c)
     n42, n24, rem42, rem24 = get_len_42_24(num_limbs)
     R, R2 = get_mont_const(p, num_limbs, limb_len)
 
@@ -92,7 +96,7 @@ def get_fp_params(e, c, num_kat):
         num_limbs = num_limbs, 
         limb_len = limb_len, 
         last_limb_len = last_limb_len, 
-        num_limbs64 = num_limbs64, 
+        num_words64 = num_words64, 
         n42 = n42,
         rem42 = rem42,
         n24 = n24, 
@@ -107,7 +111,7 @@ def get_param_names():
         limb_len = "LIMB_LEN", 
         num_limbs = "NUM_LIMBS", 
         limb_align = "LIMB_ALIGN", 
-        num_limbs64= "NUM_LIMBS_64",
+        num_words64= "NWORDS64",
         n42 = "N4x2",
         n24 = "N2x4",
         limb_mask = "LIMB_MASK", 
@@ -115,6 +119,10 @@ def get_param_names():
         p_plus_1_top = "P_PLUS_1_TOP",
         R = "R",
         R2 = "R2",
+        inv3 = "INV3",
+        p_64 = "P_64",
+        R_64 = "R_64",
+        inv_const_64 = "INV_CONST_64",
         num_kat_fp="NUM_FP_KAT",
         num_kat_fp2="NUM_FP2_KAT"
     )
@@ -154,3 +162,14 @@ def get_fp2_num_vec_name(v, format):
     else: # 2x4x1
         return v.n42
     
+def get_inv_params(pp):
+    N_outer = ceil((2 * pp.pbits - 62) / 31)
+    N_scalar = 2 * pp.pbits - 1 - N_outer * 31
+    if N_scalar < 0:
+        N_scalar = 0
+    N = N_outer * 31 + N_scalar
+    R_64 = pow(2, 64 * pp.num_words64)
+    inv2powN = pow(2, - N, pp.p)
+    # constant needed to correct extended gcd result
+    inv_const = (pp.R * R_64 * inv2powN) % pp.p  
+    return N_outer, N_scalar, inv_const

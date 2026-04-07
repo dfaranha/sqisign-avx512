@@ -4,7 +4,8 @@
 #include "sqi_encoded_sizes_lvl3.h"
 #include "sqi_ec_params_lvl3.h"
 #include <assert.h>
-#include "fp2_lvl3.h"
+#include "fp_unvec_lvl3.h"
+#include "fp2.h"
 #include "ec.h"
 #include "isog-1d.h"
 #include "theta.h"

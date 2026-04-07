@@ -71,7 +71,7 @@ def fp_is_zero_4x2(f, pp, v):
         f.line(f"acc &= VCMPEQ(norm_a[{i}], zero[{i}]);")
     f.line()
 
-    f.comment("a = 0 iff both halves are equal")  
+    f.comment("a = 0 iff both halves are 0")  
     f.line("return (acc & (acc >> 1) & 0x1)")
     f.indent()
     f.line("| ((acc >> 1) & (acc >> 2) & 0x2)")
@@ -271,7 +271,7 @@ def mp_add_p_sub_4x2(f, pp, v):
     top_idx = pp.n42-1 - pp.rem42
     for i in range(top_idx):
         f.line(f"t[{i}] = VSUB(VADD(a[{i}], p_bod), b[{i}]);")
-    f.line(f"t[{top_idx}] = VSUB(VADD(a[{top_idx}], p_top), b[{top_idx}])")
+    f.line(f"t[{top_idx}] = VSUB(VADD(a[{top_idx}], p_top), b[{top_idx}]);")
     if pp.rem42 == 1:
         f.line(f"t[{top_idx+1}] = VADDMASK(a[{top_idx+1}], 0x55, a[{top_idx+1}], p_bod);")
         f.line(f"t[{top_idx+1}] = VSUBMASK(t[{top_idx+1}], 0x55, t[{top_idx+1}], b[{top_idx+1}]);")
@@ -490,9 +490,73 @@ def fp_frommont_4x2(f, pp, v):
 
     f.end()
 
+def fp_div3_4x2(f, pp, v):
+    f.start("void fp_div3_4x2(__m512i* res, __m512i* src)")
+
+    f.line(f"__m512i t[{pp.n42}];")
+    f.line(f"fp_duplicate_4x2(t, {v.inv3});")
+    f.line("fp_mul_4x2(res, src, t);")
+
+    f.end()
+
+def fp_inv_4x2(f, pp, v):
+    f.comment("Batched inversion.")
+    f.start("void fp_inv_4x2(__m512i* res, __m512i* a)")
+
+    f.line(f"uint64_t r_64[{2*pp.num_words64}];")
+    f.line(f"__m512i s0[{pp.n24}], s1[{pp.n24}], r[{pp.n24}];")
+    f.line(f"__m512i t0[{pp.n42}], t1[{pp.n42}];")
+    f.line("__m512i idx0, idx1;")
+    f.line()
+
+    f.comment("s0 = (a0*a1, a2*a3)")
+    f.line("fp_4x2_to_2x4(s0, s1, a);")
+    f.line("fp_mul_2x4(s0, s0, s1);")
+    f.line()
+
+    f.comment("r = a0a1a2a3 (wastes one mul)")
+    f.line("idx1 = VSET(4, 5, 6, 7, 0, 0, 0, 0);")
+    f.line(f"for (int i = 0; i < {pp.n24}; i++) {{")
+    f.indent()
+    f.line("s1[i] = VPERM512(idx1, s0[i]);")
+    f.unindent()
+    f.line("}")
+    f.line("fp_mul_2x4(r, s0, s1);")
+    f.line()
+
+    f.comment("Computing r^-1 mod p")
+    f.line("fp_limbs_to_64_2x4(r_64, r);")
+    f.line("fp_inv_64(r_64, r_64);")
+    f.line("fp_64_to_limbs_2x4(r, r_64);")
+    f.line()
+
+    f.comment("s0 = (inv_01, inv_23)")
+    f.line("idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);")
+    f.line("idx1 = VSET(0, 1, 2, 3, 0, 1, 2, 3);")
+    f.line(f"for (int i = 0; i < {pp.n24}; i++) {{")
+    f.indent()
+    f.line("s0[i] = VPERM512(idx0, s0[i]);")
+    f.line("s1[i] = VPERM512(idx1, r[i]);")
+    f.unindent()
+    f.line("}")
+    f.line("fp_mul_2x4(s0, s0, s1);")
+    f.line()
+
+    f.comment("res = (inv0, inv1, inv2, inv3)")
+    f.line("fp_2x4_to_4x2(t0, s0, s0); // (inv_01, inv_01, inv_23, inv_23)")
+    f.line("idx1 = VSET(2, 3, 0, 1, 6, 7, 4, 5);")
+    f.line(f"for (int i = 0; i < {pp.n42}; i++) {{")
+    f.indent()
+    f.line("t1[i] = VPERM512(idx1, a[i]);")
+    f.unindent()
+    f.line("}")
+    f.line("fp_mul_4x2(res, t0, t1);")
+
+    f.end()
+
 #TODO: Assumes fully reduced, but after mul lowest limb can be one bit larger
 def fp_64_to_limbs_4x2(f, pp, v):
-    f.comment(f"Assumes unvec is an array of 4 * {v.num_limbs64} 64-bit ints")
+    f.comment(f"Assumes unvec is an array of 4 * {v.num_words64} 64-bit ints")
     f.start("void fp_64_to_limbs_4x2(__m512i* res, uint64_t* unvec)")
 
     f.line("uint64_t t[8];")
@@ -506,16 +570,16 @@ def fp_64_to_limbs_4x2(f, pp, v):
     for j in range(n):
         plusi64 = "" if i64 == 0 else f" + {i64}"
         if leftover == 64:
-            line = f"t[2*i] = unvec[{v.num_limbs64} * i{plusi64}] & {v.limb_mask};"
+            line = f"t[2*i] = unvec[{v.num_words64} * i{plusi64}] & {v.limb_mask};"
         elif leftover >= l:
             shift = 64 - leftover
-            line = f"t[2*i] = (unvec[{v.num_limbs64} * i{plusi64}] >> {shift}) & {v.limb_mask};"
+            line = f"t[2*i] = (unvec[{v.num_words64} * i{plusi64}] >> {shift}) & {v.limb_mask};"
         else: #leftover < l
             rshift = 64 - leftover
             lshift = leftover
             rmask = (1 << leftover) - 1
             lmask = (1 << (l-leftover)) - 1
-            line = f"t[2*i] = ((unvec[{v.num_limbs64} * i{plusi64}] >> {rshift}) & 0x{rmask:x}ULL) | ((unvec[{v.num_limbs64} * i + {i64+1}] & 0x{lmask:x}ULL) << {lshift});"
+            line = f"t[2*i] = ((unvec[{v.num_words64} * i{plusi64}] >> {rshift}) & 0x{rmask:x}ULL) | ((unvec[{v.num_words64} * i + {i64+1}] & 0x{lmask:x}ULL) << {lshift});"
         lines.append(line)
         leftover -= l
         if leftover <= 0:
@@ -532,16 +596,16 @@ def fp_64_to_limbs_4x2(f, pp, v):
         if j == top_idx + 1: #num_limbs odd
             f.line(f"t[2*i+1] = 0;")
         elif leftover == 64:
-            f.line(f"t[2*i+1] = unvec[{v.num_limbs64} * i{plusi64}] & {v.limb_mask};")
+            f.line(f"t[2*i+1] = unvec[{v.num_words64} * i{plusi64}] & {v.limb_mask};")
         elif leftover >= l or j == top_idx:
            shift = 64 - leftover
-           f.line(f"t[2*i+1] = (unvec[{v.num_limbs64} * i{plusi64}] >> {shift}) & {v.limb_mask};")
+           f.line(f"t[2*i+1] = (unvec[{v.num_words64} * i{plusi64}] >> {shift}) & {v.limb_mask};")
         else: #leftover < l and j < n-1
             rshift = 64 - leftover
             lshift = leftover
             rmask = (1 << leftover) - 1
             lmask = (1 << (l-leftover)) - 1
-            f.line(f"t[2*i+1] = ((unvec[{v.num_limbs64} * i{plusi64}] >> {rshift}) & 0x{rmask:x}ULL) | ((unvec[{v.num_limbs64} * i + {i64+1}] & 0x{lmask:x}ULL) << {lshift});")
+            f.line(f"t[2*i+1] = ((unvec[{v.num_words64} * i{plusi64}] >> {rshift}) & 0x{rmask:x}ULL) | ((unvec[{v.num_words64} * i + {i64+1}] & 0x{lmask:x}ULL) << {lshift});")
         
         leftover -= l
         if leftover <= 0:
@@ -569,10 +633,10 @@ def fp_limbs_to_64_4x2(f, pp, v):
     for j in range(n):
         plusi64 = "" if i64 == 0 else f" + {i64}"
         if leftover == 64:
-            lines.append([f"res[{v.num_limbs64} * i{plusi64}] = t[2*i] & {v.limb_mask};"])
+            lines.append([f"res[{v.num_words64} * i{plusi64}] = t[2*i] & {v.limb_mask};"])
         elif leftover >= l:
             shift = 64 - leftover
-            lines.append([f"res[{v.num_limbs64} * i{plusi64}] |= (t[2*i] & {v.limb_mask}) << {shift};"])
+            lines.append([f"res[{v.num_words64} * i{plusi64}] |= (t[2*i] & {v.limb_mask}) << {shift};"])
         else: #leftover < l and j < n-1
             lshift = 64 - leftover
             rshift = leftover
@@ -581,8 +645,8 @@ def fp_limbs_to_64_4x2(f, pp, v):
             # We should always do |= for the last, because l < 64
             op = "|=" if j == n-1 else "="
             lines.append([
-                f"res[{v.num_limbs64} * i{plusi64}] |= (t[2*i] & 0x{lmask:x}ULL) << {lshift};",
-                f"res[{v.num_limbs64} * i + {i64+1}] {op} (t[2*i] >> {rshift}) & 0x{rmask:x}ULL;"
+                f"res[{v.num_words64} * i{plusi64}] |= (t[2*i] & 0x{lmask:x}ULL) << {lshift};",
+                f"res[{v.num_words64} * i + {i64+1}] {op} (t[2*i] >> {rshift}) & 0x{rmask:x}ULL;"
             ])
 
         leftover -= l
@@ -603,17 +667,17 @@ def fp_limbs_to_64_4x2(f, pp, v):
         if j == top_idx + 1:
             pass
         elif leftover == 64:
-            f.line(f"res[{v.num_limbs64} * i{plusi64}] = t[2*i+1] & {v.limb_mask};")
+            f.line(f"res[{v.num_words64} * i{plusi64}] = t[2*i+1] & {v.limb_mask};")
         elif leftover >= l or j == top_idx:
             shift = 64 - leftover
-            f.line(f"res[{v.num_limbs64} * i{plusi64}] |= (t[2*i+1] & {v.limb_mask}) << {shift};")
+            f.line(f"res[{v.num_words64} * i{plusi64}] |= (t[2*i+1] & {v.limb_mask}) << {shift};")
         else: #leftover < l and j < n-1
             lshift = 64 - leftover
             rshift = leftover
             lmask = (1 << leftover) - 1
             rmask = (1 << (l - leftover)) - 1
-            f.line(f"res[{v.num_limbs64} * i{plusi64}] |= (t[2*i+1] & 0x{lmask:x}ULL) << {lshift};")
-            f.line(f"res[{v.num_limbs64} * i + {i64+1}] = (t[2*i+1] >> {rshift}) & 0x{rmask:x}ULL;")
+            f.line(f"res[{v.num_words64} * i{plusi64}] |= (t[2*i+1] & 0x{lmask:x}ULL) << {lshift};")
+            f.line(f"res[{v.num_words64} * i + {i64+1}] = (t[2*i+1] >> {rshift}) & 0x{rmask:x}ULL;")
 
         leftover -= l
         if leftover <= 0:
@@ -685,6 +749,9 @@ def write_fp_4x2(f, pp, v):
 
     fp_mul_4x2(f, pp, v)
     fp_sqr_4x2(f, pp, v)
+    fp_div3_4x2(f, pp, v)
+    fp_inv_4x2(f, pp, v)
+
     fp_tomont_4x2(f, pp, v)
     fp_frommont_4x2(f, pp, v)
 

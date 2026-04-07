@@ -102,21 +102,21 @@ class FileWriter:
             self.line()
 
     # Converts the integer "a" to a limb array, then writes it as a uint64_t array
-    def limb_array_1d(self, a, pp, arr_name=None, size_name=None, limbs_per_line=4):
-        limbs = int_to_limbs(a, pp.limb_len, pp.num_limbs)
+    def limb_array_1d(self, a, num_limbs, limb_len, arr_name=None, size_name=None, limbs_per_line=4):
+        limbs = int_to_limbs(a, limb_len, num_limbs)
         hex_limbs = limbs_to_hex(limbs)
 
         if arr_name is None:
             self.start()
         elif size_name is None:
-            self.start(f"static const uint64_t {arr_name}[{pp.num_limbs}] =")
+            self.start(f"static const uint64_t {arr_name}[{num_limbs}] =")
         else:
             self.start(f"static const uint64_t {arr_name}[{size_name}] =")
-        for i in range(0, pp.num_limbs, limbs_per_line):
+        for i in range(0, num_limbs, limbs_per_line):
             chunk = hex_limbs[i : i + limbs_per_line]
             line = ", ".join(chunk)
             
-            suffix = "," if i + limbs_per_line < pp.num_limbs else ""
+            suffix = "," if i + limbs_per_line < num_limbs else ""
             self.line(f"{line}{suffix}")
         self.end(";")
 

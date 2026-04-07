@@ -1,5 +1,6 @@
-#include "fp_lvl3.h"
-#include "fp2_lvl3.h"
+#include "fp.h"
+#include "fp_unvec_lvl3.h"
+#include "fp2.h"
 #include "theta.h"
 #include "theta_splitting.h"
 #include "utils.h"

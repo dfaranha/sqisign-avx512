@@ -2,7 +2,7 @@
 #include "isog-1d.h"
 #include "utils.h"
 #include "bench.h"
-#include "fp2_lvl3.h"
+#include "fp2.h"
 
 #define N_RUNS 10
 

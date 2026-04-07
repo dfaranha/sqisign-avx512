@@ -7,7 +7,7 @@
 #define _UTILS_H
 
 #include <stdint.h>
-#include "fp_lvl3.h"
+#include "fp.h"
 #include "intrinsics_avx512.h"
 
 void rand_bytes(uint8_t* bytes, int len);

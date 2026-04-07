@@ -1,8 +1,9 @@
 #include <stdio.h>
 
-#include "fp_lvl3.h"
+#include "fp.h"
 #include "fp_consts.h"
-#include "fp2_lvl3.h"
+#include "fp_unvec_lvl3.h"
+#include "fp2.h"
 #include "fp2_kat.h"
 #include "test.h"
 #include "utils.h"
@@ -360,7 +361,7 @@ bool test_fp2(int iterations)
     
     // Preparing i
     fp2_setzero_8x1x1(a);
-    a[8] = VSETALL(1);
+    a[NUM_LIMBS] = VSETALL(1);
     fp2_tomont_8x1x1(a, a);
 
     for (int i = 0; i < iterations; i++) {
@@ -729,6 +730,46 @@ bool test_fp2(int iterations)
         }
     }
     print_test_res("squaring", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Preparing i
+    fp2_setzero_4x1x2(a);
+    a[N4x2] = VSET(1, 0, 1, 0, 1, 0, 1, 0);
+    fp2_tomont_4x1x2(a, a);
+
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_4x1x2(b);
+        
+        fp2_muli_4x1x2(c, b);
+        fp2_mul_4x1x2(d, a, b);
+
+        if (fp2_is_equal_4x1x2(c, d) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("mult by i", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Division by 3
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_4x1x2(a);
+        fp2_copy_4x1x2(b, a);
+
+        fp2_div3_4x1x2(b, b);
+        fp2_add_4x1x2(c, b, b);
+        fp2_add_4x1x2(c, c, b);
+
+        if (fp2_is_equal_4x1x2(a, c) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 3", passed);
     if (passed == 0) {
         return false;
     }
@@ -1456,6 +1497,46 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Preparing i
+    fp2_setzero_2x2x2(a);
+    a[0] = VSET(0, 0, 1, 0, 0, 0, 1, 0);
+    fp2_tomont_2x2x2(a, a);
+
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_2x2x2(b);
+        
+        fp2_muli_2x2x2(c, b);
+        fp2_mul_2x2x2(d, a, b);
+
+        if (fp2_is_equal_2x2x2(c, d) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("mult by i", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Division by 3
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_2x2x2(a);
+        fp2_copy_2x2x2(b, a);
+
+        fp2_div3_2x2x2(b, b);
+        fp2_add_2x2x2(c, b, b);
+        fp2_add_2x2x2(c, c, b);
+
+        if (fp2_is_equal_2x2x2(a, c) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 3", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     // Square root
     for (int i = 0; i < iterations; i++) {
         rand_fp2_2x2x2(a);
@@ -1841,6 +1922,46 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Preparing i
+    fp2_setzero_2x4x1(a);
+    a[0] = VSET(0, 0, 1, 0, 0, 0, 1, 0);
+    fp2_tomont_2x4x1(a, a);
+
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_2x4x1(b);
+        
+        fp2_muli_2x4x1(c, b);
+        fp2_mul_2x4x1(d, a, b);
+
+        if (fp2_is_equal_2x4x1(c, d) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("mult by i", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Division by 3
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_2x4x1(a);
+        fp2_copy_2x4x1(b, a);
+
+        fp2_div3_2x4x1(b, b);
+        fp2_add_2x4x1(c, b, b);
+        fp2_add_2x4x1(c, c, b);
+
+        if (fp2_is_equal_2x4x1(a, c) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 3", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     printf("Fp2 lvl3 conversion tests:\n");
 
     fp2_t unvec1[8], unvec2[8];
@@ -1858,6 +1979,7 @@ bool test_fp2(int iterations)
             if (fp2_is_equal(unvec1+j, unvec2+j) == 0) { passed = 0; }
         }
         if (passed == 0) {
+            printf("To vectorized and back is not identity!\n");
             break;
         }
 
@@ -1865,6 +1987,7 @@ bool test_fp2(int iterations)
         fp2_unvectorized_to_8x1x1(d, unvec2);
         if (fp2_is_equal_8x1x1(a, d) != 0xff) {
             passed = 0;
+            printf("To unvectorized and back is not identity!\n");
             break;
         }
 
@@ -1892,6 +2015,7 @@ bool test_fp2(int iterations)
         fp2_unvectorized_to_8x1x1(d, unvec1);
 
         if (fp2_is_equal_8x1x1(c, d) != 0xff) {
+            printf("The conversion does not commute with mul!\n");
             passed = 0;
             break;
         }
@@ -1913,6 +2037,7 @@ bool test_fp2(int iterations)
         for (int j = 0; j < 8; j++) {
             if (fp2_is_equal(unvec1+j, unvec2+j) == 0) {
                 passed = 0;
+                printf("The conversion does not commute with mul!\n");
                 break;
             }
         }
@@ -1936,6 +2061,7 @@ bool test_fp2(int iterations)
             if (fp2_is_equal(&unvec1[j], &unvec2[j]) == 0) { passed = 0; }
         }
         if (passed == 0) {
+            printf("To vectorized and back is not identity!\n");
             break;
         }
 
@@ -1944,6 +2070,7 @@ bool test_fp2(int iterations)
 
         if (fp2_is_equal_4x2x1(a, d) != 0xf) {
             passed = 0;
+            printf("To unvectorized and back is not identity!\n");
             break;
         }
 
@@ -1972,6 +2099,7 @@ bool test_fp2(int iterations)
 
         if (fp2_is_equal_4x2x1(c, d) != 0xf) {
             passed = 0;
+            printf("The conversion does not commute with mul!\n");
             break;
         }
 
@@ -1992,6 +2120,7 @@ bool test_fp2(int iterations)
         for (int j = 0; j < 4; j++) {
             if (fp2_is_equal(&unvec1[j], &unvec2[j]) == 0) {
                 passed = 0;
+                printf("The conversion does not commute with mul!\n");
                 break;
             }
         }
@@ -2015,6 +2144,7 @@ bool test_fp2(int iterations)
             if (fp2_is_equal(&unvec1[j], &unvec2[j]) == 0) { passed = 0; }
         }
         if (passed == 0) {
+            printf("To vectorized and back is not identity!\n");
             break;
         }
 
@@ -2023,6 +2153,7 @@ bool test_fp2(int iterations)
 
         if (fp2_is_equal_2x2x2(a, d) != 0x3) {
             passed = 0;
+            printf("To unvectorized and back is not identity!\n");
             break;
         }
 
@@ -2051,6 +2182,7 @@ bool test_fp2(int iterations)
 
         if (fp2_is_equal_2x2x2(c, d) != 0x3) {
             passed = 0;
+            printf("The conversion does not commute with mul!\n");
             break;
         }
 
@@ -2071,6 +2203,7 @@ bool test_fp2(int iterations)
         for (int j = 0; j < 2; j++) {
             if (fp2_is_equal(&unvec1[j], &unvec2[j]) == 0) {
                 passed = 0;
+                printf("The conversion does not commute with mul!\n");
                 break;
             }
         }
@@ -2094,6 +2227,7 @@ bool test_fp2(int iterations)
             if (fp2_is_equal(&unvec1[j], &unvec2[j]) == 0) { passed = 0; }
         }
         if (passed == 0) {
+            printf("To vectorized and back is not identity!\n");
             break;
         }
 
@@ -2102,6 +2236,7 @@ bool test_fp2(int iterations)
 
         if (fp2_is_equal_2x4x1(a, d) != 0x3) {
             passed = 0;
+            printf("To unvectorized and back is not identity!\n");
             break;
         }
 
@@ -2130,6 +2265,7 @@ bool test_fp2(int iterations)
 
         if (fp2_is_equal_2x4x1(c, d) != 0x3) {
             passed = 0;
+            printf("The conversion does not commute with mul!\n");
             break;
         }
 
@@ -2150,6 +2286,7 @@ bool test_fp2(int iterations)
         for (int j = 0; j < 2; j++) {
             if (fp2_is_equal(&unvec1[j], &unvec2[j]) == 0) {
                 passed = 0;
+                printf("The conversion does not commute with mul!\n");
                 break;
             }
         }

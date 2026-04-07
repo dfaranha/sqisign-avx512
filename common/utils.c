@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "utils.h"
-
-#include "fp2_lvl3.h"
+#include "fp_unvec_lvl3.h"
+#include "fp2.h"
 #include "sqi_test_extras.h"
 
 // TODO: Might not be cryptographically secure randomness.

@@ -1,5 +1,6 @@
 #include "ec.h"
-#include "fp2_lvl3.h"
+#include "fp_unvec_lvl3.h"
+#include "fp2.h"
 #include "theta_gluing.h"
 #include "theta_middle.h" // TODO: move had, sqr, mul to theta.h? Since they are "core" functions.
 #include "intrinsics_avx512.h"

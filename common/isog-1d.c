@@ -1,5 +1,6 @@
 #include "isog-1d.h"
-#include "fp2_lvl3.h"
+#include "fp_unvec_lvl3.h"
+#include "fp2.h"
 #include "ec.h"
 #include <assert.h>
 #include "sqi_test_extras.h"

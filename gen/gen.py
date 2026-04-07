@@ -10,14 +10,25 @@ from params import (get_fp_params, get_param_names)
 # TODO:
 #   Move carry to rdc_8x1
 #   when 2 * last_limb_len <= limb_len, we can save one limb in the unreduced product.
-#   Add fp_div3_8x1
+#   Optimize fp_div3_8x1
 #   Test odd karatsuba
 #   Test 4x2 odd limbs. Is the carry pattern safe if I skip the last limb?
 #   Find out how to generate inversion code?
 #   8x1 <-> 4x2 functions
+#   unvectorized <-> vec (just convert to uint64_t array, then for sqisign define interface for converting to fp2_t)
 #   Optimize 2x4 when num_limbs % 4 != 0
 #   Optimize with addition chain for pow3div4
 #   inv
+#   We have R as a constant, so defining a set_binary function is trivial
+
+# Idea: Create strategies at the start instead of having conditional logic on the shape of p deep in the code.
+# Examples: R with num_limbs + 1 and lazy red in fp2. Don't subtract by p in Mont red.
+
+# Maybe define one interface for fp2 8, 4 and 2 elements, hide implementation details (perms in high-level code)? Might take too much time, 
+# also need example where one is not faster than other, low priority
+
+# Have two sets of conversion functions, interleaved (like 8x1x1 to 4x2x1) and un-interleaved.
+# More user friendly for a general purpose library.
 
 ### input ###
 dir = "out"

@@ -1,17 +1,18 @@
 #include <stdio.h>
 
-#include "fp_lvl3.h"
+#include "fp.h"
+#include "fp_unvec_lvl3.h"
 #include "test.h"
 #include "utils.h"
 #include "fp_kat.h"
 
 #include "sqi_test_extras.h"
 
-// TODO: 8x1 div3 test duplicated
-
 bool test_fp(int iterations)
 {
-    __m512i a[8], b[8], c[8], d[8], e[8], f[8], zero[8], one[8], t;
+    __m512i a[NUM_LIMBS], b[NUM_LIMBS], c[NUM_LIMBS], d[NUM_LIMBS], e[NUM_LIMBS], f[NUM_LIMBS];
+    __m512i g[NUM_LIMBS], h[NUM_LIMBS], zero[NUM_LIMBS], one[NUM_LIMBS], t;
+    __m512i vR[NUM_LIMBS], vR2[NUM_LIMBS];
     fp_t unvec1[8], unvec2[8];
     fp_setzero_8x1(zero);
     fp_setzero_8x1(one);
@@ -32,49 +33,6 @@ bool test_fp(int iterations)
         if (fp_is_equal_8x1(a, b) != 0xff) {
             passed = 0;
             printf("copy of a != a\n");
-            break;
-        }
-
-        // We check that making one change in each limb has the intended effect
-        // b will be a copy of a, except that one limb of a is different
-        // c will start out as a, but gradually be changed limb by limb.
-        // d is the collection of vectors that we use to change each limb
-        fp_copy_8x1(c, a);
-        d[0] = VSET(0x1, 0, 0, 0, 0, 0, 0, 0);
-        d[1] = VSET(0, 0x10, 0, 0, 0, 0, 0, 0);
-        d[2] = VSET(0, 0, 0x100, 0, 0, 0, 0, 0);
-        d[3] = VSET(0, 0, 0, 0x1000, 0, 0, 0, 0);
-        d[4] = VSET(0, 0, 0, 0, 0x100000, 0, 0, 0);
-        d[5] = VSET(0, 0, 0, 0, 0, 0x1000000, 0, 0);
-        d[6] = VSET(0, 0, 0, 0, 0, 0, 0x100000000, 0);
-        d[7] = VSET(0, 0, 0, 0, 0, 0, 0, 0x4000000000000);
-
-        int mask_b = 0xfe;
-        int mask_c = 0xfe;
-        int multiplier = 1;
-        int i_fp = 0, j_limb = 0;
-        while(i_fp < 8) {
-            b[j_limb] = VXOR(b[j_limb], d[i_fp]);
-            c[j_limb] = VXOR(c[j_limb], d[i_fp]);
-            int valid = (fp_is_equal_8x1(a, b) == mask_b) & (fp_is_equal_8x1(a,c) == mask_c);
-            if (valid == 0) {
-                passed = 0;
-                break;
-            }
-
-            b[j_limb] = a[j_limb];
-            if(j_limb == 7) {
-                j_limb = 0;
-                i_fp += 1;
-                multiplier *= 2;
-                mask_b = 0xff - multiplier; // b should be equal to a, except at index i_fp
-                mask_c -= multiplier; // c should only be equal to a at the fp elements we haven't touched yet.
-            }
-            else {
-                j_limb += 1;
-            }
-        }
-        if (passed == 0) {
             break;
         }
     }
@@ -295,7 +253,6 @@ bool test_fp(int iterations)
 
     // Multiplication tests
     // Using Montgomery constant
-    __m512i vR[8], vR2[8];
     fp_duplicate_8x1(vR, R);
     fp_duplicate_8x1(vR2, R2);
 
@@ -479,7 +436,7 @@ bool test_fp(int iterations)
         // Top 16 bits of each AVX limb is 0
         t = VSETALL(0xffff000000000000);
         fp_unvectorized_to_8x1(d, unvec1);
-        for (int j = 0; j < 8; j++) {
+        for (int j = 0; j < NUM_LIMBS; j++) {
             e[j] = VAND(d[j], t);
         }
         if (fp_is_zero_8x1(e) != 0xff) {
@@ -549,6 +506,25 @@ bool test_fp(int iterations)
         return false;
     }
 
+    //Batched inversion
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_8x1(a);
+        if (fp_is_zero_8x1(a) != 0) { continue; }
+
+        fp_inv_8x1(b, a);
+        fp_mul_8x1(c, a, b);
+
+        if (fp_is_equal_8x1(c, vR) != 0xff) {
+            passed = 0;
+            printf("a * a^-1 != 1 mod p\n");
+            break;
+        }
+    }
+    print_test_res("inversion", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     printf("Fp lvl3 4x2 tests:\n");
     one[0] = VSET(1, 0, 1, 0, 1, 0, 1, 0);
 
@@ -564,53 +540,6 @@ bool test_fp(int iterations)
         if (fp_is_equal_4x2(a, b) != 0xf) {
             passed = 0;
             printf("copy of a != a\n");
-            break;
-        }
-
-        // We check that making one change in each limb has the intended effect
-        // b will be a copy of a, except that one limb of a is different
-        // c will start out as a, but gradually be changed limb by limb.
-        // d is the collection of vectors that we use to change each limb
-        fp_copy_4x2(c, a);
-        d[0] = VSET(0x1, 0, 0, 0, 0, 0, 0, 0);
-        d[1] = VSET(0, 0x10, 0, 0, 0, 0, 0, 0);
-        d[2] = VSET(0, 0, 0x100, 0, 0, 0, 0, 0);
-        d[3] = VSET(0, 0, 0, 0x1000, 0, 0, 0, 0);
-        d[4] = VSET(0, 0, 0, 0, 0x100000, 0, 0, 0);
-        d[5] = VSET(0, 0, 0, 0, 0, 0x1000000, 0, 0);
-        d[6] = VSET(0, 0, 0, 0, 0, 0, 0x100000000, 0);
-        d[7] = VSET(0, 0, 0, 0, 0, 0, 0, 0x4000000000000);
-
-        int mask_b = 0xe;
-        int mask_c = 0xe;
-        int multiplier = 1;
-        int i_vec = 0, j_limb = 0;
-        while(i_vec < 8) {
-            b[j_limb] = VXOR(b[j_limb], d[i_vec]);
-            c[j_limb] = VXOR(c[j_limb], d[i_vec]);
-
-            int valid = (fp_is_equal_4x2(a, b) == mask_b) & (fp_is_equal_4x2(a,c) == mask_c);
-            if (valid == 0) {
-                passed = 0;
-                break;
-            }
-
-            b[j_limb] = a[j_limb];
-            if(j_limb == 3) {
-                j_limb = 0;
-                i_vec += 1;
-                if(i_vec % 2 == 0)
-                {
-                    multiplier *= 2;
-                    mask_b = 0xf - multiplier; // b should be equal to a, except at index i_vec
-                    mask_c -= multiplier; // c should only be equal to a at the fp elements we haven't touched yet.
-                }
-            }
-            else {
-                j_limb += 1;
-            }
-        }
-        if (passed == 0) {
             break;
         }
     }
@@ -828,8 +757,6 @@ bool test_fp(int iterations)
     // Montgomery representation of 1 is R mod p
     fp_tomont_4x2(d, one);
     if (fp_is_equal_4x2(d, vR) != 0xf) {
-		print_fp_4x2_index(d, 0);
-		print_fp_4x2_index(vR, 0);
         passed = 0;
         printf("Montgomery representation of 1 is not R mod p\n");
     }
@@ -837,8 +764,6 @@ bool test_fp(int iterations)
     // Montgomery representation of R is R2 mod p
     fp_tomont_4x2(d, vR);
     if (fp_is_equal_4x2(d, vR2) != 0xf) {
-		print_fp_4x2_index(d, 0);
-		print_fp_4x2_index(vR2, 0);
         passed = 0;
         printf("Montgomery representation of R is not R^2 mod p\n");
     }
@@ -982,14 +907,14 @@ bool test_fp(int iterations)
 
     // Division by 3
     for (int i = 0; i < iterations; i++) {
-        rand_fp_8x1(a);
-        fp_copy_8x1(b, a);
+        rand_fp_4x2(a);
+        fp_copy_4x2(b, a);
 
-        fp_div3_8x1(b, b);
-        fp_add_8x1(c, b, b);
-        fp_add_8x1(c, c, b);
+        fp_div3_4x2(b, b);
+        fp_add_4x2(c, b, b);
+        fp_add_4x2(c, c, b);
 
-        if (fp_is_equal_8x1(a, c) != 0xff) {
+        if (fp_is_equal_4x2(a, c) != 0xf) {
             passed = 0;
             break;
         }
@@ -999,82 +924,21 @@ bool test_fp(int iterations)
         return false;
     }
 
-    // 8x1 <-> unvectorized
+    //Batched inversion
     for (int i = 0; i < iterations; i++) {
-        for (int j = 0; j < 8; j++) {
-            fp_random_test(unvec1+j);
-        }
-        rand_fp_8x1(a);
+        rand_fp_4x2(a);
+        if (fp_is_zero_4x2(a) != 0) { continue; }
 
-        // Converting back and forth does nothin
-        fp_unvectorized_to_8x1(d, unvec1);
-        fp_8x1_to_unvectorized(unvec2, d);
+        fp_inv_4x2(b, a);
+        fp_mul_4x2(c, a, b);
 
-        for (int j = 0; j < 8; j++) {
-            if (fp_is_equal(unvec1+j, unvec2+j) == 0) { passed = 0; }
-        }
-        if (passed == 0) {
-            break;
-        }
-
-        fp_8x1_to_unvectorized(unvec2, a);
-        fp_unvectorized_to_8x1(d, unvec2);
-
-        if (fp_is_equal_8x1(a, d) != 0xff) {
+        if (fp_is_equal_4x2(c, vR) != 0xf) {
             passed = 0;
+            printf("a * a^-1 != 1 mod p\n");
             break;
-        }
-
-        // Top 13 bits of each AVX limb is 0
-        t = VSETALL(0xfff8000000000000);
-        fp_unvectorized_to_8x1(d, unvec1);
-        for (int j = 0; j < 8; j++) {
-            e[j] = VAND(d[j], t);
-        }
-        if (fp_is_zero_8x1(e) != 0xff) {
-            passed = 0;
-            break;
-        }
-        
-        // Conversion commutes with arithmetic
-        rand_fp_8x1(a);
-        rand_fp_8x1(b);
-        fp_mul_8x1(c, a, b);
-
-        fp_8x1_to_unvectorized(unvec1, a);
-        fp_8x1_to_unvectorized(unvec2, b);
-        for (int j = 0; j < 8; j++) {
-            fp_mul(unvec1+j, unvec1+j, unvec2+j);
-        }
-        fp_unvectorized_to_8x1(d, unvec1);
-
-        if (fp_is_equal_8x1(c, d) != 0xff) {
-            passed = 0;
-            break;
-        }
-
-        for (int j = 0; j < 8; j++) {
-            fp_random_test(unvec1+j);
-            fp_random_test(unvec2+j);
-        }
-
-        fp_unvectorized_to_8x1(d, unvec1);
-        fp_unvectorized_to_8x1(e, unvec2);
-
-        for (int j = 0; j < 8; j++) {
-            fp_mul(unvec1+j, unvec1+j, unvec2+j);
-        }
-        fp_mul_8x1(f, d, e);
-        fp_8x1_to_unvectorized(unvec2, f);
-        
-        for (int j = 0; j < 8; j++) {
-            if (fp_is_equal(unvec1+j, unvec2+j) == 0) {
-                passed = 0;
-                break;
-            }
         }
     }
-    print_test_res("unvectorized <-> 8x1", passed);
+    print_test_res("inversion", passed);
     if (passed == 0) {
         return false;
     }
@@ -1108,7 +972,7 @@ bool test_fp(int iterations)
         // Top 13 bits of each AVX limb is 0
         t = VSETALL(0xfff8000000000000);
         fp_unvectorized_to_8x1(d, unvec1);
-        for (int j = 0; j < 4; j++) {
+        for (int j = 0; j < N4x2; j++) {
             e[j] = VAND(d[j], t);
         }
         if (fp_is_zero_4x2(e) != 0xf) {
@@ -1165,16 +1029,14 @@ bool test_fp(int iterations)
     for (int i = 0; i < iterations; i++) {
         rand_fp_4x2(a);
         rand_fp_4x2(b);
-        fp_4x2_to_2x4(c, c+2, a);
-        fp_4x2_to_2x4(d, d+2, b);
+        fp_4x2_to_2x4(c, e, a);
+        fp_4x2_to_2x4(d, f, b);
         fp_add_2x4(c, c, d);
-        fp_add_2x4(c+2, c+2, d+2);
-        fp_2x4_to_4x2(c, c, c+2);
-        fp_add_4x2(e, a, b);
+        fp_add_2x4(e, e, f);
+        fp_2x4_to_4x2(c, c, e);
+        fp_add_4x2(d, a, b);
 
-        if (fp_is_equal_4x2(c, e) != 0xf) {
-            print_fp_4x2_index(c, 0);
-            print_fp_4x2_index(e, 0);
+        if (fp_is_equal_4x2(c, d) != 0xf) {
             passed = 0;
             break;
         }
@@ -1200,14 +1062,14 @@ bool test_fp(int iterations)
     for (int i = 0; i < iterations; i++) {
         rand_fp_4x2(a);
         rand_fp_4x2(b);
-        fp_4x2_to_2x4(c, c+2, a);
-        fp_4x2_to_2x4(d, d+2, b);
+        fp_4x2_to_2x4(c, e, a);
+        fp_4x2_to_2x4(d, f, b);
         fp_sub_2x4(c, c, d);
-        fp_sub_2x4(c+2, c+2, d+2);
-        fp_2x4_to_4x2(c, c, c+2);
-        fp_sub_4x2(e, a, b);
+        fp_sub_2x4(e, e, f);
+        fp_2x4_to_4x2(c, c, e);
+        fp_sub_4x2(d, a, b);
 
-        if (fp_is_equal_4x2(c, e) != 0xf) {
+        if (fp_is_equal_4x2(c, d) != 0xf) {
             print_fp_4x2_index(c, 0);
             print_fp_4x2_index(e, 0);
             passed = 0;
@@ -1235,15 +1097,13 @@ bool test_fp(int iterations)
     for (int i = 0; i < iterations; i++) {
         rand_fp_4x2(a);
 
-        fp_4x2_to_2x4(c, c+2, a);
+        fp_4x2_to_2x4(c, d, a);
         fp_neg_2x4(c, c);
-        fp_neg_2x4(c+2, c+2);
-        fp_2x4_to_4x2(c, c, c+2);
-        fp_neg_4x2(e, a);
+        fp_neg_2x4(d, d);
+        fp_2x4_to_4x2(c, c, d);
+        fp_neg_4x2(d, a);
 
-        if (fp_is_equal_4x2(c, e) != 0xf) {
-            print_fp_4x2_index(c, 0);
-            print_fp_4x2_index(e, 0);
+        if (fp_is_equal_4x2(c, d) != 0xf) {
             passed = 0;
             break;
         }
@@ -1257,16 +1117,14 @@ bool test_fp(int iterations)
     for (int i = 0; i < iterations; i++) {
         rand_fp_4x2(a);
         rand_fp_4x2(b);
-        fp_4x2_to_2x4(c, c+2, a);
-        fp_4x2_to_2x4(d, d+2, b);
+        fp_4x2_to_2x4(c, e, a);
+        fp_4x2_to_2x4(d, f, b);
         fp_mixaddsub_2x4(c, c, d, 0xff);
-        fp_mixaddsub_2x4(c+2, c+2, d+2, 0x0);
-        fp_2x4_to_4x2(c, c, c+2);
-        fp_mixaddsub_4x2(e, a, b, 0x33);
+        fp_mixaddsub_2x4(e, e, f, 0x0);
+        fp_2x4_to_4x2(c, c, e);
+        fp_mixaddsub_4x2(d, a, b, 0x33);
 
-        if (fp_is_equal_4x2(c, e) != 0xf) {
-            print_fp_4x2_index(c, 0);
-            print_fp_4x2_index(e, 0);
+        if (fp_is_equal_4x2(c, d) != 0xf) {
             passed = 0;
             break;
         }
@@ -1401,6 +1259,45 @@ bool test_fp(int iterations)
         return false;
     }
 
+    // Division by 3
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_2x4(a);
+        fp_copy_2x4(b, a);
+
+        fp_div3_2x4(b, b);
+        fp_add_2x4(c, b, b);
+        fp_add_2x4(c, c, b);
+
+        if (fp_is_equal_2x4(a, c) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 3", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Inverse
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_2x4(a);
+
+        if (fp_is_zero_2x4(a) != 0)
+            continue;
+        
+        fp_inv_2x4(b, a);
+        fp_mul_2x4(c, b, a);
+
+        if (fp_is_equal_2x4(c, vR) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("inv", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     // Square root
     for (int i = 0; i < iterations; i++) {
         rand_fp_2x4(a);
@@ -1418,24 +1315,48 @@ bool test_fp(int iterations)
     if (passed == 0) {
         return false;
     }
+    
+    printf("Conversions between Fp representations\n");
 
-    // Inverse
     for (int i = 0; i < iterations; i++) {
-        rand_fp_2x4(a);
+        rand_fp_8x1(a);
 
-        if (fp_is_zero_2x4(a))
-            continue;
-        
-        fp_inv_2x4(b, a);
-        fp_mul_2x4(b, b, a);
-        fp_tomont_2x4(c, one);
+        // back and forth does nothing
+        fp_8x1_to_4x2(b, c, a);
+        fp_4x2_to_8x1(d, b, c);
 
-        if (fp_is_equal_2x4(b, c) != 0x3) {
+        if (fp_is_equal_8x1(d, a) != 0xff) {
+            passed = 0;
+            printf("8x1 -> 4x2 -> 8x1 is not identity!\n");
+            break;
+        }
+
+        rand_fp_4x2(a);
+        rand_fp_4x2(b);
+        fp_4x2_to_8x1(c, a, b);
+        fp_8x1_to_4x2(d, e, c);
+
+        if (fp_is_equal_4x2(d, a) != 0xf || fp_is_equal_4x2(e, b) != 0xf) {
+            passed = 0;
+            printf("4x2 -> 8x1 -> 4x2 is not identity!\n");
+            break;
+        }
+
+        rand_fp_8x1(a);
+        rand_fp_8x1(b);
+        fp_mul_8x1(c, a, b);
+        fp_8x1_to_4x2(d, e, a);
+        fp_8x1_to_4x2(f, g, b);
+        fp_mul_4x2(d, d, f);
+        fp_mul_4x2(e, e, g);
+        fp_4x2_to_8x1(d, d, e);
+
+        if (fp_is_equal_8x1(c, d) != 0xff) {
             passed = 0;
             break;
         }
     }
-    print_test_res("inv", passed);
+    print_test_res("8x1 <-> 4x2", passed);
     if (passed == 0) {
         return false;
     }
@@ -1444,8 +1365,8 @@ bool test_fp(int iterations)
         rand_fp_4x2(a);
 
         // back and forth does nothing
-        fp_4x2_to_2x4(b, b+2, a);
-        fp_2x4_to_4x2(b, b, b+2);
+        fp_4x2_to_2x4(b, c, a);
+        fp_2x4_to_4x2(b, b, c);
 
         if (fp_is_equal_4x2(b, a) != 0xf) {
             passed = 0;
@@ -1453,11 +1374,11 @@ bool test_fp(int iterations)
         }
 
         rand_fp_2x4(a);
-        rand_fp_2x4(a+2);
-        fp_2x4_to_4x2(b, a, a+2);
-        fp_4x2_to_2x4(b, b+2, b);
+        rand_fp_2x4(b);
+        fp_2x4_to_4x2(c, a, b);
+        fp_4x2_to_2x4(c, d, c);
 
-        if (fp_is_equal_2x4(b, a) != 0x3 || fp_is_equal_2x4(b+2, a+2) != 0x3) {
+        if (fp_is_equal_2x4(c, a) != 0x3 || fp_is_equal_2x4(d, b) != 0x3) {
             passed = 0;
             break;
         }
@@ -1465,11 +1386,11 @@ bool test_fp(int iterations)
         rand_fp_4x2(a);
         rand_fp_4x2(b);
         fp_mul_4x2(c, a, b);
-        fp_4x2_to_2x4(d, d+2, a);
-        fp_4x2_to_2x4(e, e+2, b);
+        fp_4x2_to_2x4(d, f, a);
+        fp_4x2_to_2x4(e, g, b);
         fp_mul_2x4(d, d, e);
-        fp_mul_2x4(d+2, d+2, e+2);
-        fp_2x4_to_4x2(d, d, d+2);
+        fp_mul_2x4(f, f, g);
+        fp_2x4_to_4x2(d, d, f);
 
         if (fp_is_equal_4x2(c, d) != 0xf) {
             passed = 0;

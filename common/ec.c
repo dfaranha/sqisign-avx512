@@ -1,5 +1,6 @@
 #include "ec.h"
-#include "fp2_lvl3.h"
+#include "fp_unvec_lvl3.h"
+#include "fp2.h"
 #include "mp.h"
 
 #include "utils.h"

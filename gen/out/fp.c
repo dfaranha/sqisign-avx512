@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <immintrin.h>
 
 #include "fp.h"
 #include "fp_consts.h"
@@ -919,7 +920,8 @@ void rdc_8x1(__m512i* res, __m512i* a)
     // m = -p^(-1) mod 2^n = p + 2 = c * 2^e + 1
     // The output of this reduction is (a + (low(a) * m mod 2^n )*p) / 2^432
     
-    __m512i t[10], s7, s8, hi, msb_mask;
+    __m512i t[10], s7, s8, hi;
+    __mmask8 msb_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     const __m512i top = VSETALL(P_PLUS_1_TOP);
     const __m512i zero = VZERO();
@@ -931,7 +933,7 @@ void rdc_8x1(__m512i* res, __m512i* a)
     s8 = VMULADDH(zero, a[0], top);
     s8 = VADD(a[8], VSL(s8, LIMB_ALIGN));
     s8 = VMULADDL(s8, a[1], top);
-    s8 = VADD(s8, VSR(s7, LIMB_LEN));
+    s8 = VADD(s8, VSRA(s7, LIMB_LEN));
     s7 = VAND(s7, limb_mask);
     s8 = VAND(s8, limb_mask);
     
@@ -1010,7 +1012,7 @@ void rdc_8x1(__m512i* res, __m512i* a)
     hi = VSL(t[9], 16);
     msb_mask = VSIGN(hi);
     t[9] = VSUBMASK(t[9], msb_mask, t[9], top);
-    t[2] = VADDMASK(t[2], msb_mask, [t2], one);
+    t[2] = VADDMASK(t[2], msb_mask, t[2], one);
     
     // We do not propogate the carry here. The bottom limb can have 49 bits.
     res[0] = t[2];
@@ -1070,6 +1072,62 @@ void fp_sqr_8x1(__m512i* res, __m512i* a)
     fp_mul_8x1(res, a, a);
 }
 
+void fp_div3_8x1(__m512i* res, __m512i* src)
+{
+    __m512i t[8];
+    fp_duplicate_8x1(t, INV3);
+    fp_mul_8x1(res, src, t);
+}
+
+// Batched inversion invoking a single call to fp_inv_64.
+void fp_inv_8x1(__m512i* res, __m512i* a)
+{
+    uint64_t r_64[12];
+    __m512i u[8], t0[4], t1[4], s0[2], s1[2], r[2];
+    __m512i idx0, idx1;
+    
+    fp_8x1_to_4x2(t0, t1, a);
+    // t0 = (a0a1, a2a3, a4a5, a6a7)
+    fp_mul_4x2(t0, t0, t1);
+    fp_4x2_to_2x4(s0, s1, t0);
+    // s0 = (a0a1a2a3, a4a5a6a7)
+    fp_mul_2x4(s0, s0, s1);
+    idx1 = VSET(4, 5, 6, 7, 0, 0, 0, 0);
+    for (int i = 0; i < 2; i++) {
+        s1[i] = VPERM512(idx1, s0[i]);
+    }
+    // r = a0a1a2a3a4a5a6a7 (wastes a mul)
+    fp_mul_2x4(r, s0, s1);
+    
+    // Unvectorized inversion of r
+    fp_limbs_to_64_2x4(r_64, r);
+    fp_inv_64(r_64, r_64);
+    fp_64_to_limbs_2x4(r, r_64);
+    
+    // s0 = (inv_0123, inv_4567)
+    idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);
+    idx1 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    for (int i = 0; i < 2; i++) {
+        s0[i] = VPERM512(idx0, s0[i]);
+        s1[i] = VPERM512(idx1, r[i]);
+    }
+    fp_mul_2x4(s0, s0, s1);
+    // t0 = (inv01, inv23, inv45, inv67)
+    fp_2x4_to_4x2(t1, s0, s0); // (inv_0123, inv_0123, inv_4567, inv_4567)
+    idx0 = VSET(2, 3, 0, 1, 6, 7, 4, 5);
+    for (int i = 0; i < 4; i++) {
+        t0[i] = VPERM512(idx0, t0[i]);
+    }
+    fp_mul_4x2(t0, t0, t1);
+    // res = (inv0, inv1, inv2, ...)
+    fp_4x2_to_8x1(u, t0, t0);
+    idx0 = VSET(1, 0, 3, 2, 5, 4, 7, 6);
+    for (int i = 0; i < 8; i++) {
+        res[i] = VPERM512(idx0, a[i]);
+    }
+    fp_mul_8x1(res, res, u);
+}
+
 void fp_tomont_8x1(__m512i* res, __m512i* a)
 {
     __m512i vR2[NUM_LIMBS];
@@ -1085,80 +1143,80 @@ void fp_frommont_8x1(__m512i* res, __m512i* a)
     fp_mul_8x1(res, a, one);
 }
 
-// Assumes unvec is an array of 8 * NUM_LIMBS_64 64-bit ints
+// Assumes unvec is an array of 8 * NWORDS64 64-bit ints
 void fp_64_to_limbs_8x1(__m512i* res, uint64_t* unvec)
 {
     uint64_t t[8];
     
     for (int i = 0; i < 8; i++) {
-        t[i] = unvec[NUM_LIMBS_64 * i] & LIMB_MASK;
+        t[i] = unvec[NWORDS64 * i] & LIMB_MASK;
     }
     res[0] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = ((unvec[NUM_LIMBS_64 * i] >> 48) & 0xffffULL) | ((unvec[NUM_LIMBS_64 * i + 1] & 0xffffffffULL) << 16);
+        t[i] = ((unvec[NWORDS64 * i] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 1] & 0xffffffffULL) << 16);
     }
     res[1] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = ((unvec[NUM_LIMBS_64 * i + 1] >> 32) & 0xffffffffULL) | ((unvec[NUM_LIMBS_64 * i + 2] & 0xffffULL) << 32);
+        t[i] = ((unvec[NWORDS64 * i + 1] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 2] & 0xffffULL) << 32);
     }
     res[2] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = (unvec[NUM_LIMBS_64 * i + 2 >> 16) & LIMB_MASK;
+        t[i] = (unvec[NWORDS64 * i + 2] >> 16) & LIMB_MASK;
     }
     res[3] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = unvec[NUM_LIMBS_64 * i + 3] & LIMB_MASK;
+        t[i] = unvec[NWORDS64 * i + 3] & LIMB_MASK;
     }
     res[4] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = ((unvec[NUM_LIMBS_64 * i + 3] >> 48) & 0xffffULL) | ((unvec[NUM_LIMBS_64 * i + 4] & 0xffffffffULL) << 16);
+        t[i] = ((unvec[NWORDS64 * i + 3] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 4] & 0xffffffffULL) << 16);
     }
     res[5] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = ((unvec[NUM_LIMBS_64 * i + 4] >> 32) & 0xffffffffULL) | ((unvec[NUM_LIMBS_64 * i + 5] & 0xffffULL) << 32);
+        t[i] = ((unvec[NWORDS64 * i + 4] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 5] & 0xffffULL) << 32);
     }
     res[6] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = (unvec[NUM_LIMBS_64 * i + 5 >> 16) & LIMB_MASK;
+        t[i] = (unvec[NWORDS64 * i + 5] >> 16) & LIMB_MASK;
     }
     res[7] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
 }
 
-// Assumes unvec is an array of 4 * NUM_LIMBS_64 64-bit ints
+// Assumes unvec is an array of 4 * NWORDS64 64-bit ints
 void fp_64_to_limbs_8x1_only_even_idx(__m512i* res, uint64_t* unvec)
 {
     uint64_t t[4];
     
     for (int i = 0; i < 4; i++) {
-        t[i] = unvec[NUM_LIMBS_64 * i] & LIMB_MASK;
+        t[i] = unvec[NWORDS64 * i] & LIMB_MASK;
     }
     res[0] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = ((unvec[NUM_LIMBS_64 * i] >> 48) & 0xffffULL) | ((unvec[NUM_LIMBS_64 * i + 1] & 0xffffffffULL) << 16);
+        t[i] = ((unvec[NWORDS64 * i] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 1] & 0xffffffffULL) << 16);
     }
     res[1] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = ((unvec[NUM_LIMBS_64 * i + 1] >> 32) & 0xffffffffULL) | ((unvec[NUM_LIMBS_64 * i + 2] & 0xffffULL) << 32);
+        t[i] = ((unvec[NWORDS64 * i + 1] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 2] & 0xffffULL) << 32);
     }
     res[2] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = (unvec[NUM_LIMBS_64 * i + 2] >> 16) & LIMB_MASK;
+        t[i] = (unvec[NWORDS64 * i + 2] >> 16) & LIMB_MASK;
     }
     res[3] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = unvec[NUM_LIMBS_64 * i + 3] & LIMB_MASK;
+        t[i] = unvec[NWORDS64 * i + 3] & LIMB_MASK;
     }
     res[4] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = ((unvec[NUM_LIMBS_64 * i + 3] >> 48) & 0xffffULL) | ((unvec[NUM_LIMBS_64 * i + 4] & 0xffffffffULL) << 16);
+        t[i] = ((unvec[NWORDS64 * i + 3] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 4] & 0xffffffffULL) << 16);
     }
     res[5] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = ((unvec[NUM_LIMBS_64 * i + 4] >> 32) & 0xffffffffULL) | ((unvec[NUM_LIMBS_64 * i + 5] & 0xffffULL) << 32);
+        t[i] = ((unvec[NWORDS64 * i + 4] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 5] & 0xffffULL) << 32);
     }
     res[6] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = (unvec[NUM_LIMBS_64 * i + 5] >> 16) & LIMB_MASK;
+        t[i] = (unvec[NWORDS64 * i + 5] >> 16) & LIMB_MASK;
     }
     res[7] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
 }
@@ -1169,39 +1227,39 @@ void fp_limbs_to_64_8x1(uint64_t* res, __m512i* src)
     
     VSTORE(t, src[0]);
     for (int i = 0; i < 8; i++) {
-        res[NUM_LIMBS_64 * i] = t[i] & LIMB_MASK;
+        res[NWORDS64 * i] = t[i] & LIMB_MASK;
     }
     VSTORE(t, src[1]);
     for (int i = 0; i < 8; i++) {
-        res[NUM_LIMBS_64 * i] |= (t[i] & 0xffffULL) << 48;
-        res[NUM_LIMBS_64 * i + 1] = (t[i] >> 16) & 0xffffffffULL;
+        res[NWORDS64 * i] |= (t[i] & 0xffffULL) << 48;
+        res[NWORDS64 * i + 1] = (t[i] >> 16) & 0xffffffffULL;
     }
     VSTORE(t, src[2]);
     for (int i = 0; i < 8; i++) {
-        res[NUM_LIMBS_64 * i + 1] |= (t[i] & 0xffffffffULL) << 32;
-        res[NUM_LIMBS_64 * i + 2] = (t[i] >> 32) & 0xffffULL;
+        res[NWORDS64 * i + 1] |= (t[i] & 0xffffffffULL) << 32;
+        res[NWORDS64 * i + 2] = (t[i] >> 32) & 0xffffULL;
     }
     VSTORE(t, src[3]);
     for (int i = 0; i < 8; i++) {
-        res[NUM_LIMBS_64 * i + 2] |= (t[i] & LIMB_MASK) << 16;
+        res[NWORDS64 * i + 2] |= (t[i] & LIMB_MASK) << 16;
     }
     VSTORE(t, src[4]);
     for (int i = 0; i < 8; i++) {
-        res[NUM_LIMBS_64 * i + 3] = t[i] & LIMB_MASK;
+        res[NWORDS64 * i + 3] = t[i] & LIMB_MASK;
     }
     VSTORE(t, src[5]);
     for (int i = 0; i < 8; i++) {
-        res[NUM_LIMBS_64 * i + 3] |= (t[i] & 0xffffULL) << 48;
-        res[NUM_LIMBS_64 * i + 4] = (t[i] >> 16) & 0xffffffffULL;
+        res[NWORDS64 * i + 3] |= (t[i] & 0xffffULL) << 48;
+        res[NWORDS64 * i + 4] = (t[i] >> 16) & 0xffffffffULL;
     }
     VSTORE(t, src[6]);
     for (int i = 0; i < 8; i++) {
-        res[NUM_LIMBS_64 * i + 4] |= (t[i] & 0xffffffffULL) << 32;
-        res[NUM_LIMBS_64 * i + 5] = (t[i] >> 32) & 0xffffULL;
+        res[NWORDS64 * i + 4] |= (t[i] & 0xffffffffULL) << 32;
+        res[NWORDS64 * i + 5] = (t[i] >> 32) & 0xffffULL;
     }
     VSTORE(t, src[7]);
     for (int i = 0; i < 8; i++) {
-        res[NUM_LIMBS_64 * i + 5] |= (t[i] & LIMB_MASK) << 16;
+        res[NWORDS64 * i + 5] |= (t[i] & LIMB_MASK) << 16;
     }
 }
 
@@ -1211,39 +1269,39 @@ void fp_limbs_to_64_8x1_only_even_idx(uint64_t* res, __m512i* src)
     
     VSTORE(t, src[0]);
     for (int i = 0; i < 4; i++) {
-        res[NUM_LIMBS_64 * i] = t[2*i] & LIMB_MASK;
+        res[NWORDS64 * i] = t[2*i] & LIMB_MASK;
     }
     VSTORE(t, src[1]);
     for (int i = 0; i < 4; i++) {
-        res[NUM_LIMBS_64 * i] |= (t[2*i] & 0xffffULL) << 48;
-        res[NUM_LIMBS_64 * i + 1] = (t[2*i] >> 16) & 0xffffffffULL;
+        res[NWORDS64 * i] |= (t[2*i] & 0xffffULL) << 48;
+        res[NWORDS64 * i + 1] = (t[2*i] >> 16) & 0xffffffffULL;
     }
     VSTORE(t, src[2]);
     for (int i = 0; i < 4; i++) {
-        res[NUM_LIMBS_64 * i + 1] |= (t[2*i] & 0xffffffffULL) << 32;
-        res[NUM_LIMBS_64 * i + 2] = (t[2*i] >> 32) & 0xffffULL;
+        res[NWORDS64 * i + 1] |= (t[2*i] & 0xffffffffULL) << 32;
+        res[NWORDS64 * i + 2] = (t[2*i] >> 32) & 0xffffULL;
     }
     VSTORE(t, src[3]);
     for (int i = 0; i < 4; i++) {
-        res[NUM_LIMBS_64 * i + 2] |= (t[2*i] & LIMB_MASK) << 16;
+        res[NWORDS64 * i + 2] |= (t[2*i] & LIMB_MASK) << 16;
     }
     VSTORE(t, src[4]);
     for (int i = 0; i < 4; i++) {
-        res[NUM_LIMBS_64 * i + 3] = t[2*i] & LIMB_MASK;
+        res[NWORDS64 * i + 3] = t[2*i] & LIMB_MASK;
     }
     VSTORE(t, src[5]);
     for (int i = 0; i < 4; i++) {
-        res[NUM_LIMBS_64 * i + 3] |= (t[2*i] & 0xffffULL) << 48;
-        res[NUM_LIMBS_64 * i + 4] = (t[2*i] >> 16) & 0xffffffffULL;
+        res[NWORDS64 * i + 3] |= (t[2*i] & 0xffffULL) << 48;
+        res[NWORDS64 * i + 4] = (t[2*i] >> 16) & 0xffffffffULL;
     }
     VSTORE(t, src[6]);
     for (int i = 0; i < 4; i++) {
-        res[NUM_LIMBS_64 * i + 4] |= (t[2*i] & 0xffffffffULL) << 32;
-        res[NUM_LIMBS_64 * i + 5] = (t[2*i] >> 32) & 0xffffULL;
+        res[NWORDS64 * i + 4] |= (t[2*i] & 0xffffffffULL) << 32;
+        res[NWORDS64 * i + 5] = (t[2*i] >> 32) & 0xffffULL;
     }
     VSTORE(t, src[7]);
     for (int i = 0; i < 4; i++) {
-        res[NUM_LIMBS_64 * i + 5] |= (t[2*i] & LIMB_MASK) << 16;
+        res[NWORDS64 * i + 5] |= (t[2*i] & LIMB_MASK) << 16;
     }
 }
 
@@ -1330,7 +1388,7 @@ int fp_is_zero_4x2(__m512i* a)
     acc &= VCMPEQ(norm_a[2], zero[2]);
     acc &= VCMPEQ(norm_a[3], zero[3]);
     
-    // a = 0 iff both halves are equal
+    // a = 0 iff both halves are 0
     return (acc & (acc >> 1) & 0x1)
         | ((acc >> 1) & (acc >> 2) & 0x2)
         | ((acc >> 2) & (acc >> 3) & 0x4)
@@ -1600,7 +1658,7 @@ void mp_add_p_sub_4x2(__m512i* res, __m512i* a, __m512i* b)
     t[0] = VSUB(VADD(a[0], p_bod), b[0]);
     t[1] = VSUB(VADD(a[1], p_bod), b[1]);
     t[2] = VSUB(VADD(a[2], p_bod), b[2]);
-    t[3] = VSUB(VADD(a[3], p_top), b[3])
+    t[3] = VSUB(VADD(a[3], p_top), b[3]);
     
     res[0] = t[0];
     res[1] = t[1];
@@ -2006,6 +2064,55 @@ void fp_sqr_4x2(__m512i* res, __m512i* a)
     fp_mul_4x2(res, a, a);
 }
 
+void fp_div3_4x2(__m512i* res, __m512i* src)
+{
+    __m512i t[4];
+    fp_duplicate_4x2(t, INV3);
+    fp_mul_4x2(res, src, t);
+}
+
+// Batched inversion.
+void fp_inv_4x2(__m512i* res, __m512i* a)
+{
+    uint64_t r_64[12];
+    __m512i s0[2], s1[2], r[2];
+    __m512i t0[4], t1[4];
+    __m512i idx0, idx1;
+    
+    // s0 = (a0*a1, a2*a3)
+    fp_4x2_to_2x4(s0, s1, a);
+    fp_mul_2x4(s0, s0, s1);
+    
+    // r = a0a1a2a3 (wastes one mul)
+    idx1 = VSET(4, 5, 6, 7, 0, 0, 0, 0);
+    for (int i = 0; i < 2; i++) {
+        s1[i] = VPERM512(idx1, s0[i]);
+    }
+    fp_mul_2x4(r, s0, s1);
+    
+    // Computing r^-1 mod p
+    fp_limbs_to_64_2x4(r_64, r);
+    fp_inv_64(r_64, r_64);
+    fp_64_to_limbs_2x4(r, r_64);
+    
+    // s0 = (inv_01, inv_23)
+    idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);
+    idx1 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    for (int i = 0; i < 2; i++) {
+        s0[i] = VPERM512(idx0, s0[i]);
+        s1[i] = VPERM512(idx1, r[i]);
+    }
+    fp_mul_2x4(s0, s0, s1);
+    
+    // res = (inv0, inv1, inv2, inv3)
+    fp_2x4_to_4x2(t0, s0, s0); // (inv_01, inv_01, inv_23, inv_23)
+    idx1 = VSET(2, 3, 0, 1, 6, 7, 4, 5);
+    for (int i = 0; i < 4; i++) {
+        t1[i] = VPERM512(idx1, a[i]);
+    }
+    fp_mul_4x2(res, t0, t1);
+}
+
 void fp_tomont_4x2(__m512i* res, __m512i* a)
 {
     __m512i vR2[4];
@@ -2021,29 +2128,29 @@ void fp_frommont_4x2(__m512i* res, __m512i* a)
     fp_mul_4x2(res, a, one);
 }
 
-// Assumes unvec is an array of 4 * NUM_LIMBS_64 64-bit ints
+// Assumes unvec is an array of 4 * NWORDS64 64-bit ints
 void fp_64_to_limbs_4x2(__m512i* res, uint64_t* unvec)
 {
     uint64_t t[8];
     
     for (int i = 0; i < 4; i++) {
-        t[2*i] = unvec[NUM_LIMBS_64 * i] & LIMB_MASK;
-        t[2*i+1] = unvec[NUM_LIMBS_64 * i + 3] & LIMB_MASK;
+        t[2*i] = unvec[NWORDS64 * i] & LIMB_MASK;
+        t[2*i+1] = unvec[NWORDS64 * i + 3] & LIMB_MASK;
     }
     res[0] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 4; i++) {
-        t[2*i] = ((unvec[NUM_LIMBS_64 * i] >> 48) & 0xffffULL) | ((unvec[NUM_LIMBS_64 * i + 1] & 0xffffffffULL) << 16);
-        t[2*i+1] = ((unvec[NUM_LIMBS_64 * i + 3] >> 48) & 0xffffULL) | ((unvec[NUM_LIMBS_64 * i + 4] & 0xffffffffULL) << 16);
+        t[2*i] = ((unvec[NWORDS64 * i] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 1] & 0xffffffffULL) << 16);
+        t[2*i+1] = ((unvec[NWORDS64 * i + 3] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 4] & 0xffffffffULL) << 16);
     }
     res[1] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 4; i++) {
-        t[2*i] = ((unvec[NUM_LIMBS_64 * i + 1] >> 32) & 0xffffffffULL) | ((unvec[NUM_LIMBS_64 * i + 2] & 0xffffULL) << 32);
-        t[2*i+1] = ((unvec[NUM_LIMBS_64 * i + 4] >> 32) & 0xffffffffULL) | ((unvec[NUM_LIMBS_64 * i + 5] & 0xffffULL) << 32);
+        t[2*i] = ((unvec[NWORDS64 * i + 1] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 2] & 0xffffULL) << 32);
+        t[2*i+1] = ((unvec[NWORDS64 * i + 4] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 5] & 0xffffULL) << 32);
     }
     res[2] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 4; i++) {
-        t[2*i] = (unvec[NUM_LIMBS_64 * i + 2] >> 16) & LIMB_MASK;
-        t[2*i+1] = (unvec[NUM_LIMBS_64 * i + 5] >> 16) & LIMB_MASK;
+        t[2*i] = (unvec[NWORDS64 * i + 2] >> 16) & LIMB_MASK;
+        t[2*i+1] = (unvec[NWORDS64 * i + 5] >> 16) & LIMB_MASK;
     }
     res[3] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
 }
@@ -2054,31 +2161,31 @@ void fp_limbs_to_64_4x2(uint64_t* res, __m512i* src)
     
     VSTORE(t, src[0]);
     for (int i = 0; i < 4; i++) {
-        res[NUM_LIMBS_64 * i] = t[2*i] & LIMB_MASK;
+        res[NWORDS64 * i] = t[2*i] & LIMB_MASK;
         
-        res[NUM_LIMBS_64 * i + 3] = t[2*i+1] & LIMB_MASK;
+        res[NWORDS64 * i + 3] = t[2*i+1] & LIMB_MASK;
     }
     VSTORE(t, src[1]);
     for (int i = 0; i < 4; i++) {
-        res[NUM_LIMBS_64 * i] |= (t[2*i] & 0xffffULL) << 48;
-        res[NUM_LIMBS_64 * i + 1] = (t[2*i] >> 16) & 0xffffffffULL;
+        res[NWORDS64 * i] |= (t[2*i] & 0xffffULL) << 48;
+        res[NWORDS64 * i + 1] = (t[2*i] >> 16) & 0xffffffffULL;
         
-        res[NUM_LIMBS_64 * i + 3] |= (t[2*i+1] & 0xffffULL) << 48;
-        res[NUM_LIMBS_64 * i + 4] = (t[2*i+1] >> 16) & 0xffffffffULL;
+        res[NWORDS64 * i + 3] |= (t[2*i+1] & 0xffffULL) << 48;
+        res[NWORDS64 * i + 4] = (t[2*i+1] >> 16) & 0xffffffffULL;
     }
     VSTORE(t, src[2]);
     for (int i = 0; i < 4; i++) {
-        res[NUM_LIMBS_64 * i + 1] |= (t[2*i] & 0xffffffffULL) << 32;
-        res[NUM_LIMBS_64 * i + 2] = (t[2*i] >> 32) & 0xffffULL;
+        res[NWORDS64 * i + 1] |= (t[2*i] & 0xffffffffULL) << 32;
+        res[NWORDS64 * i + 2] = (t[2*i] >> 32) & 0xffffULL;
         
-        res[NUM_LIMBS_64 * i + 4] |= (t[2*i+1] & 0xffffffffULL) << 32;
-        res[NUM_LIMBS_64 * i + 5] = (t[2*i+1] >> 32) & 0xffffULL;
+        res[NWORDS64 * i + 4] |= (t[2*i+1] & 0xffffffffULL) << 32;
+        res[NWORDS64 * i + 5] = (t[2*i+1] >> 32) & 0xffffULL;
     }
     VSTORE(t, src[3]);
     for (int i = 0; i < 4; i++) {
-        res[NUM_LIMBS_64 * i + 2] |= (t[2*i] & LIMB_MASK) << 16;
+        res[NWORDS64 * i + 2] |= (t[2*i] & LIMB_MASK) << 16;
         
-        res[NUM_LIMBS_64 * i + 5] |= (t[2*i+1] & LIMB_MASK) << 16;
+        res[NWORDS64 * i + 5] |= (t[2*i+1] & LIMB_MASK) << 16;
     }
 }
 
@@ -2219,7 +2326,7 @@ void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)
     
     // If the result is negative, we add p
     sign_mask = VSRA(t[1], 63);
-    sign_mask = VPERMV(idx_sign, sign_mask);
+    sign_mask = VPERM512(idx_sign, sign_mask);
     t[1] = VADD(t[1], VAND(p_top, sign_mask));
     t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
     
@@ -2303,7 +2410,7 @@ void fp_sub_2x4(__m512i* res, __m512i* a, __m512i* b)
     
     // If the result is negative, we add p
     sign_mask = VSRA(t[1], 63);
-    sign_mask = VPERMV(idx_sign, sign_mask);
+    sign_mask = VPERM512(idx_sign, sign_mask);
     t[1] = VADD(t[1], VAND(p_top, sign_mask));
     t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
     
@@ -2388,7 +2495,7 @@ void fp_neg_2x4(__m512i* res, __m512i* a)
     
     // If the result is negative, we add p
     sign_mask = VSRA(t[1], 63);
-    sign_mask = VPERMV(idx_sign, sign_mask);
+    sign_mask = VPERM512(idx_sign, sign_mask);
     t[1] = VADD(t[1], VAND(p_top, sign_mask));
     t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
     
@@ -2479,7 +2586,7 @@ void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     
     // If the result is negative, we add p
     sign_mask = VSRA(t[1], 63);
-    sign_mask = VPERMV(idx_sign, sign_mask);
+    sign_mask = VPERM512(idx_sign, sign_mask);
     t[1] = VADD(t[1], VAND(p_top, sign_mask));
     t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
     
@@ -2786,6 +2893,43 @@ void fp_frommont_2x4(__m512i* res, __m512i* a)
     fp_mul_2x4(res, a, one);
 }
 
+void fp_div3_2x4(__m512i* res, __m512i* src)
+{
+    __m512i t[2];
+    fp_duplicate_2x4(t, INV3);
+    fp_mul_2x4(res, src, t);
+}
+
+// Batched inversion.
+void fp_inv_2x4(__m512i* res, __m512i* a)
+{
+    uint64_t r_64[12];
+    __m512i s[2], r[2];
+    __m512i idx0, idx1;
+    
+    // r = a0a1 (wastes one mul)
+    idx1 = VSET(4, 5, 6, 7, 0, 0, 0, 0);
+    for (int i = 0; i < 2; i++) {
+        r[i] = VPERM512(idx1, a[i]);
+    }
+    fp_mul_2x4(r, r, a);
+    
+    // Computing r^-1 mod p
+    fp_limbs_to_64_2x4(r_64, r);
+    fp_inv_64(r_64, r_64);
+    fp_64_to_limbs_2x4(r, r_64);
+    
+    // res = (inv_0, inv_1)
+    idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);
+    idx1 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    for (int i = 0; i < 2; i++) {
+        s[i] = VPERM512(idx0, a[i]);
+        r[i] = VPERM512(idx1, r[i]);
+    }
+    fp_mul_2x4(res, r, s);
+    
+}
+
 void fp_sqrt_2x4(__m512i* res, __m512i* a)
 {
     // Candidate root is a^((p+1)/4), with (p+1)/4 = 65*2^374
@@ -2804,6 +2948,7 @@ void fp_sqrt_2x4(__m512i* res, __m512i* a)
 
 void fp_exp3div4_2x4(__m512i* res, __m512i* a)
 {
+    __m512i t[2];
     fp_sqr_2x4(t, a);
     for (int i = 1; i < 7; i++) {
         fp_sqr_2x4(t, t);
@@ -3557,48 +3702,23 @@ void fp_exp3div4_2x4(__m512i* res, __m512i* a)
     fp_mul_2x4(res, t, a);
 }
 
-// Given src=(a, b, c, d), it computes res1 = (a, c) and res2 = (b, d)
-// We choose this interleaving pattern for the Fp2 2x2x2 sqrt,
-// where res1 = re and res2 = im
-void fp_4x2_to_2x4(__m512i* res1, __m512i* res2, __m512i* src)
-{
-    const __m512i idx1 = VSET(0, 8, 1, 9, 4, 12, 5, 13);
-    const __m512i idx2 = VSET(2, 10, 3, 11, 6, 14, 7, 15);
-    for (int i = 0; i < 2; i++) {
-        __m512i s = src[i], t = src[i+2];
-        res1[i] = VBLENDPERM(idx1, s, t);
-        res2[i] = VBLENDPERM(idx2, s, t);
-    }
-}
-
-void fp_2x4_to_4x2(__m512i* res, __m512i* src1, __m512i* src2)
-{
-    __m512i idx1 = VSET(0, 2, 8, 10, 4, 6, 12, 14);
-    __m512i idx2 = VSET(1, 3, 9, 11, 5, 7, 13, 15);
-    for (int i = 0; i < 2; i++) {
-        __m512i s = src1[i], t = src2[i];
-        res[i] = VBLENDPERM(idx1, s, t);
-        res[i+2] = VBLENDPERM(idx2, s, t);
-    }
-}
-
-// Assumes unvec is an array of 2 * NUM_LIMBS_64 64-bit ints
+// Assumes unvec is an array of 2 * NWORDS64 64-bit ints
 void fp_64_to_limbs_2x4(__m512i* res, uint64_t* unvec)
 {
     uint64_t t[8];
     
     for (int i = 0; i < 2; i++) {
-        t[4*i] = unvec[NUM_LIMBS_64 * i] & LIMB_MASK;
-        t[4*i + 1] = ((unvec[NUM_LIMBS_64 * i + 1] >> 32) & 0xffffffffULL) | ((unvec[NUM_LIMBS_64 * i + 2] & 0xffffULL) << 32);
-        t[4*i + 2] = unvec[NUM_LIMBS_64 * i + 3] & LIMB_MASK;
-        t[4*i+3] = ((unvec[NUM_LIMBS_64 * i + 4] >> 32) & 0xffffffffULL) | ((unvec[NUM_LIMBS_64 * i + 5] & 0xffffULL) << 32);
+        t[4*i] = unvec[NWORDS64 * i] & LIMB_MASK;
+        t[4*i + 1] = ((unvec[NWORDS64 * i + 1] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 2] & 0xffffULL) << 32);
+        t[4*i + 2] = unvec[NWORDS64 * i + 3] & LIMB_MASK;
+        t[4*i+3] = ((unvec[NWORDS64 * i + 4] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 5] & 0xffffULL) << 32);
     }
     res[0] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 2; i++) {
-        t[4*i] = ((unvec[NUM_LIMBS_64 * i] >> 48) & 0xffffULL) | ((unvec[NUM_LIMBS_64 * i + 1] & 0xffffffffULL) << 16);
-        t[4*i + 1] = (unvec[NUM_LIMBS_64 * i + 2] >> 16) & LIMB_MASK;
-        t[4*i + 2] = ((unvec[NUM_LIMBS_64 * i + 3] >> 48) & 0xffffULL) | ((unvec[NUM_LIMBS_64 * i + 4] & 0xffffffffULL) << 16);
-        t[4*i+3] = (unvec[NUM_LIMBS_64 * i + 5] >> 16) & LIMB_MASK;
+        t[4*i] = ((unvec[NWORDS64 * i] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 1] & 0xffffffffULL) << 16);
+        t[4*i + 1] = (unvec[NWORDS64 * i + 2] >> 16) & LIMB_MASK;
+        t[4*i + 2] = ((unvec[NWORDS64 * i + 3] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 4] & 0xffffffffULL) << 16);
+        t[4*i+3] = (unvec[NWORDS64 * i + 5] >> 16) & LIMB_MASK;
     }
     res[1] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
 }
@@ -3609,21 +3729,21 @@ void fp_limbs_to_64_2x4(uint64_t* res, __m512i* src)
     
     VSTORE(t, src[0]);
     for (int i = 0; i < 2; i++) {
-        res[NUM_LIMBS_64 * i] = t[4*i] & LIMB_MASK;
-        res[NUM_LIMBS_64 * i + 1] = (t[4*i + 1] & 0xffffffffULL) << 32;
-        res[NUM_LIMBS_64 * i + 2] = (t[4*i + 1] >> 32) & 0xffffULL;
-        res[NUM_LIMBS_64 * i + 3] = t[4*i + 2] & LIMB_MASK;
-        res[NUM_LIMBS_64 * i + 4] = (t[4*i+3] & 0xffffffffULL) << 32;
-        res[NUM_LIMBS_64 * i + 5] = (t[4*i+3] >> 32) & 0xffffULL;
+        res[NWORDS64 * i] = t[4*i] & LIMB_MASK;
+        res[NWORDS64 * i + 1] = (t[4*i + 1] & 0xffffffffULL) << 32;
+        res[NWORDS64 * i + 2] = (t[4*i + 1] >> 32) & 0xffffULL;
+        res[NWORDS64 * i + 3] = t[4*i + 2] & LIMB_MASK;
+        res[NWORDS64 * i + 4] = (t[4*i+3] & 0xffffffffULL) << 32;
+        res[NWORDS64 * i + 5] = (t[4*i+3] >> 32) & 0xffffULL;
     }
     VSTORE(t, src[1]);
     for (int i = 0; i < 2; i++) {
-        res[NUM_LIMBS_64 * i] |= (t[4*i] & 0xffffULL) << 48;
-        res[NUM_LIMBS_64 * i + 1] |= (t[4*i] >> 16) & 0xffffffffULL;
-        res[NUM_LIMBS_64 * i + 2] |= (t[4*i + 1] & LIMB_MASK) << 16;
-        res[NUM_LIMBS_64 * i + 3] |= (t[4*i + 2] & 0xffffULL) << 48;
-        res[NUM_LIMBS_64 * i + 4] |= (t[4*i + 2] >> 16) & 0xffffffffULL;
-        res[NUM_LIMBS_64 * i + 5] |= (t[4*i+3] & LIMB_MASK) << 16;
+        res[NWORDS64 * i] |= (t[4*i] & 0xffffULL) << 48;
+        res[NWORDS64 * i + 1] |= (t[4*i] >> 16) & 0xffffffffULL;
+        res[NWORDS64 * i + 2] |= (t[4*i + 1] & LIMB_MASK) << 16;
+        res[NWORDS64 * i + 3] |= (t[4*i + 2] & 0xffffULL) << 48;
+        res[NWORDS64 * i + 4] |= (t[4*i + 2] >> 16) & 0xffffffffULL;
+        res[NWORDS64 * i + 5] |= (t[4*i+3] & LIMB_MASK) << 16;
     }
 }
 
@@ -3643,5 +3763,535 @@ void rand_fp_2x4(__m512i* res)
     
     // Reduction
     fp_add_2x4(res, res, zero);
+}
+
+// ====================================================================================================
+//                                Conversions between Fp representations                               
+// ====================================================================================================
+
+// Given src = (a, b, c, d, e, f, g, h),
+// it computes res1 = (a, c, e, g) and res2 = (b, d, f, h).
+void fp_8x1_to_4x2(__m512i* res1, __m512i* res2, __m512i* src)
+{
+    __m512i s, t;
+    const __m512i idx1 = VSET(0, 8, 2, 10, 4, 12, 6, 14);
+    const __m512i idx2 = VSET(1, 9, 3, 11, 5, 13, 7, 15);
+    for (int i = 0; i < 4; i++) {
+        s = src[i], t = src[i + 4];
+        res1[i] = VBLENDPERM(idx1, s, t);
+        res2[i] = VBLENDPERM(idx2, s, t);
+    }
+}
+
+// Given src1 = (a1, b1, c1, d1) and src2 = (a2, b2, c2, d2),
+// it computes res = (a1, a2, b1, b2, c1, c2, d1, d2).
+void fp_4x2_to_8x1(__m512i* res, __m512i* src1, __m512i* src2)
+{
+    __m512i s, t;
+    const __m512i idx1 = VSET(0, 8, 2, 10, 4, 12, 6, 14);
+    const __m512i idx2 = VSET(1, 9, 3, 11, 5, 13, 7, 15);
+    for (int i = 0; i < 4; i++) {
+        s = src1[i], t = src2[i];
+        res[i] = VBLENDPERM(idx1, s, t);
+        res[i + 4] = VBLENDPERM(idx2, s, t);
+    }
+}
+
+// Given src=(a, b, c, d), it computes res1 = (a, c) and res2 = (b, d).
+// We choose this interleaving pattern for the Fp2 2x2x2 sqrt,
+// where res1 = re and res2 = im.
+void fp_4x2_to_2x4(__m512i* res1, __m512i* res2, __m512i* src)
+{
+    __m512i idx1 = VSET(0, 8, 1, 9, 4, 12, 5, 13);
+    __m512i idx2 = VSET(2, 10, 3, 11, 6, 14, 7, 15);
+    for (int i = 0; i < 2; i++) {
+        __m512i s = src[i], t = src[i+2];
+        res1[i] = VBLENDPERM(idx1, s, t);
+        res2[i] = VBLENDPERM(idx2, s, t);
+    }
+}
+
+void fp_2x4_to_4x2(__m512i* res, __m512i* src1, __m512i* src2)
+{
+    __m512i idx1 = VSET(0, 2, 8, 10, 4, 6, 12, 14);
+    __m512i idx2 = VSET(1, 3, 9, 11, 5, 7, 13, 15);
+    for (int i = 0; i < 2; i++) {
+        __m512i s = src1[i], t = src2[i];
+        res[i] = VBLENDPERM(idx1, s, t);
+        res[i+2] = VBLENDPERM(idx2, s, t);
+    }
+}
+
+// ====================================================================================================
+//                                      Unvectorized Fp inversion                                     
+// ====================================================================================================
+
+#define adc(cc, a, b, d) _addcarry_u64(cc, a, b, (unsigned long long *)(void *)d)
+#define sbb(cc, a, b, d) _subborrow_u64(cc, a, b, (unsigned long long *)(void *)d)
+#define lzcnt(x) ((x) == 0 ? 64 : (int64_t)__builtin_clzll(x))
+
+// Outputs 0xffffffffffffffff if src is negative, else 0
+uint64_t sgnw(const uint64_t src)
+{
+    return (uint64_t)(*(int64_t *)&src >> 63);
+}
+
+// Assumes input is fully reduced.
+uint64_t is_zero64(const uint64_t* src)
+{
+    uint64_t t = src[0];
+    t |= src[1];
+    t |= src[2];
+    t |= src[3];
+    t |= src[4];
+    t |= src[5];
+    
+    t = (t | -t) >> 63; // 0 if t = 0, 1 otherwise
+    return t-1;
+}
+
+// If mask == 0xffffffffffffffff, a1 is copied to res
+void select64(uint64_t* res, const uint64_t* a0, const uint64_t* a1, const uint64_t mask)
+{
+    res[0] = a0[0] ^ (mask & (a0[0] ^ a1[0]));
+    res[1] = a0[1] ^ (mask & (a0[1] ^ a1[1]));
+    res[2] = a0[2] ^ (mask & (a0[2] ^ a1[2]));
+    res[3] = a0[3] ^ (mask & (a0[3] ^ a1[3]));
+    res[4] = a0[4] ^ (mask & (a0[4] ^ a1[4]));
+    res[5] = a0[5] ^ (mask & (a0[5] ^ a1[5]));
+}
+
+// (lo, hi) = x*y as integers
+void umul_64(uint64_t* lo, uint64_t* hi, const uint64_t x, const uint64_t y)
+{
+    unsigned __int128 t;
+    t = (unsigned __int128)(x) * (unsigned __int128)(y);
+    *lo = (uint64_t) t;
+    *hi = (uint64_t)(t >> 64);
+}
+
+// (lo, hi) = x*y + z as integers
+void umul_add_64(uint64_t* lo, uint64_t* hi, const uint64_t x, const uint64_t y, const uint64_t z)
+{
+    unsigned __int128 t;
+    t = (unsigned __int128)(x) * (unsigned __int128)(y) + (unsigned __int128)(uint64_t)(z);
+*lo = (uint64_t) t;
+*hi = (uint64_t)(t >> 64);
+}
+
+// (lo, hi) = x1*y1 + x2*y2 as integers
+void umulx2_64(uint64_t* lo, uint64_t* hi, const uint64_t x1, const uint64_t y1, const uint64_t x2, const uint64_t y2)
+{
+    unsigned __int128 t;
+    t = (unsigned __int128)(x1) * (unsigned __int128)(y1) + (unsigned __int128)(x2) * (unsigned __int128)(y2);
+    *lo = (uint64_t) t;
+    *hi = (uint64_t)(t >> 64);
+}
+
+// (lo, hi) = x1*y1 + x2*y2 + z as integers
+void umulx2_add_64(uint64_t* lo, uint64_t* hi, const uint64_t x1,
+    const uint64_t y1, const uint64_t x2, const uint64_t y2, const uint64_t z)
+{
+    unsigned __int128 t;
+    t = (unsigned __int128)(x1) * (unsigned __int128)(y1) + (unsigned __int128)(x2) * (unsigned __int128)(y2)
+        + (unsigned __int128)(uint64_t)(z);
+    *lo = (uint64_t) t;
+    *hi = (uint64_t)(t >> 64);
+}
+
+// Assumes input is fully reduced.
+void neg64(uint64_t* res, const uint64_t* src)
+{
+    uint64_t t[6];
+    unsigned char cc;
+    const uint64_t nz = ~is_zero64(src);
+    
+    // p - a
+    cc = sbb(0, (uint64_t) 0xffffffffffffffff, src[0], t);
+    cc = sbb(cc, (uint64_t) 0xffffffffffffffff, src[1], t+1);
+    cc = sbb(cc, (uint64_t) 0xffffffffffffffff, src[2], t+2);
+    cc = sbb(cc, (uint64_t) 0xffffffffffffffff, src[3], t+3);
+    cc = sbb(cc, (uint64_t) 0xffffffffffffffff, src[4], t+4);
+    cc = sbb(cc, (uint64_t) 0x40ffffffffffffff, src[5], t+5);
+    
+    res[0] = t[0] & nz;
+    res[1] = t[1] & nz;
+    res[2] = t[2] & nz;
+    res[3] = t[3] & nz;
+    res[4] = t[4] & nz;
+    res[5] = t[5] & nz;
+}
+
+// res = f*u + g*v mod p
+// Assumes f,g < 2^62
+void lin64(uint64_t* res, const uint64_t* u, const uint64_t* v, uint64_t f, uint64_t g)
+{
+    uint64_t t[6], tu[6], tv[6], hi;
+    unsigned char cc;
+    
+    // If f is negative, set f := abs(f) and negate u
+    uint64_t sf = sgnw(f);
+    f = (f ^ sf) - sf;
+    neg64(tu, u);
+    select64(tu, u, tu, sf);
+    
+    // If g is negative, set g := abs(g) and negate v
+    uint64_t sg = sgnw(g);
+    g = (g ^ sg) - sg;
+    neg64(tv, v);
+    select64(tv, v, tv, sg);
+    // t = f*u + g*v over the integers
+    umulx2_64(t, &hi, tu[0], f, tv[0], g);
+    umulx2_add_64(t+1, &hi, tu[1], f, tv[1], g, hi);
+    umulx2_add_64(t+2, &hi, tu[2], f, tv[2], g, hi);
+    umulx2_add_64(t+3, &hi, tu[3], f, tv[3], g, hi);
+    umulx2_add_64(t+4, &hi, tu[4], f, tv[4], g, hi);
+    umulx2_add_64(t+5, &hi, tu[5], f, tv[5], g, hi);
+    
+    // Reduction
+    // t = L + 2^e H
+    // Since p = c* 2^e - 1, 2^e = 1/c mod p
+    // We fold the output as t = L + 2^e * (H mod c) + 2^e * floor(H/c)
+    
+    // Compute H in (h0, h1) and L in (t[0], ..., t[5]):
+    uint64_t h0 = (t[5] >> 56) | (hi << 8);
+    uint64_t h1 = (hi >> 56);
+    t[5] &= 0x00FFFFFFFFFFFFFFULL;
+    
+    // Divide H by c
+    __uint128_t H_full = ((__uint128_t)h1 << 64) | h0;
+    uint64_t quo = (uint64_t)(H_full / 0x41ULL);
+    uint64_t rem = (uint64_t)(H_full % 0x41ULL);
+    
+    // t = L + quo + rem * 2^e
+    cc = adc(0, t[0], quo, &t[0]);
+    cc = adc(cc, t[1], 0, &t[1]);
+    cc = adc(cc, t[2], 0, &t[2]);
+    cc = adc(cc, t[3], 0, &t[3]);
+    cc = adc(cc, t[4], 0, &t[4]);
+    adc(cc, t[5], rem << 56, &t[5]);
+    
+    // Finally, if t > p, we subtract p to reduce fully.
+    cc = sbb(0, t[0], 0xffffffffffffffffULL, tu);
+    cc = sbb(cc, t[1], 0xffffffffffffffffULL, tu + 1);
+    cc = sbb(cc, t[2], 0xffffffffffffffffULL, tu + 2);
+    cc = sbb(cc, t[3], 0xffffffffffffffffULL, tu + 3);
+    cc = sbb(cc, t[4], 0xffffffffffffffffULL, tu + 4);
+    cc = sbb(cc, t[5], 0x40ffffffffffffffULL, tu + 5);
+    // If no borrow (t >= p), use tu; otherwise keep t
+    uint64_t mask = -(uint64_t)cc;
+    select64(res, tu, t, mask);
+}
+
+// d = abs(floor((a*fc + b*gc) / 2^31))
+// Coefficients fc, gc are signed, |fc|,|gc| <= 2^31.
+// Returns 0xFFFFFFFFFFFFFFFF if a*fc + b*gc < 0, else 0.
+uint64_t lindiv31abs(uint64_t* d, const uint64_t* a, const uint64_t* b, uint64_t fc, uint64_t gc)
+{
+    uint64_t ta[7], tb[7], t[7], hi;
+    unsigned char cc;
+    
+    // fc = abs(fc), conditionally negate a
+    uint64_t sf = sgnw(fc);
+    fc = (fc ^ sf) - sf;
+    cc = sbb(0, a[0] ^ sf, sf, &ta[0]);
+    cc = sbb(cc, a[1] ^ sf, sf, &ta[1]);
+    cc = sbb(cc, a[2] ^ sf, sf, &ta[2]);
+    cc = sbb(cc, a[3] ^ sf, sf, &ta[3]);
+    cc = sbb(cc, a[4] ^ sf, sf, &ta[4]);
+    cc = sbb(cc, a[5] ^ sf, sf, &ta[5]);
+    (void)sbb(cc, 0, 0, &ta[6]);
+    
+    // gc = abs(gc), conditionally negate b
+    uint64_t sg = sgnw(gc);
+    gc = (gc ^ sg) - sg;
+    cc = sbb(0, b[0] ^ sg, sg, &tb[0]);
+    cc = sbb(cc, b[1] ^ sg, sg, &tb[1]);
+    cc = sbb(cc, b[2] ^ sg, sg, &tb[2]);
+    cc = sbb(cc, b[3] ^ sg, sg, &tb[3]);
+    cc = sbb(cc, b[4] ^ sg, sg, &tb[4]);
+    cc = sbb(cc, b[5] ^ sg, sg, &tb[5]);
+    (void)sbb(cc, 0, 0, &tb[6]);
+    
+    // Compute ta*fc + tb*gc as a signed integer
+    umulx2_64(&t[0], &hi, ta[0], fc, tb[0], gc);
+    umulx2_add_64(&t[1], &hi, ta[1], fc, tb[1], gc, hi);
+    umulx2_add_64(&t[2], &hi, ta[2], fc, tb[2], gc, hi);
+    umulx2_add_64(&t[3], &hi, ta[3], fc, tb[3], gc, hi);
+    umulx2_add_64(&t[4], &hi, ta[4], fc, tb[4], gc, hi);
+    umulx2_add_64(&t[5], &hi, ta[5], fc, tb[5], gc, hi);
+    t[6] = hi - (ta[6] & fc) - (tb[6] & gc);
+    
+    // Right-shift by 31 bits
+    t[0] = (t[0] >> 31) | (t[1] << 33);
+    t[1] = (t[1] >> 31) | (t[2] << 33);
+    t[2] = (t[2] >> 31) | (t[3] << 33);
+    t[3] = (t[3] >> 31) | (t[4] << 33);
+    t[4] = (t[4] >> 31) | (t[5] << 33);
+    t[5] = (t[5] >> 31) | (t[6] << 33);
+    
+    // If result is negative, negate it
+    uint64_t s = sgnw(t[6]);
+    cc = sbb(0, t[0] ^ s, s, &d[0]);
+    cc = sbb(cc, t[1] ^ s, s, &d[1]);
+    cc = sbb(cc, t[2] ^ s, s, &d[2]);
+    cc = sbb(cc, t[3] ^ s, s, &d[3]);
+    cc = sbb(cc, t[4] ^ s, s, &d[4]);
+    (void)sbb(cc, t[5] ^ s, s, &d[5]);
+    
+    return s;
+}
+
+// Montgomery multiplication: res = a * b / 2^384 mod p
+// p = 65 * 2^376 - 1
+void fp_mul_64(uint64_t* res, const uint64_t* a, const uint64_t* b)
+{
+    const uint64_t P[6] = {
+        0xffffffffffffffffULL,
+        0xffffffffffffffffULL,
+        0xffffffffffffffffULL,
+        0xffffffffffffffffULL,
+        0xffffffffffffffffULL,
+        0x40ffffffffffffffULL
+    };
+    
+    uint64_t e[12], lo, hi;
+    uint64_t s[6], h[7];
+    unsigned char cc;
+    
+    // Schoolbook multiplication: e = a * b
+    umul_64(&e[0], &hi, a[0], b[0]);
+    umul_add_64(&e[1], &hi, a[0], b[1], hi);
+    umul_add_64(&e[2], &hi, a[0], b[2], hi);
+    umul_add_64(&e[3], &hi, a[0], b[3], hi);
+    umul_add_64(&e[4], &hi, a[0], b[4], hi);
+    umul_add_64(&e[5], &hi, a[0], b[5], hi);
+    e[6] = hi;
+    
+    umul_64(&lo, &hi, a[1], b[0]);
+    cc = adc(0, e[1], lo, &e[1]);
+    umul_add_64(&lo, &hi, a[1], b[1], hi);
+    cc = adc(cc, e[2], lo, &e[2]);
+    umul_add_64(&lo, &hi, a[1], b[2], hi);
+    cc = adc(cc, e[3], lo, &e[3]);
+    umul_add_64(&lo, &hi, a[1], b[3], hi);
+    cc = adc(cc, e[4], lo, &e[4]);
+    umul_add_64(&lo, &hi, a[1], b[4], hi);
+    cc = adc(cc, e[5], lo, &e[5]);
+    umul_add_64(&lo, &hi, a[1], b[5], hi);
+    cc = adc(cc, e[6], lo, &e[6]);
+    e[7] = hi + (uint64_t)cc;
+    
+    umul_64(&lo, &hi, a[2], b[0]);
+    cc = adc(0, e[2], lo, &e[2]);
+    umul_add_64(&lo, &hi, a[2], b[1], hi);
+    cc = adc(cc, e[3], lo, &e[3]);
+    umul_add_64(&lo, &hi, a[2], b[2], hi);
+    cc = adc(cc, e[4], lo, &e[4]);
+    umul_add_64(&lo, &hi, a[2], b[3], hi);
+    cc = adc(cc, e[5], lo, &e[5]);
+    umul_add_64(&lo, &hi, a[2], b[4], hi);
+    cc = adc(cc, e[6], lo, &e[6]);
+    umul_add_64(&lo, &hi, a[2], b[5], hi);
+    cc = adc(cc, e[7], lo, &e[7]);
+    e[8] = hi + (uint64_t)cc;
+    
+    umul_64(&lo, &hi, a[3], b[0]);
+    cc = adc(0, e[3], lo, &e[3]);
+    umul_add_64(&lo, &hi, a[3], b[1], hi);
+    cc = adc(cc, e[4], lo, &e[4]);
+    umul_add_64(&lo, &hi, a[3], b[2], hi);
+    cc = adc(cc, e[5], lo, &e[5]);
+    umul_add_64(&lo, &hi, a[3], b[3], hi);
+    cc = adc(cc, e[6], lo, &e[6]);
+    umul_add_64(&lo, &hi, a[3], b[4], hi);
+    cc = adc(cc, e[7], lo, &e[7]);
+    umul_add_64(&lo, &hi, a[3], b[5], hi);
+    cc = adc(cc, e[8], lo, &e[8]);
+    e[9] = hi + (uint64_t)cc;
+    
+    umul_64(&lo, &hi, a[4], b[0]);
+    cc = adc(0, e[4], lo, &e[4]);
+    umul_add_64(&lo, &hi, a[4], b[1], hi);
+    cc = adc(cc, e[5], lo, &e[5]);
+    umul_add_64(&lo, &hi, a[4], b[2], hi);
+    cc = adc(cc, e[6], lo, &e[6]);
+    umul_add_64(&lo, &hi, a[4], b[3], hi);
+    cc = adc(cc, e[7], lo, &e[7]);
+    umul_add_64(&lo, &hi, a[4], b[4], hi);
+    cc = adc(cc, e[8], lo, &e[8]);
+    umul_add_64(&lo, &hi, a[4], b[5], hi);
+    cc = adc(cc, e[9], lo, &e[9]);
+    e[10] = hi + (uint64_t)cc;
+    
+    umul_64(&lo, &hi, a[5], b[0]);
+    cc = adc(0, e[5], lo, &e[5]);
+    umul_add_64(&lo, &hi, a[5], b[1], hi);
+    cc = adc(cc, e[6], lo, &e[6]);
+    umul_add_64(&lo, &hi, a[5], b[2], hi);
+    cc = adc(cc, e[7], lo, &e[7]);
+    umul_add_64(&lo, &hi, a[5], b[3], hi);
+    cc = adc(cc, e[8], lo, &e[8]);
+    umul_add_64(&lo, &hi, a[5], b[4], hi);
+    cc = adc(cc, e[9], lo, &e[9]);
+    umul_add_64(&lo, &hi, a[5], b[5], hi);
+    cc = adc(cc, e[10], lo, &e[10]);
+    e[11] = hi + (uint64_t)cc;
+    
+    // Montgomery reduction
+    // m = -1/p mod 2^(64 * n) = 65 * 2^376 + 1) 
+    // s = low(e) * m mod 2^(64 * n)
+    for (int i = 0; i < 6; i++) s[i] = e[i];
+    s[5] += (uint64_t)((e[0] & 0xFFULL) * 65ULL) << 56;
+    
+    // h = s * (65 << 56)
+    umul_64(&h[0], &hi, s[0], 4683743612465315840ULL);
+    umul_add_64(&h[1], &hi, s[1], 4683743612465315840ULL, hi);
+    umul_add_64(&h[2], &hi, s[2], 4683743612465315840ULL, hi);
+    umul_add_64(&h[3], &hi, s[3], 4683743612465315840ULL, hi);
+    umul_add_64(&h[4], &hi, s[4], 4683743612465315840ULL, hi);
+    umul_add_64(&h[5], &hi, s[5], 4683743612465315840ULL, hi);
+    h[6] = hi;
+    
+    // e += s*p = s*c*2^f - s
+    // Step A: e -= s
+    cc = 0;
+    for (int i = 0; i < 6; i++) cc = sbb(cc, e[i], s[i], &e[i]);
+    for (int i = 6; i < 12; i++) cc = sbb(cc, e[i], 0, &e[i]);
+    
+    // Step B: e += h at word position 5
+    cc = 0;
+    for (int i = 0; i <= 6; i++) cc = adc(cc, e[5 + i], h[i], &e[5 + i]);
+    
+    // Conditional subtraction of p for full reduction
+    uint64_t r[6];
+    cc = 0;
+    for (int i = 0; i < 6; i++) cc = sbb(cc, e[6 + i], P[i], &r[i]);
+    uint64_t mask = -(uint64_t)cc;
+    for (int i = 0; i < 6; i++) res[i] = (e[6 + i] & mask) | (r[i] & ~mask);
+}
+
+// Implements inversion mod p using a constant-time extended binary GCD algorithm
+// by Thomas Pornin: https://eprint.iacr.org/2020/972.
+// This code is based on the version implented in the SQIsign submission.
+// It asssumes the input is normalized and in the Montgomery representation with R.
+void fp_inv_64(uint64_t* res, const uint64_t* src)
+{
+    uint64_t a[6], b[6], u[6], v[6];
+    uint64_t xa, xb, f0, g0, f1, g1;
+    
+    // Initialize a = src, b = p, u = 1 * R, v = 0
+    for (int i = 0; i < 6; i++) {
+        a[i] = src[i];
+        b[i] = P_64[i];
+        u[i] = R_64[i];
+        v[i] = 0;
+    }
+    
+    // Main loop: 23 outer iterations of k-1=31 inner halvings
+    for (int i = 0; i < 23; i++) {
+        // Get 64-bit approximations xa, xb of a, b
+        uint64_t tnzm = 0, tnza = 0, tnzb = 0, snza = 0, snzb = 0;
+        uint64_t found = 0;
+        for (int k = 5; k >= 1; k--) {
+            uint64_t mk = a[k] | b[k];
+            uint64_t nz = sgnw(mk | -mk) & ~found;
+            found |= nz;
+            tnzm |= mk & nz;
+            tnza |= a[k] & nz;
+            tnzb |= b[k] & nz;
+            snza |= a[k-1] & nz;
+            snzb |= b[k-1] & nz;
+        }
+        
+        int64_t s = lzcnt(tnzm);
+        uint64_t sm = (uint64_t)((31 - s) >> 63);
+        tnza ^= sm & (tnza ^ ((tnza << 32) | (snza >> 32)));
+        tnzb ^= sm & (tnzb ^ ((tnzb << 32) | (snzb >> 32)));
+        s -= 32 & sm;
+        tnza <<= s;
+        tnzb <<= s;
+        
+        uint64_t tzx = ~found;
+        tnza |= a[0] & tzx;
+        tnzb |= b[0] & tzx;
+        xa = (a[0] & 0x7FFFFFFF) | (tnza & 0xFFFFFFFF80000000);
+        xb = (b[0] & 0x7FFFFFFF) | (tnzb & 0xFFFFFFFF80000000);
+        
+        // 31 inner iterations
+        uint64_t fg0 = (uint64_t)1;
+        uint64_t fg1 = (uint64_t)1 << 32;
+        for (int j = 0; j < 31; j++) {
+            uint64_t a_odd, swap, t0, t1, t2;
+            unsigned char cc;
+            a_odd = -(xa & 1);
+            cc = sbb(0, xa, xb, &t0);
+            (void)sbb(cc, 0, 0, &swap);
+            swap &= a_odd;
+            t1 = swap & (xa ^ xb);
+            xa ^= t1;
+            xb ^= t1;
+            t2 = swap & (fg0 ^ fg1);
+            fg0 ^= t2;
+            fg1 ^= t2;
+            xa -= a_odd & xb;
+            fg0 -= a_odd & fg1;
+            xa >>= 1;
+            fg1 <<= 1;
+        }
+        fg0 += 0x7FFFFFFF7FFFFFFF;
+        fg1 += 0x7FFFFFFF7FFFFFFF;
+        f0 = (fg0 & 0xFFFFFFFF) - (uint64_t)0x7FFFFFFF;
+        g0 = (fg0 >> 32) - (uint64_t)0x7FFFFFFF;
+        f1 = (fg1 & 0xFFFFFFFF) - (uint64_t)0x7FFFFFFF;
+        g1 = (fg1 >> 32) - (uint64_t)0x7FFFFFFF;
+        
+        // Update a, b, u, v
+        uint64_t na[6], nb[6], nu[6], nv[6];
+        uint64_t nega = lindiv31abs(na, a, b, f0, g0);
+        uint64_t negb = lindiv31abs(nb, a, b, f1, g1);
+        f0 = (f0 ^ nega) - nega;
+        g0 = (g0 ^ nega) - nega;
+        f1 = (f1 ^ negb) - negb;
+        g1 = (g1 ^ negb) - negb;
+        lin64(nu, u, v, f0, g0);
+        lin64(nv, u, v, f1, g1);
+        for (int k = 0; k < 6; k++) {
+            a[k] = na[k]; b[k] = nb[k]; u[k] = nu[k]; v[k] = nv[k];
+        }
+    }
+    
+    // Final scalar loop: 52 iterations
+    xa = a[0]; xb = b[0];
+    f0 = 1; g0 = 0; f1 = 0; g1 = 1;
+    for (int j = 0; j < 52; j++) {
+        uint64_t a_odd, swap, t0, t1, t2, t3;
+        unsigned char cc;
+        a_odd = -(xa & 1);
+        cc = sbb(0, xa, xb, &t0);
+        (void)sbb(cc, 0, 0, &swap);
+        swap &= a_odd;
+        t1 = swap & (xa ^ xb);
+        xa ^= t1;
+        xb ^= t1;
+        t2 = swap & (f0 ^ f1);
+        f0 ^= t2;
+        f1 ^= t2;
+        t3 = swap & (g0 ^ g1);
+        g0 ^= t3;
+        g1 ^= t3;
+        xa -= a_odd & xb;
+        f0 -= a_odd & f1;
+        g0 -= a_odd & g1;
+        xa >>= 1;
+        f1 <<= 1;
+        g1 <<= 1;
+    }
+    lin64(v, u, v, f1, g1);
+    
+    // Correction: Given the input src = x * R mod p,
+    //  v now holds 2^num_iterations * x^-1 mod p
+    // We multiply by a precomputed constant to obtain x^-1 * R mod p
+    fp_mul_64(res, v, INV_CONST_64);
 }
 
