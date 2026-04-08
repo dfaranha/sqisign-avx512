@@ -329,19 +329,18 @@ def mp_add_p_sub_8x1(f, pp, v):
     f.start("void mp_add_p_sub_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
     f.line(f"__m512i t[{v.num_limbs}];")
-    f.line(f"__m512i p_bot = VSETALL(1);")
-    f.line(f"__m512i p_top = VSETALL({v.p_plus_1_top});")
+    f.line(f"__m512i p_bot = VSETALL({v.limb_mask});")
+    f.line(f"__m512i p_top = VSETALL({v.p_plus_1_top}-1);")
     f.line()
 
     f.comment("Add p")
-    f.line(f"t[0] = VSUB(a[0], p_bot);")
+    for i in range(pp.num_limbs-1):
+        f.line(f"t[{i}] = VADD(a[{i}], p_bot);")
     f.line(f"t[{pp.num_limbs-1}] = VADD(a[{pp.num_limbs-1}], p_top);")
     f.line()
 
-    f.line("t[0] = VSUB(t[0], b[0]);")
-    for i in range(1, pp.num_limbs-1):
-        f.line(f"t[{i}] = VSUB(a[{i}], b[{i}]);")
-    f.line(f"t[{pp.num_limbs-1}] = VSUB(t[{pp.num_limbs-1}], b[{pp.num_limbs-1}]);")
+    for i in range(pp.num_limbs):
+        f.line(f"t[{i}] = VSUB(t[{i}], b[{i}]);")
     f.line()
 
     for i in range(pp.num_limbs):

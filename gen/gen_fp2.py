@@ -73,10 +73,18 @@ def fp2_mixaddsub_8x1x1(f, pp, v):
 
     f.end()
 
-# TODO: Optimize
 def fp2_mul_8x1x1(f, pp, v):
     f.start("void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)")
 
+    if pp.limb_len <= 50:
+        fp2_mul_8x1x1_lazy(f, pp, v)
+    else:
+        fp2_mul_8x1x1_standard(f, pp, v)
+
+    f.end()
+
+def fp2_mul_8x1x1_standard(f, pp, v):
+    
     f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}], s3[{pp.num_limbs}];")
     f.line()
 
@@ -89,11 +97,31 @@ def fp2_mul_8x1x1(f, pp, v):
     f.line(f"fp_sub_8x1(res + {pp.num_limbs}, s3, s2);")
     f.line(f"fp_sub_8x1(res, s1, s2);")
 
-    f.end()
+def fp2_mul_8x1x1_lazy(f, pp, v):
+    f.line(f"__m512i tt1[{2*pp.num_limbs}], tt2[{2*pp.num_limbs}], tt3[{2*pp.num_limbs}];")
+    f.line()
+
+    f.line(f"mp_add_8x1(tt3, a, a + {pp.num_limbs});")
+    f.line(f"mp_add_8x1(tt3 + {pp.num_limbs}, b, b + {pp.num_limbs});")
+    f.line(f"mp_mul_8x1_karat(tt1, a, b);")
+    f.line(f"mp_mul_8x1_karat(tt2, a + {pp.num_limbs}, b + {pp.num_limbs});")
+    f.line(f"mp_mul_8x1_karat(tt3, tt3, tt3 + {pp.num_limbs});")
+    f.line(f"mp_dblsubx2_8x1(tt3, tt1, tt2);")
+    f.line(f"mp_subx2_8x1(tt1, tt2);")
+    f.line(f"rdc_8x1(res + {pp.num_limbs}, tt3);")
+    f.line(f"rdc_8x1(res, tt1);")
 
 def fp2_sqr_8x1x1(f, pp, v):
     f.start("void fp2_sqr_8x1x1(__m512i* res, __m512i* a)")
 
+    if pp.limb_len <= 50:
+        fp2_sqr_8x1x1_lazy(f, pp, v)
+    else:
+        fp2_sqr_8x1x1_standard(f, pp, v)
+
+    f.end()
+
+def fp2_sqr_8x1x1_standard(f, pp, v):
     f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}], s3[{pp.num_limbs}];")
     f.line()
 
@@ -103,7 +131,15 @@ def fp2_sqr_8x1x1(f, pp, v):
     f.line(f"fp_mul_8x1(res + {pp.num_limbs}, s3, a + {pp.num_limbs});")
     f.line(f"fp_mul_8x1(res, s1, s2);")
 
-    f.end()
+def fp2_sqr_8x1x1_lazy(f, pp, v):
+    f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}], s3[{pp.num_limbs}];")
+    f.line()
+
+    f.line(f"mp_add_8x1(s1, a, a + {pp.num_limbs});")
+    f.line(f"mp_add_p_sub_8x1(s2, a, a + {pp.num_limbs});")
+    f.line(f"mp_add_8x1(s3, a, a);")
+    f.line(f"fp_mul_8x1(res, s1, s2);")
+    f.line(f"fp_mul_8x1(res + {pp.num_limbs}, s3, a + {pp.num_limbs});")
 
 def fp2_muli_8x1x1(f, pp, v):
     f.start("void fp2_muli_8x1x1(__m512i* res, __m512i* a)")

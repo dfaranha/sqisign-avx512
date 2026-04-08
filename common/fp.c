@@ -667,20 +667,26 @@ void mp_mixaddsubx2_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add
 void mp_add_p_sub_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t[NUM_LIMBS];
-    __m512i p_bot = VSETALL(1);
-    __m512i p_top = VSETALL(P_PLUS_1_TOP);
+    __m512i p_bot = VSETALL(LIMB_MASK);
+    __m512i p_top = VSETALL(P_PLUS_1_TOP-1);
     
     // Add p
-    t[0] = VSUB(a[0], p_bot);
+    t[0] = VADD(a[0], p_bot);
+    t[1] = VADD(a[1], p_bot);
+    t[2] = VADD(a[2], p_bot);
+    t[3] = VADD(a[3], p_bot);
+    t[4] = VADD(a[4], p_bot);
+    t[5] = VADD(a[5], p_bot);
+    t[6] = VADD(a[6], p_bot);
     t[7] = VADD(a[7], p_top);
     
     t[0] = VSUB(t[0], b[0]);
-    t[1] = VSUB(a[1], b[1]);
-    t[2] = VSUB(a[2], b[2]);
-    t[3] = VSUB(a[3], b[3]);
-    t[4] = VSUB(a[4], b[4]);
-    t[5] = VSUB(a[5], b[5]);
-    t[6] = VSUB(a[6], b[6]);
+    t[1] = VSUB(t[1], b[1]);
+    t[2] = VSUB(t[2], b[2]);
+    t[3] = VSUB(t[3], b[3]);
+    t[4] = VSUB(t[4], b[4]);
+    t[5] = VSUB(t[5], b[5]);
+    t[6] = VSUB(t[6], b[6]);
     t[7] = VSUB(t[7], b[7]);
     
     res[0] = t[0];
