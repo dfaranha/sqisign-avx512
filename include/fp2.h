@@ -51,6 +51,7 @@ void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b);
 void fp2_sqr_8x1x1(__m512i* res, __m512i* a);
 
 void fp2_div3_8x1x1(__m512i* res, __m512i* src);
+void fp2_inv_8x1x1(__m512i* res, __m512i* src);
 
 /**
  * Multipication by i.
@@ -94,6 +95,7 @@ void fp2_copy_4x1x2(__m512i* res, __m512i* a);
 
  void fp2_muli_4x1x2(__m512i* res, __m512i* a);
  void fp2_div3_4x1x2(__m512i* res, __m512i* src);
+ void fp2_inv_4x1x2(__m512i* res, __m512i* src);
  
  void fp2_tomont_4x1x2(__m512i* res, __m512i* a);
  void fp2_frommont_4x1x2(__m512i*res, __m512i* a);
@@ -146,8 +148,8 @@ void fp2_mulx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* b1, __m
 void fp2_sqrx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* a2);
 
 void fp2_muli_4x2x1(__m512i* res, __m512i* a);
-
 void fp2_div3_4x2x1(__m512i* res, __m512i* src);
+void fp2_inv_4x2x1(__m512i* res, __m512i* src);
 
 void fp2_tomont_4x2x1(__m512i* res, __m512i* a);
 

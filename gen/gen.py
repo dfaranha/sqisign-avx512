@@ -18,7 +18,7 @@ from params import (get_fp_params, get_param_names)
 #   unvectorized <-> vec (just convert to uint64_t array, then for sqisign define interface for converting to fp2_t)
 #   Optimize 2x4 when num_limbs % 4 != 0
 #   Optimize with addition chain for pow3div4
-#   inv
+#   Optimize inv (twice as slow as lvl3 unvec)
 #   We have R as a constant, so defining a set_binary function is trivial
 
 # Idea: Create strategies at the start instead of having conditional logic on the shape of p deep in the code.

@@ -399,6 +399,29 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Inverse
+    fp2_setzero_8x1x1(one);
+    one[0] = VSETALL(1);
+    fp2_tomont_8x1x1(c, one);
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_8x1x1(a);
+
+        if (fp2_is_zero_8x1x1(a))
+            continue;
+        
+        fp2_inv_8x1x1(b, a);
+        fp2_mul_8x1x1(b, b, a);
+
+        if (fp2_is_equal_8x1x1(b, c) != 0xff) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("inv", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     printf("Fp2 lvl3 4x1x2 tests:\n");
 
     // Equality test
@@ -770,6 +793,29 @@ bool test_fp2(int iterations)
         }
     }
     print_test_res("division by 3", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Inverse
+    fp2_setzero_4x1x2(one);
+    one[0] = VSET(1, 0, 1, 0, 1, 0, 1, 0);
+    fp2_tomont_4x1x2(c, one);
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_4x1x2(a);
+
+        if (fp2_is_zero_4x1x2(a))
+            continue;
+        
+        fp2_inv_4x1x2(b, a);
+        fp2_mul_4x1x2(b, b, a);
+
+        if (fp2_is_equal_4x1x2(b, c) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("inv", passed);
     if (passed == 0) {
         return false;
     }
@@ -1149,6 +1195,29 @@ bool test_fp2(int iterations)
         }
     }
     print_test_res("division by 3", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Inverse
+    fp2_setzero_4x2x1(one);
+    one[0] = VSET(1, 0, 1, 0, 1, 0, 1, 0);
+    fp2_tomont_4x2x1(c, one);
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_4x2x1(a);
+
+        if (fp2_is_zero_4x2x1(a))
+            continue;
+        
+        fp2_inv_4x2x1(b, a);
+        fp2_mul_4x2x1(b, b, a);
+
+        if (fp2_is_equal_4x2x1(b, c) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("inv", passed);
     if (passed == 0) {
         return false;
     }
@@ -1958,6 +2027,29 @@ bool test_fp2(int iterations)
         }
     }
     print_test_res("division by 3", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Inverse
+    fp2_setzero_2x4x1(one);
+    one[0] = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    fp2_tomont_2x4x1(c, one);
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_2x4x1(a);
+
+        if (fp2_is_zero_2x4x1(a))
+            continue;
+        
+        fp2_inv_2x4x1(b, a);
+        fp2_mul_2x4x1(b, b, a);
+
+        if (fp2_is_equal_2x4x1(b, c) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("inv", passed);
     if (passed == 0) {
         return false;
     }

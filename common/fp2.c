@@ -1,6 +1,5 @@
 #include "fp.h"
 #include "fp_consts.h"
-#include "fp_unvec_lvl3.h"
 #include "fp2.h"
 #include "utils.h"
 
@@ -97,6 +96,18 @@ void fp2_div3_8x1x1(__m512i* res, __m512i* src)
 {
     fp_div3_8x1(res, src);
     fp_div3_8x1(res + 8, src + 8);
+}
+
+void fp2_inv_8x1x1(__m512i* res, __m512i* a)
+{
+    __m512i t0[8], t1[8];
+    fp_sqr_8x1(t0, a);
+    fp_sqr_8x1(t1, a + 8);
+    fp_add_8x1(t0, t0, t1);
+    fp_inv_8x1(t0, t0);
+    fp_mul_8x1(t1, a + 8, t0);
+    fp_mul_8x1(res, a, t0);
+    fp_neg_8x1(res + 8, t1);
 }
 
 void fp2_tomont_8x1x1(__m512i* res, __m512i* a)
@@ -210,6 +221,18 @@ void fp2_div3_4x1x2(__m512i* res, __m512i* src)
 {
     fp_div3_4x2(res, src);
     fp_div3_4x2(res + 4, src + 4);
+}
+
+void fp2_inv_4x1x2(__m512i* res, __m512i* a)
+{
+    __m512i t0[4], t1[4];
+    fp_sqr_4x2(t0, a);
+    fp_sqr_4x2(t1, a + 4);
+    fp_add_4x2(t0, t0, t1);
+    fp_inv_4x2(t0, t0);
+    fp_mul_4x2(t1, a + 4, t0);
+    fp_mul_4x2(res, a, t0);
+    fp_neg_4x2(res + 4, t1);
 }
 
 void fp2_tomont_4x1x2(__m512i* res, __m512i* a)
@@ -346,6 +369,22 @@ void fp2_muli_4x2x1(__m512i* res, __m512i* a)
 void fp2_div3_4x2x1(__m512i* res, __m512i* src)
 {
     fp_div3_8x1(res, src);
+}
+
+void fp2_inv_4x2x1(__m512i* res, __m512i* a)
+{
+    __m512i re[4], im[4], t0[4], t1[4];
+    fp_8x1_to_4x2(re, im, a);
+    
+    fp_sqr_4x2(t0, re);
+    fp_sqr_4x2(t1, im);
+    fp_add_4x2(t0, t0, t1);
+    fp_inv_4x2(t0, t0);
+    fp_mul_4x2(re, re, t0);
+    fp_mul_4x2(im, im, t0);
+    fp_neg_4x2(im, im);
+    
+    fp_4x2_to_8x1(res, re, im);
 }
 
 void fp2_tomont_4x2x1(__m512i* res, __m512i* a)
@@ -504,7 +543,7 @@ void fp2_inv_2x2x2(__m512i* res, __m512i* a)
     fp_sqr_2x4(t0, re);
     fp_sqr_2x4(t1, im);
     fp_add_2x4(t0, t0, t1);
-    fp_inv_2x4(t0, t0); // batched unvectorized impl
+    fp_inv_2x4(t0, t0);
     fp_mul_2x4(re, re, t0);
     fp_mul_2x4(im, im, t0);
     fp_neg_2x4(im, im);
@@ -619,6 +658,25 @@ void fp2_muli_2x4x1(__m512i* res, __m512i* a)
 void fp2_div3_2x4x1(__m512i* res, __m512i* src)
 {
     fp_div3_8x1(res, src);
+}
+
+void fp2_inv_2x4x1(__m512i* res, __m512i* src)
+{
+    __m512i re[4], im[4], zero[4], t0[2], t1[2];
+    
+    fp_8x1_to_4x2(re, zero, src); // re = (a_re, a_im, b_re, b_im), zero = (0, 0, 0, 0)
+    fp_4x2_to_2x4(re, im, re);
+    
+    fp_sqr_2x4(t0, re);
+    fp_sqr_2x4(t1, im);
+    fp_add_2x4(t0, t0, t1);
+    fp_inv_2x4(t0, t0);
+    fp_mul_2x4(re, re, t0);
+    fp_mul_2x4(im, im, t0);
+    fp_neg_2x4(im, im);
+    
+    fp_2x4_to_4x2(re, re, im);
+    fp_4x2_to_8x1(res, re, zero);
 }
 
 void fp2_tomont_2x4x1(__m512i* res, __m512i* a)

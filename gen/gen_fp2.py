@@ -125,6 +125,21 @@ def fp2_div3_8x1x1(f, pp, v):
 
     f.end()
 
+def fp2_inv_8x1x1(f, pp, v):
+    f.start("void fp2_inv_8x1x1(__m512i* res, __m512i* a)")
+
+    f.line(f"__m512i t0[{pp.num_limbs}], t1[{pp.num_limbs}];")
+
+    f.line("fp_sqr_8x1(t0, a);")
+    f.line(f"fp_sqr_8x1(t1, a + {pp.num_limbs});")
+    f.line("fp_add_8x1(t0, t0, t1);")
+    f.line("fp_inv_8x1(t0, t0);")
+    f.line(f"fp_mul_8x1(t1, a + {pp.num_limbs}, t0);")
+    f.line("fp_mul_8x1(res, a, t0);")
+    f.line(f"fp_neg_8x1(res + {pp.num_limbs}, t1);")
+
+    f.end()
+
 def fp2_tomont_8x1x1(f, pp, v):
     f.start("void fp2_tomont_8x1x1(__m512i* res, __m512i* a)")
 
@@ -166,6 +181,7 @@ def fp2_8x1x1(f, pp, v):
 
     fp2_muli_8x1x1(f, pp, v)
     fp2_div3_8x1x1(f, pp, v)
+    fp2_inv_8x1x1(f, pp, v)
 
     fp2_tomont_8x1x1(f, pp, v)
     fp2_frommont_8x1x1(f, pp, v)
@@ -290,6 +306,21 @@ def fp2_div3_4x1x2(f, pp, v):
 
     f.end()
 
+def fp2_inv_4x1x2(f, pp, v):
+    f.start("void fp2_inv_4x1x2(__m512i* res, __m512i* a)")
+
+    f.line(f"__m512i t0[{pp.n42}], t1[{pp.n42}];")
+
+    f.line("fp_sqr_4x2(t0, a);")
+    f.line(f"fp_sqr_4x2(t1, a + {pp.n42});")
+    f.line("fp_add_4x2(t0, t0, t1);")
+    f.line("fp_inv_4x2(t0, t0);")
+    f.line(f"fp_mul_4x2(t1, a + {pp.n42}, t0);")
+    f.line("fp_mul_4x2(res, a, t0);")
+    f.line(f"fp_neg_4x2(res + {pp.n42}, t1);")
+
+    f.end()
+
 def fp2_tomont_4x1x2(f, pp, v):
     f.start("void fp2_tomont_4x1x2(__m512i* res, __m512i* a)")
 
@@ -331,6 +362,7 @@ def fp2_4x1x2(f, pp, v):
 
     fp2_muli_4x1x2(f, pp, v)
     fp2_div3_4x1x2(f, pp, v)
+    fp2_inv_4x1x2(f, pp, v)
 
     fp2_tomont_4x1x2(f, pp, v)
     fp2_frommont_4x1x2(f, pp, v)
@@ -500,6 +532,26 @@ def fp2_div3_4x2x1(f, pp, v):
 
     f.end()
 
+def fp2_inv_4x2x1(f, pp, v):
+    f.start("void fp2_inv_4x2x1(__m512i* res, __m512i* a)")
+
+    f.line(f"__m512i re[{pp.n42}], im[{pp.n42}], t0[{pp.n42}], t1[{pp.n42}];")
+    f.line("fp_8x1_to_4x2(re, im, a);")
+    f.line()
+
+    f.line("fp_sqr_4x2(t0, re);")
+    f.line("fp_sqr_4x2(t1, im);")
+    f.line("fp_add_4x2(t0, t0, t1);")
+    f.line("fp_inv_4x2(t0, t0);")
+    f.line("fp_mul_4x2(re, re, t0);")
+    f.line("fp_mul_4x2(im, im, t0);")
+    f.line("fp_neg_4x2(im, im);")
+    f.line()
+
+    f.line("fp_4x2_to_8x1(res, re, im);")
+
+    f.end()
+
 def fp2_tomont_4x2x1(f, pp, v):
     f.start("void fp2_tomont_4x2x1(__m512i* res, __m512i* a)")
 
@@ -540,6 +592,7 @@ def fp2_4x2x1(f, pp, v):
 
     fp2_muli_4x2x1(f, pp, v)
     fp2_div3_4x2x1(f, pp, v)
+    fp2_inv_4x2x1(f, pp, v)
 
     fp2_tomont_4x2x1(f, pp, v)
     fp2_frommont_4x2x1(f, pp, v)
@@ -952,7 +1005,7 @@ def fp2_inv_2x4x1(f, pp, v):
     f.line()
 
     f.line("fp_2x4_to_4x2(re, re, im);")
-    f.line("fp_8x1_to_4x2(res, re, zero);")
+    f.line("fp_4x2_to_8x1(res, re, zero);")
 
     f.end()
 
@@ -999,6 +1052,7 @@ def fp2_2x4x1(f, pp, v):
 
     fp2_muli_2x4x1(f, pp, v)
     fp2_div3_2x4x1(f, pp, v)
+    fp2_inv_2x4x1(f, pp, v)
 
     fp2_tomont_2x4x1(f, pp, v)
     fp2_frommont_2x4x1(f, pp, v)
