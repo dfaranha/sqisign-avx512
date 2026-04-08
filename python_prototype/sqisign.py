@@ -211,15 +211,16 @@ class SQIsign:
         a00, a01, a10, a11 = M.list()
 
         # Compute the new scaled basis
-        # xR = ladder_biscalar_1x2x4x1(A24, basis, a00, a10)
-        # xS = ladder_biscalar_1x2x4x1(A24, basis, a01, a11)
-        xR, xS = ladder_double_biscalar_1x2x4x1(A, basis, a00, a10, a01, a11)
+        # xR = ladder_biscalar_1x2x4x1(A, basis, a00, a10)
+        # xS = ladder_biscalar_1x2x4x1(A, basis, a01, a11)
+        xR, xS = ladder_double_biscalar_1x2x4x1(A, A24, basis, a00, a10, a01, a11)
 
         # For the difference point we must be careful the result
         # is positive, so we work modulo the point order
         diff_m = (a00 - a01) % order
         diff_n = (a10 - a11) % order
-        xRS = ladder_biscalar_1x2x4x1(A, basis, diff_m, diff_n)
+
+        xRS = ladder_biscalar_1x2x4x1(A, A24, basis, diff_m, diff_n)
 
         return xR, xS, xRS
 

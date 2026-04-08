@@ -640,7 +640,6 @@ def x_mul_normA_1x2x4x1(A: AVX_2x4x1, P: AVX_2x4x1, m: ZZ) -> PointX:
             X0_X1 = swap(X0_X1)
 
     x0, x1 = avx_421_to_241(X0_X1)
-
     return x0
 
 
@@ -691,7 +690,7 @@ def ladder_3pt_1x2x4x1(A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], m: ZZ) -> PointX
 
 
 def ladder_biscalar_1x2x4x1(
-    A: AVX_2x4x1, basis: tuple[AVX_2x4x1], s0: ZZ, s1: ZZ
+    A: AVX_2x4x1, A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], s0: ZZ, s1: ZZ
 ) -> AVX_2x4x1:
     # Parse out points from basis
     x0, x1, xd = basis
@@ -737,8 +736,8 @@ def ladder_biscalar_1x2x4x1(
             # x_double_add_1x2x4x1
 
             X1_XD = [X0_X1[2], X0_X1[3], XD_A[0], XD_A[1]]
-            X0_A24 = [X0_X1[0], X0_X1[1], XD_A[2], XD_A[3]]
-            X1_XD = x_double_add_normA_1x2x4x1(X1_XD, XD_A)
+            X0_A = [X0_X1[0], X0_X1[1], XD_A[2], XD_A[3]]
+            X1_XD = x_double_add_normA_1x2x4x1(X1_XD, X0_A)
             X0_X1[2], X0_X1[3] = X1_XD[0], X1_XD[1]
             XD_A[0], XD_A[1] = X1_XD[2], X1_XD[3]
 
@@ -749,8 +748,8 @@ def ladder_biscalar_1x2x4x1(
             # x_double_add_1x2x4x1
 
             X0_XD = [X0_X1[0], X0_X1[1], XD_A[0], XD_A[1]]
-            X1_A24 = [X0_X1[2], X0_X1[3], XD_A[2], XD_A[3]]
-            X0_XD = x_double_add_normA_1x2x4x1(X0_XD, XD_A)
+            X1_A = [X0_X1[2], X0_X1[3], XD_A[2], XD_A[3]]
+            X0_XD = x_double_add_normA_1x2x4x1(X0_XD, X1_A)
             X0_X1[0], X0_X1[1] = X0_XD[0], X0_XD[1]
             XD_A[0], XD_A[1] = X0_XD[2], X0_XD[3]
 
@@ -761,13 +760,13 @@ def ladder_biscalar_1x2x4x1(
 
     while s1 & 1 == 0:
         s1 //= 2
-        x1 = x_double_1x2x4x1(A, x1)
+        x1 = x_double_1x2x4x1(A24, x1)
 
     return x_mul_normA_1x2x4x1(A, x1, s1)
 
 
 def ladder_double_biscalar_1x2x4x1(
-    A: AVX_2x4x1, basis: tuple[AVX_2x4x1], r0: ZZ, r1: ZZ, s0: ZZ, s1: ZZ
+    A: AVX_2x4x1, A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], r0: ZZ, r1: ZZ, s0: ZZ, s1: ZZ
 ) -> AVX_2x4x1:
     """
     Computes the Euclidean loop with 2 way parallelism to use 8x1x1 multiplication
@@ -915,8 +914,8 @@ def ladder_double_biscalar_1x2x4x1(
 
     x0, x1, xd, _ = avx_811_to_241(X0_X1_XD_A)
     y0, y1, yd, _ = avx_811_to_241(Y0_Y1_YD_A)
-    R = ladder_biscalar_1x2x4x1(A, (x0, x1, xd), r0, r1)
-    S = ladder_biscalar_1x2x4x1(A, (y0, y1, yd), s0, s1)
+    R = ladder_biscalar_1x2x4x1(A, A24, (x0, x1, xd), r0, r1)
+    S = ladder_biscalar_1x2x4x1(A, A24, (y0, y1, yd), s0, s1)
 
     return R, S
 
