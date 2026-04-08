@@ -219,7 +219,6 @@ class SQIsign:
         # is positive, so we work modulo the point order
         diff_m = (a00 - a01) % order
         diff_n = (a10 - a11) % order
-
         xRS = ladder_biscalar_1x2x4x1(A, A24, basis, diff_m, diff_n)
 
         return xR, xS, xRS
