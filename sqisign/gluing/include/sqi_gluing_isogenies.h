@@ -8,7 +8,7 @@
 #ifndef SQI_GLUING_ISOGENY_H
 #define SQI_GLUING_ISOGENY_H
 
-#include "fp2_lvl3.h"
+#include "fp2.h"
 
 #include "sqi_ec.h"
 #include "sqi_fp2.h"
