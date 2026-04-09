@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "bench.h"
 #include "fp.h"
+#include "fp_consts.h"
 #include "fp_unvec_lvl3.h"
 #include "fp2.h"
 #include "utils.h"
@@ -11,7 +12,7 @@ void bench_fp2(int iterations)
 {
     uint64_t cycles[N_RUNS];
     uint64_t start, end, tmp;
-    __m512i a[16], b[16], c[16];
+    __m512i a[2*NUM_LIMBS], b[2*NUM_LIMBS], c[2*NUM_LIMBS];
     rand_fp2_8x1x1(a);
     rand_fp2_8x1x1(b);
     rand_fp2_8x1x1(c);

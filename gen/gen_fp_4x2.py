@@ -628,7 +628,12 @@ def fp_limbs_to_64_4x2(f, pp, v):
     f.comment("Assumes src is fully redduced")
     f.start("void fp_limbs_to_64_4x2(uint64_t* res, __m512i* src)")
 
-    f.line("uint64_t t[8];")
+    f.line(f"uint64_t t[8];")
+    f.line(f"__m512i s[{pp.n42}], zero[{pp.n42}];")
+    f.comment("Normalize input")
+    f.line("fp_setzero_4x2(zero);")
+    f.line("fp_add_4x2(s, src, zero);")
+    f.line()
     f.line()
 
     n = pp.n42
@@ -671,7 +676,7 @@ def fp_limbs_to_64_4x2(f, pp, v):
     seen = set()
     top_idx = n - 1 - pp.rem42
     for j in range(n):
-        f.line(f"VSTORE(t, src[{j}]);")
+        f.line(f"VSTORE(t, s[{j}]);")
         f.line("for (int i = 0; i < 4; i++) {")
         f.indent()
         for k in range(len(indices[j])):

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "bench.h"
 #include "fp.h"
+#include "fp_consts.h"
 #include "utils.h"
 
 #define N_RUNS 10
@@ -10,7 +11,7 @@ void bench_fp(int iterations)
     int iterations_inv = 20;
     uint64_t cycles[N_RUNS];
     uint64_t start, end, tmp;
-    __m512i a[8], b[8], c[8];
+    __m512i a[NUM_LIMBS], b[NUM_LIMBS], c[NUM_LIMBS];
     rand_fp_8x1(a);
     rand_fp_8x1(b);
     rand_fp_8x1(c);

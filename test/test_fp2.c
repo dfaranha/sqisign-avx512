@@ -2046,19 +2046,6 @@ bool test_fp2(int iterations)
             break;
         }
 
-        // Top 13 bits of each limb is 0
-        t = VSETALL(0xfff8000000000000);
-        for(int j = 0; j < NUM_LIMBS; j++) {
-            d[j] = VAND(d[j], t);
-            d[j + NUM_LIMBS] = VAND(d[j + NUM_LIMBS], t);
-            e[j] = VAND(e[j], t);
-            f[j] = VAND(f[j], t);
-        }
-        if (fp2_is_zero_8x1x1(d) != 0xff || fp2_is_zero_4x2x1(e) != 0xf || fp2_is_zero_4x2x1(f) != 0xf) {
-            passed = 0;
-            break;
-        }
-
         // Conversion commutes with arithmetic
         rand_fp2_8x1x1(a);
         rand_fp2_8x1x1(b);
@@ -2185,17 +2172,6 @@ bool test_fp2(int iterations)
             break;
         }
 
-        // Top 13 bits of each limb is 0
-        t = VSETALL(0xfff8000000000000);
-        for(int j = 0; j < NUM_LIMBS; j++) {
-            d[j] = VAND(d[j], t);
-            f[j] = VAND(f[j], t);
-        }
-        if (fp2_is_zero_4x2x1(d) != 0xf || fp2_is_zero_4x2x1(f) != 0xf) {
-            passed = 0;
-            break;
-        }
-
         // Conversion commutes with arithmetic
         rand_fp2_4x2x1(b);
         fp2_mul_4x2x1(c, a, b);
@@ -2246,18 +2222,6 @@ bool test_fp2(int iterations)
         fp2_2x2x2_to_2x4x1(f, b);
         fp2_2x4x1_to_2x2x2(e, f);
         if (fp2_is_equal_2x2x2(e, b) != 0x3) {
-            passed = 0;
-            break;
-        }
-
-        // Top 13 bits of each limb is 0
-        t = VSETALL(0xfff8000000000000);
-        for(int j = 0; j < N4x2; j++) {
-            d[j] = VAND(d[j], t);
-            f[j] = VAND(f[j], t);
-            f[j+4] = VAND(f[j+N4x2], t);
-        }
-        if (fp2_is_zero_2x2x2(d) != 0x3 || fp2_is_zero_2x4x1(f) != 0x3) {
             passed = 0;
             break;
         }

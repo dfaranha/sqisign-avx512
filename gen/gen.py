@@ -43,12 +43,12 @@ gen_addchain = True # Requires addchain to be installed
 # c = 27
 
 # no shift
-e = 2601
-c = 609
+# e = 2601
+# c = 609
 
 # mersenne
-# e = 521
-# c = 1
+e = 521
+c = 1
 
 #############
 

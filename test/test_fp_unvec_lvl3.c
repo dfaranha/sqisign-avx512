@@ -16,39 +16,6 @@ bool test_fp_unvec_lvl3(int iterations)
     fp2_t unvec1_fp2[8], unvec2_fp2[8];
     int passed = 1;
 
-    int fail = 0;
-for (int iter = 0; iter < 10; iter++) {
-    fp_t unvec_orig[4], unvec_rt[4];
-    uint64_t raw_in[4*NWORDS64], raw_out[4*NWORDS64];
-    __m512i packed[N4x2], monted[N4x2], demonted[N4x2], zero4[N4x2];
-    
-    for (int j = 0; j < 4; j++)
-        fp_random_test(unvec_orig + j);
-    
-    for (int i = 0; i < 4; i++)
-        fp_encode(raw_in + i*NWORDS64, unvec_orig + i);
-    fp_64_to_limbs_4x2(packed, raw_in);
-    fp_tomont_4x2(monted, packed);
-    fp_frommont_4x2(demonted, monted);
-    fp_setzero_4x2(zero4);
-    fp_add_4x2(demonted, demonted, zero4);
-    fp_limbs_to_64_4x2(raw_out, demonted);
-    
-    // Check raw first
-    for (int i = 0; i < 4; i++)
-        for (int k = 0; k < NWORDS64; k++)
-            if (raw_in[i*NWORDS64+k] != raw_out[i*NWORDS64+k])
-                printf("RAW fail iter %d elem %d word %d: %016lx vs %016lx\n",
-                       iter, i, k, raw_in[i*NWORDS64+k], raw_out[i*NWORDS64+k]);
-    
-    // Then check after decode
-    for (int i = 0; i < 4; i++) {
-        fp_decode(unvec_rt + i, (const void*)(raw_out + i*NWORDS64));
-        if (fp_is_equal(unvec_orig + i, unvec_rt + i) == 0)
-            printf("FP fail iter %d elem %d\n", iter, i);
-    }
-}
-
     printf("Fp vec <-> SQIsign unvec tests:\n");
 
     // 8x1 <-> unvectorized

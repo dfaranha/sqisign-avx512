@@ -319,12 +319,13 @@ def rdc_2x4(f, pp, v, strat):
         n_low = pp.num_limbs + 1
     else:
         n_low = pp.num_limbs
+    start_idx = n_low
 
     f.line("__m512i carry, lo, hi, shuf;")
     f.line("const __m512i zero = VZERO();")
     f.line("const __m512i one = VSETALL(1);")
     f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
-    f.line("const __m512i limb_mask = VSETALL(LIMB_MASK);")
+    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line("__mmask8 msb_mask;")
     f.line()
 
@@ -339,7 +340,7 @@ def rdc_2x4(f, pp, v, strat):
 
     f.comment("Generalized Montgomery reduction loop")
     for i in range(n_low):
-        f.line(f"carry = VSRA(a[{i}], LIMB_LEN);")
+        f.line(f"carry = VSRA(a[{i}], {v.limb_len});")
         f.line(f"a[{i}] = VAND(a[{i}], limb_mask);")
         f.line(f"a[{i+1}] = VADD(a[{i+1}], carry);")
         
@@ -352,31 +353,31 @@ def rdc_2x4(f, pp, v, strat):
         f.line()
 
     f.comment("Propagate carries")
-    for i in range(N + 1, 2 * N):
-        f.line(f"carry = VSRA(a[{i}], LIMB_LEN);")
+    for i in range(start_idx, 2 * N):
+        f.line(f"carry = VSRA(a[{i}], {v.limb_len});")
         f.line(f"a[{i}] = VAND(a[{i}], limb_mask);")
         f.line(f"a[{i+1}] = VADD(a[{i+1}], carry);")
         
-        # We don't fold the track on the very last propagation steps
         if i + n24 <= 2 * N:
             f.line(f"a[{i + n24}] = VADD(a[{i + n24}], VPERM512MASKZ(0x77, a[{i}], idx));")
         f.line()
 
     f.comment("Final reduction step to get the result down to the strict bit boundary")
     if strat.rdc_final_sub_p:
-        f.line(f"hi = VSL(a[{2 * N}], 16);")
+        shift = 64 - (pp.last_limb_len + 1)
+        f.line(f"hi = VSL(a[{2 * N}], {shift});")
         f.line("msb_mask = VSIGN(hi);")
         f.line("__mmask8 mask_top = msb_mask & 0x11;")
         f.line()
         f.line(f"a[{2 * N}] = VSUBMASK(a[{2 * N}], mask_top, a[{2 * N}], p_top);")
-        f.line(f"a[{N + 1}] = VADDMASK(a[{N + 1}], mask_top, a[{N + 1}], one);")
+        f.line(f"a[{start_idx}] = VADDMASK(a[{start_idx}], mask_top, a[{start_idx}], one);")
         f.line(f"a[{2 * N}] = VAND(a[{2 * N}], limb_mask);")
         f.line()
 
     f.comment("Pack result from pos 0 of the accumulators back into 2x4 format")
     f.line("const __m512i idx_pack = VSET(0, 1, 8, 9, 4, 5, 12, 13);")
     for k in range(n24):
-        base = N + 1 + k
+        base = start_idx + k
         f.line(f"lo = VUNPACKLO(a[{base}], a[{base + n24}]);")
         f.line(f"hi = VUNPACKLO(a[{base + 2 * n24}], a[{base + 3 * n24}]);")
         f.line(f"res[{k}] = VBLENDPERM(idx_pack, lo, hi);")
@@ -684,7 +685,11 @@ def fp_64_to_limbs_2x4(f, pp, v):
 def fp_limbs_to_64_2x4(f, pp, v):
     f.start("void fp_limbs_to_64_2x4(uint64_t* res, __m512i* src)")
 
-    f.line("uint64_t t[8];")
+    f.line(f"uint64_t t[8];")
+    f.line(f"__m512i s[{pp.n24}], zero[{pp.n24}];")
+    f.comment("Normalize input")
+    f.line("fp_setzero_2x4(zero);")
+    f.line("fp_add_2x4(s, src, zero);")
     f.line()
 
     n = pp.n24
@@ -728,7 +733,7 @@ def fp_limbs_to_64_2x4(f, pp, v):
     seen = set()
 
     for j in range(n):
-        f.line(f"VSTORE(t, src[{j}]);")
+        f.line(f"VSTORE(t, s[{j}]);")
         f.line("for (int i = 0; i < 2; i++) {")
         f.indent()
         for k in range(len(indices[j])):

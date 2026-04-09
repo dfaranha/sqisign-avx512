@@ -8,11 +8,10 @@
 
 void fp_8x1_to_unvectorized(fp_t* res, __m512i* src)
 {
-    __m512i s[NUM_LIMBS], zero[NUM_LIMBS];
+    __m512i s[NUM_LIMBS];
     uint64_t res_arr[8*NWORDS64];
-    fp_setzero_8x1(zero);
+
     fp_frommont_8x1(s, src);
-    fp_add_8x1(s, s, zero); // Fully reduce
     fp_limbs_to_64_8x1(res_arr, s);
 
     // Convert to Montgomery representation
@@ -36,11 +35,10 @@ void fp_unvectorized_to_8x1(__m512i* res, fp_t* src)
 
 void fp_4x2_to_unvectorized(fp_t* res, __m512i* src)
 {
-    __m512i s[N4x2], zero[N4x2];
+    __m512i s[N4x2];
     uint64_t res_arr[4*NWORDS64];
-    fp_setzero_4x2(zero);
+
     fp_frommont_4x2(s, src);
-    fp_add_4x2(s, s, zero); // Fully reduce
     fp_limbs_to_64_4x2(res_arr, s);
 
     // Convert to Montgomery representation
@@ -65,11 +63,10 @@ void fp_unvectorized_to_4x2(__m512i* res, fp_t* src)
 
 void fp_2x4_to_unvectorized(fp_t* res, __m512i* src)
 {
-    __m512i s[N2x4], zero[N2x4];
+    __m512i s[N2x4];
     uint64_t res_arr[2*NWORDS64];
-    fp_setzero_2x4(zero);
+
     fp_frommont_2x4(s, src);
-    fp_add_2x4(s, s, zero); // Fully reduce
     fp_limbs_to_64_2x4(res_arr, s);
 
     // Convert to Montgomery representation
@@ -107,13 +104,10 @@ void fp2_unvectorized_to_8x1x1(__m512i* res, fp2_t* src)
 
 void fp2_8x1x1_to_unvectorized(fp2_t* res, __m512i* src)
 {
-    __m512i s[2*NUM_LIMBS], zero[NUM_LIMBS];
+    __m512i s[2*NUM_LIMBS];
     uint64_t re[8*NWORDS64], im[8*NWORDS64];
-    fp_setzero_8x1(zero);
+
     fp2_frommont_8x1x1(s, src);
-    // Fully reduce
-    fp_add_8x1(s, s, zero);
-    fp_add_8x1(s + NUM_LIMBS, s + NUM_LIMBS, zero);
 
     fp_limbs_to_64_8x1(re, s);
     fp_limbs_to_64_8x1(im, s + NUM_LIMBS);
@@ -138,12 +132,10 @@ void fp2_unvectorized_to_4x2x1(__m512i* res, fp2_t* src)
 
 void fp2_4x2x1_to_unvectorized(fp2_t* res, __m512i* src)
 {
-    __m512i s[NUM_LIMBS], zero[NUM_LIMBS];
+    __m512i s[NUM_LIMBS];
     uint64_t coeffs[8*NWORDS64];
 
-    fp_setzero_8x1(zero);
     fp_frommont_8x1(s, src);
-    fp_add_8x1(s, s, zero); // Fully reduce
     fp_limbs_to_64_8x1(coeffs, s);
 
     for (int i = 0; i < 4; i++) {
@@ -166,12 +158,10 @@ void fp2_unvectorized_to_2x2x2(__m512i* res, fp2_t* src)
 
 void fp2_2x2x2_to_unvectorized(fp2_t* res, __m512i* src)
 {
-    __m512i s[N4x2], zero[N4x2];
+    __m512i s[N4x2];
     uint64_t coeffs[4*NWORDS64];
 
-    fp_setzero_4x2(zero);
     fp_frommont_4x2(s, src);
-    fp_add_4x2(s, s, zero); // Fully reduce
     fp_limbs_to_64_4x2(coeffs, s);
 
     for (int i = 0; i < 2; i++) {
@@ -194,12 +184,10 @@ void fp2_unvectorized_to_2x4x1(__m512i* res, fp2_t* src)
 
 void fp2_2x4x1_to_unvectorized(fp2_t* res, __m512i* src)
 {
-    __m512i s[NUM_LIMBS], zero[NUM_LIMBS];
+    __m512i s[NUM_LIMBS];
     uint64_t coeffs[4*NWORDS64];
 
-    fp_setzero_8x1(zero);
     fp2_frommont_2x4x1(s, src);
-    fp_add_8x1(s, s, zero); // Fully reduce
     fp_limbs_to_64_8x1_only_even_idx(coeffs, s);
 
     for (int i = 0; i < 2; i++) {

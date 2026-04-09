@@ -41,22 +41,16 @@ class FpParamNames:
     num_kat_fp: str
     num_kat_fp2: str
 
-class rdc_8x1_mode(Enum):
-    c1 = 1
-    shift0 = 2
-    ham2plus = 3
-    ham2minus = 4
-    shift0_ham2plus = 5
-    shift0_ham2minus = 6
-    standard = 7
+# class rdc_8x1_mode(Enum):
+#     c1 = 1
+#     standard = 2
 
 @dataclass
 class Strat:
     gen_addchain: bool
     fp2_lazy: bool
     rdc_final_sub_p: bool
-    rdc_8x1: rdc_8x1_mode
-    ham2_k: int
+    c1: bool
 
 def get_p(e, c):
     p = c * 2**e -1
@@ -71,12 +65,10 @@ def get_limb_params(pbits, e, c):
     num_limbs = ceil(pbits/51)
     num_words64 = ceil(pbits/64)
 
-    # TODO: Can it sometimes be worth it to pick a larger limb size that divides pp.e?
     limb_len = ceil(pbits/num_limbs)
     last_limb_len = pbits - limb_len*(num_limbs-1)
 
     # For simplicity we require the cofactor c to be small
-    # TODO: Do we want to handle larger c?
     assert c.bit_length() + (e % limb_len ) < 52
 
     return num_limbs, limb_len, last_limb_len, num_words64
@@ -95,38 +87,13 @@ def get_strat(e, c, limb_len, last_limb_len, gen_addchain):
     rdc_final_sub_p = not (has_spare_bits or limb_len <= 49)
 
     # Picking rdc_8x1 strategy:
-    # Detecting whether c = 2^k +- 1
-    ham2_k = None
-    c_form = None
-    if c > 1:
-        for kk in range(1, 64):
-            if c == (1 << kk) + 1:
-                ham2_k = kk; c_form = 1
-            if c == (1 << kk) - 1:
-                ham2_k = kk; c_form = -1
-
-    if c == 1:
-        rdc_8x1 = rdc_8x1_mode.c1
-    if e % limb_len == 0:
-        if c_form == 1:
-            rdc_8x1 = rdc_8x1_mode.shift0_ham2plus
-        elif c_form == -1:
-            rdc_8x1 = rdc_8x1_mode.shift0_ham2minus
-        else:
-            rdc_8x1 = rdc_8x1_mode.shift0
-    elif c_form == 1:
-        rdc_8x1 = rdc_8x1_mode.ham2plus
-    elif c_form == -1:
-        rdc_8x1 = rdc_8x1_mode.ham2minus
-    else:
-        rdc_8x1 = rdc_8x1_mode.standard
+    c1 = c == 1
 
     return Strat(
         gen_addchain = gen_addchain,
         fp2_lazy = fp2_lazy,
         rdc_final_sub_p = rdc_final_sub_p,
-        rdc_8x1 = rdc_8x1_mode.standard,
-        ham2_k = ham2_k
+        c1 = c1
     )
 
 # TODO: Optimize Montgomery constant for lazy reduction like 48-bit limb case    
