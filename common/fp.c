@@ -1265,74 +1265,65 @@ void rdc_8x1(__m512i* res, __m512i* a)
     const __m512i zero = VZERO();
     const __m512i one = VSETALL(1);
     
-    // s = low(a) * (2^521 + 1) mod 2^((11+1)*48)
+    // s = low(a) * m mod 2^n, n = (11+1)*48
     // s0 = a0, ..., s9 = a9
-    s10 = VADD(a10, VAND(VSL(a0, 41), limb_mask));
-    s11 = VADD(a11, VSRA(a0, 7));
-    s11 = VADD(s11, VAND(VSL(a1, 41), limb_mask));
-    s11 = VADD(s11, VSRA(s10, 48));
+    s10 = VMULADDL(a10, a0, top);
+    s11 = VMULADDH(zero, a0, top);
+    s11 = VADD(a11, VSL(s11, LIMB_ALIGN));
+    s11 = VMULADDL(s11, a1, top);
+    s11 = VADD(s11, VSRA(s10, LIMB_LEN));
     s10 = VAND(s10, limb_mask);
     s11 = VAND(s11, limb_mask);
     
-    // Computing a + s*(p+1) - s = a + s*2^521 - s
+    // Computing a + s*p as a + s*(p+1) - s.
     // As the division by 2^n cancels the lower limbs, we don't need to compute - s.
-    t0 = VAND(VSL(a0, 41), limb_mask);
-    hi = VSRA(a0, 7);
+    t0 = VMULADDL(zero, a0, top);
+    hi = VMULADDH(zero, a0, top);
+    hi = VSL(hi, LIMB_ALIGN);
     
-    t1 = VADD(hi, VAND(VSL(a1, 41), limb_mask));
-    hi = VSRA(a1, 7);
-    hi = VADD(hi, VSRA(t1, 48));
-    t1 = VAND(t1, limb_mask);
+    t1 = VMULADDL(hi, a1, top);
+    hi = VMULADDH(zero, a1, top);
+    hi = VSL(hi, LIMB_ALIGN);
     
-    t2 = VADD(hi, VAND(VSL(a2, 41), limb_mask));
-    hi = VSRA(a2, 7);
-    hi = VADD(hi, VSRA(t2, 48));
-    t2 = VAND(t2, limb_mask);
+    t2 = VMULADDL(hi, a2, top);
+    hi = VMULADDH(zero, a2, top);
+    hi = VSL(hi, LIMB_ALIGN);
     
-    t3 = VADD(hi, VAND(VSL(a3, 41), limb_mask));
-    hi = VSRA(a3, 7);
-    hi = VADD(hi, VSRA(t3, 48));
-    t3 = VAND(t3, limb_mask);
+    t3 = VMULADDL(hi, a3, top);
+    hi = VMULADDH(zero, a3, top);
+    hi = VSL(hi, LIMB_ALIGN);
     
-    t4 = VADD(hi, VAND(VSL(a4, 41), limb_mask));
-    hi = VSRA(a4, 7);
-    hi = VADD(hi, VSRA(t4, 48));
-    t4 = VAND(t4, limb_mask);
+    t4 = VMULADDL(hi, a4, top);
+    hi = VMULADDH(zero, a4, top);
+    hi = VSL(hi, LIMB_ALIGN);
     
-    t5 = VADD(hi, VAND(VSL(a5, 41), limb_mask));
-    hi = VSRA(a5, 7);
-    hi = VADD(hi, VSRA(t5, 48));
-    t5 = VAND(t5, limb_mask);
+    t5 = VMULADDL(hi, a5, top);
+    hi = VMULADDH(zero, a5, top);
+    hi = VSL(hi, LIMB_ALIGN);
     
-    t6 = VADD(hi, VAND(VSL(a6, 41), limb_mask));
-    hi = VSRA(a6, 7);
-    hi = VADD(hi, VSRA(t6, 48));
-    t6 = VAND(t6, limb_mask);
+    t6 = VMULADDL(hi, a6, top);
+    hi = VMULADDH(zero, a6, top);
+    hi = VSL(hi, LIMB_ALIGN);
     
-    t7 = VADD(hi, VAND(VSL(a7, 41), limb_mask));
-    hi = VSRA(a7, 7);
-    hi = VADD(hi, VSRA(t7, 48));
-    t7 = VAND(t7, limb_mask);
+    t7 = VMULADDL(hi, a7, top);
+    hi = VMULADDH(zero, a7, top);
+    hi = VSL(hi, LIMB_ALIGN);
     
-    t8 = VADD(hi, VAND(VSL(a8, 41), limb_mask));
-    hi = VSRA(a8, 7);
-    hi = VADD(hi, VSRA(t8, 48));
-    t8 = VAND(t8, limb_mask);
+    t8 = VMULADDL(hi, a8, top);
+    hi = VMULADDH(zero, a8, top);
+    hi = VSL(hi, LIMB_ALIGN);
     
-    t9 = VADD(hi, VAND(VSL(a9, 41), limb_mask));
-    hi = VSRA(a9, 7);
-    hi = VADD(hi, VSRA(t9, 48));
-    t9 = VAND(t9, limb_mask);
+    t9 = VMULADDL(hi, a9, top);
+    hi = VMULADDH(zero, a9, top);
+    hi = VSL(hi, LIMB_ALIGN);
     
-    t10 = VADD(hi, VAND(VSL(s10, 41), limb_mask));
-    hi = VSRA(s10, 7);
-    hi = VADD(hi, VSRA(t10, 48));
-    t10 = VAND(t10, limb_mask);
+    t10 = VMULADDL(hi, s10, top);
+    hi = VMULADDH(zero, s10, top);
+    hi = VSL(hi, LIMB_ALIGN);
     
-    t11 = VADD(hi, VAND(VSL(s11, 41), limb_mask));
-    t12 = VSRA(s11, 7);
-    t12 = VADD(t12, VSRA(t11, 48));
-    t11 = VAND(t11, limb_mask);
+    t11 = VMULADDL(hi, s11, top);
+    t12 = VMULADDH(zero, s11, top);
+    t12 = VSL(t12, LIMB_ALIGN);
     
     // t += a (ignoring lower limbs)
     t0 = VADD(t0, a10);
@@ -1376,7 +1367,6 @@ void rdc_8x1(__m512i* res, __m512i* a)
     
     // After dividing by 2^n, the result is in t2, ..., t12
     // The result can be 522 bits.
-    // We do not propagate the carry here. The bottom limb can have 49 bits.
     res[0] = t2; res[1] = t3; res[2] = t4; res[3] = t5; res[4] = t6; res[5] = t7;
     res[6] = t8; res[7] = t9; res[8] = t10; res[9] = t11; res[10] = t12;
 }

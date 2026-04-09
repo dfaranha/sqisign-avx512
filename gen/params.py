@@ -93,7 +93,7 @@ def get_strat(e, c, limb_len, last_limb_len, gen_addchain):
         gen_addchain = gen_addchain,
         fp2_lazy = fp2_lazy,
         rdc_final_sub_p = rdc_final_sub_p,
-        c1 = c1
+        c1 = False
     )
 
 # TODO: Optimize Montgomery constant for lazy reduction like 48-bit limb case    

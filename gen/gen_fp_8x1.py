@@ -502,129 +502,6 @@ def rdc_8x1(f, pp, v, strat):
     f.comment("The output of this reduction is (a + (low(a) * m mod 2^n )*p) / 2^n")
     f.line()
 
-    # The logic is slightly different depending on whether c = 1
-    if strat.c1:
-        rdc_8x1_c1(f, pp, v, strat)
-    else:
-        rdc_8x1_standard(f, pp, v, strat)
-
-    f.end()
-
-# Assumes c = 1
-def rdc_8x1_c1(f, pp, v, strat):
-    nl = pp.num_limbs
-    L = pp.limb_len
-    lshift = pp.last_limb_len
-    rshift = L - pp.last_limb_len
-
-    if strat.fp2_lazy:
-        n_t = nl + 2
-        result_start = 2
-    else:
-        n_t = nl + 1
-        result_start = 1
-
-    f.array_to_single_vars(var_name="a", arr_name="a", count=2*nl)
-    f.declare_single_vars(var_name="t", count=n_t)
-    if strat.fp2_lazy:
-        f.line(f"__m512i s{nl-1}, s{nl}, hi;")
-    else:
-        f.line(f"__m512i s{nl-1}, hi;")
-    f.line("__mmask8 msb_mask;")
-    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
-    f.line(f"const __m512i zero = VZERO();")
-    f.line(f"const __m512i one = VSETALL(1);")
-    f.line()
-
-    # Compute s = low(a) * m mod 2^n
-    # For c=1: m = 2^e + 1, so s = low(a) + low(a) << e, mod 2^n
-    # The shift by e = (nl-1)*L + last_limb_len splits across limbs
-    # s[0..nl-2] = a[0..nl-2] (from the +1 part)
-    # Limb nl-1 gets a[nl-1] + (a[0] << lshift)
-    # Note: we mask the shift to avoid 64-bit overflow when lshift + L > 64.
-    if strat.fp2_lazy:
-        f.comment(f"s = low(a) * (2^{pp.e} + 1) mod 2^(({nl}+1)*{L})")
-        f.comment(f"s0 = a0, ..., s{nl-2} = a{nl-2}")
-        f.line(f"s{nl-1} = VADD(a{nl-1}, VAND(VSL(a0, {lshift}), limb_mask));")
-        f.line(f"s{nl} = VADD(a{nl}, VSRA(a0, {rshift}));")
-        f.line(f"s{nl} = VADD(s{nl}, VAND(VSL(a1, {lshift}), limb_mask));")
-        f.line(f"s{nl} = VADD(s{nl}, VSRA(s{nl-1}, {L}));")
-        f.line(f"s{nl-1} = VAND(s{nl-1}, limb_mask);")
-        f.line(f"s{nl} = VAND(s{nl}, limb_mask);")
-    else:
-        f.comment(f"s = low(a) * (2^{pp.e} + 1) mod 2^({nl}*{L})")
-        f.comment(f"s0 = a0, ..., s{nl-2} = a{nl-2}")
-        f.line(f"s{nl-1} = VAND(VADD(a{nl-1}, VSL(a0, {lshift})), limb_mask);")
-    f.line()
-
-    # Compute s * (p+1) = s * 2^e (pure shift, since c=1)
-    # Each limb i of s contributes:
-    #   lo: (s[i] << lshift) & limb_mask
-    #   hi: s[i] >> rshift
-    # Note: we mask the shift result before extracting carries to avoid
-    # 64-bit overflow issues when lshift + L > 64.
-    f.comment(f"Computing a + s*(p+1) - s = a + s*2^{pp.e} - s")
-    f.comment("As the division by 2^n cancels the lower limbs, we don't need to compute - s.")
-
-    # First limb: a[0]
-    f.line(f"t0 = VAND(VSL(a0, {lshift}), limb_mask);")
-    f.line(f"hi = VSRA(a0, {rshift});")
-    f.line()
-
-    # Middle limbs: a[1..nl-2]
-    for i in range(1, nl - 1):
-        f.line(f"t{i} = VADD(hi, VAND(VSL(a{i}, {lshift}), limb_mask));")
-        f.line(f"hi = VSRA(a{i}, {rshift});")
-        f.line(f"hi = VADD(hi, VSRA(t{i}, {L}));")
-        f.line(f"t{i} = VAND(t{i}, limb_mask);")
-        f.line()
-
-    # Limb nl-1: uses s{nl-1}
-    f.line(f"t{nl-1} = VADD(hi, VAND(VSL(s{nl-1}, {lshift}), limb_mask));")
-    f.line(f"hi = VSRA(s{nl-1}, {rshift});")
-    f.line(f"hi = VADD(hi, VSRA(t{nl-1}, {L}));")
-    f.line(f"t{nl-1} = VAND(t{nl-1}, limb_mask);")
-    f.line()
-
-    if strat.fp2_lazy:
-        # Limb nl: uses s{nl}
-        f.line(f"t{nl} = VADD(hi, VAND(VSL(s{nl}, {lshift}), limb_mask));")
-        f.line(f"t{nl+1} = VSRA(s{nl}, {rshift});")
-        f.line(f"t{nl+1} = VADD(t{nl+1}, VSRA(t{nl}, {L}));")
-        f.line(f"t{nl} = VAND(t{nl}, limb_mask);")
-    else:
-        f.line(f"t{nl} = hi;")
-    f.line()
-
-    # Add upper part of input
-    f.comment("t += a (ignoring lower limbs)")
-    for i in range(nl + 1):
-        f.line(f"t{i} = VADD(t{i}, a{i + nl - 1});")
-    f.line()
-
-    carry_prop_8x1_var(f, pp, v, n_t, "t", "limb_mask")
-
-    f.comment(f"After dividing by 2^n, the result is in t{result_start}, ..., t{n_t-1}")
-    f.comment(f"The result can be {pp.pbits+1} bits.")
-
-    if strat.rdc_final_sub_p:
-        f.comment(f"If so, we do a final subtraction by p to bring it down to {pp.pbits} bits.")
-
-        shift = 64 - (pp.pbits + 1 - (nl - 1) * L)
-        f.line(f"hi = VSL(t{n_t-1}, {shift});")
-        f.line(f"msb_mask = VSIGN(hi);")
-        f.line(f"t{n_t-1} = VSUBMASK(t{n_t-1}, msb_mask, t{n_t-1}, top);")
-        f.line(f"t{result_start} = VADDMASK(t{result_start}, msb_mask, t{result_start}, one);")
-        f.line()
-
-        carry_prop_8x1_var(f, pp, v, nl, "t", "limb_mask", start_idx=result_start)
-    else:
-        f.comment(f"We do not propagate the carry here. The bottom limb can have {L+1} bits.")
-
-    f.single_vars_to_array(var_name="t", arr_name="res", count=nl, start_idx=result_start)
-
-def rdc_8x1_standard(f, pp, v, strat):
     nl = pp.num_limbs
     if strat.fp2_lazy:
         n_t = nl + 2
@@ -714,6 +591,8 @@ def rdc_8x1_standard(f, pp, v, strat):
         carry_prop_8x1_var(f, pp, v, nl, "t", "limb_mask", start_idx=result_start)
     
     f.single_vars_to_array(var_name="t", arr_name="res", count=nl, start_idx = result_start)
+
+    f.end()
 
 def fp_mul_8x1(f, pp, v):
     f.start("void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)")
