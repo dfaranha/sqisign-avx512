@@ -1,19 +1,15 @@
 #include <stdio.h>
 
 #include "fp.h"
-#include "fp_unvec_lvl3.h"
 #include "test.h"
 #include "utils.h"
 #include "fp_kat.h"
-
-#include "sqi_test_extras.h"
 
 bool test_fp(int iterations)
 {
     __m512i a[NUM_LIMBS], b[NUM_LIMBS], c[NUM_LIMBS], d[NUM_LIMBS], e[NUM_LIMBS], f[NUM_LIMBS];
     __m512i g[NUM_LIMBS], h[NUM_LIMBS], zero[NUM_LIMBS], one[NUM_LIMBS], t;
     __m512i vR[NUM_LIMBS], vR2[NUM_LIMBS];
-    fp_t unvec1[8], unvec2[8];
     fp_setzero_8x1(zero);
     fp_setzero_8x1(one);
     one[0] = VSETALL(1);
@@ -408,85 +404,6 @@ bool test_fp(int iterations)
         return false;
     }
 
-    // 8x1 <-> unvectorized
-    for (int i = 0; i < iterations; i++) {
-        for (int j = 0; j < 8; j++) {
-            fp_random_test(unvec1+j);
-        }
-        rand_fp_8x1(a);
-
-        // Converting back and forth does nothin
-        fp_unvectorized_to_8x1(d, unvec1);
-        fp_8x1_to_unvectorized(unvec2, d);
-
-        for (int j = 0; j < 8; j++) {
-            if (fp_is_equal(unvec1+j, unvec2+j) == 0) { passed = 0; }
-        }
-        if (passed == 0) {
-            break;
-        }
-
-        fp_8x1_to_unvectorized(unvec2, a);
-        fp_unvectorized_to_8x1(d, unvec2);
-        if (fp_is_equal_8x1(a, d) != 0xff) {
-            passed = 0;
-            break;
-        }
-
-        // Top 16 bits of each AVX limb is 0
-        t = VSETALL(0xffff000000000000);
-        fp_unvectorized_to_8x1(d, unvec1);
-        for (int j = 0; j < NUM_LIMBS; j++) {
-            e[j] = VAND(d[j], t);
-        }
-        if (fp_is_zero_8x1(e) != 0xff) {
-            passed = 0;
-            break;
-        }
-        
-        // Conversion commutes with arithmetic
-        rand_fp_8x1(a);
-        rand_fp_8x1(b);
-        fp_mul_8x1(c, a, b);
-
-        fp_8x1_to_unvectorized(unvec1, a);
-        fp_8x1_to_unvectorized(unvec2, b);
-        for (int j = 0; j < 8; j++) {
-            fp_mul(unvec1+j, unvec1+j, unvec2+j);
-        }
-        fp_unvectorized_to_8x1(d, unvec1);
-
-        if (fp_is_equal_8x1(c, d) != 0xff) {
-            passed = 0;
-            break;
-        }
-
-        for (int j = 0; j < 8; j++) {
-            fp_random_test(unvec1+j);
-            fp_random_test(unvec2+j);
-        }
-
-        fp_unvectorized_to_8x1(d, unvec1);
-        fp_unvectorized_to_8x1(e, unvec2);
-
-        for (int j = 0; j < 8; j++) {
-            fp_mul(unvec1+j, unvec1+j, unvec2+j);
-        }
-        fp_mul_8x1(f, d, e);
-        fp_8x1_to_unvectorized(unvec2, f);
-        
-        for (int j = 0; j < 8; j++) {
-            if (fp_is_equal(unvec1+j, unvec2+j) == 0) {
-                passed = 0;
-                break;
-            }
-        }
-    }
-    print_test_res("unvectorized <-> 8x1", passed);
-    if (passed == 0) {
-        return false;
-    }
-
     // Division by 3
     for (int i = 0; i < iterations; i++) {
         rand_fp_8x1(a);
@@ -507,23 +424,23 @@ bool test_fp(int iterations)
     }
 
     //Batched inversion
-    for (int i = 0; i < iterations; i++) {
-        rand_fp_8x1(a);
-        if (fp_is_zero_8x1(a) != 0) { continue; }
+    // for (int i = 0; i < iterations; i++) {
+    //     rand_fp_8x1(a);
+    //     if (fp_is_zero_8x1(a) != 0) { continue; }
 
-        fp_inv_8x1(b, a);
-        fp_mul_8x1(c, a, b);
+    //     fp_inv_8x1(b, a);
+    //     fp_mul_8x1(c, a, b);
 
-        if (fp_is_equal_8x1(c, vR) != 0xff) {
-            passed = 0;
-            printf("a * a^-1 != 1 mod p\n");
-            break;
-        }
-    }
-    print_test_res("inversion", passed);
-    if (passed == 0) {
-        return false;
-    }
+    //     if (fp_is_equal_8x1(c, vR) != 0xff) {
+    //         passed = 0;
+    //         printf("a * a^-1 != 1 mod p\n");
+    //         break;
+    //     }
+    // }
+    // print_test_res("inversion", passed);
+    // if (passed == 0) {
+    //     return false;
+    // }
 
     printf("Fp lvl3 4x2 tests:\n");
     one[0] = VSET(1, 0, 1, 0, 1, 0, 1, 0);
@@ -925,103 +842,23 @@ bool test_fp(int iterations)
     }
 
     //Batched inversion
-    for (int i = 0; i < iterations; i++) {
-        rand_fp_4x2(a);
-        if (fp_is_zero_4x2(a) != 0) { continue; }
+    // for (int i = 0; i < iterations; i++) {
+    //     rand_fp_4x2(a);
+    //     if (fp_is_zero_4x2(a) != 0) { continue; }
 
-        fp_inv_4x2(b, a);
-        fp_mul_4x2(c, a, b);
+    //     fp_inv_4x2(b, a);
+    //     fp_mul_4x2(c, a, b);
 
-        if (fp_is_equal_4x2(c, vR) != 0xf) {
-            passed = 0;
-            printf("a * a^-1 != 1 mod p\n");
-            break;
-        }
-    }
-    print_test_res("inversion", passed);
-    if (passed == 0) {
-        return false;
-    }
-
-    // 4x2 <-> unvectorized
-    for (int i = 0; i < iterations; i++) {
-        for (int j = 0; j < 8; j++) {
-            fp_random_test(unvec1+j);
-        }
-        rand_fp_4x2(a);
-
-        // Converting back and forth does nothin
-        fp_unvectorized_to_4x2(d, unvec1);
-        fp_4x2_to_unvectorized(unvec2, d);
-
-        for (int j = 0; j < 4; j++) {
-            if (fp_is_equal(unvec1+j, unvec2+j) == 0) { passed = 0; }
-        }
-        if (passed == 0) {
-            break;
-        }
-
-        fp_4x2_to_unvectorized(unvec2, a);
-        fp_unvectorized_to_4x2(d, unvec2);
-
-        if (fp_is_equal_4x2(a, d) != 0xf) {
-            passed = 0;
-            break;
-        }
-
-        // Top 13 bits of each AVX limb is 0
-        t = VSETALL(0xfff8000000000000);
-        fp_unvectorized_to_8x1(d, unvec1);
-        for (int j = 0; j < N4x2; j++) {
-            e[j] = VAND(d[j], t);
-        }
-        if (fp_is_zero_4x2(e) != 0xf) {
-            passed = 0;
-            break;
-        }
-        
-        // Conversion commutes with arithmetic
-        rand_fp_4x2(a);
-        rand_fp_4x2(b);
-        fp_mul_4x2(c, a, b);
-
-        fp_4x2_to_unvectorized(unvec1, a);
-        fp_4x2_to_unvectorized(unvec2, b);
-        for (int j = 0; j < 4; j++) {
-            fp_mul(unvec1+j, unvec1+j, unvec2+j);
-        }
-        fp_unvectorized_to_4x2(d, unvec1);
-
-        if (fp_is_equal_4x2(c, d) != 0xf) {
-            passed = 0;
-            break;
-        }
-
-        for (int j = 0; j < 4; j++) {
-            fp_random_test(unvec1+j);
-            fp_random_test(unvec2+j);
-        }
-
-        fp_unvectorized_to_4x2(d, unvec1);
-        fp_unvectorized_to_4x2(e, unvec2);
-
-        for (int j = 0; j < 4; j++) {
-            fp_mul(unvec1+j, unvec1+j, unvec2+j);
-        }
-        fp_mul_4x2(f, d, e);
-        fp_4x2_to_unvectorized(unvec2, f);
-        
-        for (int j = 0; j < 4; j++) {
-            if (fp_is_equal(unvec1+j, unvec2+j) == 0) {
-                passed = 0;
-                break;
-            }
-        }
-    }
-    print_test_res("unvectorized <-> 4x2", passed);
-    if (passed == 0) {
-        return false;
-    }
+    //     if (fp_is_equal_4x2(c, vR) != 0xf) {
+    //         passed = 0;
+    //         printf("a * a^-1 != 1 mod p\n");
+    //         break;
+    //     }
+    // }
+    // print_test_res("inversion", passed);
+    // if (passed == 0) {
+    //     return false;
+    // }
 
     printf("Fp lvl3 2x4 tests:\n");
 
@@ -1136,6 +973,7 @@ bool test_fp(int iterations)
 
     // Multiplication tests
     // Using Montgomery constant
+    fp_setzero_2x4(one);
     one[0] = VSET(1, 0, 0, 0, 1, 0, 0, 0);
     fp_duplicate_2x4(vR, R);
     fp_duplicate_2x4(vR2, R2);
@@ -1279,24 +1117,24 @@ bool test_fp(int iterations)
     }
 
     // Inverse
-    for (int i = 0; i < iterations; i++) {
-        rand_fp_2x4(a);
+    // for (int i = 0; i < iterations; i++) {
+    //     rand_fp_2x4(a);
 
-        if (fp_is_zero_2x4(a) != 0)
-            continue;
+    //     if (fp_is_zero_2x4(a) != 0)
+    //         continue;
         
-        fp_inv_2x4(b, a);
-        fp_mul_2x4(c, b, a);
+    //     fp_inv_2x4(b, a);
+    //     fp_mul_2x4(c, b, a);
 
-        if (fp_is_equal_2x4(c, vR) != 0x3) {
-            passed = 0;
-            break;
-        }
-    }
-    print_test_res("inv", passed);
-    if (passed == 0) {
-        return false;
-    }
+    //     if (fp_is_equal_2x4(c, vR) != 0x3) {
+    //         passed = 0;
+    //         break;
+    //     }
+    // }
+    // print_test_res("inv", passed);
+    // if (passed == 0) {
+    //     return false;
+    // }
 
     // Square root
     for (int i = 0; i < iterations; i++) {

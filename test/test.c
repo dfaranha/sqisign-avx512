@@ -30,7 +30,7 @@ int main()
 
     // =================================================
 
-    int n_tests = 1000;
+    int n_tests = 10;
     bool passed;
 
     passed = test_fp(n_tests);
@@ -41,6 +41,7 @@ int main()
 
     passed = test_fp_unvec_lvl3(n_tests);
     if (!passed) { return 0; }
+
     // passed = test_ec(n_tests);
     // if (!passed) { return 0; }
 

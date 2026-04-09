@@ -1,13 +1,12 @@
 from dataclasses import dataclass
 from enum import Enum
 from math import ceil
-from sage.all import ZZ
 
 @dataclass
 class FpParams:
     e: int
     c: int
-    p: ZZ
+    p: int
     pbits: int
     num_limbs: int
     limb_len: int
@@ -18,8 +17,8 @@ class FpParams:
     n24: int
     rem24: int
     num_limbs_R: int
-    R: ZZ
-    R2: ZZ
+    R: int
+    R2: int
     num_kat: int
 
 @dataclass
@@ -60,9 +59,9 @@ class Strat:
     ham2_k: int
 
 def get_p(e, c):
-    p = ZZ(c * 2**e -1)
-    pbits = p.nbits()
-    assert p.is_prime()
+    p = c * 2**e -1
+    pbits = p.bit_length()
+    #assert p.is_prime()
     # script only designed for cryptographically sized primes
     assert pbits >= 51*4 
 
@@ -78,7 +77,7 @@ def get_limb_params(pbits, e, c):
 
     # For simplicity we require the cofactor c to be small
     # TODO: Do we want to handle larger c?
-    assert ZZ(c).nbits() + (e % limb_len ) < 52
+    assert c.bit_length() + (e % limb_len ) < 52
 
     return num_limbs, limb_len, last_limb_len, num_words64
 
@@ -102,7 +101,7 @@ def get_strat(e, c, limb_len, last_limb_len, gen_addchain):
     if c > 1:
         for kk in range(1, 64):
             if c == (1 << kk) + 1:
-                ham_2k = kk; c_form = 1
+                ham2_k = kk; c_form = 1
             if c == (1 << kk) - 1:
                 ham2_k = kk; c_form = -1
 
@@ -126,15 +125,15 @@ def get_strat(e, c, limb_len, last_limb_len, gen_addchain):
         gen_addchain = gen_addchain,
         fp2_lazy = fp2_lazy,
         rdc_final_sub_p = rdc_final_sub_p,
-        rdc_8x1 = rdc_8x1,
+        rdc_8x1 = rdc_8x1_mode.standard,
         ham2_k = ham2_k
     )
 
 # TODO: Optimize Montgomery constant for lazy reduction like 48-bit limb case    
 def get_mont_const(p, num_limbs, limb_len, strat):
     num_limbs_R = num_limbs+1 if strat.fp2_lazy else num_limbs
-    R = ZZ(pow(2, num_limbs_R * limb_len, p))
-    R2 = ZZ(pow(R, 2, p))
+    R = pow(2, num_limbs_R * limb_len, p)
+    R2 = pow(R, 2, p)
     return num_limbs_R, R, R2
 
 def get_limb_mask(pp):

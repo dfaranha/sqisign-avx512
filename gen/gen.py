@@ -30,21 +30,21 @@ from params import (comp_params_and_strat, get_param_names)
 # More user friendly for a general purpose library.
 
 ### input ###
-dir = "out"
+#dir = "out"
 num_kat = 20
 gen_addchain = True # Requires addchain to be installed
 
 # lvl3
-e = 376
-c = 65
+# e = 376
+# c = 65
 
 # lvl5
 # e = 500
 # c = 27
 
 # no shift
-# e = 2601
-# c = 609
+e = 2601
+c = 609
 
 # mersenne
 # e = 521
@@ -55,11 +55,11 @@ c = 65
 pp, strat = comp_params_and_strat(e, c, num_kat, gen_addchain)
 v = get_param_names()
 
-if not os.path.exists(dir):
-    os.mkdir(dir)
+# if not os.path.exists(dir):
+#     os.mkdir(dir)
 
-write_fp_header_file(dir, pp, v)
-write_fp_file(dir, pp, v, strat)
-write_fp2_file(dir, pp, v, strat)
-write_fp_kat_file(dir, pp, v)
-write_fp2_kat_file(dir, pp, v)
+write_fp_header_file("../include", pp, v)
+write_fp_file("../common", pp, v, strat)
+write_fp2_file("../common", pp, v, strat)
+write_fp_kat_file("../test", pp, v)
+write_fp2_kat_file("../test", pp, v)

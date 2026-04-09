@@ -1437,6 +1437,7 @@ def fp2_conversions(f, pp, v):
 def write_fp2_file(dir, pp, v, strat):
     path = f"{dir}/fp2.c"
     f = FileWriter(path)
+    print(f"Writing {path}")
 
     write_fp2_include(f, pp, v)
 

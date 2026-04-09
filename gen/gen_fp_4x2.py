@@ -395,7 +395,8 @@ def mp_mul_4x2(f, pp, v):
 #TODO this does not yet handle odd limbs or a smaller R
 
 def rdc_4x2(f, pp, v, strat):
-    f.comment("Algorithm 3 from \"Finite Field Arithmetic Using AVX-512 For Isogeny-Based Cryptography\" by Orisaka, Aranha and López")
+    f.comment("Algorithm 3 from \"Finite Field Arithmetic Using AVX-512 For Isogeny-Based Cryptography\"")
+    f.comment("by Orisaka, Aranha and López")
     f.comment("Modifies a")
     f.start("void rdc_4x2(__m512i* res, __m512i* a)")
 
@@ -406,10 +407,16 @@ def rdc_4x2(f, pp, v, strat):
     f.line(f"const __m512i one = VSETALL(1);")
     f.line()
 
+    if strat.fp2_lazy:
+        n_low = pp.num_limbs + 1
+    else:
+        n_low = pp.num_limbs
+
+    start_idx = n_low
+
     f.comment("Montgomery reduction loop")
     top_idx = pp.n42 - 1 - pp.rem42
-    #TODO it is only + 1 when R is larger to allow lazy red
-    for i in range(pp.num_limbs+1):
+    for i in range(n_low):
         if i == 0:
             f.comment("using the fact that -p^{-1} mod 2^(limb_len) = 1 + c* 2^f mod 2^(limb_len) = 1 as f > limb_len")
         f.line(f"carry = VSRA(a[{i}], {v.limb_len});")
@@ -427,28 +434,27 @@ def rdc_4x2(f, pp, v, strat):
         f.line(f"a[{i+top_idx+1}] = VADD(a[{i+top_idx+1}], hi);")
         if i == 0:
             f.comment("Folding step")
-        f.line(f"a[{i+4}] = VADDMASK(a[{i+4}], 0x55, a[{i+4}], VSHUFFLE(a[{i}], 0x4e));")
+        f.line(f"a[{i+pp.n42}] = VADDMASK(a[{i+pp.n42}], 0x55, a[{i+pp.n42}], VSHUFFLE(a[{i}], 0x4e));")
         f.line()
 
-    f.comment(f"Result is now in a[{pp.num_limbs+1}], ..., a[{pp.num_limbs + pp.n42}]")
-    start_idx = pp.num_limbs+1
+    f.comment(f"Result is now in a[{start_idx}], ..., a[{start_idx + pp.n42 - 1}]")
     carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
 
     f.comment(f"The result can be {pp.pbits+1} bits.")
     if strat.rdc_final_sub_p:
         f.comment(f"If so, we do a final subtraction by p to bring it down to {pp.pbits} bits.")
         shift = 64 - (pp.pbits + 1 - (pp.num_limbs - 1) * pp.limb_len)
-        f.line(f"hi = VSL(a[{pp.n42 + pp.num_limbs}], {shift});")
+        f.line(f"hi = VSL(a[{start_idx + pp.n42 - 1}], {shift});")
         f.line("__mmask8 msb_mask = VSIGN(hi);")
         f.line("__mmask8 mask_odd  = msb_mask & 0xaa;")
         f.line("__mmask8 mask_even = mask_odd >> 1;")
-        top_idx = start_idx + top_idx
-        f.line(f"a[{top_idx}] = VSUBMASK(a[{top_idx}], mask_odd, a[{top_idx}], top);")
+        top_sub_idx = start_idx + top_idx
+        f.line(f"a[{top_sub_idx}] = VSUBMASK(a[{top_sub_idx}], mask_odd, a[{top_sub_idx}], top);")
         f.line(f"a[{start_idx}]  = VADDMASK(a[{start_idx}], mask_even, a[{start_idx}], one);")
         f.line()
+    else:
+        f.comment("Output result: final carry propagation is left for the final result.")
 
-    f.comment("Output result: final carry propagation is left for the final result.")
-    f.comment("               Bottom limb can have up to 49 bits (because of the +1).")
     for i in range(pp.n42):
         f.line(f"res[{i}] = a[{i+start_idx}];")
 
@@ -555,7 +561,6 @@ def fp_inv_4x2(f, pp, v):
 
     f.end()
 
-#TODO: Assumes fully reduced, but after mul lowest limb can be one bit larger
 def fp_64_to_limbs_4x2(f, pp, v):
     f.comment(f"Assumes unvec is an array of 4 * {v.num_words64} 64-bit ints")
     f.start("void fp_64_to_limbs_4x2(__m512i* res, uint64_t* unvec)")
@@ -620,6 +625,7 @@ def fp_64_to_limbs_4x2(f, pp, v):
     f.end()
 
 def fp_limbs_to_64_4x2(f, pp, v):
+    f.comment("Assumes src is fully redduced")
     f.start("void fp_limbs_to_64_4x2(uint64_t* res, __m512i* src)")
 
     f.line("uint64_t t[8];")
@@ -629,56 +635,77 @@ def fp_limbs_to_64_4x2(f, pp, v):
     l = pp.limb_len
     i64 = 0
     leftover = 64
-    lines = []
+    indices = [[] for _ in range(n)]
+    lines_l = [[] for _ in range(n)]
+    lines_r = [[] for _ in range(n)]
 
     for j in range(n):
         plusi64 = "" if i64 == 0 else f" + {i64}"
         if leftover == 64:
-            lines.append([f"res[{v.num_words64} * i{plusi64}] = t[2*i] & {v.limb_mask};"])
+            indices[j].append(i64)
+            lines_l[j].append(f"res[{v.num_words64} * i{plusi64}]")
+            lines_r[j].append(f"t[2*i] & {v.limb_mask};")
         elif leftover >= l:
             shift = 64 - leftover
-            lines.append([f"res[{v.num_words64} * i{plusi64}] |= (t[2*i] & {v.limb_mask}) << {shift};"])
+            indices[j].append(i64)
+            lines_l[j].append(f"res[{v.num_words64} * i{plusi64}]")
+            lines_r[j].append(f"(t[2*i] & {v.limb_mask}) << {shift};")
         else: #leftover < l and j < n-1
             lshift = 64 - leftover
             rshift = leftover
             lmask = (1 << leftover) - 1
             rmask = (1 << (l - leftover)) - 1
             # We should always do |= for the last, because l < 64
-            op = "|=" if j == n-1 else "="
-            lines.append([
-                f"res[{v.num_words64} * i{plusi64}] |= (t[2*i] & 0x{lmask:x}ULL) << {lshift};",
-                f"res[{v.num_words64} * i + {i64+1}] {op} (t[2*i] >> {rshift}) & 0x{rmask:x}ULL;"
-            ])
+            indices[j].append(i64)
+            lines_l[j].append(f"res[{v.num_words64} * i{plusi64}]")
+            lines_r[j].append(f"(t[2*i] & 0x{lmask:x}ULL) << {lshift};")
+            indices[j].append(i64+1)
+            lines_l[j].append(f"res[{v.num_words64} * i + {i64+1}]")
+            lines_r[j].append(f"(t[2*i] >> {rshift}) & 0x{rmask:x}ULL;")
 
         leftover -= l
         if leftover <= 0:
             leftover += 64
             i64 += 1
 
+    seen = set()
     top_idx = n - 1 - pp.rem42
     for j in range(n):
         f.line(f"VSTORE(t, src[{j}]);")
         f.line("for (int i = 0; i < 4; i++) {")
         f.indent()
-        for line in lines[j]:
-            f.line(line)
+        for k in range(len(indices[j])):
+            idx = indices[j][k]
+            line_l = lines_l[j][k]
+            line_r = lines_r[j][k]
+            op = "|=" if idx in seen else "="
+            f.line(f"{line_l} {op} {line_r}")
+            seen.add(idx)
         f.line()
 
         plusi64 = "" if i64 == 0 else f" + {i64}"
         if j == top_idx + 1:
             pass
         elif leftover == 64:
-            f.line(f"res[{v.num_words64} * i{plusi64}] = t[2*i+1] & {v.limb_mask};")
+            op = "|=" if i64 in seen else "="
+            seen.add(i64)
+            f.line(f"res[{v.num_words64} * i{plusi64}] {op} t[2*i+1] & {v.limb_mask};")
         elif leftover >= l or j == top_idx:
             shift = 64 - leftover
-            f.line(f"res[{v.num_words64} * i{plusi64}] |= (t[2*i+1] & {v.limb_mask}) << {shift};")
+            op = "|=" if i64 in seen else "="
+            seen.add(i64)
+            f.line(f"res[{v.num_words64} * i{plusi64}] {op} (t[2*i+1] & {v.limb_mask}) << {shift};")
         else: #leftover < l and j < n-1
             lshift = 64 - leftover
             rshift = leftover
             lmask = (1 << leftover) - 1
             rmask = (1 << (l - leftover)) - 1
-            f.line(f"res[{v.num_words64} * i{plusi64}] |= (t[2*i+1] & 0x{lmask:x}ULL) << {lshift};")
-            f.line(f"res[{v.num_words64} * i + {i64+1}] = (t[2*i+1] >> {rshift}) & 0x{rmask:x}ULL;")
+            op = "|=" if i64 in seen else "="
+            seen.add(i64)
+            op1 = "|=" if (i64+1) in seen else "="
+            seen.add(i64+1)
+            f.line(f"res[{v.num_words64} * i{plusi64}] {op} (t[2*i+1] & 0x{lmask:x}ULL) << {lshift};")
+            f.line(f"res[{v.num_words64} * i + {i64+1}] {op1} (t[2*i+1] >> {rshift}) & 0x{rmask:x}ULL;")
 
         leftover -= l
         if leftover <= 0:

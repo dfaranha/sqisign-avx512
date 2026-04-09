@@ -315,11 +315,15 @@ def rdc_2x4(f, pp, v, strat):
     N = pp.num_limbs
     n24 = pp.n24
     top_offset = N - 1 - n24
+    if strat.fp2_lazy:
+        n_low = pp.num_limbs + 1
+    else:
+        n_low = pp.num_limbs
 
     f.line("__m512i carry, lo, hi, shuf;")
     f.line("const __m512i zero = VZERO();")
     f.line("const __m512i one = VSETALL(1);")
-    f.line("const __m512i cnst = VSETALL((uint64_t)65 << 40);")
+    f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
     f.line("const __m512i limb_mask = VSETALL(LIMB_MASK);")
     f.line("__mmask8 msb_mask;")
     f.line()
@@ -334,14 +338,14 @@ def rdc_2x4(f, pp, v, strat):
     f.line()
 
     f.comment("Generalized Montgomery reduction loop")
-    for i in range(N + 1):
+    for i in range(n_low):
         f.line(f"carry = VSRA(a[{i}], LIMB_LEN);")
         f.line(f"a[{i}] = VAND(a[{i}], limb_mask);")
         f.line(f"a[{i+1}] = VADD(a[{i+1}], carry);")
         
         f.line(f"shuf = VSHUFFLEMASKZ(0x0c0c, a[{i}], 0x4e);")
-        f.line(f"a[{i + top_offset}] = VMULADDL(a[{i + top_offset}], shuf, cnst);")
-        f.line(f"hi = VMULADDH(zero, shuf, cnst);")
+        f.line(f"a[{i + top_offset}] = VMULADDL(a[{i + top_offset}], shuf, p_top);")
+        f.line(f"hi = VMULADDH(zero, shuf, p_top);")
         f.line(f"a[{i + top_offset + 1}] = VADD(a[{i + top_offset + 1}], VSL(hi, {v.limb_align}));")
         
         f.line(f"a[{i + n24}] = VADD(a[{i + n24}], VPERM512MASKZ(0x77, a[{i}], idx));")
@@ -353,8 +357,8 @@ def rdc_2x4(f, pp, v, strat):
         f.line(f"a[{i}] = VAND(a[{i}], limb_mask);")
         f.line(f"a[{i+1}] = VADD(a[{i+1}], carry);")
         
-        # We don't fold the track on the very last propagation step
-        if i != 2 * N - 1:
+        # We don't fold the track on the very last propagation steps
+        if i + n24 <= 2 * N:
             f.line(f"a[{i + n24}] = VADD(a[{i + n24}], VPERM512MASKZ(0x77, a[{i}], idx));")
         f.line()
 
@@ -364,7 +368,7 @@ def rdc_2x4(f, pp, v, strat):
         f.line("msb_mask = VSIGN(hi);")
         f.line("__mmask8 mask_top = msb_mask & 0x11;")
         f.line()
-        f.line(f"a[{2 * N}] = VSUBMASK(a[{2 * N}], mask_top, a[{2 * N}], cnst);")
+        f.line(f"a[{2 * N}] = VSUBMASK(a[{2 * N}], mask_top, a[{2 * N}], p_top);")
         f.line(f"a[{N + 1}] = VADDMASK(a[{N + 1}], mask_top, a[{N + 1}], one);")
         f.line(f"a[{2 * N}] = VAND(a[{2 * N}], limb_mask);")
         f.line()
@@ -588,7 +592,7 @@ def fp_exp3_div4_2x4_naive(f, pp, v):
     f.line(f"__m512i t[{pp.n24}];")
 
     exponent = (pp.p - 3) // 4
-    assert exponent == pp.c * 2**374 - 1
+    assert exponent == pp.c * 2**(pp.e-2) - 1
     dbl_and_add(f, pp, v, exponent, copy_to_res=True)
 
     f.end()
@@ -738,6 +742,9 @@ def fp_limbs_to_64_2x4(f, pp, v):
         plusi64 = "" if i64 == 0 else f" + {i64}"
         op = "|=" if i64 in seen else "="
         seen.add(i64)
+
+        is_last = (j == n-1)
+        l = pp.last_limb_len if is_last else pp.limb_len
 
         if leftover == 64:
             f.line(f"res[{v.num_words64} * i{plusi64}] {op} t[4*i+3] & {v.limb_mask};")

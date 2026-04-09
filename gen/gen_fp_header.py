@@ -40,6 +40,7 @@ def write_fp_consts(f, pp, v):
 def write_fp_header_file(dir, pp, v):
     path = f"{dir}/fp_consts.h"
     f = FileWriter(path)
+    print(f"Writing {path}")
 
     f.line("#ifndef _FP_CONSTS_H")
     f.line("#define _FP_CONSTS_H")

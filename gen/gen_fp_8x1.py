@@ -585,7 +585,7 @@ def rdc_8x1_shift0(f, pp, v, strat):
     f.line(f"t[2] = VADDMASK(t[2], msb_mask, t[2], one);")
     f.line()
 
-    if strat.rdc_final_carry_prop:
+    if strat.rdc_final_sub_p:
         carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask", start_idx=2)
     else:
         f.comment(f"We do not propagate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
@@ -651,7 +651,7 @@ def rdc_8x1_c1(f, pp, v, strat):
     f.line(f"t[2] = VADDMASK(t[2], msb_mask, t[2], one);")
     f.line()
 
-    if strat.rdc_final_carry_prop:
+    if strat.rdc_final_sub_p:
         carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask", start_idx=2)
     else:
         f.comment(f"We do not propagate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
@@ -898,7 +898,7 @@ def rdc_8x1_ham2(f, pp, v, strat):
     f.line(f"t[{result_start}] = VADDMASK(t[{result_start}], msb_mask, t[{result_start}], one);")
     f.line()
 
-    if strat.rdc_final_carry_prop:
+    if strat.rdc_final_sub_p:
         carry_prop_8x1(f, pp, v, nl, "t", "limb_mask", start_idx=result_start)
     else:
         f.comment(f"We do not propagate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
@@ -1021,7 +1021,7 @@ def rdc_8x1_shift0_ham2(f, pp, v, strat):
     f.line(f"t[{result_start}] = VADDMASK(t[{result_start}], msb_mask, t[{result_start}], one);")
     f.line()
 
-    if strat.rdc_final_carry_prop:
+    if strat.rdc_final_sub_p:
         carry_prop_8x1(f, pp, v, nl, "t", "limb_mask", start_idx=result_start)
     else:
         f.comment(f"We do not propagate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
@@ -1369,7 +1369,7 @@ def fp_limbs_to_64_8x1_only_even_idx(f, pp, v):
 def rand_fp_8x1(f, pp, v):
     f.start(f"void rand_fp_8x1(__m512i* res)")
 
-    f.line(f"__m512i zero[8];")
+    f.line(f"__m512i zero[{pp.num_limbs}];")
     f.line(f"__m512i mask = VSETALL({v.limb_mask});")
     f.line(f"fp_setzero_8x1(zero);")
     f.line()
