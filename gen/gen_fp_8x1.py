@@ -58,11 +58,11 @@ def fp_is_zero_8x1(f, pp, v):
 
     f.end()
 
-def carry_prop_8x1(f, pp, v, len, tmp_name, mask_name):
+def carry_prop_8x1(f, pp, v, len, tmp_name, mask_name, start_idx=0):
     f.comment("Carry propagation")
-    for i in range(1, len):
+    for i in range(start_idx + 1, start_idx + len):
         f.line(f"{tmp_name}[{i}] = VADD({tmp_name}[{i}], VSRA({tmp_name}[{i-1}], {v.limb_len}));")
-    for i in range(len-1):
+    for i in range(start_idx + len-1):
         f.line(f"{tmp_name}[{i}] = VAND({tmp_name}[{i}], {mask_name});")
     f.line()
 
@@ -479,6 +479,7 @@ def rdc_8x1(f, pp, v, strat):
     # The logic is slightly different depending on whether:
     #   1. e % limb_len == 0
     #   2. c == 1
+    #   3. c = 2^k +-1
     #
     # 1. and 2. can not happen simultaneously, at least not for cryptographically sized primes.
     # 2^e - 1 can only be prime when e itself is prime.
@@ -499,7 +500,12 @@ def rdc_8x1(f, pp, v, strat):
         case rdc_8x1_mode.shift0:
             rdc_8x1_shift0(f, pp, v, strat)
         case rdc_8x1_mode.ham2plus | rdc_8x1_mode.ham2minus:
-            rdc_8x1_ham2(f, pp, v, strat)
+            #TODO Finish
+            #rdc_8x1_ham2(f, pp, v, strat)
+            rdc_8x1_standard(f, pp, v, strat)
+        case rdc_8x1_mode.shift0_ham2plus | rdc_8x1_mode.shift0_ham2minus:
+            #rdc_8x1_shift0_ham2(f, pp, v, strat)
+            rdc_8x1_standard(f, pp, v, strat)
         case _:
             rdc_8x1_standard(f, pp, v, strat)
 
@@ -550,7 +556,11 @@ def rdc_8x1_shift0(f, pp, v, strat):
     f.line(f"t[2] = VADDMASK(t[2], msb_mask, t[2], one);")
     f.line()
 
-    f.comment(f"We do not propogate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
+    if strat.rdc_final_carry_prop:
+        carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask", start_idx=2)
+    else:
+        f.comment(f"We do not propagate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
+
     for i in range(pp.num_limbs):
         f.line(f"res[{i}] = t[{i+2}];")
 
@@ -612,12 +622,383 @@ def rdc_8x1_c1(f, pp, v, strat):
     f.line(f"t[2] = VADDMASK(t[2], msb_mask, t[2], one);")
     f.line()
 
-    f.comment(f"We do not propogate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
+    if strat.rdc_final_carry_prop:
+        carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask", start_idx=2)
+    else:
+        f.comment(f"We do not propagate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
+
     for i in range(pp.num_limbs):
         f.line(f"res[{i}] = t[{i+2}];")
 
 def rdc_8x1_ham2(f, pp, v, strat):
-    return rdc_8x1_standard(f, pp, v, strat)
+    """Optimized reduction for c = 2^k +- 1."""
+    nl = pp.num_limbs
+    L = pp.limb_len
+    c = pp.c
+
+    # Detect form
+    k = None
+    c_form = None
+    for kk in range(1, 64):
+        if c == (1 << kk) + 1:
+            k = kk; c_form = 'plus'; break
+        if c == (1 << kk) - 1:
+            k = kk; c_form = 'minus'; break
+    assert k is not None, f"c={c} is not 2^k ± 1"
+
+    shift = pp.e % L  # bit offset within limb
+    s1 = shift         # low shift
+    s2 = shift + k     # high shift
+
+    if strat.fp2_lazy:
+        n_t = nl + 2
+        result_start = 2
+    else:
+        n_t = nl + 1
+        result_start = 1
+
+    if strat.fp2_lazy:
+        f.line(f"__m512i t[{n_t}], s{nl-1}, s{nl}, hi1, hi2;")
+    else:
+        f.line(f"__m512i t[{n_t}], s{nl-1}, hi1, hi2;")
+    f.line("__mmask8 msb_mask;")
+    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
+    f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
+    f.line(f"const __m512i zero = VZERO();")
+    f.line(f"const __m512i one = VSETALL(1);")
+    f.line()
+
+    # Helper: generate x * top = x << s2 ± x << s1
+    # Returns (lo, hi) where lo is the low L bits and hi is the carry
+    def emit_mul_top(dst_lo, dst_hi, src, accum_lo=None, accum_hi=None):
+        """Generate code for dst = src * top, split into (lo, hi).
+        If accum_lo/accum_hi given, add to those."""
+        # x << s1: low part is (x << s1) & mask, high is x >> (L - s1)
+        # x << s2: low part is (x << s2) & mask if s2 < L, else 0
+        #          high is x >> (L - s2) if s2 < L, else x << (s2 - L)
+
+        if s2 < L:
+            # Both shifts produce bits in the low limb
+            op = "VADD" if c_form == 'plus' else "VSUB"
+            lo_expr = f"{op}(VSL({src}, {s2}), VSL({src}, {s1}))"
+            f.line(f"__m512i {dst_lo}_raw = {lo_expr};")
+            f.line(f"{dst_lo} = VAND({dst_lo}_raw, limb_mask);")
+
+            hi_s1 = f"VSRA({src}, {L - s1})" if s1 > 0 else "zero"
+            hi_s2 = f"VSRA({src}, {L - s2})"
+            hi_expr = f"{op}({hi_s2}, {hi_s1})"
+            # Also add the overflow from lo
+            f.line(f"{dst_hi} = VADD({hi_expr}, VSRA({dst_lo}_raw, {L}));")
+        elif s2 == L:
+            # s2 shift puts everything in the high word
+            f.line(f"{dst_lo} = VSL({src}, {s1});")
+            hi_s1 = f"VSRA({src}, {L - s1})" if s1 > 0 else "zero"
+            if c_form == 'plus':
+                f.line(f"{dst_hi} = VADD({src}, {hi_s1});")
+            else:
+                f.line(f"{dst_hi} = VSUB({src}, {hi_s1});")
+            f.line(f"__m512i {dst_lo}_overflow = VSRA({dst_lo}, {L});")
+            f.line(f"{dst_lo} = VAND({dst_lo}, limb_mask);")
+            f.line(f"{dst_hi} = VADD({dst_hi}, {dst_lo}_overflow);")
+        else:
+            # s2 > L: the s2 shift lands entirely in the high word
+            s2_rem = s2 - L
+            f.line(f"{dst_lo} = VSL({src}, {s1});")
+            hi_s1 = f"VSRA({src}, {L - s1})" if s1 > 0 else "zero"
+            if c_form == 'plus':
+                f.line(f"{dst_hi} = VADD(VSL({src}, {s2_rem}), {hi_s1});")
+            else:
+                f.line(f"{dst_hi} = VSUB(VSL({src}, {s2_rem}), {hi_s1});")
+            f.line(f"__m512i {dst_lo}_overflow = VSRA({dst_lo}, {L});")
+            f.line(f"{dst_lo} = VAND({dst_lo}, limb_mask);")
+            f.line(f"{dst_hi} = VADD({dst_hi}, {dst_lo}_overflow);")
+
+    # --- Compute s ---
+    # Use VMULADDL/VMULADDH for s since it's just 1-2 limb multiplies
+    # and it keeps the code simpler
+    if strat.fp2_lazy:
+        f.comment(f"s = low(a) * ({c}*2^{pp.e} + 1) mod 2^(({nl}+1)*{L})")
+        f.line(f"s{nl-1} = VMULADDL(a[{nl-1}], a[0], top);")
+        f.line(f"s{nl} = VMULADDH(zero, a[0], top);")
+        f.line(f"s{nl} = VADD(a[{nl}], VSL(s{nl}, {v.limb_align}));")
+        f.line(f"s{nl} = VMULADDL(s{nl}, a[1], top);")
+        f.line(f"s{nl} = VADD(s{nl}, VSRA(s{nl-1}, {L}));")
+        f.line(f"s{nl-1} = VAND(s{nl-1}, limb_mask);")
+        f.line(f"s{nl} = VAND(s{nl}, limb_mask);")
+    else:
+        f.comment(f"s = low(a) * ({c}*2^{pp.e} + 1) mod 2^({nl}*{L})")
+        f.line(f"s{nl-1} = VAND(VMULADDL(a[{nl-1}], a[0], top), limb_mask);")
+    f.line()
+
+    # --- Compute s * (p+1) = s * c * 2^e using shifts ---
+    f.comment(f"Compute s * (p+1) using shifts: c = 2^{k} {'+' if c_form == 'plus' else '-'} 1")
+    op = "VADD" if c_form == 'plus' else "VSUB"
+
+    # First limb: a[0]
+    if s2 < L:
+        f.line(f"t[0] = {op}(VSL(a[0], {s2}), VSL(a[0], {s1}));")
+        if s1 > 0:
+            f.line(f"hi1 = VSRA(a[0], {L - s1});")
+        else:
+            f.line(f"hi1 = zero;")
+        f.line(f"hi2 = VSRA(a[0], {L - s2});")
+        f.line(f"hi1 = VADD({op}(hi2, hi1), VSRA(t[0], {L}));")
+        f.line(f"t[0] = VAND(t[0], limb_mask);")
+    elif s2 == L:
+        f.line(f"t[0] = VSL(a[0], {s1});")
+        if s1 > 0:
+            f.line(f"hi1 = {op}(a[0], VSRA(a[0], {L - s1}));")
+        else:
+            f.line(f"hi1 = {'VADD' if c_form == 'plus' else 'VSUB'}(a[0], zero);")
+        f.line(f"hi1 = VADD(hi1, VSRA(t[0], {L}));")
+        f.line(f"t[0] = VAND(t[0], limb_mask);")
+    else:
+        s2r = s2 - L
+        f.line(f"t[0] = VSL(a[0], {s1});")
+        if s1 > 0:
+            f.line(f"hi1 = {op}(VSL(a[0], {s2r}), VSRA(a[0], {L - s1}));")
+        else:
+            f.line(f"hi1 = VSL(a[0], {s2r});")
+        f.line(f"hi1 = VADD(hi1, VSRA(t[0], {L}));")
+        f.line(f"t[0] = VAND(t[0], limb_mask);")
+    f.line()
+
+    # Middle limbs: a[1..nl-2]
+    for i in range(1, nl - 1):
+        src = f"a[{i}]"
+        if s2 < L:
+            f.line(f"t[{i}] = VADD(hi1, {op}(VSL({src}, {s2}), VSL({src}, {s1})));")
+            if s1 > 0:
+                f.line(f"hi1 = VSRA({src}, {L - s1});")
+            else:
+                f.line(f"hi1 = zero;")
+            f.line(f"hi2 = VSRA({src}, {L - s2});")
+            f.line(f"hi1 = VADD({op}(hi2, hi1), VSRA(t[{i}], {L}));")
+        elif s2 == L:
+            f.line(f"t[{i}] = VADD(hi1, VSL({src}, {s1}));")
+            if s1 > 0:
+                f.line(f"hi1 = {op}({src}, VSRA({src}, {L - s1}));")
+            else:
+                f.line(f"hi1 = {src};")
+            f.line(f"hi1 = VADD(hi1, VSRA(t[{i}], {L}));")
+        else:
+            s2r = s2 - L
+            f.line(f"t[{i}] = VADD(hi1, VSL({src}, {s1}));")
+            if s1 > 0:
+                f.line(f"hi1 = {op}(VSL({src}, {s2r}), VSRA({src}, {L - s1}));")
+            else:
+                f.line(f"hi1 = VSL({src}, {s2r});")
+            f.line(f"hi1 = VADD(hi1, VSRA(t[{i}], {L}));")
+        f.line(f"t[{i}] = VAND(t[{i}], limb_mask);")
+        f.line()
+
+    # s_{nl-1} limb
+    src = f"s{nl-1}"
+    if s2 < L:
+        f.line(f"t[{nl-1}] = VADD(hi1, {op}(VSL({src}, {s2}), VSL({src}, {s1})));")
+        if s1 > 0:
+            f.line(f"hi1 = VSRA({src}, {L - s1});")
+        else:
+            f.line(f"hi1 = zero;")
+        f.line(f"hi2 = VSRA({src}, {L - s2});")
+        f.line(f"hi1 = VADD({op}(hi2, hi1), VSRA(t[{nl-1}], {L}));")
+    elif s2 == L:
+        f.line(f"t[{nl-1}] = VADD(hi1, VSL({src}, {s1}));")
+        if s1 > 0:
+            f.line(f"hi1 = {op}({src}, VSRA({src}, {L - s1}));")
+        else:
+            f.line(f"hi1 = {src};")
+        f.line(f"hi1 = VADD(hi1, VSRA(t[{nl-1}], {L}));")
+    else:
+        s2r = s2 - L
+        f.line(f"t[{nl-1}] = VADD(hi1, VSL({src}, {s1}));")
+        if s1 > 0:
+            f.line(f"hi1 = {op}(VSL({src}, {s2r}), VSRA({src}, {L - s1}));")
+        else:
+            f.line(f"hi1 = VSL({src}, {s2r});")
+        f.line(f"hi1 = VADD(hi1, VSRA(t[{nl-1}], {L}));")
+    f.line(f"t[{nl-1}] = VAND(t[{nl-1}], limb_mask);")
+    f.line()
+
+    # Top limb(s)
+    if strat.fp2_lazy:
+        src = f"s{nl}"
+        if s2 < L:
+            f.line(f"t[{nl}] = VADD(hi1, {op}(VSL({src}, {s2}), VSL({src}, {s1})));")
+            if s1 > 0:
+                f.line(f"hi1 = VSRA({src}, {L - s1});")
+            else:
+                f.line(f"hi1 = zero;")
+            f.line(f"hi2 = VSRA({src}, {L - s2});")
+            f.line(f"t[{nl+1}] = VADD({op}(hi2, hi1), VSRA(t[{nl}], {L}));")
+        elif s2 == L:
+            f.line(f"t[{nl}] = VADD(hi1, VSL({src}, {s1}));")
+            if s1 > 0:
+                f.line(f"t[{nl+1}] = {op}({src}, VSRA({src}, {L - s1}));")
+            else:
+                f.line(f"t[{nl+1}] = {src};")
+            f.line(f"t[{nl+1}] = VADD(t[{nl+1}], VSRA(t[{nl}], {L}));")
+        else:
+            s2r = s2 - L
+            f.line(f"t[{nl}] = VADD(hi1, VSL({src}, {s1}));")
+            if s1 > 0:
+                f.line(f"t[{nl+1}] = {op}(VSL({src}, {s2r}), VSRA({src}, {L - s1}));")
+            else:
+                f.line(f"t[{nl+1}] = VSL({src}, {s2r});")
+            f.line(f"t[{nl+1}] = VADD(t[{nl+1}], VSRA(t[{nl}], {L}));")
+        f.line(f"t[{nl}] = VAND(t[{nl}], limb_mask);")
+    else:
+        f.line(f"t[{nl}] = hi1;")
+    f.line()
+
+    # Add upper part of input
+    f.comment("t += a (ignoring lower limbs)")
+    for i in range(nl + 1):
+        f.line(f"t[{i}] = VADD(t[{i}], a[{i + nl - 1}]);")
+    f.line()
+
+    carry_prop_8x1(f, pp, v, n_t, "t", "limb_mask")
+
+    # Final conditional subtraction
+    f.comment(f"After dividing by 2^n, the result is in t[{result_start}], ..., t[{n_t-1}]")
+    f.comment(f"Conditionally subtract p")
+    shift_final = 64 - (pp.pbits + 1 - (nl - 1) * L)
+    f.line(f"hi1 = VSL(t[{n_t-1}], {shift_final});")
+    f.line(f"msb_mask = VSIGN(hi1);")
+    f.line(f"t[{n_t-1}] = VSUBMASK(t[{n_t-1}], msb_mask, t[{n_t-1}], top);")
+    f.line(f"t[{result_start}] = VADDMASK(t[{result_start}], msb_mask, t[{result_start}], one);")
+    f.line()
+
+    if strat.rdc_final_carry_prop:
+        carry_prop_8x1(f, pp, v, nl, "t", "limb_mask", start_idx=result_start)
+    else:
+        f.comment(f"We do not propagate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
+    
+    for i in range(nl):
+        f.line(f"res[{i}] = t[{i + result_start}];")
+
+def rdc_8x1_shift0_ham2(f, pp, v, strat):
+    nl = pp.num_limbs
+    L = pp.limb_len
+    c = pp.c
+
+    # Detect form
+    k = None
+    c_form = None
+    for kk in range(1, 64):
+        if c == (1 << kk) + 1:
+            k = kk; c_form = 'plus'; break
+        if c == (1 << kk) - 1:
+            k = kk; c_form = 'minus'; break
+    assert k is not None, f"c={c} is not 2^k ± 1"
+    assert pp.e % L == 0, f"e={pp.e} is not a multiple of L={L}"
+    assert k < L, f"k={k} must be less than L={L}"
+
+    op = "VADD" if c_form == 'plus' else "VSUB"
+
+    if strat.fp2_lazy:
+        n_t = nl + 2
+        result_start = 2
+    else:
+        n_t = nl + 1
+        result_start = 1
+
+    if strat.fp2_lazy:
+        f.line(f"__m512i t[{n_t}], s{nl-1}, s{nl}, hi;")
+    else:
+        f.line(f"__m512i t[{n_t}], s{nl-1}, hi;")
+    f.line("__mmask8 msb_mask;")
+    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
+    f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
+    f.line(f"const __m512i zero = VZERO();")
+    f.line(f"const __m512i one = VSETALL(1);")
+    f.line()
+
+    # --- Compute s ---
+    # Since e = (nl-1)*L, m = c*2^e + 1, and s = low(a)*m mod 2^n
+    # s[0..nl-2] = a[0..nl-2], s[nl-1] = a[nl-1] + (a[0]*c) mod 2^L
+    # For c = 2^k ± 1: a[0]*c = (a[0] << k) ± a[0]
+    if strat.fp2_lazy:
+        f.comment(f"s = low(a) * ({c}*2^{pp.e} + 1) mod 2^(({nl}+1)*{L})")
+        f.line(f"s{nl-1} = {op}(VSL(a[0], {k}), a[0]);")
+        f.line(f"s{nl-1} = VADD(a[{nl-1}], s{nl-1});")
+        f.line(f"hi = VSRA(s{nl-1}, {L});")
+        f.line(f"s{nl-1} = VAND(s{nl-1}, limb_mask);")
+        # s[nl] = a[nl] + (a[1]*c + carry) mod 2^L
+        f.line(f"s{nl} = {op}(VSL(a[1], {k}), a[1]);")
+        f.line(f"s{nl} = VADD(s{nl}, VADD(a[{nl}], hi));")
+        f.line(f"s{nl} = VAND(s{nl}, limb_mask);")
+    else:
+        f.comment(f"s = low(a) * ({c}*2^{pp.e} + 1) mod 2^({nl}*{L})")
+        f.line(f"s{nl-1} = {op}(VSL(a[0], {k}), a[0]);")
+        f.line(f"s{nl-1} = VAND(VADD(a[{nl-1}], s{nl-1}), limb_mask);")
+    f.line()
+
+    # --- Compute s * c * 2^e = s * c placed at limb nl-1 ---
+    # Since e aligns and c = 2^k ± 1, for each limb x:
+    #   x * c = (x << k) ± x
+    #   lo = ((x << k) ± x) & LIMB_MASK
+    #   hi = carry from lo + x >> (L-k)  [only from the shift term]
+
+    f.comment(f"Compute s * (p+1) = s * {c} * 2^{pp.e}")
+    f.comment(f"Since e aligns and c = 2^{k} {'+' if c_form == 'plus' else '-'} 1, use shifts")
+
+    # First limb
+    f.line(f"t[0] = {op}(VSL(a[0], {k}), a[0]);")
+    f.line(f"hi = VSRA(a[0], {L - k});")
+    f.line(f"hi = VADD(hi, VSRA(t[0], {L}));")
+    f.line(f"t[0] = VAND(t[0], limb_mask);")
+    f.line()
+
+    # Middle limbs
+    for i in range(1, nl - 1):
+        f.line(f"t[{i}] = VADD(hi, {op}(VSL(a[{i}], {k}), a[{i}]));")
+        f.line(f"hi = VSRA(a[{i}], {L - k});")
+        f.line(f"hi = VADD(hi, VSRA(t[{i}], {L}));")
+        f.line(f"t[{i}] = VAND(t[{i}], limb_mask);")
+        f.line()
+
+    # s_{nl-1} limb
+    f.line(f"t[{nl-1}] = VADD(hi, {op}(VSL(s{nl-1}, {k}), s{nl-1}));")
+    f.line(f"hi = VSRA(s{nl-1}, {L - k});")
+    f.line(f"hi = VADD(hi, VSRA(t[{nl-1}], {L}));")
+    f.line(f"t[{nl-1}] = VAND(t[{nl-1}], limb_mask);")
+    f.line()
+
+    if strat.fp2_lazy:
+        f.line(f"t[{nl}] = VADD(hi, {op}(VSL(s{nl}, {k}), s{nl}));")
+        f.line(f"t[{nl+1}] = VSRA(s{nl}, {L - k});")
+        f.line(f"t[{nl+1}] = VADD(t[{nl+1}], VSRA(t[{nl}], {L}));")
+        f.line(f"t[{nl}] = VAND(t[{nl}], limb_mask);")
+    else:
+        f.line(f"t[{nl}] = hi;")
+    f.line()
+
+    # Add upper part of input
+    f.comment("t += a (ignoring lower limbs)")
+    for i in range(nl + 1):
+        f.line(f"t[{i}] = VADD(t[{i}], a[{i + nl - 1}]);")
+    f.line()
+
+    carry_prop_8x1(f, pp, v, n_t, "t", "limb_mask")
+
+    # Final conditional subtraction
+    f.comment(f"After dividing by 2^n, the result is in t[{result_start}], ..., t[{n_t-1}]")
+    f.comment(f"Conditionally subtract p")
+    shift_final = 64 - (pp.pbits + 1 - (nl - 1) * L)
+    f.line(f"hi = VSL(t[{n_t-1}], {shift_final});")
+    f.line(f"msb_mask = VSIGN(hi);")
+    f.line(f"t[{n_t-1}] = VSUBMASK(t[{n_t-1}], msb_mask, t[{n_t-1}], top);")
+    f.line(f"t[{result_start}] = VADDMASK(t[{result_start}], msb_mask, t[{result_start}], one);")
+    f.line()
+
+    if strat.rdc_final_carry_prop:
+        carry_prop_8x1(f, pp, v, nl, "t", "limb_mask", start_idx=result_start)
+    else:
+        f.comment(f"We do not propagate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
+
+    for i in range(nl):
+        f.line(f"res[{i}] = t[{i + result_start}];")
 
 def rdc_8x1_standard(f, pp, v, strat):
     nl = pp.num_limbs
@@ -702,7 +1083,11 @@ def rdc_8x1_standard(f, pp, v, strat):
     f.line(f"t[{result_start}] = VADDMASK(t[{result_start}], msb_mask, t[{result_start}], one);")
     f.line()
 
-    f.comment(f"We do not propagate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
+    if strat.rdc_final_carry_prop:
+        carry_prop_8x1(f, pp, v, nl, "t", "limb_mask", start_idx=result_start)
+    else:
+        f.comment(f"We do not propagate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
+    
     for i in range(nl):
         f.line(f"res[{i}] = t[{i + result_start}];")
 

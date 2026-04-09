@@ -186,7 +186,7 @@ void fp2_mixaddsub_4x1x2(__m512i* res, __m512i* a, __m512i* b,
 
 void fp2_mul_4x1x2(__m512i* res, __m512i* a, __m512i* b)
 {
-    t1[13], t2[13], t3[13];
+    __m512i t1[13], t2[13], t3[13];
     
     mp_add_4x2(t3, a, a + 4);
     fp_add_4x2(t3 + 4, b, b + 4);
@@ -204,7 +204,7 @@ void fp2_sqr_4x1x2(__m512i* res, __m512i* a)
     __m512i s1[4], s2[4], s3[4];
     
     mp_add_4x2(s1, a, a + 4);
-    mp_app_p_sub_4x2(s2, a, a + 4);
+    mp_add_p_sub_4x2(s2, a, a + 4);
     mp_add_4x2(s3, a, a);
     fp_mul_4x2(res + 4, s3, a + 4);
     fp_mul_4x2(res, s1, s2);
@@ -319,7 +319,7 @@ void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b)
     }
     mp_mul_8x1_karat(t0, t0, b);
     mp_mul_8x1_karat(t1, t1, t1 + 8);
-    mp_mixaddsubx2_8x1(res, t0, t1, 0xaa);
+    mp_mixaddsubx2_8x1(t0, t0, t1, 0xaa);
     rdc_8x1(res, t0);
 }
 
@@ -453,7 +453,7 @@ void fp2_mixaddsub_2x2x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 ad
 
 void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i t0[13], s2[13], s3[13];
+    __m512i t0[13], t1[13];
     
     for (int i = 0; i < 4; i++) {
         t0[i] = VPERM256(a[i], 0x44); // a0, a0

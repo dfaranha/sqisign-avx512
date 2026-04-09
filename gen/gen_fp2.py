@@ -315,7 +315,7 @@ def fp2_mul_4x1x2_standard(f, pp, v):
 
 def fp2_mul_4x1x2_lazy(f, pp, v):
     lenx2 = pp.n42 + pp.num_limbs + 1
-    f.line(f"t1[{lenx2}], t2[{lenx2}], t3[{lenx2}];")
+    f.line(f"__m512i t1[{lenx2}], t2[{lenx2}], t3[{lenx2}];")
     f.line()
 
     f.line(f"mp_add_4x2(t3, a, a + {pp.n42});")
@@ -353,7 +353,7 @@ def fp2_sqr_4x1x2_lazy(f, pp, v):
     f.line()
 
     f.line(f"mp_add_4x2(s1, a, a + {pp.n42});")
-    f.line(f"mp_app_p_sub_4x2(s2, a, a + {pp.n42});")
+    f.line(f"mp_add_p_sub_4x2(s2, a, a + {pp.n42});")
     f.line(f"mp_add_4x2(s3, a, a);")
     f.line(f"fp_mul_4x2(res + {pp.n42}, s3, a + {pp.n42});")
     f.line(f"fp_mul_4x2(res, s1, s2);")
@@ -552,7 +552,7 @@ def fp2_mul_4x2x1_lazy(f, pp, v):
 
     f.line("mp_mul_8x1_karat(t0, t0, b);")
     f.line(f"mp_mul_8x1_karat(t1, t1, t1 + {pp.num_limbs});")
-    f.line("mp_mixaddsubx2_8x1(res, t0, t1, 0xaa);")
+    f.line("mp_mixaddsubx2_8x1(t0, t0, t1, 0xaa);")
     f.line("rdc_8x1(res, t0);")
 
 def fp2_sqr_4x2x1(f, pp, v, strat):
@@ -805,7 +805,7 @@ def fp2_mul_2x2x2_standard(f, pp, v):
 
 def fp2_mul_2x2x2_lazy(f, pp, v):
     lenx2 = pp.n42 + pp.num_limbs + 1
-    f.line(f"__m512i t0[{lenx2}], s2[{lenx2}], s3[{lenx2}];")
+    f.line(f"__m512i t0[{lenx2}], t1[{lenx2}];")
     f.line()
 
     f.line(f"for (int i = 0; i < {pp.n42}; i++) {{")

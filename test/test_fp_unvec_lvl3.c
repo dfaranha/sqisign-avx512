@@ -346,4 +346,6 @@ bool test_fp_unvec_lvl3(int iterations)
     if (passed == 0) {
         return false;
     }
+
+    return true;
 }
