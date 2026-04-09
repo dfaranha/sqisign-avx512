@@ -112,13 +112,13 @@ def fp_conversions(f, pp, v):
     fp_4x2_to_2x4(f, pp, v)
     fp_2x4_to_4x2(f, pp, v)
 
-def write_fp_file(dir, pp, v):
+def write_fp_file(dir, pp, v, strat):
     path = f"{dir}/fp.c"
     f = FileWriter(path)
     
     write_fp_include(f)
-    write_fp_8x1(f, pp, v)
+    write_fp_8x1(f, pp, v, strat)
     write_fp_4x2(f, pp, v)
-    write_fp_2x4(f, pp, v)
+    write_fp_2x4(f, pp, v, strat)
     fp_conversions(f, pp, v)
     write_fp_inv_functions(f, pp, v)

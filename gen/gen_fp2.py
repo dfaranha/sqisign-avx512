@@ -73,10 +73,10 @@ def fp2_mixaddsub_8x1x1(f, pp, v):
 
     f.end()
 
-def fp2_mul_8x1x1(f, pp, v):
+def fp2_mul_8x1x1(f, pp, v, strat):
     f.start("void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)")
 
-    if pp.limb_len <= 50:
+    if strat.fp2_lazy:
         fp2_mul_8x1x1_lazy(f, pp, v)
     else:
         fp2_mul_8x1x1_standard(f, pp, v)
@@ -111,10 +111,10 @@ def fp2_mul_8x1x1_lazy(f, pp, v):
     f.line(f"rdc_8x1(res + {pp.num_limbs}, tt3);")
     f.line(f"rdc_8x1(res, tt1);")
 
-def fp2_sqr_8x1x1(f, pp, v):
+def fp2_sqr_8x1x1(f, pp, v, strat):
     f.start("void fp2_sqr_8x1x1(__m512i* res, __m512i* a)")
 
-    if pp.limb_len <= 50:
+    if strat.fp2_lazy:
         fp2_sqr_8x1x1_lazy(f, pp, v)
     else:
         fp2_sqr_8x1x1_standard(f, pp, v)
@@ -200,7 +200,7 @@ def fp2_rand_8x1x1(f, pp, v):
     
     f.end()
 
-def fp2_8x1x1(f, pp, v):
+def fp2_8x1x1(f, pp, v, strat):
     f.banner("8x1x1")
 
     fp2_setzero_8x1x1(f, pp, v)
@@ -212,8 +212,8 @@ def fp2_8x1x1(f, pp, v):
     fp2_neg_8x1x1(f, pp, v)
     fp2_mixaddsub_8x1x1(f, pp, v)
 
-    fp2_mul_8x1x1(f, pp, v)
-    fp2_sqr_8x1x1(f, pp, v)
+    fp2_mul_8x1x1(f, pp, v, strat)
+    fp2_sqr_8x1x1(f, pp, v, strat)
 
     fp2_muli_8x1x1(f, pp, v)
     fp2_div3_8x1x1(f, pp, v)
@@ -290,10 +290,17 @@ def fp2_mixaddsub_4x1x2(f, pp, v):
 
     f.end()
 
-# TODO: Optimize
-def fp2_mul_4x1x2(f, pp, v):
+def fp2_mul_4x1x2(f, pp, v, strat):
     f.start("void fp2_mul_4x1x2(__m512i* res, __m512i* a, __m512i* b)")
 
+    if strat.fp2_lazy:
+        fp2_mul_4x1x2_lazy(f, pp, v)
+    else:
+        fp2_mul_4x1x2_standard(f, pp, v)
+
+    f.end()
+
+def fp2_mul_4x1x2_standard(f, pp, v):
     f.line(f"__m512i s1[{pp.n42}], s2[{pp.n42}], s3[{pp.n42}];")
     f.line()
 
@@ -306,11 +313,32 @@ def fp2_mul_4x1x2(f, pp, v):
     f.line(f"fp_sub_4x2(res + {pp.n42}, s3, s2);")
     f.line(f"fp_sub_4x2(res, s1, s2);")
 
-    f.end()
+def fp2_mul_4x1x2_lazy(f, pp, v):
+    lenx2 = pp.n42 + pp.num_limbs + 1
+    f.line(f"t1[{lenx2}], t2[{lenx2}], t3[{lenx2}];")
+    f.line()
 
-def fp2_sqr_4x1x2(f, pp, v):
+    f.line(f"mp_add_4x2(t3, a, a + {pp.n42});")
+    f.line(f"fp_add_4x2(t3 + {pp.n42}, b, b + {pp.n42});")
+    f.line(f"mp_mul_4x2(t1, a, b);")
+    f.line(f"mp_mul_4x2(t2, a+{pp.n42}, b+{pp.n42});")
+    f.line(f"mp_mul_4x2(t3, t3, t3+{pp.n42});")
+    f.line(f"mp_dblsubx2_4x2(t3, t1, t2);")
+    f.line(f"mp_subx2_4x2(t1, t2);")
+    f.line(f"rdc_4x2(res+{pp.n42}, t3);")
+    f.line(f"rdc_4x2(res, t1);")
+
+def fp2_sqr_4x1x2(f, pp, v, strat):
     f.start("void fp2_sqr_4x1x2(__m512i* res, __m512i* a)")
 
+    if strat.fp2_lazy:
+        fp2_sqr_4x1x2_lazy(f, pp, v)
+    else:
+        fp2_sqr_4x1x2_standard(f, pp, v)
+
+    f.end()
+
+def fp2_sqr_4x1x2_standard(f, pp, v):
     f.line(f"__m512i s1[{pp.n42}], s2[{pp.n42}], s3[{pp.n42}];")
     f.line()
 
@@ -320,7 +348,16 @@ def fp2_sqr_4x1x2(f, pp, v):
     f.line(f"fp_mul_4x2(res + {pp.n42}, s3, a + {pp.n42});")
     f.line(f"fp_mul_4x2(res, s1, s2);")
 
-    f.end()
+def fp2_sqr_4x1x2_lazy(f, pp, v):
+    f.line(f"__m512i s1[{pp.n42}], s2[{pp.n42}], s3[{pp.n42}];")
+    f.line()
+
+    f.line(f"mp_add_4x2(s1, a, a + {pp.n42});")
+    f.line(f"mp_app_p_sub_4x2(s2, a, a + {pp.n42});")
+    f.line(f"mp_add_4x2(s3, a, a);")
+    f.line(f"fp_mul_4x2(res + {pp.n42}, s3, a + {pp.n42});")
+    f.line(f"fp_mul_4x2(res, s1, s2);")
+
 
 def fp2_muli_4x1x2(f, pp, v):
     f.start("void fp2_muli_4x1x2(__m512i* res, __m512i* a)")
@@ -381,7 +418,7 @@ def fp2_rand_4x1x2(f, pp, v):
 
     f.end()
 
-def fp2_4x1x2(f, pp, v):
+def fp2_4x1x2(f, pp, v, strat):
     f.banner("4x1x2")
 
     fp2_setzero_4x1x2(f, pp, v)
@@ -393,8 +430,8 @@ def fp2_4x1x2(f, pp, v):
     fp2_neg_4x1x2(f, pp, v)
     fp2_mixaddsub_4x1x2(f, pp, v)
 
-    fp2_mul_4x1x2(f, pp, v)
-    fp2_sqr_4x1x2(f, pp, v)
+    fp2_mul_4x1x2(f, pp, v, strat)
+    fp2_sqr_4x1x2(f, pp, v, strat)
 
     fp2_muli_4x1x2(f, pp, v)
     fp2_div3_4x1x2(f, pp, v)
@@ -475,10 +512,17 @@ def fp2_mixaddsub_4x2x1(f, pp, v):
 
     f.end()
 
-# TODO: Optimize
-def fp2_mul_4x2x1(f, pp, v):
+def fp2_mul_4x2x1(f, pp, v, strat):
     f.start("void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b)")
 
+    if strat.fp2_lazy:
+        fp2_mul_4x2x1_lazy(f, pp, v)
+    else:
+        fp2_mul_4x2x1_standard(f, pp, v)
+
+    f.end()
+
+def fp2_mul_4x2x1_standard(f, pp, v):
     f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}], s3[{pp.num_limbs}];")
     f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
@@ -494,11 +538,34 @@ def fp2_mul_4x2x1(f, pp, v):
     f.line("fp_mul_8x1(s2, s2, s3);")
     f.line("fp_mixaddsub_8x1(res, s1, s2, 0xaa);")
 
-    f.end()
+def fp2_mul_4x2x1_lazy(f, pp, v):
+    f.line(f"__m512i t0[{2*pp.num_limbs}], t1[{2*pp.num_limbs}];")
+    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.indent()
 
-def fp2_sqr_4x2x1(f, pp, v):
+    f.line("t0[i] = VSHUFFLE(a[i], 0x44); // a0, a0")
+    f.line("t1[i] = VSHUFFLE(a[i], 0xee); // a1, a1")
+    f.line(f"t1[i + {pp.num_limbs}] = VSHUFFLE(b[i], 0x4e); // b0, b1")
+
+    f.unindent()
+    f.line("}")
+
+    f.line("mp_mul_8x1_karat(t0, t0, b);")
+    f.line(f"mp_mul_8x1_karat(t1, t1, t1 + {pp.num_limbs});")
+    f.line("mp_mixaddsubx2_8x1(res, t0, t1, 0xaa);")
+    f.line("rdc_8x1(res, t0);")
+
+def fp2_sqr_4x2x1(f, pp, v, strat):
     f.start("void fp2_sqr_4x2x1(__m512i* res, __m512i* a)")
 
+    if strat.fp2_lazy:
+        fp2_sqr_4x2x1_lazy(f, pp, v)
+    else:
+        fp2_sqr_4x2x1_standard(f, pp, v)
+
+    f.end()
+
+def fp2_sqr_4x2x1_standard(f, pp, v):
     f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}], s3[{pp.num_limbs}];")
     f.line("__mmask16 mask = 0b0011001100110011;")
     f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
@@ -515,7 +582,22 @@ def fp2_sqr_4x2x1(f, pp, v):
     f.line(f"fp_sub_8x1(s2, a, s2);")
     f.line("fp_mul_8x1(res, s1, s2);")
 
-    f.end()
+def fp2_sqr_4x2x1_lazy(f, pp, v):
+    f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}], s3[{pp.num_limbs}];")
+    f.line("__mmask16 mask = 0b0011001100110011;")
+    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.indent()
+
+    f.line("s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0")
+    f.line("s2[i] = VSHUFFLEMASKZ(mask, a[i], 0x0e); // 0, a1")
+    f.line("s3[i] = VSHUFFLE(a[i], 0x4e); // a0, a1")
+
+    f.unindent()
+    f.line("}")
+
+    f.line("mp_add_8x1(s1, s1, s3);")
+    f.line(f"mp_add_p_sub_8x1(s2, a, s2);")
+    f.line("fp_mul_8x1(res, s1, s2);")
 
 def fp2_mulx2_4x2x1(f, pp, v):
     f.comment("res1 = a1 * b1, res2 = a2 * b2")
@@ -609,7 +691,7 @@ def fp2_rand_4x2x1(f, pp, v):
 
     f.end()
 
-def fp2_4x2x1(f, pp, v):
+def fp2_4x2x1(f, pp, v, strat):
     f.banner("4x2x1")
 
     fp2_setzero_4x2x1(f, pp, v)
@@ -621,8 +703,8 @@ def fp2_4x2x1(f, pp, v):
     fp2_neg_4x2x1(f, pp, v)
     fp2_mixaddsub_4x2x1(f, pp, v)
 
-    fp2_mul_4x2x1(f, pp, v)
-    fp2_sqr_4x2x1(f, pp, v)
+    fp2_mul_4x2x1(f, pp, v, strat)
+    fp2_sqr_4x2x1(f, pp, v, strat)
     fp2_mulx2_4x2x1(f, pp, v)
     fp2_sqrx2_4x2x1(f, pp, v)
 
@@ -693,10 +775,17 @@ def fp2_mixaddsub_2x2x2(f, pp, v):
 
     f.end()
 
-# TODO: Optimize
-def fp2_mul_2x2x2(f, pp, v):
+def fp2_mul_2x2x2(f, pp, v, strat):
     f.start("void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b)")
 
+    if strat.fp2_lazy:
+        fp2_mul_2x2x2_lazy(f, pp, v)
+    else:
+        fp2_mul_2x2x2_standard(f, pp, v)
+
+    f.end()
+
+def fp2_mul_2x2x2_standard(f, pp, v):
     f.line(f"__m512i s1[{pp.n42}], s2[{pp.n42}], s3[{pp.n42}];")
     f.line()
 
@@ -714,11 +803,37 @@ def fp2_mul_2x2x2(f, pp, v):
     f.line("fp_mul_4x2(s2, s2, s3);")
     f.line("fp_mixaddsub_4x2(res, s1, s2, 0xcc);")
 
-    f.end()
+def fp2_mul_2x2x2_lazy(f, pp, v):
+    lenx2 = pp.n42 + pp.num_limbs + 1
+    f.line(f"__m512i t0[{lenx2}], s2[{lenx2}], s3[{lenx2}];")
+    f.line()
 
-def fp2_sqr_2x2x2(f, pp, v):
+    f.line(f"for (int i = 0; i < {pp.n42}; i++) {{")
+    f.indent()
+
+    f.line("t0[i] = VPERM256(a[i], 0x44); // a0, a0")
+    f.line("t1[i] = VPERM256(a[i], 0xee); // a1, a1")
+    f.line(f"t1[i + {pp.n42}] = VPERM256(b[i], 0x4e); // b0, b1")
+
+    f.unindent()
+    f.line("}")
+
+    f.line("mp_mul_4x2(t0, t0, b);")
+    f.line(f"mp_mul_4x2(t1, t1, t1+{pp.n42});")
+    f.line("mp_mixaddsubx2_4x2(t0, t0, t1, 0xcc);")
+    f.line("rdc_4x2(res, t0);")
+
+def fp2_sqr_2x2x2(f, pp, v, strat):
     f.start("void fp2_sqr_2x2x2(__m512i* res, __m512i* a)")
 
+    if strat.fp2_lazy:
+        fp2_sqr_2x2x2_lazy(f, pp, v)
+    else:
+        fp2_sqr_2x2x2_standard(f, pp, v)
+
+    f.end()
+
+def fp2_sqr_2x2x2_standard(f, pp, v):
     f.line(f"__m512i s1[{pp.n42}], s2[{pp.n42}];")
     f.line()
 
@@ -743,7 +858,30 @@ def fp2_sqr_2x2x2(f, pp, v):
     f.line("fp_sub_4x2(s2, a, s2); // a0 - a1, a1")
     f.line("fp_mul_4x2(res, s1, s2);")
 
-    f.end()
+def fp2_sqr_2x2x2_lazy(f, pp, v):
+    f.line(f"__m512i s1[{pp.n42}], s2[{pp.n42}];")
+    f.line()
+
+    f.line(f"for (int i = 0; i < {pp.n42}; i++) {{")
+    f.indent()
+
+    f.line("s1[i] = VPERM256(a[i], 0x44); // a0, a0")
+    f.line("s2[i] = VPERM256(a[i], 0x4e); // a1, a0")
+
+    f.unindent()
+    f.line("}")
+
+    f.line("mp_add_4x2(s1, s1, s2);")
+
+    f.line(f"for (int i = 0; i < {pp.n42}; i++) {{")
+    f.indent()
+
+    f.line("s2[i] = VPERM256MASKZ(0x33, a[i], 0x4e); // a1, 0")
+
+    f.unindent()
+    f.line("}")
+    f.line("mp_add_p_sub_4x2(s2, a, s2); // a0 - a1, a1")
+    f.line("fp_mul_4x2(res, s1, s2);")
 
 def fp2_muli_2x2x2(f, pp, v):
     f.start("void fp2_muli_2x2x2(__m512i* res, __m512i* a)")
@@ -857,7 +995,7 @@ def fp2_rand_2x2x2(f, pp, v):
 
     f.end()
 
-def fp2_2x2x2(f, pp, v):
+def fp2_2x2x2(f, pp, v, strat):
     f.banner("2x2x2")
 
     fp2_setzero_2x2x2(f, pp, v)
@@ -869,8 +1007,8 @@ def fp2_2x2x2(f, pp, v):
     fp2_neg_2x2x2(f, pp, v)
     fp2_mixaddsub_2x2x2(f, pp, v)
 
-    fp2_mul_2x2x2(f, pp, v)
-    fp2_sqr_2x2x2(f, pp, v)
+    fp2_mul_2x2x2(f, pp, v, strat)
+    fp2_sqr_2x2x2(f, pp, v, strat)
     
     fp2_muli_2x2x2(f, pp, v)
     fp2_div3_2x2x2(f, pp, v)
@@ -946,7 +1084,6 @@ def fp2_mixaddsub_2x4x1(f, pp, v):
 
     f.end()
 
-# TODO: Optimize
 def fp2_mul_2x4x1(f, pp, v):
     f.start("void fp2_mul_2x4x1(__m512i* res, __m512i* a, __m512i* b)")
 
@@ -1297,16 +1434,16 @@ def fp2_conversions(f, pp, v):
     fp2_2x2x2_to_2x4x1(f, pp, v)
     fp2_2x4x1_to_2x2x2(f, pp, v)
 
-def write_fp2_file(dir, pp, v):
+def write_fp2_file(dir, pp, v, strat):
     path = f"{dir}/fp2.c"
     f = FileWriter(path)
 
     write_fp2_include(f, pp, v)
 
-    fp2_8x1x1(f, pp, v)
-    fp2_4x1x2(f, pp, v)
-    fp2_4x2x1(f, pp, v)
-    fp2_2x2x2(f, pp, v)
+    fp2_8x1x1(f, pp, v, strat)
+    fp2_4x1x2(f, pp, v, strat)
+    fp2_4x2x1(f, pp, v, strat)
+    fp2_2x2x2(f, pp, v, strat)
     fp2_2x4x1(f, pp, v)
     fp2_conversions(f, pp, v)
 

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from sage.all import ZZ
+from enum import Enum
 from math import ceil
+from sage.all import ZZ
 
 @dataclass
 class FpParams:
@@ -16,6 +17,7 @@ class FpParams:
     rem42: int
     n24: int
     rem24: int
+    num_limbs_R: int
     R: ZZ
     R2: ZZ
     num_kat: int
@@ -40,6 +42,19 @@ class FpParamNames:
     num_kat_fp: str
     num_kat_fp2: str
 
+class rdc_8x1_mode(Enum):
+    c1 = 1
+    shift0 = 2
+    ham2plus = 3
+    ham2minus = 4
+    standard = 5
+
+@dataclass
+class Strat:
+    fp2_lazy: bool
+    gen_addchain: bool
+    rdc_8x1: rdc_8x1_mode
+    ham2_k: int
 
 def get_p(e, c):
     p = ZZ(c * 2**e -1)
@@ -71,24 +86,59 @@ def get_len_42_24(num_limbs):
     rem24 = num_limbs % 4
     return n42, n24, rem42, rem24
 
+def get_strat(e, c, limb_len, last_limb_len, gen_addchain):
+    fp2_lazy = limb_len <= 50
+
+    # Picking rdc_8x1 strategy:
+    # Detecting whether c = 2^k +- 1
+    ham2_k = None
+    c_form = None
+    if c > 1:
+        for kk in range(1, 64):
+            if c == (1 << kk) + 1:
+                ham_2k = kk; c_form = 1
+            if c == (1 << kk) - 1:
+                ham2_k = kk; c_form = -1
+
+    if c == 1:
+        rdc_8x1 = rdc_8x1_mode.c1
+    elif c_form == 1:
+        rdc_8x1 = rdc_8x1_mode.ham2plus
+    elif c_form == -1:
+        rdc_8x1 = rdc_8x1_mode.ham2minus
+    elif e % limb_len == 0:
+        rdc_8x1 = rdc_8x1_mode.shift0
+    else:
+        rdc_8x1 = rdc_8x1_mode.standard
+    
+
+    return Strat(
+        fp2_lazy = fp2_lazy,
+        gen_addchain = gen_addchain,
+        rdc_8x1 = rdc_8x1,
+        ham2_k = ham2_k
+    )
+
 # TODO: Optimize Montgomery constant for lazy reduction like 48-bit limb case    
-def get_mont_const(p, num_limbs, limb_len):
-    R = ZZ(pow(2, (num_limbs+1) * limb_len, p))
+def get_mont_const(p, num_limbs, limb_len, strat):
+    num_limbs_R = num_limbs+1 if strat.fp2_lazy else num_limbs
+    R = ZZ(pow(2, num_limbs_R * limb_len, p))
     R2 = ZZ(pow(R, 2, p))
-    return R, R2
+    return num_limbs_R, R, R2
 
 def get_limb_mask(pp):
     limb_mask = (1 << pp.limb_len) - 1
     last_limb_mask = (1 << pp.last_limb_len) - 1
     return limb_mask, last_limb_mask
 
-def get_fp_params(e, c, num_kat):
+def comp_params_and_strat(e, c, num_kat, gen_addchain):
     p, pbits = get_p(e, c)
     num_limbs, limb_len, last_limb_len, num_words64 = get_limb_params(pbits, e, c)
     n42, n24, rem42, rem24 = get_len_42_24(num_limbs)
-    R, R2 = get_mont_const(p, num_limbs, limb_len)
+    strat = get_strat(e, c, limb_len, last_limb_len, gen_addchain)
+    num_limbs_R, R, R2 = get_mont_const(p, num_limbs, limb_len, strat)
 
-    return FpParams(
+    pp = FpParams(
         e = e, 
         c = c, 
         p = p, 
@@ -101,10 +151,12 @@ def get_fp_params(e, c, num_kat):
         rem42 = rem42,
         n24 = n24, 
         rem24 = rem24,
+        num_limbs_R = num_limbs_R,
         R = R, 
         R2 = R2,
         num_kat=num_kat
     )
+    return pp, strat
 
 def get_param_names():
     return FpParamNames(

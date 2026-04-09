@@ -1,3 +1,5 @@
+from gen_addchain import (run_addchain, generate_exp_function)
+
 def fp_setzero_2x4(f, pp, v):
     f.start("void fp_setzero_2x4(__m512i* res)")
 
@@ -568,7 +570,18 @@ def fp_sqrt_2x4(f, pp, v):
             
     f.end()
 
-def fp_exp3div4_2x4(f, pp, v):
+def fp_exp3div4_2x4(f, pp, v, strat):
+    if strat.gen_addchain:
+        fun_name = "fp_exp3div4_2x4"
+        fmt = "2x4"
+        arr_size = pp.n24
+        expr_str = f"{pp.c}*2^{pp.e-2} - 1"
+        chain = run_addchain(expr_str)
+        generate_exp_function(f, pp, v, chain, fun_name, fmt, arr_size)
+    else:
+        fp_exp3_div4_2x4_naive(f, pp, v)
+
+def fp_exp3_div4_2x4_naive(f, pp, v):
     f.start("void fp_exp3div4_2x4(__m512i* res, __m512i* a)")
 
     f.line(f"__m512i t[{pp.n24}];")
@@ -776,7 +789,7 @@ def rand_fp_2x4(f, pp, v):
     f.line("fp_add_2x4(res, res, zero);")
     f.end()
 
-def write_fp_2x4(f, pp, v):
+def write_fp_2x4(f, pp, v, strat):
     f.banner("2x4")
 
     fp_setzero_2x4(f, pp, v)
@@ -801,7 +814,7 @@ def write_fp_2x4(f, pp, v):
     fp_div3_2x4(f, pp, v)
     fp_inv_2x4(f, pp, v)
     fp_sqrt_2x4(f, pp, v)
-    fp_exp3div4_2x4(f, pp, v)
+    fp_exp3div4_2x4(f, pp, v, strat)
 
     fp_64_to_limbs_2x4(f, pp, v)
     fp_limbs_to_64_2x4(f, pp, v)

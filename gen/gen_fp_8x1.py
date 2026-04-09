@@ -1,4 +1,5 @@
 from math import ceil
+from params import rdc_8x1_mode
 
 def fp_setzero_8x1(f, pp, v):
     f.start("void fp_setzero_8x1(__m512i* res)")
@@ -465,21 +466,21 @@ def mp_mul_8x1_karat(f, pp, v):
 
     f.end()
 
-def rdc_8x1(f, pp, v):
+def rdc_8x1(f, pp, v, strat):
     f.start("void rdc_8x1(__m512i* res, __m512i* a)")
 
-    f.comment("Montgomery reduction with R = 2^n mod p, with n = ((num_limbs+1) * limb_len)")
+    plus1 = " + 1" if strat.fp2_lazy else ""
+    f.comment(f"Montgomery reduction with R = 2^n mod p, with n = ((num_limbs{plus1}) * limb_len)")
     f.comment("low(a) = (a_0, a_1, ... , a_num_limbs)")
     f.comment("m = -p^(-1) mod 2^n = p + 2 = c * 2^e + 1")
-    f.comment("The output of this reduction is (a + (low(a) * m mod 2^n )*p) / 2^432")
+    f.comment("The output of this reduction is (a + (low(a) * m mod 2^n )*p) / 2^n")
     f.line()
 
     # The logic is slightly different depending on whether:
     #   1. e % limb_len == 0
-    #   2. last_limb_len == limb_len
-    #   3. c == 1
+    #   2. c == 1
     #
-    # 3. cannot happen simultaneously as 1. or 2., at least not for cryptographically sized primes.
+    # 1. and 2. can not happen simultaneously, at least not for cryptographically sized primes.
     # 2^e - 1 can only be prime when e itself is prime.
     #
     # Case 1 can only happen in certain cases.
@@ -492,29 +493,20 @@ def rdc_8x1(f, pp, v):
     # (N-k) * L - N < L, implies that (N-k-1)*L < N.
     # If k < N-1, (N-k-1)*L > L, which implies L < N.
     # If k = N - 1, then c.nbits() > L - N.
-    
-    if pp.e % pp.limb_len == 0 and pp.last_limb_len == pp.limb_len:
-        rdc_8x1_shift0_sat(f, pp, v)
-    elif pp.e % pp.limb_len == 0:
-        rdc_8x1_shift0(f, pp, v)
-    elif pp.last_limb_len == pp.limb_len:
-        rdc_8x1_sat(f, pp, v)
-    elif pp.c == 1:
-        rdc_8x1_c1(f, pp, v)
-    else:
-        rdc_8x1_standard(f, pp, v)
-
-    # TODO small hammingweight speedup for c? i.e. c = 2^k + 1 or 2^k - 1.
-    # for lvl5, we have c = 65 = 2^6 + 1.
+    match strat.rdc_8x1:
+        case rdc_8x1_mode.c1:  
+            rdc_8x1_c1(f, pp, v, strat)
+        case rdc_8x1_mode.shift0:
+            rdc_8x1_shift0(f, pp, v, strat)
+        case rdc_8x1_mode.ham2plus | rdc_8x1_mode.ham2minus:
+            rdc_8x1_ham2(f, pp, v, strat)
+        case _:
+            rdc_8x1_standard(f, pp, v, strat)
 
     f.end()
 
-# c != 1, e % limb_len == 0, last_limb_len = limb_len
-def rdc_8x1_shift0_sat(f, pp, v):
-    pass
-
-# c != 1, e % limb_len == 0, last_limb_len < limb_len
-def rdc_8x1_shift0(f, pp, v):
+# Assumes pp.e = 0 mod pp.limb_len
+def rdc_8x1_shift0(f, pp, v, strat):
     f.line(f"__m512i t[{pp.num_limbs+2}], s{pp.num_limbs}, hi;")
     f.line("__mmask8 msb_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
@@ -562,12 +554,9 @@ def rdc_8x1_shift0(f, pp, v):
     for i in range(pp.num_limbs):
         f.line(f"res[{i}] = t[{i+2}];")
 
-# c != 1, e % limb_len != 0, last_limb_len = limb_len
-def rdc_8x1_sat(f, pp, v):
-    pass
 
-# c = 1, e % limb_len != 0, last_limb_len < limb_len
-def rdc_8x1_c1(f, pp, v):
+# Assumes c = 1
+def rdc_8x1_c1(f, pp, v, strat):
 
     f.line(f"__m512i t[{pp.num_limbs+2}], s{pp.num_limbs-1}, s{pp.num_limbs}, hi;")
     f.line("__mmask8 msb_mask;")
@@ -627,8 +616,22 @@ def rdc_8x1_c1(f, pp, v):
     for i in range(pp.num_limbs):
         f.line(f"res[{i}] = t[{i+2}];")
 
-def rdc_8x1_standard(f, pp, v):
-    f.line(f"__m512i t[{pp.num_limbs+2}], s{pp.num_limbs-1}, s{pp.num_limbs}, hi;")
+def rdc_8x1_ham2(f, pp, v, strat):
+    return rdc_8x1_standard(f, pp, v, strat)
+
+def rdc_8x1_standard(f, pp, v, strat):
+    nl = pp.num_limbs
+    if strat.fp2_lazy:
+        n_t = nl + 2
+        result_start = 2
+    else:
+        n_t = nl + 1
+        result_start = 1
+
+    if strat.fp2_lazy:
+        f.line(f"__m512i t[{n_t}], s{nl-1}, s{nl}, hi;")
+    else:
+        f.line(f"__m512i t[{n_t}], s{nl-1}, hi;")
     f.line("__mmask8 msb_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
@@ -636,62 +639,72 @@ def rdc_8x1_standard(f, pp, v):
     f.line(f"const __m512i one = VSETALL(1);")
     f.line()
 
-    f.comment("s = low(a) * m mod 2^n = (a0, a1) * m mod 2^n")
-    f.comment(f"s0 = a0, ..., s{pp.num_limbs-2} = a{pp.num_limbs-2}")
-    f.line(f"s{pp.num_limbs-1} = VMULADDL(a[{pp.num_limbs-1}], a[0], top);")
-    f.line(f"s{pp.num_limbs} = VMULADDH(zero, a[0], top);")
-    f.line(f"s{pp.num_limbs} = VADD(a[{pp.num_limbs}], VSL(s{pp.num_limbs}, {v.limb_align}));")
-    f.line(f"s{pp.num_limbs} = VMULADDL(s{pp.num_limbs}, a[1], top);")
-    f.line(f"s{pp.num_limbs} = VADD(s{pp.num_limbs}, VSRA(s{pp.num_limbs-1}, {v.limb_len}));")
-    f.line(f"s{pp.num_limbs-1} = VAND(s{pp.num_limbs-1}, limb_mask);")
-    f.line(f"s{pp.num_limbs} = VAND(s{pp.num_limbs}, limb_mask);")
+    # Compute s = low(a) * m mod 2^n
+    if strat.fp2_lazy:
+        f.comment(f"s = low(a) * m mod 2^n, n = ({nl}+1)*{pp.limb_len}")
+        f.comment(f"s0 = a0, ..., s{nl-2} = a{nl-2}")
+        f.line(f"s{nl-1} = VMULADDL(a[{nl-1}], a[0], top);")
+        f.line(f"s{nl} = VMULADDH(zero, a[0], top);")
+        f.line(f"s{nl} = VADD(a[{nl}], VSL(s{nl}, {v.limb_align}));")
+        f.line(f"s{nl} = VMULADDL(s{nl}, a[1], top);")
+        f.line(f"s{nl} = VADD(s{nl}, VSRA(s{nl-1}, {v.limb_len}));")
+        f.line(f"s{nl-1} = VAND(s{nl-1}, limb_mask);")
+        f.line(f"s{nl} = VAND(s{nl}, limb_mask);")
+    else:
+        f.comment(f"s = low(a) * m mod 2^n, n = {nl}*{pp.limb_len}")
+        f.comment(f"s0 = a0, ..., s{nl-2} = a{nl-2}")
+        f.line(f"s{nl-1} = VAND(VMULADDL(a[{nl-1}], a[0], top), limb_mask);")
     f.line()
 
     f.comment("Computing a + s*p as a + s*(p+1) - s.")
     f.comment("As the division by 2^n cancels the lower limbs, we don't need to compute - s.")
 
+    # s * top: first nl-1 limbs of s are a[0..nl-2]
     f.line(f"t[0] = VMULADDL(zero, a[0], top);")
     f.line(f"hi = VMULADDH(zero, a[0], top);")
     f.line(f"hi = VSL(hi, {v.limb_align});")
     f.line()
 
-    for i in range(1, pp.num_limbs-1):
+    for i in range(1, nl - 1):
         f.line(f"t[{i}] = VMULADDL(hi, a[{i}], top);")
         f.line(f"hi = VMULADDH(zero, a[{i}], top);")
         f.line(f"hi = VSL(hi, {v.limb_align});")
         f.line()
 
-    f.line(f"t[{pp.num_limbs-1}] = VMULADDL(hi, s{pp.num_limbs-1}, top);")
-    f.line(f"hi = VMULADDH(zero, s{pp.num_limbs-1}, top);")
+    f.line(f"t[{nl-1}] = VMULADDL(hi, s{nl-1}, top);")
+    f.line(f"hi = VMULADDH(zero, s{nl-1}, top);")
     f.line(f"hi = VSL(hi, {v.limb_align});")
     f.line()
 
-    f.line(f"t[{pp.num_limbs}] = VMULADDL(hi, s{pp.num_limbs}, top);")
-    f.line(f"t[{pp.num_limbs+1}] = VMULADDH(zero, s{pp.num_limbs}, top);")
-    f.line(f"t[{pp.num_limbs+1}] = VSL(t[{pp.num_limbs+1}], {v.limb_align});")
+    if strat.fp2_lazy:
+        f.line(f"t[{nl}] = VMULADDL(hi, s{nl}, top);")
+        f.line(f"t[{nl+1}] = VMULADDH(zero, s{nl}, top);")
+        f.line(f"t[{nl+1}] = VSL(t[{nl+1}], {v.limb_align});")
+    else:
+        f.line(f"t[{nl}] = hi;")
     f.line()
 
     f.comment("t += a (ignoring lower limbs)")
-    for i in range(pp.num_limbs+1):
-        f.line(f"t[{i}] = VADD(t[{i}], a[{i + pp.num_limbs-1}]);")
+    for i in range(nl + 1):
+        f.line(f"t[{i}] = VADD(t[{i}], a[{i + nl - 1}]);")
     f.line()
 
-    carry_prop_8x1(f, pp, v, pp.num_limbs+2, "t", "limb_mask")
+    carry_prop_8x1(f, pp, v, n_t, "t", "limb_mask")
 
-    f.comment(f"After dividing by 2^n, the result is in t[2], ..., t[{pp.num_limbs+1}]")
+    f.comment(f"After dividing by 2^n, the result is in t[{result_start}], ..., t[{n_t-1}]")
     f.comment(f"The result can be {pp.pbits+1} bits.")
     f.comment(f"If so, we do a final subtraction by p to bring it down to {pp.pbits} bits.")
 
-    shift = 64 - (pp.pbits + 1 - (pp.num_limbs - 1) * pp.limb_len)
-    f.line(f"hi = VSL(t[{pp.num_limbs+1}], {shift});")
+    shift = 64 - (pp.pbits + 1 - (nl - 1) * pp.limb_len)
+    f.line(f"hi = VSL(t[{n_t-1}], {shift});")
     f.line(f"msb_mask = VSIGN(hi);")
-    f.line(f"t[{pp.num_limbs+1}] = VSUBMASK(t[{pp.num_limbs+1}], msb_mask, t[{pp.num_limbs+1}], top);")
-    f.line(f"t[2] = VADDMASK(t[2], msb_mask, t[2], one);")
+    f.line(f"t[{n_t-1}] = VSUBMASK(t[{n_t-1}], msb_mask, t[{n_t-1}], top);")
+    f.line(f"t[{result_start}] = VADDMASK(t[{result_start}], msb_mask, t[{result_start}], one);")
     f.line()
 
-    f.comment(f"We do not propogate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
-    for i in range(pp.num_limbs):
-        f.line(f"res[{i}] = t[{i+2}];")
+    f.comment(f"We do not propagate the carry here. The bottom limb can have {pp.limb_len+1} bits.")
+    for i in range(nl):
+        f.line(f"res[{i}] = t[{i + result_start}];")
 
 def fp_mul_8x1(f, pp, v):
     f.start("void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)")
@@ -968,7 +981,7 @@ def rand_fp_8x1(f, pp, v):
     f.line("fp_add_8x1(res, res, zero);")
     f.end()
 
-def write_fp_8x1(f, pp, v):
+def write_fp_8x1(f, pp, v, strat):
     f.banner("8x1")
 
     fp_setzero_8x1(f, pp, v)
@@ -989,7 +1002,7 @@ def write_fp_8x1(f, pp, v):
     mp_add_p_sub_8x1(f, pp, v)
     mp_dbl_8x1(f, pp, v)
     mp_mul_8x1_karat(f, pp, v)
-    rdc_8x1(f, pp, v)
+    rdc_8x1(f, pp, v, strat)
 
     fp_mul_8x1(f, pp, v)
     fp_sqr_8x1(f, pp, v)

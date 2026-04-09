@@ -437,7 +437,7 @@ def rdc_4x2(f, pp, v):
     f.comment(f"The result can be {pp.pbits+1} bits.")
     f.comment(f"If so, we do a final subtraction by p to bring it down to {pp.pbits} bits.")
     shift = 64 - (pp.pbits + 1 - (pp.num_limbs - 1) * pp.limb_len)
-    f.line(f"hi = VSL(a[{3*pp.n42}], {shift});")
+    f.line(f"hi = VSL(a[{pp.n42 + pp.num_limbs}], {shift});")
     f.line("__mmask8 msb_mask = VSIGN(hi);")
     f.line("__mmask8 mask_odd  = msb_mask & 0xaa;")
     f.line("__mmask8 mask_even = mask_odd >> 1;")
@@ -458,7 +458,7 @@ def fp_mul_4x2(f, pp, v):
 
     # We need one extra limb for lazy red. When n42 is odd, there is a limb available in the last vec.
     # TODO: Depends on Montgomery constant used, may not need last limb if R = 2^(num_limbs * limb_len) mod p
-    f.line(f"__m512i t[{3*pp.n42 + (1-pp.rem42)}];")
+    f.line(f"__m512i t[{pp.n42 + pp.num_limbs + 1}];")
     f.line()
 
     f.line("mp_mul_4x2(t, a, b);")
