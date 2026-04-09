@@ -724,199 +724,193 @@ void mp_dbl_8x1(__m512i* res, __m512i* a)
 
 void mp_mul_8x1_karat(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i t[16], ta[4], tb[4], m[8];
+    const __m512i a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3], a4 = a[4], a5 = a[5];
+    const __m512i a6 = a[6], a7 = a[7];
+    const __m512i b0 = b[0], b1 = b[1], b2 = b[2], b3 = b[3], b4 = b[4], b5 = b[5];
+    const __m512i b6 = b[6], b7 = b[7];
+    __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15;
+    __m512i ta0, ta1, ta2, ta3;
+    __m512i tb0, tb1, tb2, tb3;
+    __m512i m0, m1, m2, m3, m4, m5, m6, m7;
     const __m512i zero = VZERO();
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     
     // a_low * b_low
-    t[0] = VMULADDL(zero, a[0], b[0]);
-    t[1] = VMULADDH(zero, a[0], b[0]);
-    t[1] = VSL(t[1], LIMB_ALIGN);
+    t0 = VMULADDL(zero, a0, b0);
+    t1 = VMULADDH(zero, a0, b0);
+    t1 = VSL(t1, LIMB_ALIGN);
     
-    t[1] = VMULADDL(t[1], a[0], b[1]);
-    t[2] = VMULADDH(zero, a[0], b[1]);
-    t[1] = VMULADDL(t[1], a[1], b[0]);
-    t[2] = VMULADDH(t[2], a[1], b[0]);
-    t[2] = VSL(t[2], LIMB_ALIGN);
+    t1 = VMULADDL(t1, a0, b1);
+    t2 = VMULADDH(zero, a0, b1);
+    t1 = VMULADDL(t1, a1, b0);
+    t2 = VMULADDH(t2, a1, b0);
+    t2 = VSL(t2, LIMB_ALIGN);
     
-    t[2] = VMULADDL(t[2], a[0], b[2]);
-    t[3] = VMULADDH(zero, a[0], b[2]);
-    t[2] = VMULADDL(t[2], a[1], b[1]);
-    t[3] = VMULADDH(t[3], a[1], b[1]);
-    t[2] = VMULADDL(t[2], a[2], b[0]);
-    t[3] = VMULADDH(t[3], a[2], b[0]);
-    t[3] = VSL(t[3], LIMB_ALIGN);
+    t2 = VMULADDL(t2, a0, b2);
+    t3 = VMULADDH(zero, a0, b2);
+    t2 = VMULADDL(t2, a1, b1);
+    t3 = VMULADDH(t3, a1, b1);
+    t2 = VMULADDL(t2, a2, b0);
+    t3 = VMULADDH(t3, a2, b0);
+    t3 = VSL(t3, LIMB_ALIGN);
     
-    t[3] = VMULADDL(t[3], a[0], b[3]);
-    t[4] = VMULADDH(zero, a[0], b[3]);
-    t[3] = VMULADDL(t[3], a[1], b[2]);
-    t[4] = VMULADDH(t[4], a[1], b[2]);
-    t[3] = VMULADDL(t[3], a[2], b[1]);
-    t[4] = VMULADDH(t[4], a[2], b[1]);
-    t[3] = VMULADDL(t[3], a[3], b[0]);
-    t[4] = VMULADDH(t[4], a[3], b[0]);
-    t[4] = VSL(t[4], LIMB_ALIGN);
+    t3 = VMULADDL(t3, a0, b3);
+    t4 = VMULADDH(zero, a0, b3);
+    t3 = VMULADDL(t3, a1, b2);
+    t4 = VMULADDH(t4, a1, b2);
+    t3 = VMULADDL(t3, a2, b1);
+    t4 = VMULADDH(t4, a2, b1);
+    t3 = VMULADDL(t3, a3, b0);
+    t4 = VMULADDH(t4, a3, b0);
+    t4 = VSL(t4, LIMB_ALIGN);
     
-    t[4] = VMULADDL(t[4], a[1], b[3]);
-    t[5] = VMULADDH(zero, a[1], b[3]);
-    t[4] = VMULADDL(t[4], a[2], b[2]);
-    t[5] = VMULADDH(t[5], a[2], b[2]);
-    t[4] = VMULADDL(t[4], a[3], b[1]);
-    t[5] = VMULADDH(t[5], a[3], b[1]);
-    t[5] = VSL(t[5], LIMB_ALIGN);
+    t4 = VMULADDL(t4, a1, b3);
+    t5 = VMULADDH(zero, a1, b3);
+    t4 = VMULADDL(t4, a2, b2);
+    t5 = VMULADDH(t5, a2, b2);
+    t4 = VMULADDL(t4, a3, b1);
+    t5 = VMULADDH(t5, a3, b1);
+    t5 = VSL(t5, LIMB_ALIGN);
     
-    t[5] = VMULADDL(t[5], a[2], b[3]);
-    t[6] = VMULADDH(zero, a[2], b[3]);
-    t[5] = VMULADDL(t[5], a[3], b[2]);
-    t[6] = VMULADDH(t[6], a[3], b[2]);
-    t[6] = VSL(t[6], LIMB_ALIGN);
+    t5 = VMULADDL(t5, a2, b3);
+    t6 = VMULADDH(zero, a2, b3);
+    t5 = VMULADDL(t5, a3, b2);
+    t6 = VMULADDH(t6, a3, b2);
+    t6 = VSL(t6, LIMB_ALIGN);
     
-    t[6] = VMULADDL(t[6], a[3], b[3]);
-    t[7] = VMULADDH(zero, a[3], b[3]);
-    t[7] = VSL(t[7], LIMB_ALIGN);
+    t6 = VMULADDL(t6, a3, b3);
+    t7 = VMULADDH(zero, a3, b3);
+    t7 = VSL(t7, LIMB_ALIGN);
     
     // a_hi * b_hi
-    t[8] = VMULADDL(zero, a[4], b[4]);
-    t[9] = VMULADDH(zero, a[4], b[4]);
-    t[9] = VSL(t[9], LIMB_ALIGN);
+    t8 = VMULADDL(zero, a4, b4);
+    t9 = VMULADDH(zero, a4, b4);
+    t9 = VSL(t9, LIMB_ALIGN);
     
-    t[9] = VMULADDL(t[9], a[4], b[5]);
-    t[10] = VMULADDH(zero, a[4], b[5]);
-    t[9] = VMULADDL(t[9], a[5], b[4]);
-    t[10] = VMULADDH(t[10], a[5], b[4]);
-    t[10] = VSL(t[10], LIMB_ALIGN);
+    t9 = VMULADDL(t9, a4, b5);
+    t10 = VMULADDH(zero, a4, b5);
+    t9 = VMULADDL(t9, a5, b4);
+    t10 = VMULADDH(t10, a5, b4);
+    t10 = VSL(t10, LIMB_ALIGN);
     
-    t[10] = VMULADDL(t[10], a[4], b[6]);
-    t[11] = VMULADDH(zero, a[4], b[6]);
-    t[10] = VMULADDL(t[10], a[5], b[5]);
-    t[11] = VMULADDH(t[11], a[5], b[5]);
-    t[10] = VMULADDL(t[10], a[6], b[4]);
-    t[11] = VMULADDH(t[11], a[6], b[4]);
-    t[11] = VSL(t[11], LIMB_ALIGN);
+    t10 = VMULADDL(t10, a4, b6);
+    t11 = VMULADDH(zero, a4, b6);
+    t10 = VMULADDL(t10, a5, b5);
+    t11 = VMULADDH(t11, a5, b5);
+    t10 = VMULADDL(t10, a6, b4);
+    t11 = VMULADDH(t11, a6, b4);
+    t11 = VSL(t11, LIMB_ALIGN);
     
-    t[11] = VMULADDL(t[11], a[4], b[7]);
-    t[12] = VMULADDH(zero, a[4], b[7]);
-    t[11] = VMULADDL(t[11], a[5], b[6]);
-    t[12] = VMULADDH(t[12], a[5], b[6]);
-    t[11] = VMULADDL(t[11], a[6], b[5]);
-    t[12] = VMULADDH(t[12], a[6], b[5]);
-    t[11] = VMULADDL(t[11], a[7], b[4]);
-    t[12] = VMULADDH(t[12], a[7], b[4]);
-    t[12] = VSL(t[12], LIMB_ALIGN);
+    t11 = VMULADDL(t11, a4, b7);
+    t12 = VMULADDH(zero, a4, b7);
+    t11 = VMULADDL(t11, a5, b6);
+    t12 = VMULADDH(t12, a5, b6);
+    t11 = VMULADDL(t11, a6, b5);
+    t12 = VMULADDH(t12, a6, b5);
+    t11 = VMULADDL(t11, a7, b4);
+    t12 = VMULADDH(t12, a7, b4);
+    t12 = VSL(t12, LIMB_ALIGN);
     
-    t[12] = VMULADDL(t[12], a[5], b[7]);
-    t[13] = VMULADDH(zero, a[5], b[7]);
-    t[12] = VMULADDL(t[12], a[6], b[6]);
-    t[13] = VMULADDH(t[13], a[6], b[6]);
-    t[12] = VMULADDL(t[12], a[7], b[5]);
-    t[13] = VMULADDH(t[13], a[7], b[5]);
-    t[13] = VSL(t[13], LIMB_ALIGN);
+    t12 = VMULADDL(t12, a5, b7);
+    t13 = VMULADDH(zero, a5, b7);
+    t12 = VMULADDL(t12, a6, b6);
+    t13 = VMULADDH(t13, a6, b6);
+    t12 = VMULADDL(t12, a7, b5);
+    t13 = VMULADDH(t13, a7, b5);
+    t13 = VSL(t13, LIMB_ALIGN);
     
-    t[13] = VMULADDL(t[13], a[6], b[7]);
-    t[14] = VMULADDH(zero, a[6], b[7]);
-    t[13] = VMULADDL(t[13], a[7], b[6]);
-    t[14] = VMULADDH(t[14], a[7], b[6]);
-    t[14] = VSL(t[14], LIMB_ALIGN);
+    t13 = VMULADDL(t13, a6, b7);
+    t14 = VMULADDH(zero, a6, b7);
+    t13 = VMULADDL(t13, a7, b6);
+    t14 = VMULADDH(t14, a7, b6);
+    t14 = VSL(t14, LIMB_ALIGN);
     
-    t[14] = VMULADDL(t[14], a[7], b[7]);
-    t[15] = VMULADDH(zero, a[7], b[7]);
-    t[15] = VSL(t[15], LIMB_ALIGN);
+    t14 = VMULADDL(t14, a7, b7);
+    t15 = VMULADDH(zero, a7, b7);
+    t15 = VSL(t15, LIMB_ALIGN);
     
     // ta = a_low + a_hi
-    ta[0] = VADD(a[0], a[4]);
-    ta[1] = VADD(a[1], a[5]);
-    ta[2] = VADD(a[2], a[6]);
-    ta[3] = VADD(a[3], a[7]);
+    ta0 = VADD(a0, a4);
+    ta1 = VADD(a1, a5);
+    ta2 = VADD(a2, a6);
+    ta3 = VADD(a3, a7);
     
     // tb = b_low + b_hi
-    tb[0] = VADD(b[0], b[4]);
-    tb[1] = VADD(b[1], b[5]);
-    tb[2] = VADD(b[2], b[6]);
-    tb[3] = VADD(b[3], b[7]);
+    tb0 = VADD(b0, b4);
+    tb1 = VADD(b1, b5);
+    tb2 = VADD(b2, b6);
+    tb3 = VADD(b3, b7);
     
     // m = ta * tb
-    m[0] = VMULADDL(zero, ta[0], tb[0]);
-    m[1] = VMULADDH(zero, ta[0], tb[0]);
-    m[1] = VSL(m[1], LIMB_ALIGN);
+    m0 = VMULADDL(zero, ta0, tb0);
+    m1 = VMULADDH(zero, ta0, tb0);
+    m1 = VSL(m1, LIMB_ALIGN);
     
-    m[1] = VMULADDL(m[1], ta[0], tb[1]);
-    m[2] = VMULADDH(zero, ta[0], tb[1]);
-    m[1] = VMULADDL(m[1], ta[1], tb[0]);
-    m[2] = VMULADDH(m[2], ta[1], tb[0]);
-    m[2] = VSL(m[2], LIMB_ALIGN);
+    m1 = VMULADDL(m1, ta0, tb1);
+    m2 = VMULADDH(zero, ta0, tb1);
+    m1 = VMULADDL(m1, ta1, tb0);
+    m2 = VMULADDH(m2, ta1, tb0);
+    m2 = VSL(m2, LIMB_ALIGN);
     
-    m[2] = VMULADDL(m[2], ta[0], tb[2]);
-    m[3] = VMULADDH(zero, ta[0], tb[2]);
-    m[2] = VMULADDL(m[2], ta[1], tb[1]);
-    m[3] = VMULADDH(m[3], ta[1], tb[1]);
-    m[2] = VMULADDL(m[2], ta[2], tb[0]);
-    m[3] = VMULADDH(m[3], ta[2], tb[0]);
-    m[3] = VSL(m[3], LIMB_ALIGN);
+    m2 = VMULADDL(m2, ta0, tb2);
+    m3 = VMULADDH(zero, ta0, tb2);
+    m2 = VMULADDL(m2, ta1, tb1);
+    m3 = VMULADDH(m3, ta1, tb1);
+    m2 = VMULADDL(m2, ta2, tb0);
+    m3 = VMULADDH(m3, ta2, tb0);
+    m3 = VSL(m3, LIMB_ALIGN);
     
-    m[3] = VMULADDL(m[3], ta[0], tb[3]);
-    m[4] = VMULADDH(zero, ta[0], tb[3]);
-    m[3] = VMULADDL(m[3], ta[1], tb[2]);
-    m[4] = VMULADDH(m[4], ta[1], tb[2]);
-    m[3] = VMULADDL(m[3], ta[2], tb[1]);
-    m[4] = VMULADDH(m[4], ta[2], tb[1]);
-    m[3] = VMULADDL(m[3], ta[3], tb[0]);
-    m[4] = VMULADDH(m[4], ta[3], tb[0]);
-    m[4] = VSL(m[4], LIMB_ALIGN);
+    m3 = VMULADDL(m3, ta0, tb3);
+    m4 = VMULADDH(zero, ta0, tb3);
+    m3 = VMULADDL(m3, ta1, tb2);
+    m4 = VMULADDH(m4, ta1, tb2);
+    m3 = VMULADDL(m3, ta2, tb1);
+    m4 = VMULADDH(m4, ta2, tb1);
+    m3 = VMULADDL(m3, ta3, tb0);
+    m4 = VMULADDH(m4, ta3, tb0);
+    m4 = VSL(m4, LIMB_ALIGN);
     
-    m[4] = VMULADDL(m[4], ta[1], tb[3]);
-    m[5] = VMULADDH(zero, ta[1], tb[3]);
-    m[4] = VMULADDL(m[4], ta[2], tb[2]);
-    m[5] = VMULADDH(m[5], ta[2], tb[2]);
-    m[4] = VMULADDL(m[4], ta[3], tb[1]);
-    m[5] = VMULADDH(m[5], ta[3], tb[1]);
-    m[5] = VSL(m[5], LIMB_ALIGN);
+    m4 = VMULADDL(m4, ta1, tb3);
+    m5 = VMULADDH(zero, ta1, tb3);
+    m4 = VMULADDL(m4, ta2, tb2);
+    m5 = VMULADDH(m5, ta2, tb2);
+    m4 = VMULADDL(m4, ta3, tb1);
+    m5 = VMULADDH(m5, ta3, tb1);
+    m5 = VSL(m5, LIMB_ALIGN);
     
-    m[5] = VMULADDL(m[5], ta[2], tb[3]);
-    m[6] = VMULADDH(zero, ta[2], tb[3]);
-    m[5] = VMULADDL(m[5], ta[3], tb[2]);
-    m[6] = VMULADDH(m[6], ta[3], tb[2]);
-    m[6] = VSL(m[6], LIMB_ALIGN);
+    m5 = VMULADDL(m5, ta2, tb3);
+    m6 = VMULADDH(zero, ta2, tb3);
+    m5 = VMULADDL(m5, ta3, tb2);
+    m6 = VMULADDH(m6, ta3, tb2);
+    m6 = VSL(m6, LIMB_ALIGN);
     
-    m[6] = VMULADDL(m[6], ta[3], tb[3]);
-    m[7] = VMULADDH(zero, ta[3], tb[3]);
-    m[7] = VSL(m[7], LIMB_ALIGN);
+    m6 = VMULADDL(m6, ta3, tb3);
+    m7 = VMULADDH(zero, ta3, tb3);
+    m7 = VSL(m7, LIMB_ALIGN);
     
     // m = (ta * tb) - (a_low * b_low) - (a_hi * b_hi)
-    m[0] = VSUB(m[0], VADD(t[0], t[8]));
-    m[1] = VSUB(m[1], VADD(t[1], t[9]));
-    m[2] = VSUB(m[2], VADD(t[2], t[10]));
-    m[3] = VSUB(m[3], VADD(t[3], t[11]));
-    m[4] = VSUB(m[4], VADD(t[4], t[12]));
-    m[5] = VSUB(m[5], VADD(t[5], t[13]));
-    m[6] = VSUB(m[6], VADD(t[6], t[14]));
-    m[7] = VSUB(m[7], VADD(t[7], t[15]));
+    m0 = VSUB(m0, VADD(t0, t8));
+    m1 = VSUB(m1, VADD(t1, t9));
+    m2 = VSUB(m2, VADD(t2, t10));
+    m3 = VSUB(m3, VADD(t3, t11));
+    m4 = VSUB(m4, VADD(t4, t12));
+    m5 = VSUB(m5, VADD(t5, t13));
+    m6 = VSUB(m6, VADD(t6, t14));
+    m7 = VSUB(m7, VADD(t7, t15));
     
     // t += m * 2^(limbs_low)
-    t[4] = VADD(t[4], m[0]);
-    t[5] = VADD(t[5], m[1]);
-    t[6] = VADD(t[6], m[2]);
-    t[7] = VADD(t[7], m[3]);
-    t[8] = VADD(t[8], m[4]);
-    t[9] = VADD(t[9], m[5]);
-    t[10] = VADD(t[10], m[6]);
-    t[11] = VADD(t[11], m[7]);
+    t4 = VADD(t4, m0);
+    t5 = VADD(t5, m1);
+    t6 = VADD(t6, m2);
+    t7 = VADD(t7, m3);
+    t8 = VADD(t8, m4);
+    t9 = VADD(t9, m5);
+    t10 = VADD(t10, m6);
+    t11 = VADD(t11, m7);
     
-    res[0] = t[0];
-    res[1] = t[1];
-    res[2] = t[2];
-    res[3] = t[3];
-    res[4] = t[4];
-    res[5] = t[5];
-    res[6] = t[6];
-    res[7] = t[7];
-    res[8] = t[8];
-    res[9] = t[9];
-    res[10] = t[10];
-    res[11] = t[11];
-    res[12] = t[12];
-    res[13] = t[13];
-    res[14] = t[14];
-    res[15] = t[15];
+    res[0] = t0; res[1] = t1; res[2] = t2; res[3] = t3; res[4] = t4; res[5] = t5;
+    res[6] = t6; res[7] = t7; res[8] = t8; res[9] = t9; res[10] = t10; res[11] = t11;
+    res[12] = t12; res[13] = t13; res[14] = t14; res[15] = t15;
 }
 
 void rdc_8x1(__m512i* res, __m512i* a)
@@ -926,149 +920,141 @@ void rdc_8x1(__m512i* res, __m512i* a)
     // m = -p^(-1) mod 2^n = p + 2 = c * 2^e + 1
     // The output of this reduction is (a + (low(a) * m mod 2^n )*p) / 2^n
     
-    __m512i t[10], s7, s8, hi;
+    const __m512i a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3], a4 = a[4], a5 = a[5];
+    const __m512i a6 = a[6], a7 = a[7], a8 = a[8], a9 = a[9], a10 = a[10], a11 = a[11];
+    const __m512i a12 = a[12], a13 = a[13], a14 = a[14], a15 = a[15];
+    __m512i t0, t1, t2, t3, t4, t5, t6, t7, t8, t9;
+    __m512i s7, s8, hi;
     __mmask8 msb_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     const __m512i top = VSETALL(P_PLUS_1_TOP);
     const __m512i zero = VZERO();
     const __m512i one = VSETALL(1);
     
-    // s = low(a) * m mod 2^n, n = (8+1)*48
+    // s = low(a) * m mod 2^n, n = (8+1)*49
     // s0 = a0, ..., s6 = a6
-    s7 = VMULADDL(a[7], a[0], top);
-    s8 = VMULADDH(zero, a[0], top);
-    s8 = VADD(a[8], VSL(s8, LIMB_ALIGN));
-    s8 = VMULADDL(s8, a[1], top);
+    s7 = VMULADDL(a7, a0, top);
+    s8 = VMULADDH(zero, a0, top);
+    s8 = VADD(a8, VSL(s8, LIMB_ALIGN));
+    s8 = VMULADDL(s8, a1, top);
     s8 = VADD(s8, VSRA(s7, LIMB_LEN));
     s7 = VAND(s7, limb_mask);
     s8 = VAND(s8, limb_mask);
     
     // Computing a + s*p as a + s*(p+1) - s.
     // As the division by 2^n cancels the lower limbs, we don't need to compute - s.
-    t[0] = VMULADDL(zero, a[0], top);
-    hi = VMULADDH(zero, a[0], top);
+    t0 = VMULADDL(zero, a0, top);
+    hi = VMULADDH(zero, a0, top);
     hi = VSL(hi, LIMB_ALIGN);
     
-    t[1] = VMULADDL(hi, a[1], top);
-    hi = VMULADDH(zero, a[1], top);
+    t1 = VMULADDL(hi, a1, top);
+    hi = VMULADDH(zero, a1, top);
     hi = VSL(hi, LIMB_ALIGN);
     
-    t[2] = VMULADDL(hi, a[2], top);
-    hi = VMULADDH(zero, a[2], top);
+    t2 = VMULADDL(hi, a2, top);
+    hi = VMULADDH(zero, a2, top);
     hi = VSL(hi, LIMB_ALIGN);
     
-    t[3] = VMULADDL(hi, a[3], top);
-    hi = VMULADDH(zero, a[3], top);
+    t3 = VMULADDL(hi, a3, top);
+    hi = VMULADDH(zero, a3, top);
     hi = VSL(hi, LIMB_ALIGN);
     
-    t[4] = VMULADDL(hi, a[4], top);
-    hi = VMULADDH(zero, a[4], top);
+    t4 = VMULADDL(hi, a4, top);
+    hi = VMULADDH(zero, a4, top);
     hi = VSL(hi, LIMB_ALIGN);
     
-    t[5] = VMULADDL(hi, a[5], top);
-    hi = VMULADDH(zero, a[5], top);
+    t5 = VMULADDL(hi, a5, top);
+    hi = VMULADDH(zero, a5, top);
     hi = VSL(hi, LIMB_ALIGN);
     
-    t[6] = VMULADDL(hi, a[6], top);
-    hi = VMULADDH(zero, a[6], top);
+    t6 = VMULADDL(hi, a6, top);
+    hi = VMULADDH(zero, a6, top);
     hi = VSL(hi, LIMB_ALIGN);
     
-    t[7] = VMULADDL(hi, s7, top);
+    t7 = VMULADDL(hi, s7, top);
     hi = VMULADDH(zero, s7, top);
     hi = VSL(hi, LIMB_ALIGN);
     
-    t[8] = VMULADDL(hi, s8, top);
-    t[9] = VMULADDH(zero, s8, top);
-    t[9] = VSL(t[9], LIMB_ALIGN);
+    t8 = VMULADDL(hi, s8, top);
+    t9 = VMULADDH(zero, s8, top);
+    t9 = VSL(t9, LIMB_ALIGN);
     
     // t += a (ignoring lower limbs)
-    t[0] = VADD(t[0], a[7]);
-    t[1] = VADD(t[1], a[8]);
-    t[2] = VADD(t[2], a[9]);
-    t[3] = VADD(t[3], a[10]);
-    t[4] = VADD(t[4], a[11]);
-    t[5] = VADD(t[5], a[12]);
-    t[6] = VADD(t[6], a[13]);
-    t[7] = VADD(t[7], a[14]);
-    t[8] = VADD(t[8], a[15]);
+    t0 = VADD(t0, a7);
+    t1 = VADD(t1, a8);
+    t2 = VADD(t2, a9);
+    t3 = VADD(t3, a10);
+    t4 = VADD(t4, a11);
+    t5 = VADD(t5, a12);
+    t6 = VADD(t6, a13);
+    t7 = VADD(t7, a14);
+    t8 = VADD(t8, a15);
     
     // Carry propagation
-    t[1] = VADD(t[1], VSRA(t[0], LIMB_LEN));
-    t[2] = VADD(t[2], VSRA(t[1], LIMB_LEN));
-    t[3] = VADD(t[3], VSRA(t[2], LIMB_LEN));
-    t[4] = VADD(t[4], VSRA(t[3], LIMB_LEN));
-    t[5] = VADD(t[5], VSRA(t[4], LIMB_LEN));
-    t[6] = VADD(t[6], VSRA(t[5], LIMB_LEN));
-    t[7] = VADD(t[7], VSRA(t[6], LIMB_LEN));
-    t[8] = VADD(t[8], VSRA(t[7], LIMB_LEN));
-    t[9] = VADD(t[9], VSRA(t[8], LIMB_LEN));
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VAND(t[2], limb_mask);
-    t[3] = VAND(t[3], limb_mask);
-    t[4] = VAND(t[4], limb_mask);
-    t[5] = VAND(t[5], limb_mask);
-    t[6] = VAND(t[6], limb_mask);
-    t[7] = VAND(t[7], limb_mask);
-    t[8] = VAND(t[8], limb_mask);
+    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+    t5 = VADD(t5, VSRA(t4, LIMB_LEN));
+    t6 = VADD(t6, VSRA(t5, LIMB_LEN));
+    t7 = VADD(t7, VSRA(t6, LIMB_LEN));
+    t8 = VADD(t8, VSRA(t7, LIMB_LEN));
+    t9 = VADD(t9, VSRA(t8, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VAND(t3, limb_mask);
+    t4 = VAND(t4, limb_mask);
+    t5 = VAND(t5, limb_mask);
+    t6 = VAND(t6, limb_mask);
+    t7 = VAND(t7, limb_mask);
+    t8 = VAND(t8, limb_mask);
     
-    // After dividing by 2^n, the result is in t[2], ..., t[9]
+    // After dividing by 2^n, the result is in t2, ..., t9
     // The result can be 384 bits.
-    // If so, we do a final subtraction by p to bring it down to 383 bits.
-    hi = VSL(t[9], 16);
-    msb_mask = VSIGN(hi);
-    t[9] = VSUBMASK(t[9], msb_mask, t[9], top);
-    t[2] = VADDMASK(t[2], msb_mask, t[2], one);
-    
-    // We do not propagate the carry here. The bottom limb can have 49 bits.
-    res[0] = t[2];
-    res[1] = t[3];
-    res[2] = t[4];
-    res[3] = t[5];
-    res[4] = t[6];
-    res[5] = t[7];
-    res[6] = t[8];
-    res[7] = t[9];
+    res[0] = t2; res[1] = t3; res[2] = t4; res[3] = t5; res[4] = t6; res[5] = t7;
+    res[6] = t8; res[7] = t9;
 }
 
 void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t[16];
+    __m512i t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     
     mp_mul_8x1_karat(t, a, b);
     
     // Carry propagation
-    t[1] = VADD(t[1], VSRA(t[0], LIMB_LEN));
-    t[2] = VADD(t[2], VSRA(t[1], LIMB_LEN));
-    t[3] = VADD(t[3], VSRA(t[2], LIMB_LEN));
-    t[4] = VADD(t[4], VSRA(t[3], LIMB_LEN));
-    t[5] = VADD(t[5], VSRA(t[4], LIMB_LEN));
-    t[6] = VADD(t[6], VSRA(t[5], LIMB_LEN));
-    t[7] = VADD(t[7], VSRA(t[6], LIMB_LEN));
-    t[8] = VADD(t[8], VSRA(t[7], LIMB_LEN));
-    t[9] = VADD(t[9], VSRA(t[8], LIMB_LEN));
-    t[10] = VADD(t[10], VSRA(t[9], LIMB_LEN));
-    t[11] = VADD(t[11], VSRA(t[10], LIMB_LEN));
-    t[12] = VADD(t[12], VSRA(t[11], LIMB_LEN));
-    t[13] = VADD(t[13], VSRA(t[12], LIMB_LEN));
-    t[14] = VADD(t[14], VSRA(t[13], LIMB_LEN));
-    t[15] = VADD(t[15], VSRA(t[14], LIMB_LEN));
+    t1 = VADD(t[1], VSRA(t[0], LIMB_LEN));
+    t2 = VADD(t[2], VSRA(t1, LIMB_LEN));
+    t3 = VADD(t[3], VSRA(t2, LIMB_LEN));
+    t4 = VADD(t[4], VSRA(t3, LIMB_LEN));
+    t5 = VADD(t[5], VSRA(t4, LIMB_LEN));
+    t6 = VADD(t[6], VSRA(t5, LIMB_LEN));
+    t7 = VADD(t[7], VSRA(t6, LIMB_LEN));
+    t8 = VADD(t[8], VSRA(t7, LIMB_LEN));
+    t9 = VADD(t[9], VSRA(t8, LIMB_LEN));
+    t10 = VADD(t[10], VSRA(t9, LIMB_LEN));
+    t11 = VADD(t[11], VSRA(t10, LIMB_LEN));
+    t12 = VADD(t[12], VSRA(t11, LIMB_LEN));
+    t13 = VADD(t[13], VSRA(t12, LIMB_LEN));
+    t14 = VADD(t[14], VSRA(t13, LIMB_LEN));
+    t[15] = VADD(t[15], VSRA(t14, LIMB_LEN));
     t[0] = VAND(t[0], limb_mask);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VAND(t[2], limb_mask);
-    t[3] = VAND(t[3], limb_mask);
-    t[4] = VAND(t[4], limb_mask);
-    t[5] = VAND(t[5], limb_mask);
-    t[6] = VAND(t[6], limb_mask);
-    t[7] = VAND(t[7], limb_mask);
-    t[8] = VAND(t[8], limb_mask);
-    t[9] = VAND(t[9], limb_mask);
-    t[10] = VAND(t[10], limb_mask);
-    t[11] = VAND(t[11], limb_mask);
-    t[12] = VAND(t[12], limb_mask);
-    t[13] = VAND(t[13], limb_mask);
-    t[14] = VAND(t[14], limb_mask);
+    t[1] = VAND(t1, limb_mask);
+    t[2] = VAND(t2, limb_mask);
+    t[3] = VAND(t3, limb_mask);
+    t[4] = VAND(t4, limb_mask);
+    t[5] = VAND(t5, limb_mask);
+    t[6] = VAND(t6, limb_mask);
+    t[7] = VAND(t7, limb_mask);
+    t[8] = VAND(t8, limb_mask);
+    t[9] = VAND(t9, limb_mask);
+    t[10] = VAND(t10, limb_mask);
+    t[11] = VAND(t11, limb_mask);
+    t[12] = VAND(t12, limb_mask);
+    t[13] = VAND(t13, limb_mask);
+    t[14] = VAND(t14, limb_mask);
     
     rdc_8x1(res, t);
 }
@@ -1159,31 +1145,31 @@ void fp_64_to_limbs_8x1(__m512i* res, uint64_t* unvec)
     }
     res[0] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = ((unvec[NWORDS64 * i] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 1] & 0xffffffffULL) << 16);
+        t[i] = ((unvec[NWORDS64 * i] >> 49) & 0x7fffULL) | ((unvec[NWORDS64 * i + 1] & 0x3ffffffffULL) << 15);
     }
     res[1] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = ((unvec[NWORDS64 * i + 1] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 2] & 0xffffULL) << 32);
+        t[i] = ((unvec[NWORDS64 * i + 1] >> 34) & 0x3fffffffULL) | ((unvec[NWORDS64 * i + 2] & 0x7ffffULL) << 30);
     }
     res[2] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = (unvec[NWORDS64 * i + 2] >> 16) & LIMB_MASK;
+        t[i] = ((unvec[NWORDS64 * i + 2] >> 19) & 0x1fffffffffffULL) | ((unvec[NWORDS64 * i + 3] & 0xfULL) << 45);
     }
     res[3] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = unvec[NWORDS64 * i + 3] & LIMB_MASK;
+        t[i] = (unvec[NWORDS64 * i + 3] >> 4) & LIMB_MASK;
     }
     res[4] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = ((unvec[NWORDS64 * i + 3] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 4] & 0xffffffffULL) << 16);
+        t[i] = ((unvec[NWORDS64 * i + 3] >> 53) & 0x7ffULL) | ((unvec[NWORDS64 * i + 4] & 0x3fffffffffULL) << 11);
     }
     res[5] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = ((unvec[NWORDS64 * i + 4] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 5] & 0xffffULL) << 32);
+        t[i] = ((unvec[NWORDS64 * i + 4] >> 38) & 0x3ffffffULL) | ((unvec[NWORDS64 * i + 5] & 0x7fffffULL) << 26);
     }
     res[6] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = (unvec[NWORDS64 * i + 5] >> 16) & LIMB_MASK;
+        t[i] = (unvec[NWORDS64 * i + 5] >> 23) & LIMB_MASK;
     }
     res[7] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
 }
@@ -1198,31 +1184,31 @@ void fp_64_to_limbs_8x1_only_even_idx(__m512i* res, uint64_t* unvec)
     }
     res[0] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = ((unvec[NWORDS64 * i] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 1] & 0xffffffffULL) << 16);
+        t[i] = ((unvec[NWORDS64 * i] >> 49) & 0x7fffULL) | ((unvec[NWORDS64 * i + 1] & 0x3ffffffffULL) << 15);
     }
     res[1] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = ((unvec[NWORDS64 * i + 1] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 2] & 0xffffULL) << 32);
+        t[i] = ((unvec[NWORDS64 * i + 1] >> 34) & 0x3fffffffULL) | ((unvec[NWORDS64 * i + 2] & 0x7ffffULL) << 30);
     }
     res[2] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = (unvec[NWORDS64 * i + 2] >> 16) & LIMB_MASK;
+        t[i] = ((unvec[NWORDS64 * i + 2] >> 19) & 0x1fffffffffffULL) | ((unvec[NWORDS64 * i + 3] & 0xfULL) << 45);
     }
     res[3] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = unvec[NWORDS64 * i + 3] & LIMB_MASK;
+        t[i] = (unvec[NWORDS64 * i + 3] >> 4) & LIMB_MASK;
     }
     res[4] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = ((unvec[NWORDS64 * i + 3] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 4] & 0xffffffffULL) << 16);
+        t[i] = ((unvec[NWORDS64 * i + 3] >> 53) & 0x7ffULL) | ((unvec[NWORDS64 * i + 4] & 0x3fffffffffULL) << 11);
     }
     res[5] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = ((unvec[NWORDS64 * i + 4] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 5] & 0xffffULL) << 32);
+        t[i] = ((unvec[NWORDS64 * i + 4] >> 38) & 0x3ffffffULL) | ((unvec[NWORDS64 * i + 5] & 0x7fffffULL) << 26);
     }
     res[6] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = (unvec[NWORDS64 * i + 5] >> 16) & LIMB_MASK;
+        t[i] = (unvec[NWORDS64 * i + 5] >> 23) & LIMB_MASK;
     }
     res[7] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
 }
@@ -1237,35 +1223,36 @@ void fp_limbs_to_64_8x1(uint64_t* res, __m512i* src)
     }
     VSTORE(t, src[1]);
     for (int i = 0; i < 8; i++) {
-        res[NWORDS64 * i] |= (t[i] & 0xffffULL) << 48;
-        res[NWORDS64 * i + 1] = (t[i] >> 16) & 0xffffffffULL;
+        res[NWORDS64 * i] |= (t[i] & 0x7fffULL) << 49;
+        res[NWORDS64 * i + 1] = (t[i] >> 15) & 0x3ffffffffULL;
     }
     VSTORE(t, src[2]);
     for (int i = 0; i < 8; i++) {
-        res[NWORDS64 * i + 1] |= (t[i] & 0xffffffffULL) << 32;
-        res[NWORDS64 * i + 2] = (t[i] >> 32) & 0xffffULL;
+        res[NWORDS64 * i + 1] |= (t[i] & 0x3fffffffULL) << 34;
+        res[NWORDS64 * i + 2] = (t[i] >> 30) & 0x7ffffULL;
     }
     VSTORE(t, src[3]);
     for (int i = 0; i < 8; i++) {
-        res[NWORDS64 * i + 2] |= (t[i] & LIMB_MASK) << 16;
+        res[NWORDS64 * i + 2] |= (t[i] & 0x1fffffffffffULL) << 19;
+        res[NWORDS64 * i + 3] = (t[i] >> 45) & 0xfULL;
     }
     VSTORE(t, src[4]);
     for (int i = 0; i < 8; i++) {
-        res[NWORDS64 * i + 3] = t[i] & LIMB_MASK;
+        res[NWORDS64 * i + 3] |= (t[i] & LIMB_MASK) << 4;
     }
     VSTORE(t, src[5]);
     for (int i = 0; i < 8; i++) {
-        res[NWORDS64 * i + 3] |= (t[i] & 0xffffULL) << 48;
-        res[NWORDS64 * i + 4] = (t[i] >> 16) & 0xffffffffULL;
+        res[NWORDS64 * i + 3] |= (t[i] & 0x7ffULL) << 53;
+        res[NWORDS64 * i + 4] = (t[i] >> 11) & 0x3fffffffffULL;
     }
     VSTORE(t, src[6]);
     for (int i = 0; i < 8; i++) {
-        res[NWORDS64 * i + 4] |= (t[i] & 0xffffffffULL) << 32;
-        res[NWORDS64 * i + 5] = (t[i] >> 32) & 0xffffULL;
+        res[NWORDS64 * i + 4] |= (t[i] & 0x3ffffffULL) << 38;
+        res[NWORDS64 * i + 5] = (t[i] >> 26) & 0x7fffffULL;
     }
     VSTORE(t, src[7]);
     for (int i = 0; i < 8; i++) {
-        res[NWORDS64 * i + 5] |= (t[i] & LIMB_MASK) << 16;
+        res[NWORDS64 * i + 5] |= (t[i] & LIMB_MASK) << 23;
     }
 }
 
@@ -1279,35 +1266,36 @@ void fp_limbs_to_64_8x1_only_even_idx(uint64_t* res, __m512i* src)
     }
     VSTORE(t, src[1]);
     for (int i = 0; i < 4; i++) {
-        res[NWORDS64 * i] |= (t[2*i] & 0xffffULL) << 48;
-        res[NWORDS64 * i + 1] = (t[2*i] >> 16) & 0xffffffffULL;
+        res[NWORDS64 * i] |= (t[2*i] & 0x7fffULL) << 49;
+        res[NWORDS64 * i + 1] = (t[2*i] >> 15) & 0x3ffffffffULL;
     }
     VSTORE(t, src[2]);
     for (int i = 0; i < 4; i++) {
-        res[NWORDS64 * i + 1] |= (t[2*i] & 0xffffffffULL) << 32;
-        res[NWORDS64 * i + 2] = (t[2*i] >> 32) & 0xffffULL;
+        res[NWORDS64 * i + 1] |= (t[2*i] & 0x3fffffffULL) << 34;
+        res[NWORDS64 * i + 2] = (t[2*i] >> 30) & 0x7ffffULL;
     }
     VSTORE(t, src[3]);
     for (int i = 0; i < 4; i++) {
-        res[NWORDS64 * i + 2] |= (t[2*i] & LIMB_MASK) << 16;
+        res[NWORDS64 * i + 2] |= (t[2*i] & 0x1fffffffffffULL) << 19;
+        res[NWORDS64 * i + 3] = (t[2*i] >> 45) & 0xfULL;
     }
     VSTORE(t, src[4]);
     for (int i = 0; i < 4; i++) {
-        res[NWORDS64 * i + 3] = t[2*i] & LIMB_MASK;
+        res[NWORDS64 * i + 3] |= (t[2*i] & LIMB_MASK) << 4;
     }
     VSTORE(t, src[5]);
     for (int i = 0; i < 4; i++) {
-        res[NWORDS64 * i + 3] |= (t[2*i] & 0xffffULL) << 48;
-        res[NWORDS64 * i + 4] = (t[2*i] >> 16) & 0xffffffffULL;
+        res[NWORDS64 * i + 3] |= (t[2*i] & 0x7ffULL) << 53;
+        res[NWORDS64 * i + 4] = (t[2*i] >> 11) & 0x3fffffffffULL;
     }
     VSTORE(t, src[6]);
     for (int i = 0; i < 4; i++) {
-        res[NWORDS64 * i + 4] |= (t[2*i] & 0xffffffffULL) << 32;
-        res[NWORDS64 * i + 5] = (t[2*i] >> 32) & 0xffffULL;
+        res[NWORDS64 * i + 4] |= (t[2*i] & 0x3ffffffULL) << 38;
+        res[NWORDS64 * i + 5] = (t[2*i] >> 26) & 0x7fffffULL;
     }
     VSTORE(t, src[7]);
     for (int i = 0; i < 4; i++) {
-        res[NWORDS64 * i + 5] |= (t[2*i] & LIMB_MASK) << 16;
+        res[NWORDS64 * i + 5] |= (t[2*i] & LIMB_MASK) << 23;
     }
 }
 
@@ -2041,14 +2029,6 @@ void rdc_4x2(__m512i* res, __m512i* a)
     a[12] = VANDMASK(a[12], 0x55, a[12], limb_mask);
     
     // The result can be 384 bits.
-    // If so, we do a final subtraction by p to bring it down to 383 bits.
-    hi = VSL(a[12], 16);
-    __mmask8 msb_mask = VSIGN(hi);
-    __mmask8 mask_odd  = msb_mask & 0xaa;
-    __mmask8 mask_even = mask_odd >> 1;
-    a[12] = VSUBMASK(a[12], mask_odd, a[12], top);
-    a[9]  = VADDMASK(a[9], mask_even, a[9], one);
-    
     // Output result: final carry propagation is left for the final result.
     //                Bottom limb can have up to 49 bits (because of the +1).
     res[0] = a[9];
@@ -2141,22 +2121,22 @@ void fp_64_to_limbs_4x2(__m512i* res, uint64_t* unvec)
     
     for (int i = 0; i < 4; i++) {
         t[2*i] = unvec[NWORDS64 * i] & LIMB_MASK;
-        t[2*i+1] = unvec[NWORDS64 * i + 3] & LIMB_MASK;
+        t[2*i+1] = (unvec[NWORDS64 * i + 3] >> 4) & LIMB_MASK;
     }
     res[0] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 4; i++) {
-        t[2*i] = ((unvec[NWORDS64 * i] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 1] & 0xffffffffULL) << 16);
-        t[2*i+1] = ((unvec[NWORDS64 * i + 3] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 4] & 0xffffffffULL) << 16);
+        t[2*i] = ((unvec[NWORDS64 * i] >> 49) & 0x7fffULL) | ((unvec[NWORDS64 * i + 1] & 0x3ffffffffULL) << 15);
+        t[2*i+1] = ((unvec[NWORDS64 * i + 3] >> 53) & 0x7ffULL) | ((unvec[NWORDS64 * i + 4] & 0x3fffffffffULL) << 11);
     }
     res[1] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 4; i++) {
-        t[2*i] = ((unvec[NWORDS64 * i + 1] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 2] & 0xffffULL) << 32);
-        t[2*i+1] = ((unvec[NWORDS64 * i + 4] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 5] & 0xffffULL) << 32);
+        t[2*i] = ((unvec[NWORDS64 * i + 1] >> 34) & 0x3fffffffULL) | ((unvec[NWORDS64 * i + 2] & 0x7ffffULL) << 30);
+        t[2*i+1] = ((unvec[NWORDS64 * i + 4] >> 38) & 0x3ffffffULL) | ((unvec[NWORDS64 * i + 5] & 0x7fffffULL) << 26);
     }
     res[2] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 4; i++) {
-        t[2*i] = (unvec[NWORDS64 * i + 2] >> 16) & LIMB_MASK;
-        t[2*i+1] = (unvec[NWORDS64 * i + 5] >> 16) & LIMB_MASK;
+        t[2*i] = ((unvec[NWORDS64 * i + 2] >> 19) & 0x1fffffffffffULL) | ((unvec[NWORDS64 * i + 3] & 0xfULL) << 45);
+        t[2*i+1] = (unvec[NWORDS64 * i + 5] >> 23) & LIMB_MASK;
     }
     res[3] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
 }
@@ -2169,29 +2149,30 @@ void fp_limbs_to_64_4x2(uint64_t* res, __m512i* src)
     for (int i = 0; i < 4; i++) {
         res[NWORDS64 * i] = t[2*i] & LIMB_MASK;
         
-        res[NWORDS64 * i + 3] = t[2*i+1] & LIMB_MASK;
+        res[NWORDS64 * i + 3] |= (t[2*i+1] & LIMB_MASK) << 4;
     }
     VSTORE(t, src[1]);
     for (int i = 0; i < 4; i++) {
-        res[NWORDS64 * i] |= (t[2*i] & 0xffffULL) << 48;
-        res[NWORDS64 * i + 1] = (t[2*i] >> 16) & 0xffffffffULL;
+        res[NWORDS64 * i] |= (t[2*i] & 0x7fffULL) << 49;
+        res[NWORDS64 * i + 1] = (t[2*i] >> 15) & 0x3ffffffffULL;
         
-        res[NWORDS64 * i + 3] |= (t[2*i+1] & 0xffffULL) << 48;
-        res[NWORDS64 * i + 4] = (t[2*i+1] >> 16) & 0xffffffffULL;
+        res[NWORDS64 * i + 3] |= (t[2*i+1] & 0x7ffULL) << 53;
+        res[NWORDS64 * i + 4] = (t[2*i+1] >> 11) & 0x3fffffffffULL;
     }
     VSTORE(t, src[2]);
     for (int i = 0; i < 4; i++) {
-        res[NWORDS64 * i + 1] |= (t[2*i] & 0xffffffffULL) << 32;
-        res[NWORDS64 * i + 2] = (t[2*i] >> 32) & 0xffffULL;
+        res[NWORDS64 * i + 1] |= (t[2*i] & 0x3fffffffULL) << 34;
+        res[NWORDS64 * i + 2] = (t[2*i] >> 30) & 0x7ffffULL;
         
-        res[NWORDS64 * i + 4] |= (t[2*i+1] & 0xffffffffULL) << 32;
-        res[NWORDS64 * i + 5] = (t[2*i+1] >> 32) & 0xffffULL;
+        res[NWORDS64 * i + 4] |= (t[2*i+1] & 0x3ffffffULL) << 38;
+        res[NWORDS64 * i + 5] = (t[2*i+1] >> 26) & 0x7fffffULL;
     }
     VSTORE(t, src[3]);
     for (int i = 0; i < 4; i++) {
-        res[NWORDS64 * i + 2] |= (t[2*i] & LIMB_MASK) << 16;
+        res[NWORDS64 * i + 2] |= (t[2*i] & 0x1fffffffffffULL) << 19;
+        res[NWORDS64 * i + 3] |= (t[2*i] >> 45) & 0xfULL;
         
-        res[NWORDS64 * i + 5] |= (t[2*i+1] & LIMB_MASK) << 16;
+        res[NWORDS64 * i + 5] |= (t[2*i+1] & LIMB_MASK) << 23;
     }
 }
 
@@ -2849,14 +2830,6 @@ void rdc_2x4(__m512i* res, __m512i* a)
     a[16] = VADD(a[16], carry);
     
     // Final reduction step to get the result down to the strict bit boundary
-    hi = VSL(a[16], 16);
-    msb_mask = VSIGN(hi);
-    __mmask8 mask_top = msb_mask & 0x11;
-    
-    a[16] = VSUBMASK(a[16], mask_top, a[16], cnst);
-    a[9] = VADDMASK(a[9], mask_top, a[9], one);
-    a[16] = VAND(a[16], limb_mask);
-    
     // Pack result from pos 0 of the accumulators back into 2x4 format
     const __m512i idx_pack = VSET(0, 1, 8, 9, 4, 5, 12, 13);
     lo = VUNPACKLO(a[9], a[11]);
@@ -3034,16 +3007,16 @@ void fp_64_to_limbs_2x4(__m512i* res, uint64_t* unvec)
     
     for (int i = 0; i < 2; i++) {
         t[4*i] = unvec[NWORDS64 * i] & LIMB_MASK;
-        t[4*i + 1] = ((unvec[NWORDS64 * i + 1] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 2] & 0xffffULL) << 32);
-        t[4*i + 2] = unvec[NWORDS64 * i + 3] & LIMB_MASK;
-        t[4*i+3] = ((unvec[NWORDS64 * i + 4] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 5] & 0xffffULL) << 32);
+        t[4*i + 1] = ((unvec[NWORDS64 * i + 1] >> 34) & 0x3fffffffULL) | ((unvec[NWORDS64 * i + 2] & 0x7ffffULL) << 30);
+        t[4*i + 2] = (unvec[NWORDS64 * i + 3] >> 4) & LIMB_MASK;
+        t[4*i+3] = ((unvec[NWORDS64 * i + 4] >> 38) & 0x3ffffffULL) | ((unvec[NWORDS64 * i + 5] & 0x7fffffULL) << 26);
     }
     res[0] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 2; i++) {
-        t[4*i] = ((unvec[NWORDS64 * i] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 1] & 0xffffffffULL) << 16);
-        t[4*i + 1] = (unvec[NWORDS64 * i + 2] >> 16) & LIMB_MASK;
-        t[4*i + 2] = ((unvec[NWORDS64 * i + 3] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 4] & 0xffffffffULL) << 16);
-        t[4*i+3] = (unvec[NWORDS64 * i + 5] >> 16) & LIMB_MASK;
+        t[4*i] = ((unvec[NWORDS64 * i] >> 49) & 0x7fffULL) | ((unvec[NWORDS64 * i + 1] & 0x3ffffffffULL) << 15);
+        t[4*i + 1] = ((unvec[NWORDS64 * i + 2] >> 19) & 0x1fffffffffffULL) | ((unvec[NWORDS64 * i + 3] & 0xfULL) << 45);
+        t[4*i + 2] = ((unvec[NWORDS64 * i + 3] >> 53) & 0x7ffULL) | ((unvec[NWORDS64 * i + 4] & 0x3fffffffffULL) << 11);
+        t[4*i+3] = (unvec[NWORDS64 * i + 5] >> 23) & LIMB_MASK;
     }
     res[1] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
 }
@@ -3055,20 +3028,21 @@ void fp_limbs_to_64_2x4(uint64_t* res, __m512i* src)
     VSTORE(t, src[0]);
     for (int i = 0; i < 2; i++) {
         res[NWORDS64 * i] = t[4*i] & LIMB_MASK;
-        res[NWORDS64 * i + 1] = (t[4*i + 1] & 0xffffffffULL) << 32;
-        res[NWORDS64 * i + 2] = (t[4*i + 1] >> 32) & 0xffffULL;
-        res[NWORDS64 * i + 3] = t[4*i + 2] & LIMB_MASK;
-        res[NWORDS64 * i + 4] = (t[4*i+3] & 0xffffffffULL) << 32;
-        res[NWORDS64 * i + 5] = (t[4*i+3] >> 32) & 0xffffULL;
+        res[NWORDS64 * i + 1] = (t[4*i + 1] & 0x3fffffffULL) << 34;
+        res[NWORDS64 * i + 2] = (t[4*i + 1] >> 30) & 0x7ffffULL;
+        res[NWORDS64 * i + 3] = (t[4*i + 2] & LIMB_MASK) << 4;
+        res[NWORDS64 * i + 4] = (t[4*i+3] & 0x3ffffffULL) << 38;
+        res[NWORDS64 * i + 5] = (t[4*i+3] >> 26) & 0x7fffffULL;
     }
     VSTORE(t, src[1]);
     for (int i = 0; i < 2; i++) {
-        res[NWORDS64 * i] |= (t[4*i] & 0xffffULL) << 48;
-        res[NWORDS64 * i + 1] |= (t[4*i] >> 16) & 0xffffffffULL;
-        res[NWORDS64 * i + 2] |= (t[4*i + 1] & LIMB_MASK) << 16;
-        res[NWORDS64 * i + 3] |= (t[4*i + 2] & 0xffffULL) << 48;
-        res[NWORDS64 * i + 4] |= (t[4*i + 2] >> 16) & 0xffffffffULL;
-        res[NWORDS64 * i + 5] |= (t[4*i+3] & LIMB_MASK) << 16;
+        res[NWORDS64 * i] |= (t[4*i] & 0x7fffULL) << 49;
+        res[NWORDS64 * i + 1] |= (t[4*i] >> 15) & 0x3ffffffffULL;
+        res[NWORDS64 * i + 2] |= (t[4*i + 1] & 0x1fffffffffffULL) << 19;
+        res[NWORDS64 * i + 3] |= (t[4*i + 1] >> 45) & 0xfULL;
+        res[NWORDS64 * i + 3] |= (t[4*i + 2] & 0x7ffULL) << 53;
+        res[NWORDS64 * i + 4] |= (t[4*i + 2] >> 11) & 0x3fffffffffULL;
+        res[NWORDS64 * i + 5] |= (t[4*i+3] & LIMB_MASK) << 23;
     }
 }
 

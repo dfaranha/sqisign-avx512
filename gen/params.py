@@ -53,11 +53,11 @@ class rdc_8x1_mode(Enum):
 
 @dataclass
 class Strat:
-    fp2_lazy: bool
     gen_addchain: bool
+    fp2_lazy: bool
+    rdc_final_sub_p: bool
     rdc_8x1: rdc_8x1_mode
     ham2_k: int
-    rdc_final_carry_prop: bool
 
 def get_p(e, c):
     p = ZZ(c * 2**e -1)
@@ -90,15 +90,10 @@ def get_len_42_24(num_limbs):
     return n42, n24, rem42, rem24
 
 def get_strat(e, c, limb_len, last_limb_len, gen_addchain):
-    if limb_len < 51:
-        fp2_lazy = True
-        rdc_final_carry_prop = False
-    elif limb_len == 50:
-        fp2_lazy = True
-        rdc_final_carry_prop = True
-    else:
-        fp2_lazy = False
-        rdc_final_carry_prop = True
+    has_spare_bits = (limb_len - last_limb_len) > 0
+    fp2_lazy = limb_len <= 50
+    # last_limb_len + 1 <= limb_len, we can fit results in [0, 2p) without changes.
+    rdc_final_sub_p = not (has_spare_bits or limb_len <= 49)
 
     # Picking rdc_8x1 strategy:
     # Detecting whether c = 2^k +- 1
@@ -128,11 +123,11 @@ def get_strat(e, c, limb_len, last_limb_len, gen_addchain):
         rdc_8x1 = rdc_8x1_mode.standard
 
     return Strat(
-        fp2_lazy = fp2_lazy,
         gen_addchain = gen_addchain,
+        fp2_lazy = fp2_lazy,
+        rdc_final_sub_p = rdc_final_sub_p,
         rdc_8x1 = rdc_8x1,
-        ham2_k = ham2_k,
-        rdc_final_carry_prop = rdc_final_carry_prop
+        ham2_k = ham2_k
     )
 
 # TODO: Optimize Montgomery constant for lazy reduction like 48-bit limb case    

@@ -118,7 +118,7 @@ def write_fp_file(dir, pp, v, strat):
     
     write_fp_include(f)
     write_fp_8x1(f, pp, v, strat)
-    write_fp_4x2(f, pp, v)
+    write_fp_4x2(f, pp, v, strat)
     write_fp_2x4(f, pp, v, strat)
     fp_conversions(f, pp, v)
     write_fp_inv_functions(f, pp, v)

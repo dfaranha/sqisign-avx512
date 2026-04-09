@@ -308,7 +308,7 @@ def mp_mul_2x4(f, pp, v):
     f.end()
 
 #TODO: Reduce the size of t?
-def rdc_2x4(f, pp, v):
+def rdc_2x4(f, pp, v, strat):
     f.comment(f"Modfies a. Its length must be {2*pp.num_limbs+1}.")
     f.start("void rdc_2x4(__m512i* res, __m512i* a)")
 
@@ -359,14 +359,15 @@ def rdc_2x4(f, pp, v):
         f.line()
 
     f.comment("Final reduction step to get the result down to the strict bit boundary")
-    f.line(f"hi = VSL(a[{2 * N}], 16);")
-    f.line("msb_mask = VSIGN(hi);")
-    f.line("__mmask8 mask_top = msb_mask & 0x11;")
-    f.line()
-    f.line(f"a[{2 * N}] = VSUBMASK(a[{2 * N}], mask_top, a[{2 * N}], cnst);")
-    f.line(f"a[{N + 1}] = VADDMASK(a[{N + 1}], mask_top, a[{N + 1}], one);")
-    f.line(f"a[{2 * N}] = VAND(a[{2 * N}], limb_mask);")
-    f.line()
+    if strat.rdc_final_sub_p:
+        f.line(f"hi = VSL(a[{2 * N}], 16);")
+        f.line("msb_mask = VSIGN(hi);")
+        f.line("__mmask8 mask_top = msb_mask & 0x11;")
+        f.line()
+        f.line(f"a[{2 * N}] = VSUBMASK(a[{2 * N}], mask_top, a[{2 * N}], cnst);")
+        f.line(f"a[{N + 1}] = VADDMASK(a[{N + 1}], mask_top, a[{N + 1}], one);")
+        f.line(f"a[{2 * N}] = VAND(a[{2 * N}], limb_mask);")
+        f.line()
 
     f.comment("Pack result from pos 0 of the accumulators back into 2x4 format")
     f.line("const __m512i idx_pack = VSET(0, 1, 8, 9, 4, 5, 12, 13);")
@@ -805,7 +806,7 @@ def write_fp_2x4(f, pp, v, strat):
     fp_mixaddsub_2x4(f, pp, v)
 
     mp_mul_2x4(f, pp, v)
-    rdc_2x4(f, pp, v)
+    rdc_2x4(f, pp, v, strat)
     fp_mul_2x4(f, pp, v)
     fp_sqr_2x4(f, pp, v)
     fp_tomont_2x4(f, pp, v)

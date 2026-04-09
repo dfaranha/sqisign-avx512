@@ -170,3 +170,41 @@ class FileWriter:
             end_suffix = "," if i < size1-1 else ""
             self.fp2_array_1d(a_2d_list[i], pp, v, format, arr_name=None, end_suffix=end_suffix, end_newline=False)
         self.end(";")
+
+    def array_to_single_vars(self, var_name, arr_name, count, per_line=6, const=True):
+        """ 
+            Load an array into single vectors as: 
+            const __m512i a0 = a[0], a1 = a[1], ...;
+            The compiler is much more likely to allocate them to registers, 
+            rather than push them to the stack
+        """
+        qualifier = "const __m512i " if const else "__m512i "
+        for start in range(0, count, per_line):
+            end = min(start + per_line, count)
+            parts = [f"{var_name}{i} = {arr_name}[{i}]" for i in range(start, end)]
+            self.line(f"{qualifier}{', '.join(parts)};")
+
+    def single_vars_to_array(self, var_name, arr_name, count, start_idx=0, per_line=6):
+        """
+            Stores the single variables back into an array, as:
+            res[0] = t0; res[1] = t1; ...
+            start_idx is the start index for the single variables.
+        """
+        for start in range(0, count, per_line):
+            end = min(start + per_line, count)
+            parts = [f"{arr_name}[{i}] = {var_name}{i+start_idx}" for i in range(start, end)]
+            self.line(f"{'; '.join(parts)};")
+
+    def declare_single_vars(self, var_name, count, set_zero = False, start_idx = 0, per_line=16):
+        """
+            Declare a bunch of single variables, as:
+            __m512i a0, a1, a2, ...;
+            The compiler is much more likely to allocate them to registers, 
+            rather than push them to the stack.
+            start_idx is the start index for the single variables.
+        """
+        zero = " = VZERO()" if set_zero else ""
+        for start in range(0, count, per_line):
+            end = min(start + per_line, count)
+            parts = [f"{var_name}{i+start_idx}{zero}" for i in range(start, end)]
+            self.line(f"__m512i {', '.join(parts)};")

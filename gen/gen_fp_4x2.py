@@ -394,7 +394,7 @@ def mp_mul_4x2(f, pp, v):
 
 #TODO this does not yet handle odd limbs or a smaller R
 
-def rdc_4x2(f, pp, v):
+def rdc_4x2(f, pp, v, strat):
     f.comment("Algorithm 3 from \"Finite Field Arithmetic Using AVX-512 For Isogeny-Based Cryptography\" by Orisaka, Aranha and López")
     f.comment("Modifies a")
     f.start("void rdc_4x2(__m512i* res, __m512i* a)")
@@ -435,16 +435,17 @@ def rdc_4x2(f, pp, v):
     carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
 
     f.comment(f"The result can be {pp.pbits+1} bits.")
-    f.comment(f"If so, we do a final subtraction by p to bring it down to {pp.pbits} bits.")
-    shift = 64 - (pp.pbits + 1 - (pp.num_limbs - 1) * pp.limb_len)
-    f.line(f"hi = VSL(a[{pp.n42 + pp.num_limbs}], {shift});")
-    f.line("__mmask8 msb_mask = VSIGN(hi);")
-    f.line("__mmask8 mask_odd  = msb_mask & 0xaa;")
-    f.line("__mmask8 mask_even = mask_odd >> 1;")
-    top_idx = start_idx + top_idx
-    f.line(f"a[{top_idx}] = VSUBMASK(a[{top_idx}], mask_odd, a[{top_idx}], top);")
-    f.line(f"a[{start_idx}]  = VADDMASK(a[{start_idx}], mask_even, a[{start_idx}], one);")
-    f.line()
+    if strat.rdc_final_sub_p:
+        f.comment(f"If so, we do a final subtraction by p to bring it down to {pp.pbits} bits.")
+        shift = 64 - (pp.pbits + 1 - (pp.num_limbs - 1) * pp.limb_len)
+        f.line(f"hi = VSL(a[{pp.n42 + pp.num_limbs}], {shift});")
+        f.line("__mmask8 msb_mask = VSIGN(hi);")
+        f.line("__mmask8 mask_odd  = msb_mask & 0xaa;")
+        f.line("__mmask8 mask_even = mask_odd >> 1;")
+        top_idx = start_idx + top_idx
+        f.line(f"a[{top_idx}] = VSUBMASK(a[{top_idx}], mask_odd, a[{top_idx}], top);")
+        f.line(f"a[{start_idx}]  = VADDMASK(a[{start_idx}], mask_even, a[{start_idx}], one);")
+        f.line()
 
     f.comment("Output result: final carry propagation is left for the final result.")
     f.comment("               Bottom limb can have up to 49 bits (because of the +1).")
@@ -726,7 +727,7 @@ def rand_fp_4x2(f, pp, v):
     f.end()
 
 
-def write_fp_4x2(f, pp, v):
+def write_fp_4x2(f, pp, v, strat):
     f.banner("4x2")
 
     fp_setzero_4x2(f, pp, v)
@@ -745,7 +746,7 @@ def write_fp_4x2(f, pp, v):
     mp_dblsubx2_4x2(f, pp, v)
     mp_subx2_4x2(f, pp, v)
     mp_mul_4x2(f, pp, v)
-    rdc_4x2(f, pp, v)
+    rdc_4x2(f, pp, v, strat)
 
     fp_mul_4x2(f, pp, v)
     fp_sqr_4x2(f, pp, v)
