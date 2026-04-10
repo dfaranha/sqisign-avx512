@@ -36,16 +36,16 @@ num_kat = 20
 gen_addchain = True # Requires addchain to be installed
 
 #lvl1
-# e = 248
-# c = 5
+e = 248
+c = 5
 
 # lvl3
 # e = 376
 # c = 65
 
 # lvl5
-e = 500
-c = 27
+# e = 500
+# c = 27
 
 # no shift
 # e = 2601
@@ -65,9 +65,13 @@ chain = run_addchain_exp3div4(pp, strat)
 
 # if not os.path.exists(dir):
 #     os.mkdir(dir)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+include_dir = os.path.join(script_dir, "..", "include")
+common_dir = os.path.join(script_dir, "..", "common")
+test_dir = os.path.join(script_dir, "..", "test")
 
-write_fp_header_file("../include", pp, v)
-write_fp_file("../common", pp, v, strat, chain)
-write_fp2_file("../common", pp, v, strat)
-write_fp_kat_file("../test", pp, v)
-write_fp2_kat_file("../test", pp, v)
+write_fp_header_file(include_dir, pp, v)
+write_fp_file(common_dir, pp, v, strat, chain)
+write_fp2_file(common_dir, pp, v, strat)
+write_fp_kat_file(test_dir, pp, v)
+write_fp2_kat_file(test_dir, pp, v)

@@ -30,7 +30,7 @@ int main()
 
     // =================================================
 
-    int n_tests = 100;
+    int n_tests = 10000;
     bool passed;
 
     passed = test_fp(n_tests);

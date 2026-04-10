@@ -41,15 +41,15 @@ class FpParamNames:
     num_kat_fp: str
     num_kat_fp2: str
 
-# class rdc_8x1_mode(Enum):
-#     c1 = 1
-#     standard = 2
+class Fp2Mode(Enum):
+    lazy_no_carry = 0
+    lazy_carry = 1
+    reduce_everything = 2
 
 @dataclass
 class Strat:
     gen_addchain: bool
-    fp2_lazy: bool
-    rdc_final_sub_p: bool
+    fp2_mode: Fp2Mode
 
 def get_p(e, c):
     p = c * 2**e -1
@@ -80,20 +80,22 @@ def get_len_42_24(num_limbs):
     return n42, n24, rem42, rem24
 
 def get_strat(e, c, limb_len, last_limb_len, gen_addchain):
-    has_spare_bits = (limb_len - last_limb_len) > 0
-    fp2_lazy = limb_len <= 50
-    # last_limb_len + 1 <= limb_len, we can fit results in [0, 2p) without changes.
-    rdc_final_sub_p = not (has_spare_bits or limb_len <= 49)
+    if limb_len <= 50:
+        fp2_mode = Fp2Mode.lazy_no_carry
+    elif limb_len > last_limb_len:
+        fp2_mode = Fp2Mode.lazy_carry
+    else:
+        fp2_mode = Fp2Mode.reduce_everything
+
+    # TODO: Can we save one limb in prod when last_limb_len < 2 * limb_len?
 
     return Strat(
         gen_addchain = gen_addchain,
-        fp2_lazy = fp2_lazy,
-        rdc_final_sub_p = rdc_final_sub_p
+        fp2_mode = fp2_mode
     )
-
-# TODO: Optimize Montgomery constant for lazy reduction like 48-bit limb case    
+    
 def get_mont_const(p, num_limbs, limb_len, strat):
-    num_limbs_R = num_limbs+1 if strat.fp2_lazy else num_limbs
+    num_limbs_R = num_limbs+1 if strat.fp2_mode == Fp2Mode.lazy_no_carry else num_limbs
     R = pow(2, num_limbs_R * limb_len, p)
     R2 = pow(R, 2, p)
     return num_limbs_R, R, R2

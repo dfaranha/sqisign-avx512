@@ -1439,7 +1439,7 @@ bool test_fp(int iterations)
         return false;
     }
 
-    //Batched inversion
+    // Batched inversion
     fp_duplicate_8x1(vR, R);
     for (int i = 0; i < iterations; i++) {
         rand_fp_8x1(a);
@@ -1454,7 +1454,7 @@ bool test_fp(int iterations)
             break;
         }
     }
-    print_test_res("inversion", passed);
+    print_test_res("8x1", passed);
     if (passed == 0) {
         return false;
     }

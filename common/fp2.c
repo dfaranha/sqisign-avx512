@@ -10,116 +10,110 @@
 void fp2_setzero_8x1x1(__m512i* res)
 {
     fp_setzero_8x1(res);
-    fp_setzero_8x1(res+10);
+    fp_setzero_8x1(res+5);
 }
 
 void fp2_copy_8x1x1(__m512i* res, __m512i* a)
 {
     fp_copy_8x1(res, a);
-    fp_copy_8x1(res+10, a+10);
+    fp_copy_8x1(res+5, a+5);
 }
 
 int fp2_is_equal_8x1x1(__m512i* a, __m512i* b)
 {
     int lo = fp_is_equal_8x1(a, b);
-    int hi = fp_is_equal_8x1(a+10, b+10);
+    int hi = fp_is_equal_8x1(a+5, b+5);
     return lo & hi;
 }
 
 int fp2_is_zero_8x1x1(__m512i* a)
 {
     int lo = fp_is_zero_8x1(a);
-    int hi = fp_is_zero_8x1(a+10);
+    int hi = fp_is_zero_8x1(a+5);
     return lo & hi;
 }
 
 void fp2_add_8x1x1(__m512i* res, __m512i* a, __m512i* b)
 {
     fp_add_8x1(res, a, b);
-    fp_add_8x1(res+10, a+10, b+10);
+    fp_add_8x1(res+5, a+5, b+5);
 }
 
 void fp2_sub_8x1x1(__m512i* res, __m512i* a, __m512i* b)
 {
     fp_sub_8x1(res, a, b);
-    fp_sub_8x1(res+10, a+10, b+10);
+    fp_sub_8x1(res+5, a+5, b+5);
 }
 
 void fp2_neg_8x1x1(__m512i* res, __m512i* a)
 {
     fp_neg_8x1(res, a);
-    fp_neg_8x1(res+10, a+10);
+    fp_neg_8x1(res+5, a+5);
 }
 
 void fp2_mixaddsub_8x1x1(__m512i* res, __m512i* a, __m512i* b,
     const __mmask8 add_mask_re, const __mmask8 add_mask_im)
 {
     fp_mixaddsub_8x1(res, a, b, add_mask_re);
-    fp_mixaddsub_8x1(res+10, a+10, b+10, add_mask_im);
+    fp_mixaddsub_8x1(res+5, a+5, b+5, add_mask_im);
 }
 
 void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i s1[10], s2[10], s3[10];
+    __m512i tt1[10], tt2[10], tt3[10];
     
-    __m512i zero[10];
-    fp_setzero_8x1(zero);
-    
-    fp_add_8x1(s1, a, a + 10);
-    fp_add_8x1(s2, b, b + 10);
-    fp_mul_8x1(s3, s1, s2);
-    fp_mul_8x1(s1, a, b);
-    fp_mul_8x1(s2, a + 10, b + 10);
-    // Normalize to [0, p) — rdc output can be in [0, 2p)
-    fp_add_8x1(s1, s1, zero);
-    fp_add_8x1(s2, s2, zero);
-    fp_add_8x1(s3, s3, zero);
-    fp_sub_8x1(s3, s3, s1);
-    fp_sub_8x1(res + 10, s3, s2);
-    fp_sub_8x1(res, s1, s2);
+    mp_add_8x1(tt3, a, a + 5);
+    mp_add_8x1(tt3 + 5, b, b + 5);
+    mp_mul_8x1_karat(tt1, a, b);
+    mp_mul_8x1_karat(tt2, a + 5, b + 5);
+    mp_mul_8x1_karat(tt3, tt3, tt3 + 5);
+    mp_dblsubx2_8x1(tt3, tt1, tt2);
+    mp_subx2_8x1(tt1, tt2);
+    rdc_8x1(res + 5, tt3);
+    rdc_8x1(res, tt1);
 }
 
 void fp2_sqr_8x1x1(__m512i* res, __m512i* a)
 {
-    __m512i s1[10], s2[10], s3[10];
+    __m512i s1[5], s2[5], s3[5];
     
-    fp_add_8x1(s1, a, a + 10);
-    fp_sub_8x1(s2, a, a + 10);
-    fp_add_8x1(s3, a, a);
-    fp_mul_8x1(res + 10, s3, a + 10);
+    mp_add_8x1(s1, a, a + 5);
+    mp_add_p_sub_8x1(s2, a, a + 5);
+    mp_add_8x1(s3, a, a);
     fp_mul_8x1(res, s1, s2);
+    fp_mul_8x1(res + 5, s3, a + 5);
 }
 
 void fp2_muli_8x1x1(__m512i* res, __m512i* a)
 {
-    __m512i t[10];
+    __m512i t[5];
     
-    fp_neg_8x1(t, a + 10);
-    fp_copy_8x1(res + 10, a);
+    fp_neg_8x1(t, a + 5);
+    fp_copy_8x1(res + 5, a);
     fp_copy_8x1(res, t);
 }
 
 void fp2_div3_8x1x1(__m512i* res, __m512i* src)
 {
     fp_div3_8x1(res, src);
-    fp_div3_8x1(res + 10, src + 10);
+    fp_div3_8x1(res + 5, src + 5);
 }
 
 void fp2_inv_8x1x1(__m512i* res, __m512i* a)
 {
-    __m512i t0[10], t1[10];
+    __m512i t0[5], t1[5];
     fp_sqr_8x1(t0, a);
-    fp_sqr_8x1(t1, a + 10);
+    fp_sqr_8x1(t1, a + 5);
     fp_add_8x1(t0, t0, t1);
     fp_inv_8x1(t0, t0);
-    fp_mul_8x1(t1, a + 10, t0);
+    fp_mul_8x1(t1, a + 5, t0);
     fp_mul_8x1(res, a, t0);
-    fp_neg_8x1(res + 10, t1);
+    fp_neg_8x1(res + 5, t1);
 }
 
 void fp2_sqrt_8x1x1(__m512i* res, __m512i* a)
 {
-    __m512i x0[10], x1[10], t0[10], t1[10];
+    __m512i x0[5], x1[5], t0[5], t1[5];
     __mmask8 is_zero;
     
     // From "Optimized One-Dimensional SQIsign Verification on Intel and
@@ -127,12 +121,12 @@ void fp2_sqrt_8x1x1(__m512i* res, __m512i* a)
     
     // x0 = \delta = sqrt(a0^2 + a1^2)
     fp_sqr_8x1(x0, a);
-    fp_sqr_8x1(x1, a + 10);
+    fp_sqr_8x1(x1, a + 5);
     fp_add_8x1(x0, x0, x1);
     fp_sqrt_8x1(x0, x0);
     // If a1 = 0, there is a risk of \delta = -a0, which makes x0 = 0 below.
     // In that case, we restore the value \delta = a0.
-    is_zero = fp_is_zero_8x1(a + 10);
+    is_zero = fp_is_zero_8x1(a + 5);
     fp_select_8x1(x0, x0, a, is_zero);
     // x0 = \delta + a0, t0 = 2 * x0.
     fp_add_8x1(x0, x0, a);
@@ -142,7 +136,7 @@ void fp2_sqrt_8x1x1(__m512i* res, __m512i* a)
     fp_exp3div4_8x1(x1, x1);
     // x0 = x0 * x1, x1 = x1 * a1, t1 = (2x0)^2.
     fp_mul_8x1(x0, x0, x1);
-    fp_mul_8x1(x1, x1, a + 10);
+    fp_mul_8x1(x1, x1, a + 5);
     fp_add_8x1(t1, x0, x0);
     fp_sqr_8x1(t1, t1);
     // If t1 = t0, return x0 + x1*i, otherwise x1 - x0*i.
@@ -151,25 +145,25 @@ void fp2_sqrt_8x1x1(__m512i* res, __m512i* a)
     fp_neg_8x1(t1, x0);
     fp_copy_8x1(t0, x1);
     fp_select_8x1(res, t0, x0, is_zero);
-    fp_select_8x1(res + 10, t1, x1, is_zero);
+    fp_select_8x1(res + 5, t1, x1, is_zero);
 }
 
 void fp2_tomont_8x1x1(__m512i* res, __m512i* a)
 {
     fp_tomont_8x1(res, a);
-    fp_tomont_8x1(res + 10, a + 10);
+    fp_tomont_8x1(res + 5, a + 5);
 }
 
 void fp2_frommont_8x1x1(__m512i*res, __m512i* a)
 {
     fp_frommont_8x1(res, a);
-    fp_frommont_8x1(res + 10, a + 10);
+    fp_frommont_8x1(res + 5, a + 5);
 }
 
 void rand_fp2_8x1x1(__m512i* res)
 {
     rand_fp_8x1(res);
-    rand_fp_8x1(res+10);
+    rand_fp_8x1(res+5);
 }
 
 // ====================================================================================================
@@ -179,109 +173,110 @@ void rand_fp2_8x1x1(__m512i* res)
 void fp2_setzero_4x1x2(__m512i* res)
 {
     fp_setzero_4x2(res);
-    fp_setzero_4x2(res+5);
+    fp_setzero_4x2(res+3);
 }
 
 void fp2_copy_4x1x2(__m512i* res, __m512i* a)
 {
     fp_copy_4x2(res, a);
-    fp_copy_4x2(res+5, a+5);
+    fp_copy_4x2(res+3, a+3);
 }
 
 int fp2_is_equal_4x1x2(__m512i* a, __m512i* b)
 {
     int lo = fp_is_equal_4x2(a, b);
-    int hi = fp_is_equal_4x2(a+5, b+5);
+    int hi = fp_is_equal_4x2(a+3, b+3);
     return lo & hi;
 }
 
 int fp2_is_zero_4x1x2(__m512i* a)
 {
     int lo = fp_is_zero_4x2(a);
-    int hi = fp_is_zero_4x2(a+5);
+    int hi = fp_is_zero_4x2(a+3);
     return lo & hi;
 }
 
 void fp2_add_4x1x2(__m512i* res, __m512i* a, __m512i* b)
 {
     fp_add_4x2(res, a, b);
-    fp_add_4x2(res+5, a+5, b+5);
+    fp_add_4x2(res+3, a+3, b+3);
 }
 
 void fp2_sub_4x1x2(__m512i* res, __m512i* a, __m512i* b)
 {
     fp_sub_4x2(res, a, b);
-    fp_sub_4x2(res+5, a+5, b+5);
+    fp_sub_4x2(res+3, a+3, b+3);
 }
 
 void fp2_neg_4x1x2(__m512i* res, __m512i* a)
 {
     fp_neg_4x2(res, a);
-    fp_neg_4x2(res+5, a+5);
+    fp_neg_4x2(res+3, a+3);
 }
 
 void fp2_mixaddsub_4x1x2(__m512i* res, __m512i* a, __m512i* b,
     const __mmask8 add_mask_re, const __mmask8 add_mask_im)
 {
     fp_mixaddsub_4x2(res, a, b, add_mask_re);
-    fp_mixaddsub_4x2(res+5, a+5, b+5, add_mask_im);
+    fp_mixaddsub_4x2(res+3, a+3, b+3, add_mask_im);
 }
 
 void fp2_mul_4x1x2(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i s1[5], s2[5], s3[5];
+    __m512i t1[9], t2[9], t3[9];
     
-    fp_add_4x2(s1, a, a + 5);
-    fp_add_4x2(s2, b, b + 5);
-    fp_mul_4x2(s3, s1, s2);
-    fp_mul_4x2(s1, a, b);
-    fp_mul_4x2(s2, a + 5, b + 5);
-    fp_sub_4x2(s3, s3, s1);
-    fp_sub_4x2(res + 5, s3, s2);
-    fp_sub_4x2(res, s1, s2);
+    mp_add_4x2(t3, a, a + 3);
+    fp_add_4x2(t3 + 3, b, b + 3);
+    mp_mul_4x2(t1, a, b);
+    mp_mul_4x2(t2, a+3, b+3);
+    mp_mul_4x2(t3, t3, t3+3);
+    mp_dblsubx2_4x2(t3, t1, t2);
+    mp_subx2_4x2(t1, t2);
+    rdc_4x2(res+3, t3);
+    rdc_4x2(res, t1);
 }
 
 void fp2_sqr_4x1x2(__m512i* res, __m512i* a)
 {
-    __m512i s1[5], s2[5], s3[5];
+    __m512i s1[3], s2[3], s3[3];
     
-    fp_add_4x2(s1, a, a + 5);
-    fp_sub_4x2(s2, a, a + 5);
-    fp_add_4x2(s3, a, a);
-    fp_mul_4x2(res + 5, s3, a + 5);
+    mp_add_4x2(s1, a, a + 3);
+    mp_add_p_sub_4x2(s2, a, a + 3);
+    mp_add_4x2(s3, a, a);
+    fp_mul_4x2(res + 3, s3, a + 3);
     fp_mul_4x2(res, s1, s2);
 }
 
 void fp2_muli_4x1x2(__m512i* res, __m512i* a)
 {
-    __m512i t[5];
+    __m512i t[3];
     
-    fp_neg_4x2(t, a + 5);
-    fp_copy_4x2(res + 5, a);
+    fp_neg_4x2(t, a + 3);
+    fp_copy_4x2(res + 3, a);
     fp_copy_4x2(res, t);
 }
 
 void fp2_div3_4x1x2(__m512i* res, __m512i* src)
 {
     fp_div3_4x2(res, src);
-    fp_div3_4x2(res + 5, src + 5);
+    fp_div3_4x2(res + 3, src + 3);
 }
 
 void fp2_inv_4x1x2(__m512i* res, __m512i* a)
 {
-    __m512i t0[5], t1[5];
+    __m512i t0[3], t1[3];
     fp_sqr_4x2(t0, a);
-    fp_sqr_4x2(t1, a + 5);
+    fp_sqr_4x2(t1, a + 3);
     fp_add_4x2(t0, t0, t1);
     fp_inv_4x2(t0, t0);
-    fp_mul_4x2(t1, a + 5, t0);
+    fp_mul_4x2(t1, a + 3, t0);
     fp_mul_4x2(res, a, t0);
-    fp_neg_4x2(res + 5, t1);
+    fp_neg_4x2(res + 3, t1);
 }
 
 void fp2_sqrt_4x1x2(__m512i* res, __m512i* a)
 {
-    __m512i x0[5], x1[5], t0[5], t1[5];
+    __m512i x0[3], x1[3], t0[3], t1[3];
     __mmask8 is_zero;
     
     // From "Optimized One-Dimensional SQIsign Verification on Intel and
@@ -289,12 +284,12 @@ void fp2_sqrt_4x1x2(__m512i* res, __m512i* a)
     
     // x0 = \delta = sqrt(a0^2 + a1^2)
     fp_sqr_4x2(x0, a);
-    fp_sqr_4x2(x1, a + 5);
+    fp_sqr_4x2(x1, a + 3);
     fp_add_4x2(x0, x0, x1);
     fp_sqrt_4x2(x0, x0);
     // If a1 = 0, there is a risk of \delta = -a0, which makes x0 = 0 below.
     // In that case, we restore the value \delta = a0.
-    is_zero = fp_is_zero_4x2(a + 5);
+    is_zero = fp_is_zero_4x2(a + 3);
     fp_select_4x2(x0, x0, a, is_zero);
     // x0 = \delta + a0, t0 = 2 * x0.
     fp_add_4x2(x0, x0, a);
@@ -304,7 +299,7 @@ void fp2_sqrt_4x1x2(__m512i* res, __m512i* a)
     fp_exp3div4_4x2(x1, x1);
     // x0 = x0 * x1, x1 = x1 * a1, t1 = (2x0)^2.
     fp_mul_4x2(x0, x0, x1);
-    fp_mul_4x2(x1, x1, a + 5);
+    fp_mul_4x2(x1, x1, a + 3);
     fp_add_4x2(t1, x0, x0);
     fp_sqr_4x2(t1, t1);
     // If t1 = t0, return x0 + x1*i, otherwise x1 - x0*i.
@@ -313,25 +308,25 @@ void fp2_sqrt_4x1x2(__m512i* res, __m512i* a)
     fp_neg_4x2(t1, x0);
     fp_copy_4x2(t0, x1);
     fp_select_4x2(res, t0, x0, is_zero);
-    fp_select_4x2(res + 5, t1, x1, is_zero);
+    fp_select_4x2(res + 3, t1, x1, is_zero);
 }
 
 void fp2_tomont_4x1x2(__m512i* res, __m512i* a)
 {
     fp_tomont_4x2(res, a);
-    fp_tomont_4x2(res + 5, a + 5);
+    fp_tomont_4x2(res + 3, a + 3);
 }
 
 void fp2_frommont_4x1x2(__m512i*res, __m512i* a)
 {
     fp_frommont_4x2(res, a);
-    fp_frommont_4x2(res + 5, a + 5);
+    fp_frommont_4x2(res + 3, a + 3);
 }
 
 void rand_fp2_4x1x2(__m512i* res)
 {
     rand_fp_4x2(res);
-    rand_fp_4x2(res + 5);
+    rand_fp_4x2(res + 3);
 }
 
 // ====================================================================================================
@@ -390,35 +385,36 @@ void fp2_mixaddsub_4x2x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 ad
 
 void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i s1[10], s2[10], s3[10];
-    for (int i = 0; i < 10; i++) {
-        s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0
-        s2[i] = VSHUFFLE(a[i], 0xee); // a1, a1
-        s3[i] = VSHUFFLE(b[i], 0x4e); // b0, b1
+    __m512i t0[10], t1[10];
+    for (int i = 0; i < 5; i++) {
+        t0[i] = VSHUFFLE(a[i], 0x44); // a0, a0
+        t1[i] = VSHUFFLE(a[i], 0xee); // a1, a1
+        t1[i + 5] = VSHUFFLE(b[i], 0x4e); // b0, b1
     }
-    fp_mul_8x1(s1, s1, b);
-    fp_mul_8x1(s2, s2, s3);
-    fp_mixaddsub_8x1(res, s1, s2, 0xaa);
+    mp_mul_8x1_karat(t0, t0, b);
+    mp_mul_8x1_karat(t1, t1, t1 + 5);
+    mp_mixaddsubx2_8x1(t0, t0, t1, 0xaa);
+    rdc_8x1(res, t0);
 }
 
 void fp2_sqr_4x2x1(__m512i* res, __m512i* a)
 {
-    __m512i s1[10], s2[10], s3[10];
+    __m512i s1[5], s2[5], s3[5];
     __mmask16 mask = 0b0011001100110011;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 5; i++) {
         s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0
         s2[i] = VSHUFFLEMASKZ(mask, a[i], 0x0e); // 0, a1
         s3[i] = VSHUFFLE(a[i], 0x4e); // a0, a1
     }
-    fp_add_8x1(s1, s1, s3);
-    fp_sub_8x1(s2, a, s2);
+    mp_add_8x1(s1, s1, s3);
+    mp_add_p_sub_8x1(s2, a, s2);
     fp_mul_8x1(res, s1, s2);
 }
 
 // res1 = a1 * b1, res2 = a2 * b2
 void fp2_mulx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* b1, __m512i* a2, __m512i* b2)
 {
-    __m512i t0[20], t1[20];
+    __m512i t0[10], t1[10];
     
     fp2_4x2x1_to_8x1x1(t0, a1, a2);
     fp2_4x2x1_to_8x1x1(t1, b1, b2);
@@ -429,7 +425,7 @@ void fp2_mulx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* b1, __m
 // res1 = a1^2, res2 = a2^a
 void fp2_sqrx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* a2)
 {
-    __m512i t[20];
+    __m512i t[10];
     
     fp2_4x2x1_to_8x1x1(t, a1, a2);
     fp2_sqr_8x1x1(t, t);
@@ -438,11 +434,11 @@ void fp2_sqrx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* a2)
 
 void fp2_muli_4x2x1(__m512i* res, __m512i* a)
 {
-    __m512i t[10];
+    __m512i t[5];
     
     fp_setzero_8x1(t);
     fp_mixaddsub_8x1(t, t, a, 0x55);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 5; i++) {
         res[i] = VSHUFFLE(t[i], 0x4e);
     }
 }
@@ -454,7 +450,7 @@ void fp2_div3_4x2x1(__m512i* res, __m512i* src)
 
 void fp2_inv_4x2x1(__m512i* res, __m512i* a)
 {
-    __m512i re[5], im[5], t0[5], t1[5];
+    __m512i re[3], im[3], t0[3], t1[3];
     fp_8x1_to_4x2(re, im, a);
     
     fp_sqr_4x2(t0, re);
@@ -470,7 +466,7 @@ void fp2_inv_4x2x1(__m512i* res, __m512i* a)
 
 void fp2_sqrt_4x2x1(__m512i* res, __m512i* a)
 {
-    __m512i re[5], im[5], x0[5], x1[5], t0[5], t1[5];
+    __m512i re[3], im[3], x0[3], x1[3], t0[3], t1[3];
     __mmask8 is_zero;
     
     // From "Optimized One-Dimensional SQIsign Verification on Intel and
@@ -572,41 +568,42 @@ void fp2_mixaddsub_2x2x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 ad
 
 void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i s1[5], s2[5], s3[5];
+    __m512i t0[9], t1[9];
     
-    for (int i = 0; i < 5; i++) {
-        s1[i] = VPERM256(a[i], 0x44); // a0, a0
-        s2[i] = VPERM256(a[i], 0xee); // a1, a1
-        s3[i] = VPERM256(b[i], 0x4e); // b0, b1
+    for (int i = 0; i < 3; i++) {
+        t0[i] = VPERM256(a[i], 0x44); // a0, a0
+        t1[i] = VPERM256(a[i], 0xee); // a1, a1
+        t1[i + 3] = VPERM256(b[i], 0x4e); // b0, b1
     }
-    fp_mul_4x2(s1, s1, b);
-    fp_mul_4x2(s2, s2, s3);
-    fp_mixaddsub_4x2(res, s1, s2, 0xcc);
+    mp_mul_4x2(t0, t0, b);
+    mp_mul_4x2(t1, t1, t1+3);
+    mp_mixaddsubx2_4x2(t0, t0, t1, 0xcc);
+    rdc_4x2(res, t0);
 }
 
 void fp2_sqr_2x2x2(__m512i* res, __m512i* a)
 {
-    __m512i s1[5], s2[5];
+    __m512i s1[3], s2[3];
     
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 3; i++) {
         s1[i] = VPERM256(a[i], 0x44); // a0, a0
         s2[i] = VPERM256(a[i], 0x4e); // a1, a0
     }
-    fp_add_4x2(s1, s1, s2);
-    for (int i = 0; i < 5; i++) {
+    mp_add_4x2(s1, s1, s2);
+    for (int i = 0; i < 3; i++) {
         s2[i] = VPERM256MASKZ(0x33, a[i], 0x4e); // a1, 0
     }
-    fp_sub_4x2(s2, a, s2); // a0 - a1, a1
+    mp_add_p_sub_4x2(s2, a, s2); // a0 - a1, a1
     fp_mul_4x2(res, s1, s2);
 }
 
 void fp2_muli_2x2x2(__m512i* res, __m512i* a)
 {
-    __m512i t[5];
+    __m512i t[3];
     
     fp_setzero_4x2(t);
     fp_mixaddsub_4x2(t, t, a, 0x33);
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 3; i++) {
         res[i] = VPERM256(t[i], 0x4e);
     }
 }
@@ -618,7 +615,7 @@ void fp2_div3_2x2x2(__m512i* res, __m512i* src)
 
 void fp2_sqrt_2x2x2(__m512i* res, __m512i* a)
 {
-    __m512i re[3], im[3], x0[3], x1[3], t0[3], t1[3];
+    __m512i re[2], im[2], x0[2], x1[2], t0[2], t1[2];
     __mmask8 is_zero;
     
     // From "Optimized One-Dimensional SQIsign Verification on Intel and
@@ -659,7 +656,7 @@ void fp2_sqrt_2x2x2(__m512i* res, __m512i* a)
 
 void fp2_inv_2x2x2(__m512i* res, __m512i* a)
 {
-    __m512i re[3], im[3], t0[3], t1[3];
+    __m512i re[2], im[2], t0[2], t1[2];
     fp_4x2_to_2x4(re, im, a);
     
     fp_sqr_2x4(t0, re);
@@ -738,13 +735,13 @@ void fp2_mixaddsub_2x4x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 ad
 
 void fp2_mul_2x4x1(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i s1[10], s2[10];
-    for (int i = 0; i < 10; i++) {
+    __m512i s1[5], s2[5];
+    for (int i = 0; i < 5; i++) {
         s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0, a1, a1
         s2[i] = VPERM256(b[i], 0x28); // b0, b1, b1, b0
     }
     fp_mul_8x1(s1, s1, s2);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 5; i++) {
         s2[i] = VPERM256MASKZ(0x55, s1[i], 0x32);
         s1[i] = VPERM256MASKZ(0x55, s1[i], 0x10);
     }
@@ -753,13 +750,13 @@ void fp2_mul_2x4x1(__m512i* res, __m512i* a, __m512i* b)
 
 void fp2_sqr_2x4x1(__m512i* res, __m512i* a)
 {
-    __m512i s1[10], s2[10];
-    for (int i = 0; i < 10; i++) {
+    __m512i s1[5], s2[5];
+    for (int i = 0; i < 5; i++) {
         s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0, a1, a1
         s2[i] = VPERM256(a[i], 0x28); // a0, a1, a1, a0
     }
     fp_mul_8x1(s1, s1, s2);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 5; i++) {
         s2[i] = VPERM256MASKZ(0x55, s1[i], 0x32);
         s1[i] = VPERM256MASKZ(0x55, s1[i], 0x10);
     }
@@ -768,11 +765,11 @@ void fp2_sqr_2x4x1(__m512i* res, __m512i* a)
 
 void fp2_muli_2x4x1(__m512i* res, __m512i* a)
 {
-    __m512i t[10];
+    __m512i t[5];
     
     fp_setzero_8x1(t);
     fp_mixaddsub_8x1(t, t, a, 0x33);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 5; i++) {
         res[i] = VPERM256(t[i], 0x4e);
     }
 }
@@ -784,7 +781,7 @@ void fp2_div3_2x4x1(__m512i* res, __m512i* src)
 
 void fp2_inv_2x4x1(__m512i* res, __m512i* src)
 {
-    __m512i re[5], im[5], zero[5], t0[3], t1[3];
+    __m512i re[3], im[3], zero[3], t0[2], t1[2];
     
     fp_8x1_to_4x2(re, zero, src); // re = (a_re, a_im, b_re, b_im), zero = (0, 0, 0, 0)
     fp_4x2_to_2x4(re, im, re);
@@ -803,8 +800,8 @@ void fp2_inv_2x4x1(__m512i* res, __m512i* src)
 
 void fp2_sqrt_2x4x1(__m512i* res, __m512i* a)
 {
-    __m512i re[5], im[3], x0[3], x1[3], t0[3], t1[3];
-    __m512i zero[5];
+    __m512i re[3], im[2], x0[2], x1[2], t0[2], t1[2];
+    __m512i zero[3];
     __mmask8 is_zero;
     
     // From "Optimized One-Dimensional SQIsign Verification on Intel and
@@ -858,7 +855,7 @@ void fp2_frommont_2x4x1(__m512i*res, __m512i* a)
 void rand_fp2_2x4x1(__m512i* res)
 {
     rand_fp_8x1(res);
-    for(int i = 0; i < 10; i++) {
+    for(int i = 0; i < 5; i++) {
         res[i] = VBLEND(0x55, VZERO(), res[i]);
     }
 }
@@ -869,8 +866,8 @@ void rand_fp2_2x4x1(__m512i* res)
 
 void fp2_8x1x1_to_4x2x1(__m512i* res1, __m512i* res2, __m512i* src)
 {
-    for (int i = 0; i < 10; i++) {
-        __m512i re = src[i], im = src[i + 10];
+    for (int i = 0; i < 5; i++) {
+        __m512i re = src[i], im = src[i + 5];
         res1[i] = VUNPACKLO(re, im);
         res2[i] = VUNPACKHI(re, im);
     }
@@ -879,8 +876,8 @@ void fp2_8x1x1_to_4x2x1(__m512i* res1, __m512i* res2, __m512i* src)
 // Only extracts first 4x2x1
 void fp2_8x1x1_to_first_4x2x1(__m512i* res, __m512i* src)
 {
-    for (int i = 0; i < 10; i++) {
-        res[i] = VUNPACKLO(src[i], src[i + 10]);
+    for (int i = 0; i < 5; i++) {
+        res[i] = VUNPACKLO(src[i], src[i + 5]);
     }
 }
 
@@ -888,10 +885,10 @@ void fp2_4x2x1_to_8x1x1(__m512i* res, __m512i* src1, __m512i* src2)
 {
     __m512i idx_re = _mm512_set_epi64(14, 6, 12, 4, 10, 2, 8, 0);
     __m512i idx_im = _mm512_set_epi64(15, 7, 13, 5, 11, 3, 9, 1);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 5; i++) {
         __m512i s1 = src1[i], s2 = src2[i];
         res[i] = VBLENDPERM(idx_re, s1, s2);
-        res[i+10] = VBLENDPERM(idx_im, s1, s2);
+        res[i+5] = VBLENDPERM(idx_im, s1, s2);
     }
 }
 
@@ -899,10 +896,10 @@ void fp2_4x2x1_duplicate_to_8x1x1(__m512i* res, __m512i* src)
 {
     __m512i idx_re = _mm512_set_epi64(14, 6, 12, 4, 10, 2, 8, 0);
     __m512i idx_im = _mm512_set_epi64(15, 7, 13, 5, 11, 3, 9, 1);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 5; i++) {
         __m512i s = src[i];
         res[i] = VBLENDPERM(idx_re, s, s);
-        res[i+10] = VBLENDPERM(idx_im, s, s);
+        res[i+5] = VBLENDPERM(idx_im, s, s);
     }
 }
 
@@ -911,11 +908,14 @@ void fp2_4x2x1_to_2x2x2(__m512i* res1, __m512i* res2, __m512i* src)
     __m512i s, t;
     __m512i idx1 = VSET(0, 8, 1, 9, 2, 10, 3, 11);
     __m512i idx2 = VSET(4, 12, 5, 13, 6, 14, 7, 15);
-    for (int i = 0; i < 5; i++) {
-        s = src[i], t = src[i+5];
+    for (int i = 0; i < 2; i++) {
+        s = src[i], t = src[i+3];
         res1[i] = VBLENDPERM(idx1, s, t);
         res2[i] = VBLENDPERM(idx2, s, t);
     }
+    s = src[2];
+    res1[2] = VBLENDPERM(idx1, s, VZERO());
+    res2[2] = VBLENDPERM(idx2, s, VZERO());
 }
 
 void fp2_2x2x2_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2)
@@ -923,11 +923,12 @@ void fp2_2x2x2_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2)
     __m512i s, t;
     __m512i idx1 = VSET(0, 2, 4, 6, 8, 10, 12, 14);
     __m512i idx2 = VSET(1, 3, 5, 7, 9, 11, 13, 15);
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 2; i++) {
         s = src1[i], t = src2[i];
         res[i] = VBLENDPERM(idx1, s, t);
-        res[i+5] = VBLENDPERM(idx2, s, t);
+        res[i+3] = VBLENDPERM(idx2, s, t);
     }
+    res[2] = VBLENDPERM(idx1, src1[2], src2[2]);
 }
 
 // Maps (a,b,c,d) in 4x2x1 to (a,b) and (c,d) in 2x4x1
@@ -935,7 +936,7 @@ void fp2_4x2x1_to_2x4x1(__m512i* res1, __m512i* res2, __m512i* src)
 {
     __m512i idx1 = VSET(0, 0, 1, 1, 2, 2, 3, 3);
     __m512i idx2 = VSET(4, 4, 5, 5, 6, 6, 7, 7);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 5; i++) {
         __m512i t = src[i];
         res1[i] = VPERM512MASKZ(0x55, t, idx1);
         res2[i] = VPERM512MASKZ(0x55, t, idx2);
@@ -945,7 +946,7 @@ void fp2_4x2x1_to_2x4x1(__m512i* res1, __m512i* res2, __m512i* src)
 void fp2_2x4x1_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2)
 {
     __m512i idx = VSET(0, 2, 4, 6, 8, 10, 12, 14);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 5; i++) {
         res[i] = VBLENDPERM(idx, src1[i], src2[i]);
     }
 }
@@ -954,18 +955,20 @@ void fp2_2x2x2_to_2x4x1(__m512i* res, __m512i* src)
 {
     __m512i idx1 = VSET(0, 0, 2, 2, 4, 4, 6, 6);
     __m512i idx2 = VSET(1, 1, 3, 3, 5, 5, 7, 7);
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 2; i++) {
         __m512i t = src[i];
         res[i] = VPERM512MASKZ(0x55, t, idx1);
-        res[i+5] = VPERM512MASKZ(0x55, t, idx2);
+        res[i+3] = VPERM512MASKZ(0x55, t, idx2);
     }
+    res[2] = VPERM512MASKZ(0x55, src[2], idx1);
 }
 
 void fp2_2x4x1_to_2x2x2(__m512i* res, __m512i* src)
 {
     __m512i idx = VSET(0, 8, 2, 10, 4, 12, 6, 14);
-    for (int i = 0; i < 5; i++) {
-        res[i] = VBLENDPERM(idx, src[i], src[i+5]);
+    for (int i = 0; i < 2; i++) {
+        res[i] = VBLENDPERM(idx, src[i], src[i+3]);
     }
+    res[2] = VBLENDPERM(idx, src[2], VZERO());
 }
 

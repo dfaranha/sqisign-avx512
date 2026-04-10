@@ -1,4 +1,5 @@
 from gen_addchain import (write_exp_function, write_dbl_and_add, write_fp_exp3_div4_naive)
+from params import Fp2Mode
 
 def fp_setzero_2x4(f, pp, v):
     f.start("void fp_setzero_2x4(__m512i* res)")
@@ -386,7 +387,7 @@ def get_fold_mask(pp):
         return 0x77  # zero lanes 3,7 only
 
 def get_rdc_2x4_size(pp, strat):
-    n_low = pp.num_limbs + 1 if strat.fp2_lazy else pp.num_limbs
+    n_low = pp.num_limbs + 1 if strat.fp2_mode == Fp2Mode.lazy_no_carry else pp.num_limbs
     return n_low + 4 * pp.n24
 
 def rdc_2x4(f, pp, v, strat):
@@ -396,7 +397,7 @@ def rdc_2x4(f, pp, v, strat):
     N = pp.num_limbs
     n24 = pp.n24
     top_offset = N - 1 - n24
-    if strat.fp2_lazy:
+    if strat.fp2_mode == Fp2Mode.lazy_no_carry:
         n_low = pp.num_limbs + 1
     else:
         n_low = pp.num_limbs
@@ -446,7 +447,7 @@ def rdc_2x4(f, pp, v, strat):
         f.line()
     
     f.comment("Final reduction step to get the result down to the strict bit boundary")
-    if strat.rdc_final_sub_p:
+    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
         shift = 64 - (pp.last_limb_len + 1)
         f.line(f"hi = VSL(a[{2 * N}], {shift});")
         f.line("msb_mask = VSIGN(hi);")

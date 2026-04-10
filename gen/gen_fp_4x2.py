@@ -1,4 +1,5 @@
 from gen_addchain import (write_dbl_and_add, write_fp_exp3_div4_naive, write_exp_function)
+from params import Fp2Mode
 
 # 4x2 format stores an Fp element in n42 vectors.
 # The i-th vector stores (a[i], a[i+n42], b[i], b[i+n42], c[i], c[i+n42], d[i], d[i+n42])
@@ -447,10 +448,12 @@ def rdc_4x2(f, pp, v, strat):
     f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i zero = VZERO();")
-    f.line(f"const __m512i one = VSETALL(1);")
+    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+        f.line(f"__m512i sign_mask;")
+        f.line(f"const __m512i bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
     f.line()
 
-    if strat.fp2_lazy:
+    if strat.fp2_mode == Fp2Mode.lazy_no_carry:
         n_low = pp.num_limbs + 1
     else:
         n_low = pp.num_limbs
@@ -458,7 +461,7 @@ def rdc_4x2(f, pp, v, strat):
     start_idx = n_low
 
     f.comment("Montgomery reduction loop")
-    top_idx = pp.n42 - 1 - pp.rem42
+    top_idx = pp.n42 - 1 - pp.rem42 # idx of the last limb
     for i in range(n_low):
         if i == 0:
             f.comment("using the fact that -p^{-1} mod 2^(limb_len) = 1 + c* 2^f mod 2^(limb_len) = 1 as f > limb_len")
@@ -483,18 +486,27 @@ def rdc_4x2(f, pp, v, strat):
     f.comment(f"Result is now in a[{start_idx}], ..., a[{start_idx + pp.n42 - 1}]")
     carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
 
-    f.comment(f"The result can be {pp.pbits+1} bits.")
-    if strat.rdc_final_sub_p:
-        f.comment(f"If so, we do a final subtraction by p to bring it down to {pp.pbits} bits.")
-        shift = 64 - (pp.pbits + 1 - (pp.num_limbs - 1) * pp.limb_len)
-        f.line(f"hi = VSL(a[{start_idx + pp.n42 - 1}], {shift});")
-        f.line("__mmask8 msb_mask = VSIGN(hi);")
-        f.line("__mmask8 mask_odd  = msb_mask & 0xaa;")
-        f.line("__mmask8 mask_even = mask_odd >> 1;")
-        top_sub_idx = start_idx + top_idx
-        f.line(f"a[{top_sub_idx}] = VSUBMASK(a[{top_sub_idx}], mask_odd, a[{top_sub_idx}], top);")
-        f.line(f"a[{start_idx}]  = VADDMASK(a[{start_idx}], mask_even, a[{start_idx}], one);")
+    f.comment(f"The result is in [0, 2p).")
+    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+        f.comment(f"We fully reduce the result down to [0, p-1].")
+
+        f.comment("Subtract p, using special shape of p")
+        f.line(f"a[{start_idx}] = VADD(a[{start_idx}], bot);")
+        f.line(f"a[{top_idx}] = VSUBMASK(a[{top_idx}], 0xaa, a[{top_idx}], top);")
         f.line()
+
+        carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx) #TODO fix mp function
+
+        f.comment("If result is negative, we undo the subtraction by p")
+        f.comment("sign_mask = {0, sign_mask1, 0, sign_mask2, ...}")
+        f.line(f"sign_mask = VSRA(a[{top_idx}], 63);")
+        f.line(f"a[{top_idx}] = VADDMASK(a[{top_idx}], 0xaa, a[{top_idx}], VAND(sign_mask, p_top));")
+        f.line(f"sign_mask = VSHUFFLEMASKZ(0xffff, sign_mask, 0x4e);")
+        f.line(f"a[{start_idx}] = VSUB(a[{start_idx}], VAND(bot, sign_mask));")
+        f.line()
+
+        carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
+
     else:
         f.comment("Output result: final carry propagation is left for the final result.")
 
