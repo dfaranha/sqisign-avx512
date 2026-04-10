@@ -1,4 +1,4 @@
-from gen_addchain import (run_addchain, generate_exp_function)
+from gen_addchain import (write_exp_function, write_dbl_and_add, write_fp_exp3_div4_naive)
 
 def fp_setzero_2x4(f, pp, v):
     f.start("void fp_setzero_2x4(__m512i* res)")
@@ -38,7 +38,18 @@ def fp_is_equal_2x4(f, pp, v):
 
     f.line("__mmask8 acc = 0xff;")
     for i in range(pp.n24):
-        f.line(f"acc &= VCMPEQ(norm_a[{i}], norm_b[{i}]);")
+        valid = 0
+        for lane in range(8):
+            q = lane % 4
+            limb_idx = i + q * pp.n24
+            if limb_idx < pp.num_limbs:
+                valid |= (1 << lane)
+
+        if valid == 0xff:
+            f.line(f"acc &= VCMPEQ(norm_a[{i}], norm_b[{i}]);")
+        else:
+            ignore = 0xff ^ valid
+            f.line(f"acc &= VCMPEQ(norm_a[{i}], norm_b[{i}]) | 0x{ignore:02x};")
     f.line()
 
     f.line("return (acc & (acc >> 1) & (acc >> 2) & (acc >> 3) & 0x1)")
@@ -61,7 +72,18 @@ def fp_is_zero_2x4(f, pp, v):
 
     f.line("__mmask8 acc = 0xff;")
     for i in range(pp.n24):
-        f.line(f"acc &= VCMPEQ(norm_a[{i}], zero[{i}]);")
+        valid = 0
+        for lane in range(8):
+            q = lane % 4
+            limb_idx = i + q * pp.n24
+            if limb_idx < pp.num_limbs:
+                valid |= (1 << lane)
+
+        if valid == 0xff:
+            f.line(f"acc &= VCMPEQ(norm_a[{i}], zero[{i}]);")
+        else:
+            ignore = 0xff ^ valid
+            f.line(f"acc &= VCMPEQ(norm_a[{i}], zero[{i}]) | 0x{ignore:02x};")
     f.line()
 
     f.line("return (acc & (acc >> 1) & (acc >> 2) & (acc >> 3) & 0x1)")
@@ -91,41 +113,78 @@ def fp_select_2x4(f, pp, v):
 
     f.end()
 
+def get_top_idx(pp):
+    idx_top = (pp.num_limbs - 1) % pp.n24    # which vector holds the top limb
+    limb_top = (pp.num_limbs - 1) // pp.n24   # idx within the vector
+    return idx_top, limb_top
+
+def write_p_top(f, v, limb_top):
+    top_list = [(v.p_plus_1_top if i % 4 == limb_top else "0")  for i in range(8)]
+    top_str = ", ".join(top_list)
+    f.line(f"const __m512i p_top = VSET({top_str});")
+
+# Simple but unoptimized, doesn't account for where the top limb is.
+# def carry_prop_2x4(f, pp, v, tmp_name, mask_name, carry_name, idx_shift_name):
+#     f.comment("Carry propagation (3 full cross-lane ripples to cross all 4 lanes)")
+#     for i in range(3):
+#         if i == 0:
+#             f.comment("Straight ripple through the vectors")
+#         for j in range(pp.n24-1):
+#             f.line(f"{carry_name} = VSRA({tmp_name}[{j}], {v.limb_len});")
+#             f.line(f"{tmp_name}[{j}] = VAND({tmp_name}[{j}], {mask_name});")
+#             f.line(f"{tmp_name}[{j+1}] = VADD({tmp_name}[{j+1}], {carry_name});")
+#         if i == 0:
+#             f.comment("Cross-lane ripple from the last vector back to the first")
+#         f.line(f"{carry_name} = VSRA({tmp_name}[{pp.n24-1}], {v.limb_len});")
+#         f.line(f"{tmp_name}[{pp.n24-1}] = VANDMASK({tmp_name}[{pp.n24-1}], 0x77, {tmp_name}[{pp.n24 - 1}], {mask_name});")
+#         f.line(f"{carry_name} = VPERM512MASKZ(0xee, {carry_name}, {idx_shift_name});")
+#         f.line(f"{tmp_name}[0] = VADD({tmp_name}[0], {carry_name});")
+#     f.comment(f"Final straight ripple to finish the exact (4 * n24) limb sequence")
+#     for j in range(pp.n24-1):
+#         f.line(f"{carry_name} = VSRA({tmp_name}[{j}], {v.limb_len});")
+#         f.line(f"{tmp_name}[{j}] = VAND({tmp_name}[{j}], {mask_name});")
+#         f.line(f"{tmp_name}[{j+1}] = VADD({tmp_name}[{j+1}], {carry_name});")
+#     f.line(f"{tmp_name}[{pp.n24-1}] = VANDMASK({tmp_name}[{pp.n24-1}], 0x77, {tmp_name}[{pp.n24-1}], limb_mask);")
+#     f.line()
+
 def carry_prop_2x4(f, pp, v, tmp_name, mask_name, carry_name, idx_shift_name):
-    f.comment("Carry propagation (3 full cross-lane ripples to cross all 4 lanes)")
-    for i in range(3):
-        if i == 0:
-            f.comment("Straight ripple through the vectors")
-        for j in range(pp.n24-1):
+    _, limb_top = get_top_idx(pp)
+    n24 = pp.n24
+
+    sign_preserve_mask = 0xff ^ ((1 << limb_top) | (1 << (limb_top + 4)))
+
+    f.comment(f"Carry propagation ({limb_top} cross-lane ripples + final straight ripple)")
+    for i in range(limb_top):
+        for j in range(n24 - 1):
             f.line(f"{carry_name} = VSRA({tmp_name}[{j}], {v.limb_len});")
             f.line(f"{tmp_name}[{j}] = VAND({tmp_name}[{j}], {mask_name});")
             f.line(f"{tmp_name}[{j+1}] = VADD({tmp_name}[{j+1}], {carry_name});")
-        if i == 0:
-            f.comment("Cross-lane ripple from the last vector back to the first")
-        f.line(f"{carry_name} = VSRA({tmp_name}[{pp.n24-1}], {v.limb_len});")
-        f.line(f"{tmp_name}[{pp.n24-1}] = VANDMASK({tmp_name}[{pp.n24-1}], 0x77, {tmp_name}[{pp.n24 - 1}], {mask_name});")
+        f.line(f"{carry_name} = VSRA({tmp_name}[{n24-1}], {v.limb_len});")
+        f.line(f"{tmp_name}[{n24-1}] = VANDMASK({tmp_name}[{n24-1}], 0x{sign_preserve_mask:02x}, {tmp_name}[{n24-1}], {mask_name});")
         f.line(f"{carry_name} = VPERM512MASKZ(0xee, {carry_name}, {idx_shift_name});")
         f.line(f"{tmp_name}[0] = VADD({tmp_name}[0], {carry_name});")
-    f.comment(f"Final straight ripple to finish the exact (4 * n24) limb sequence")
-    for j in range(pp.n24-1):
+
+    f.comment("Final straight ripple")
+    for j in range(n24 - 1):
         f.line(f"{carry_name} = VSRA({tmp_name}[{j}], {v.limb_len});")
         f.line(f"{tmp_name}[{j}] = VAND({tmp_name}[{j}], {mask_name});")
         f.line(f"{tmp_name}[{j+1}] = VADD({tmp_name}[{j+1}], {carry_name});")
-    f.line(f"{tmp_name}[{pp.n24-1}] = VANDMASK({tmp_name}[{pp.n24-1}], 0x77, {tmp_name}[{pp.n24-1}], limb_mask);")
+    f.line(f"{tmp_name}[{n24-1}] = VANDMASK({tmp_name}[{n24-1}], 0x{sign_preserve_mask:02x}, {tmp_name}[{n24-1}], {mask_name});")
     f.line()
 
-# TODO: Does not work when num_limbs % 4 != 0
 def fp_add_2x4(f, pp, v):
     f.start("void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)")
+
+    idx_top, limb_top = get_top_idx(pp)
 
     f.line(f"__m512i t[{pp.n24}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);")
-    f.line(f"const __m512i p_top = VSET(0, 0, 0, {v.p_plus_1_top}, 0, 0, 0, {v.p_plus_1_top});") # wrong if num_limbs % 4 != 0, need to use correct top idx
-    f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6)")
-    f.line("const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
-    f.comment("Broadcasts the sign bits from lanes 3 and 7 to their respective elements")
-    f.line("const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);")
+    write_p_top(f, v, limb_top)
+    f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
+    f.line(f"const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
+    f.comment("For duplicating sign bit in each half")
+    f.line(f"const __m512i idx_sign = VSET({limb_top}, {limb_top}, {limb_top}, {limb_top}, {limb_top+4}, {limb_top+4}, {limb_top+4}, {limb_top+4});")
     f.line()
 
     for i in range(pp.n24):
@@ -134,15 +193,15 @@ def fp_add_2x4(f, pp, v):
 
     f.comment("Subtract p using the special shape of p")
     f.line(f"t[0] = VADD(t[0], p_bot);")
-    f.line(f"t[{pp.n24-1}] = VSUB(t[{pp.n24-1}], p_top);")
+    f.line(f"t[{idx_top}] = VSUB(t[{idx_top}], p_top);")
     f.line()
 
     carry_prop_2x4(f, pp, v, "t", "limb_mask", "carry", "idx_shift")
 
-    f.comment("If the result is negative, we add p")
-    f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);")
+    f.comment("If the result is negative, add p back")
+    f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);") # We carry the last ripple all the way to the end
     f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
-    f.line(f"t[{pp.n24-1}] = VADD(t[{pp.n24-1}], VAND(p_top, sign_mask));")
+    f.line(f"t[{idx_top}] = VADD(t[{idx_top}], VAND(p_top, sign_mask));")
     f.line(f"t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
     f.line()
 
@@ -156,13 +215,15 @@ def fp_add_2x4(f, pp, v):
 def fp_sub_2x4(f, pp, v):
     f.start("void fp_sub_2x4(__m512i* res, __m512i* a, __m512i* b)")
 
+    idx_top, limb_top = get_top_idx(pp)
+
     f.line(f"__m512i t[{pp.n24}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);")
-    f.line(f"const __m512i p_top = VSET(0, 0, 0, {v.p_plus_1_top}, 0, 0, 0, {v.p_plus_1_top});") # wrong if num_limbs % 4 != 0, need to use correct top idx
-    f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6)")
+    write_p_top(f, v, limb_top)
+    f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
     f.line("const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
-    f.comment("Broadcasts the sign bits from lanes 3 and 7 to their respective elements")
+    f.comment("For duplicating sign bit in each half")
     f.line("const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);")
     f.line()
 
@@ -175,7 +236,7 @@ def fp_sub_2x4(f, pp, v):
     f.comment("If the result is negative, we add p")
     f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);")
     f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
-    f.line(f"t[{pp.n24-1}] = VADD(t[{pp.n24-1}], VAND(p_top, sign_mask));")
+    f.line(f"t[{idx_top}] = VADD(t[{idx_top}], VAND(p_top, sign_mask));")
     f.line(f"t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
     f.line()
 
@@ -189,13 +250,15 @@ def fp_sub_2x4(f, pp, v):
 def fp_neg_2x4(f, pp, v):
     f.start("void fp_neg_2x4(__m512i* res, __m512i* a)")
 
+    idx_top, limb_top = get_top_idx(pp)
+
     f.line(f"__m512i t[{pp.n24}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);")
-    f.line(f"const __m512i p_top = VSET(0, 0, 0, {v.p_plus_1_top}, 0, 0, 0, {v.p_plus_1_top});") # wrong if num_limbs % 4 != 0, need to use correct top idx
-    f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6)")
+    write_p_top(f, v, limb_top)
+    f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
     f.line("const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
-    f.comment("Broadcasts the sign bits from lanes 3 and 7 to their respective elements")
+    f.comment("For duplicating sign bit in each half")
     f.line("const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);")
     f.line("const __m512i zero = VZERO();")
     f.line()
@@ -209,7 +272,7 @@ def fp_neg_2x4(f, pp, v):
     f.comment("If the result is negative, we add p")
     f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);")
     f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
-    f.line(f"t[{pp.n24-1}] = VADD(t[{pp.n24-1}], VAND(p_top, sign_mask));")
+    f.line(f"t[{idx_top}] = VADD(t[{idx_top}], VAND(p_top, sign_mask));")
     f.line(f"t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
     f.line()
 
@@ -223,13 +286,15 @@ def fp_neg_2x4(f, pp, v):
 def fp_mixaddsub_2x4(f, pp, v):
     f.start("void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)")
 
+    idx_top, limb_top = get_top_idx(pp)
+
     f.line(f"__m512i t[{pp.n24}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);")
-    f.line(f"const __m512i p_top = VSET(0, 0, 0, {v.p_plus_1_top}, 0, 0, 0, {v.p_plus_1_top});") # wrong if num_limbs % 4 != 0, need to use correct top idx
-    f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6)")
+    write_p_top(f, v, limb_top)
+    f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
     f.line("const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
-    f.comment("Broadcasts the sign bits from lanes 3 and 7 to their respective elements")
+    f.comment("For duplicating sign bit in each half")
     f.line("const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);")
     f.line("const __mmask8 sub_mask = ~add_mask;")
     f.line()
@@ -243,7 +308,7 @@ def fp_mixaddsub_2x4(f, pp, v):
 
     f.comment("Subtract p using the special shape of p")
     f.line(f"t[0] = VADDMASK(t[0], add_mask, t[0], p_bot);")
-    f.line(f"t[{pp.n24-1}] = VSUBMASK(t[{pp.n24-1}], add_mask, t[{pp.n24-1}], p_top);")
+    f.line(f"t[{idx_top}] = VSUBMASK(t[{idx_top}], add_mask, t[{idx_top}], p_top);")
     f.line()
 
     carry_prop_2x4(f, pp, v, "t", "limb_mask", "carry", "idx_shift")
@@ -251,7 +316,7 @@ def fp_mixaddsub_2x4(f, pp, v):
     f.comment("If the result is negative, we add p")
     f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);")
     f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
-    f.line(f"t[{pp.n24-1}] = VADD(t[{pp.n24-1}], VAND(p_top, sign_mask));")
+    f.line(f"t[{idx_top}] = VADD(t[{idx_top}], VAND(p_top, sign_mask));")
     f.line(f"t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
     f.line()
 
@@ -307,9 +372,12 @@ def mp_mul_2x4(f, pp, v):
 
     f.end()
 
-#TODO: Reduce the size of t?
+def get_rdc_2x4_size(pp, strat):
+    n_low = pp.num_limbs + 1 if strat.fp2_lazy else pp.num_limbs
+    return n_low + 4 * pp.n24
+
 def rdc_2x4(f, pp, v, strat):
-    f.comment(f"Modfies a. Its length must be {2*pp.num_limbs+1}.")
+    f.comment(f"Modifies a. Its length must be at least {get_rdc_2x4_size(pp, strat)}.")
     f.start("void rdc_2x4(__m512i* res, __m512i* a)")
 
     N = pp.num_limbs
@@ -330,7 +398,7 @@ def rdc_2x4(f, pp, v, strat):
     f.line()
 
     f.comment("Initialize the upper accumulators to zero")
-    for i in range(N + n24, 2 * N + 1):
+    for i in range(N + n24, start_idx + 4 * n24):
         f.line(f"a[{i}] = zero;")
     f.line()
 
@@ -386,9 +454,11 @@ def rdc_2x4(f, pp, v, strat):
     f.end()
 
 
-def fp_mul_2x4(f, pp, v):
+def fp_mul_2x4(f, pp, v, strat):
     f.start("void fp_mul_2x4(__m512i* res, __m512i* a, __m512i* b)")
-    f.line(f"__m512i t[{2*pp.num_limbs+1}];")
+
+    rdc_size = get_rdc_2x4_size(pp, strat)
+    f.line(f"__m512i t[{rdc_size}];")
     f.line()
 
     f.line("mp_mul_2x4(t, a, b);")
@@ -396,9 +466,11 @@ def fp_mul_2x4(f, pp, v):
 
     f.end()
 
-def fp_sqr_2x4(f, pp, v):
+def fp_sqr_2x4(f, pp, v, strat):
     f.start("void fp_sqr_2x4(__m512i* res, __m512i* a)")
-    f.line(f"__m512i t[{2*pp.num_limbs+1}];")
+
+    rdc_size = get_rdc_2x4_size(pp, strat)
+    f.line(f"__m512i t[{rdc_size}];")
     f.line()
 
     f.line("mp_mul_2x4(t, a, a);")
@@ -454,90 +526,6 @@ def fp_inv_2x4(f, pp, v):
 
     f.end()
 
-# Computes t = a^k (or res = a^k if copy_to_res=True)
-def dbl_and_add(f, pp, v, k, copy_to_res=False):
-    assert k > 1
-    k_bits = bin(k)[2:]
-    sqr_count = 0
-    first_op = True
-    
-    # Iterate through the bits
-    # The msb is always 1, and corresponds to multiplying the accumulator 1 with a.
-    # Hence, we can skip it by setting t = a.
-    bits_to_process = k_bits[1:]
-    for idx, bit in enumerate(bits_to_process):
-        is_last_bit = (idx == len(bits_to_process) - 1)
-        sqr_count += 1
-        
-        if bit == '1':
-            # Perform the accumulated squarings. 
-            if first_op:
-                f.line("fp_sqr_2x4(t, a);")
-                if sqr_count > 1:
-                    f.line(f"for (int i = 1; i < {sqr_count}; i++) {{")
-                    f.indent()
-                    f.line("fp_sqr_2x4(t, t);")
-                    f.unindent()
-                    f.line("}")
-                first_op = False
-            else:
-                if sqr_count == 1:
-                    f.line("fp_sqr_2x4(t, t);")
-                else:
-                    f.line(f"for (int i = 0; i < {sqr_count}; i++) {{")
-                    f.indent()
-                    f.line("fp_sqr_2x4(t, t);")
-                    f.unindent()
-                    f.line("}")
-            
-            # If this is the very last bit of the entire exponent, route to res
-            dst = "res" if (copy_to_res and is_last_bit) else "t"
-            f.line(f"fp_mul_2x4({dst}, t, a);")
-            sqr_count = 0
-
-    # Handle trailing zeros in k
-    if sqr_count > 0:
-        if sqr_count == 1:
-            src = "a" if first_op else "t"
-            dst = "res" if copy_to_res else "t"
-            f.line(f"fp_sqrt_2x4({dst}, {src});")
-        elif sqr_count > 1 and not first_op and not copy_to_res:
-            f.line(f"for (int i = 0; i < {sqr_count}; i++) {{")
-            f.indent()
-            f.line("fp_sqr_2x4(t, t);")
-            f.unindent()
-            f.line("}")
-        elif sqr_count > 1 and first_op and not copy_to_res:
-            f.line("fp_sqr_2x4(t, a);")
-            f.line(f"for (int i = 1; i < {sqr_count}; i++) {{")
-            f.indent()
-            f.line("fp_sqr_2x4(t, t);")
-            f.unindent()
-            f.line("}")
-        elif sqr_count == 2 and copy_to_res:
-            src = "a" if first_op else "t"
-            f.line(f"fp_sqr_2x4(t, {src});")
-            f.line(f"fp_sqr_2x4(res, t);")
-        elif sqr_count == 3 and first_op and copy_to_res:
-            f.line(f"fp_sqr_2x4(t, a);")
-            f.line(f"fp_sqr_2x4(t, t);")
-            f.line(f"fp_sqr_2x4(res, t);")
-        elif sqr_count > 2 and not first_op and copy_to_res:
-            f.line(f"for (int i = 0; i < {sqr_count-1}; i++) {{")
-            f.indent()
-            f.line("fp_sqr_2x4(t, t);")
-            f.unindent()
-            f.line("}")
-            f.line("fp_sqr_2x4(res, t);")
-        else: #sqr_count > 3 and first_op and copy_to_res:
-            f.line("fp_sqr_2x4(t, a);")
-            f.line(f"for (int i = 1; i < {sqr_count-1}; i++) {{")
-            f.indent()
-            f.line("fp_sqr_2x4(t, t);")
-            f.unindent()
-            f.line("}")
-            f.line("fp_sqr_2x4(res, t);")
-
 def fp_sqrt_2x4(f, pp, v):
     f.start("void fp_sqrt_2x4(__m512i* res, __m512i* a)")
     
@@ -548,7 +536,7 @@ def fp_sqrt_2x4(f, pp, v):
 
     # Step 1: Compute a^c
     if pp.c > 1:
-        dbl_and_add(f, pp, v, pp.c)       
+        write_dbl_and_add(f, pp, v, pp.c, fmt="2x4")       
 
     # Step 2: Compute ^(2^(e-2))
     if pp.c > 1:
@@ -576,27 +564,14 @@ def fp_sqrt_2x4(f, pp, v):
             
     f.end()
 
-def fp_exp3div4_2x4(f, pp, v, strat):
+def fp_exp3div4_2x4(f, pp, v, strat, chain):
+    fmt = "2x4"
+    arr_size = pp.n24
     if strat.gen_addchain:
         fun_name = "fp_exp3div4_2x4"
-        fmt = "2x4"
-        arr_size = pp.n24
-        expr_str = f"{pp.c}*2^{pp.e-2} - 1"
-        chain = run_addchain(expr_str)
-        generate_exp_function(f, pp, v, chain, fun_name, fmt, arr_size)
+        write_exp_function(f, pp, v, chain, fun_name, fmt, arr_size)
     else:
-        fp_exp3_div4_2x4_naive(f, pp, v)
-
-def fp_exp3_div4_2x4_naive(f, pp, v):
-    f.start("void fp_exp3div4_2x4(__m512i* res, __m512i* a)")
-
-    f.line(f"__m512i t[{pp.n24}];")
-
-    exponent = (pp.p - 3) // 4
-    assert exponent == pp.c * 2**(pp.e-2) - 1
-    dbl_and_add(f, pp, v, exponent, copy_to_res=True)
-
-    f.end()
+        write_fp_exp3_div4_naive(f, pp, v, fmt, arr_size)
 
 def fp_tomont_2x4(f, pp, v):
     f.start("void fp_tomont_2x4(__m512i* res, __m512i* a)")
@@ -617,8 +592,6 @@ def fp_frommont_2x4(f, pp, v):
 
     f.end()
 
-#TODO: Assumes fully reduced, but after mul lowest limb can be one bit larger
-#TODO: Also assumes all vectors full.
 def fp_64_to_limbs_2x4(f, pp, v):
     f.comment(f"Assumes unvec is an array of 2 * {v.num_words64} 64-bit ints")
     f.start("void fp_64_to_limbs_2x4(__m512i* res, uint64_t* unvec)")
@@ -659,12 +632,13 @@ def fp_64_to_limbs_2x4(f, pp, v):
             f.line(line)
 
         plusi64 = "" if i64 == 0 else f" + {i64}"
+        l = pp.last_limb_len if (j + 3 * n >= pp.num_limbs - 1 and j + 3 * n < pp.num_limbs) else pp.limb_len
         if leftover == 64:
             f.line(f"t[4*i+3] = unvec[{v.num_words64} * i{plusi64}] & {v.limb_mask};")
-        elif leftover >= l or j == n-1:
+        elif leftover >= l:
            shift = 64 - leftover
            f.line(f"t[4*i+3] = (unvec[{v.num_words64} * i{plusi64}] >> {shift}) & {v.limb_mask};")
-        else: #leftover < l and j < n-1
+        else: #leftover < l
             rshift = 64 - leftover
             lshift = leftover
             rmask = (1 << leftover) - 1
@@ -748,15 +722,14 @@ def fp_limbs_to_64_2x4(f, pp, v):
         op = "|=" if i64 in seen else "="
         seen.add(i64)
 
-        is_last = (j == n-1)
-        l = pp.last_limb_len if is_last else pp.limb_len
+        l = pp.last_limb_len if j == n-1 else pp.limb_len
 
         if leftover == 64:
             f.line(f"res[{v.num_words64} * i{plusi64}] {op} t[4*i+3] & {v.limb_mask};")
-        elif leftover >= l or j == n-1:
+        elif leftover >= l:
             shift = 64 - leftover
             f.line(f"res[{v.num_words64} * i{plusi64}] {op} (t[4*i+3] & {v.limb_mask}) << {shift};")
-        else: #leftover < l and j < n-1
+        else: #leftover < l
             lshift = 64 - leftover
             rshift = leftover
             lmask = (1 << leftover) - 1
@@ -776,33 +749,38 @@ def fp_limbs_to_64_2x4(f, pp, v):
 
     f.end()
 
-#TODO: Like most of the impl, this is wrong if the last limb is not full
 def rand_fp_2x4(f, pp, v):
     f.start(f"void rand_fp_2x4(__m512i* res)")
 
     f.line(f"__m512i zero[{pp.n24}];")
-    f.line(f"__m512i mask = VSETALL({v.limb_mask});")
+    f.line(f"__m512i mask;")
     f.line(f"fp_setzero_2x4(zero);")
     f.line()
 
+    def vset(vals):
+        return f"VSET({', '.join(str(x) for x in vals)})"
 
-    f.line(f"for (int i = 0; i < {pp.n24 -1}; i++) {{")
-    f.indent()
-    f.line("res[i] = VAND(rand_512i(), mask);")
-    f.unindent()
-    f.line("}")
-    f.line()
+    for i in range(pp.n24):
+        mask_vals = []
+        for lane in range(8):
+            q = lane % 4
+            limb_idx = i + q * pp.n24
+            if limb_idx >= pp.num_limbs:
+                mask_vals.append("0")
+            elif limb_idx == pp.num_limbs - 1:
+                mask_vals.append(v.last_limb_mask)
+            else:
+                mask_vals.append(v.limb_mask)
 
-    f.comment("Last limb is shorter")
-    f.line(f"mask = VSET({v.limb_mask}, {v.last_limb_mask}, {v.limb_mask}, {v.last_limb_mask}, {v.limb_mask}, {v.last_limb_mask}, {v.limb_mask}, {v.last_limb_mask});")
-    f.line(f"res[{pp.n24 - 1}] = VAND(rand_512i(), mask);")
+        f.line(f"mask = {vset(mask_vals)};")
+        f.line(f"res[{i}] = VAND(rand_512i(), mask);")
     f.line()
 
     f.comment("Reduction")
     f.line("fp_add_2x4(res, res, zero);")
     f.end()
 
-def write_fp_2x4(f, pp, v, strat):
+def write_fp_2x4(f, pp, v, strat, chain):
     f.banner("2x4")
 
     fp_setzero_2x4(f, pp, v)
@@ -819,15 +797,15 @@ def write_fp_2x4(f, pp, v, strat):
 
     mp_mul_2x4(f, pp, v)
     rdc_2x4(f, pp, v, strat)
-    fp_mul_2x4(f, pp, v)
-    fp_sqr_2x4(f, pp, v)
+    fp_mul_2x4(f, pp, v, strat)
+    fp_sqr_2x4(f, pp, v, strat)
     fp_tomont_2x4(f, pp, v)
     fp_frommont_2x4(f, pp, v)
 
     fp_div3_2x4(f, pp, v)
     fp_inv_2x4(f, pp, v)
     fp_sqrt_2x4(f, pp, v)
-    fp_exp3div4_2x4(f, pp, v, strat)
+    fp_exp3div4_2x4(f, pp, v, strat, chain)
 
     fp_64_to_limbs_2x4(f, pp, v)
     fp_limbs_to_64_2x4(f, pp, v)

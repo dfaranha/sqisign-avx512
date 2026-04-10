@@ -103,6 +103,21 @@ int fp_is_zero_8x1(__m512i* a)
     return acc;
 }
 
+void fp_select_8x1(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)
+{
+    res[0] = VBLEND(s, a0[0], a1[0]);
+    res[1] = VBLEND(s, a0[1], a1[1]);
+    res[2] = VBLEND(s, a0[2], a1[2]);
+    res[3] = VBLEND(s, a0[3], a1[3]);
+    res[4] = VBLEND(s, a0[4], a1[4]);
+    res[5] = VBLEND(s, a0[5], a1[5]);
+    res[6] = VBLEND(s, a0[6], a1[6]);
+    res[7] = VBLEND(s, a0[7], a1[7]);
+    res[8] = VBLEND(s, a0[8], a1[8]);
+    res[9] = VBLEND(s, a0[9], a1[9]);
+    res[10] = VBLEND(s, a0[10], a1[10]);
+}
+
 void fp_add_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t[NUM_LIMBS], sign_mask;
@@ -1488,6 +1503,72 @@ void fp_inv_8x1(__m512i* res, __m512i* a)
     fp_mul_8x1(res, res, u);
 }
 
+void fp_sqrt_8x1(__m512i* res, __m512i* a)
+{
+    // Candidate root is a^((p+1)/4), with (p+1)/4 = 1*2^519
+    __m512i t[11];
+    
+    fp_sqr_8x1(t, a);
+    for (int i = 0; i < 517; i++) {
+        fp_sqr_8x1(t, t);
+    }
+    fp_sqr_8x1(res, t);
+}
+
+// Cost: 518 squarings, 12 multiplications
+void fp_exp3div4_8x1(__m512i* res, __m512i* a)
+{
+    __m512i v__10[11];
+    __m512i v__11[11];
+    __m512i v__1100[11];
+    __m512i v__1111[11];
+    __m512i v__11110000[11];
+    __m512i v__11111111[11];
+    __m512i v_x129[11];
+    __m512i v_x130[11];
+    __m512i v_x16[11];
+    __m512i v_x259[11];
+    __m512i v_x260[11];
+    __m512i v_x32[11];
+    __m512i v_x64[11];
+    __m512i v_x65[11];
+    
+    fp_sqr_8x1(v__10, a);
+    fp_mul_8x1(v__11, a, v__10);
+    fp_sqr_8x1(v__1100, v__11);
+    fp_sqr_8x1(v__1100, v__1100);
+    fp_mul_8x1(v__1111, v__11, v__1100);
+    fp_sqr_8x1(v__11110000, v__1111);
+    fp_sqr_8x1(v__11110000, v__11110000);
+    fp_sqr_8x1(v__11110000, v__11110000);
+    fp_sqr_8x1(v__11110000, v__11110000);
+    fp_mul_8x1(v__11111111, v__1111, v__11110000);
+    fp_sqr_8x1(v_x16, v__11111111);
+    for (int i = 0; i < 7; i++) fp_sqr_8x1(v_x16, v_x16);
+    fp_mul_8x1(v_x16, v_x16, v__11111111);
+    fp_sqr_8x1(v_x32, v_x16);
+    for (int i = 0; i < 15; i++) fp_sqr_8x1(v_x32, v_x32);
+    fp_mul_8x1(v_x32, v_x32, v_x16);
+    fp_sqr_8x1(v_x64, v_x32);
+    for (int i = 0; i < 31; i++) fp_sqr_8x1(v_x64, v_x64);
+    fp_mul_8x1(v_x64, v_x64, v_x32);
+    fp_sqr_8x1(v_x65, v_x64);
+    fp_mul_8x1(v_x65, v_x65, a);
+    fp_sqr_8x1(v_x129, v_x65);
+    for (int i = 0; i < 63; i++) fp_sqr_8x1(v_x129, v_x129);
+    fp_mul_8x1(v_x129, v_x129, v_x64);
+    fp_sqr_8x1(v_x130, v_x129);
+    fp_mul_8x1(v_x130, v_x130, a);
+    fp_sqr_8x1(v_x259, v_x130);
+    for (int i = 0; i < 128; i++) fp_sqr_8x1(v_x259, v_x259);
+    fp_mul_8x1(v_x259, v_x259, v_x129);
+    fp_sqr_8x1(v_x260, v_x259);
+    fp_mul_8x1(v_x260, v_x260, a);
+    fp_sqr_8x1(res, v_x260);
+    for (int i = 0; i < 258; i++) fp_sqr_8x1(res, res);
+    fp_mul_8x1(res, res, v_x259);
+}
+
 void fp_tomont_8x1(__m512i* res, __m512i* a)
 {
     __m512i vR2[NUM_LIMBS];
@@ -1549,7 +1630,7 @@ void fp_64_to_limbs_8x1(__m512i* res, uint64_t* unvec)
     }
     res[9] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 8; i++) {
-        t[i] = (unvec[NWORDS64 * i + 7] >> 32) & LIMB_MASK;
+        t[i] = ((unvec[NWORDS64 * i + 7] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 8] & 0x1ffULL) << 32);
     }
     res[10] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
 }
@@ -1600,7 +1681,7 @@ void fp_64_to_limbs_8x1_only_even_idx(__m512i* res, uint64_t* unvec)
     }
     res[9] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
     for (int i = 0; i < 4; i++) {
-        t[i] = (unvec[NWORDS64 * i + 7] >> 32) & LIMB_MASK;
+        t[i] = ((unvec[NWORDS64 * i + 7] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 8] & 0x1ffULL) << 32);
     }
     res[10] = VSET(t[0], 0, t[1], 0, t[2], 0, t[3], 0);
 }
@@ -1661,7 +1742,8 @@ void fp_limbs_to_64_8x1(uint64_t* res, __m512i* src)
     }
     VSTORE(t, s[10]);
     for (int i = 0; i < 8; i++) {
-        res[NWORDS64 * i + 7] |= (t[i] & LIMB_MASK) << 32;
+        res[NWORDS64 * i + 7] |= (t[i] & 0xffffffffULL) << 32;
+        res[NWORDS64 * i + 8] = (t[i] >> 32) & 0x1ffULL;
     }
 }
 
@@ -1721,7 +1803,8 @@ void fp_limbs_to_64_8x1_only_even_idx(uint64_t* res, __m512i* src)
     }
     VSTORE(t, s[10]);
     for (int i = 0; i < 4; i++) {
-        res[NWORDS64 * i + 7] |= (t[2*i] & LIMB_MASK) << 32;
+        res[NWORDS64 * i + 7] |= (t[2*i] & 0xffffffffULL) << 32;
+        res[NWORDS64 * i + 8] = (t[2*i] >> 32) & 0x1ffULL;
     }
 }
 
@@ -1792,7 +1875,7 @@ int fp_is_equal_4x2(__m512i* a, __m512i* b)
     acc &= VCMPEQ(norm_a[2], norm_b[2]);
     acc &= VCMPEQ(norm_a[3], norm_b[3]);
     acc &= VCMPEQ(norm_a[4], norm_b[4]);
-    acc &= VCMPEQ(norm_a[5], norm_b[5]);
+    acc &= VCMPEQ(norm_a[5], norm_b[5]) | 0xaa;
     
     // a = b iff both halves are equal
     return (acc & (acc >> 1) & 0x1)
@@ -1816,13 +1899,36 @@ int fp_is_zero_4x2(__m512i* a)
     acc &= VCMPEQ(norm_a[2], zero[2]);
     acc &= VCMPEQ(norm_a[3], zero[3]);
     acc &= VCMPEQ(norm_a[4], zero[4]);
-    acc &= VCMPEQ(norm_a[5], zero[5]);
+    acc &= VCMPEQ(norm_a[5], zero[5]) | 0xaa;
     
     // a = 0 iff both halves are 0
     return (acc & (acc >> 1) & 0x1)
         | ((acc >> 1) & (acc >> 2) & 0x2)
         | ((acc >> 2) & (acc >> 3) & 0x4)
         | ((acc >> 3) & (acc >> 4) & 0x8);
+}
+
+void fp_select_4x2(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)
+{
+    __m512i t[6];
+    __mmask8 mask = (s & 0x1) | ((s & 0x1) << 1)
+        | ((s & 0x2) << 1) | ((s & 0x2) << 2)
+        | ((s & 0x4) << 2) | ((s & 0x4) << 3)
+        | ((s & 0x8) << 3) | ((s & 0x8) << 4);
+    
+    t[0] = VBLEND(mask, a0[0], a1[0]);
+    t[1] = VBLEND(mask, a0[1], a1[1]);
+    t[2] = VBLEND(mask, a0[2], a1[2]);
+    t[3] = VBLEND(mask, a0[3], a1[3]);
+    t[4] = VBLEND(mask, a0[4], a1[4]);
+    t[5] = VBLEND(mask, a0[5], a1[5]);
+    
+    res[0] = t[0];
+    res[1] = t[1];
+    res[2] = t[2];
+    res[3] = t[3];
+    res[4] = t[4];
+    res[5] = t[5];
 }
 
 void fp_add_4x2(__m512i* res, __m512i* a, __m512i* b)
@@ -2773,6 +2879,72 @@ void fp_inv_4x2(__m512i* res, __m512i* a)
     fp_mul_4x2(res, t0, t1);
 }
 
+void fp_sqrt_4x2(__m512i* res, __m512i* a)
+{
+    // Candidate root is a^((p+1)/4), with (p+1)/4 = 1*2^519
+    __m512i t[6];
+    
+    fp_sqr_4x2(t, a);
+    for (int i = 0; i < 517; i++) {
+        fp_sqr_4x2(t, t);
+    }
+    fp_sqr_4x2(res, t);
+}
+
+// Cost: 518 squarings, 12 multiplications
+void fp_exp3div4_4x2(__m512i* res, __m512i* a)
+{
+    __m512i v__10[6];
+    __m512i v__11[6];
+    __m512i v__1100[6];
+    __m512i v__1111[6];
+    __m512i v__11110000[6];
+    __m512i v__11111111[6];
+    __m512i v_x129[6];
+    __m512i v_x130[6];
+    __m512i v_x16[6];
+    __m512i v_x259[6];
+    __m512i v_x260[6];
+    __m512i v_x32[6];
+    __m512i v_x64[6];
+    __m512i v_x65[6];
+    
+    fp_sqr_4x2(v__10, a);
+    fp_mul_4x2(v__11, a, v__10);
+    fp_sqr_4x2(v__1100, v__11);
+    fp_sqr_4x2(v__1100, v__1100);
+    fp_mul_4x2(v__1111, v__11, v__1100);
+    fp_sqr_4x2(v__11110000, v__1111);
+    fp_sqr_4x2(v__11110000, v__11110000);
+    fp_sqr_4x2(v__11110000, v__11110000);
+    fp_sqr_4x2(v__11110000, v__11110000);
+    fp_mul_4x2(v__11111111, v__1111, v__11110000);
+    fp_sqr_4x2(v_x16, v__11111111);
+    for (int i = 0; i < 7; i++) fp_sqr_4x2(v_x16, v_x16);
+    fp_mul_4x2(v_x16, v_x16, v__11111111);
+    fp_sqr_4x2(v_x32, v_x16);
+    for (int i = 0; i < 15; i++) fp_sqr_4x2(v_x32, v_x32);
+    fp_mul_4x2(v_x32, v_x32, v_x16);
+    fp_sqr_4x2(v_x64, v_x32);
+    for (int i = 0; i < 31; i++) fp_sqr_4x2(v_x64, v_x64);
+    fp_mul_4x2(v_x64, v_x64, v_x32);
+    fp_sqr_4x2(v_x65, v_x64);
+    fp_mul_4x2(v_x65, v_x65, a);
+    fp_sqr_4x2(v_x129, v_x65);
+    for (int i = 0; i < 63; i++) fp_sqr_4x2(v_x129, v_x129);
+    fp_mul_4x2(v_x129, v_x129, v_x64);
+    fp_sqr_4x2(v_x130, v_x129);
+    fp_mul_4x2(v_x130, v_x130, a);
+    fp_sqr_4x2(v_x259, v_x130);
+    for (int i = 0; i < 128; i++) fp_sqr_4x2(v_x259, v_x259);
+    fp_mul_4x2(v_x259, v_x259, v_x129);
+    fp_sqr_4x2(v_x260, v_x259);
+    fp_mul_4x2(v_x260, v_x260, a);
+    fp_sqr_4x2(res, v_x260);
+    for (int i = 0; i < 258; i++) fp_sqr_4x2(res, res);
+    fp_mul_4x2(res, res, v_x259);
+}
+
 void fp_tomont_4x2(__m512i* res, __m512i* a)
 {
     __m512i vR2[6];
@@ -2815,7 +2987,7 @@ void fp_64_to_limbs_4x2(__m512i* res, uint64_t* unvec)
     res[3] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 4; i++) {
         t[2*i] = unvec[NWORDS64 * i + 3] & LIMB_MASK;
-        t[2*i+1] = (unvec[NWORDS64 * i + 7] >> 32) & LIMB_MASK;
+        t[2*i+1] = ((unvec[NWORDS64 * i + 7] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 8] & 0xffffULL) << 32);
     }
     res[4] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 4; i++) {
@@ -2867,7 +3039,8 @@ void fp_limbs_to_64_4x2(uint64_t* res, __m512i* src)
     for (int i = 0; i < 4; i++) {
         res[NWORDS64 * i + 3] = t[2*i] & LIMB_MASK;
         
-        res[NWORDS64 * i + 7] |= (t[2*i+1] & LIMB_MASK) << 32;
+        res[NWORDS64 * i + 7] |= (t[2*i+1] & 0xffffffffULL) << 32;
+        res[NWORDS64 * i + 8] = (t[2*i+1] >> 32) & 0xffffULL;
     }
     VSTORE(t, s[5]);
     for (int i = 0; i < 4; i++) {
@@ -2935,7 +3108,7 @@ int fp_is_equal_2x4(__m512i* a, __m512i* b)
     __mmask8 acc = 0xff;
     acc &= VCMPEQ(norm_a[0], norm_b[0]);
     acc &= VCMPEQ(norm_a[1], norm_b[1]);
-    acc &= VCMPEQ(norm_a[2], norm_b[2]);
+    acc &= VCMPEQ(norm_a[2], norm_b[2]) | 0x88;
     
     return (acc & (acc >> 1) & (acc >> 2) & (acc >> 3) & 0x1)
         | ((acc >> 3) & (acc >> 4) & (acc >> 5) & (acc >> 6) & 0x2);
@@ -2952,7 +3125,7 @@ int fp_is_zero_2x4(__m512i* a)
     __mmask8 acc = 0xff;
     acc &= VCMPEQ(norm_a[0], zero[0]);
     acc &= VCMPEQ(norm_a[1], zero[1]);
-    acc &= VCMPEQ(norm_a[2], zero[2]);
+    acc &= VCMPEQ(norm_a[2], zero[2]) | 0x88;
     
     return (acc & (acc >> 1) & (acc >> 2) & (acc >> 3) & 0x1)
         | ((acc >> 3) & (acc >> 4) & (acc >> 5) & (acc >> 6) & 0x2);
@@ -2980,9 +3153,9 @@ void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
     const __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
-    // Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
+    // Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation
     const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
-    // Broadcasts the sign bits from lanes 3 and 7 to their respective elements
+    // For duplicating sign bit in each half
     const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);
     
     t[0] = VADD(a[0], b[0]);
@@ -2991,21 +3164,9 @@ void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)
     
     // Subtract p using the special shape of p
     t[0] = VADD(t[0], p_bot);
-    t[2] = VSUB(t[2], p_top);
+    t[1] = VSUB(t[1], p_top);
     
-    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
-    // Straight ripple through the vectors
-    carry = VSRA(t[0], LIMB_LEN);
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VADD(t[1], carry);
-    carry = VSRA(t[1], LIMB_LEN);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VADD(t[2], carry);
-    // Cross-lane ripple from the last vector back to the first
-    carry = VSRA(t[2], LIMB_LEN);
-    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
-    carry = VPERM512MASKZ(0xee, carry, idx_shift);
-    t[0] = VADD(t[0], carry);
+    // Carry propagation (3 cross-lane ripples + final straight ripple)
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3026,7 +3187,17 @@ void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)
     t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
     carry = VPERM512MASKZ(0xee, carry, idx_shift);
     t[0] = VADD(t[0], carry);
-    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VAND(t[1], limb_mask);
+    t[2] = VADD(t[2], carry);
+    carry = VSRA(t[2], LIMB_LEN);
+    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3035,25 +3206,13 @@ void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)
     t[2] = VADD(t[2], carry);
     t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
     
-    // If the result is negative, we add p
+    // If the result is negative, add p back
     sign_mask = VSRA(t[2], 63);
     sign_mask = VPERM512(idx_sign, sign_mask);
-    t[2] = VADD(t[2], VAND(p_top, sign_mask));
+    t[1] = VADD(t[1], VAND(p_top, sign_mask));
     t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
     
-    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
-    // Straight ripple through the vectors
-    carry = VSRA(t[0], LIMB_LEN);
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VADD(t[1], carry);
-    carry = VSRA(t[1], LIMB_LEN);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VADD(t[2], carry);
-    // Cross-lane ripple from the last vector back to the first
-    carry = VSRA(t[2], LIMB_LEN);
-    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
-    carry = VPERM512MASKZ(0xee, carry, idx_shift);
-    t[0] = VADD(t[0], carry);
+    // Carry propagation (3 cross-lane ripples + final straight ripple)
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3074,7 +3233,17 @@ void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)
     t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
     carry = VPERM512MASKZ(0xee, carry, idx_shift);
     t[0] = VADD(t[0], carry);
-    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VAND(t[1], limb_mask);
+    t[2] = VADD(t[2], carry);
+    carry = VSRA(t[2], LIMB_LEN);
+    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3094,28 +3263,16 @@ void fp_sub_2x4(__m512i* res, __m512i* a, __m512i* b)
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
     const __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
-    // Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
+    // Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation
     const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
-    // Broadcasts the sign bits from lanes 3 and 7 to their respective elements
+    // For duplicating sign bit in each half
     const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);
     
     t[0] = VSUB(a[0], b[0]);
     t[1] = VSUB(a[1], b[1]);
     t[2] = VSUB(a[2], b[2]);
     
-    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
-    // Straight ripple through the vectors
-    carry = VSRA(t[0], LIMB_LEN);
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VADD(t[1], carry);
-    carry = VSRA(t[1], LIMB_LEN);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VADD(t[2], carry);
-    // Cross-lane ripple from the last vector back to the first
-    carry = VSRA(t[2], LIMB_LEN);
-    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
-    carry = VPERM512MASKZ(0xee, carry, idx_shift);
-    t[0] = VADD(t[0], carry);
+    // Carry propagation (3 cross-lane ripples + final straight ripple)
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3136,7 +3293,17 @@ void fp_sub_2x4(__m512i* res, __m512i* a, __m512i* b)
     t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
     carry = VPERM512MASKZ(0xee, carry, idx_shift);
     t[0] = VADD(t[0], carry);
-    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VAND(t[1], limb_mask);
+    t[2] = VADD(t[2], carry);
+    carry = VSRA(t[2], LIMB_LEN);
+    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3148,22 +3315,10 @@ void fp_sub_2x4(__m512i* res, __m512i* a, __m512i* b)
     // If the result is negative, we add p
     sign_mask = VSRA(t[2], 63);
     sign_mask = VPERM512(idx_sign, sign_mask);
-    t[2] = VADD(t[2], VAND(p_top, sign_mask));
+    t[1] = VADD(t[1], VAND(p_top, sign_mask));
     t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
     
-    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
-    // Straight ripple through the vectors
-    carry = VSRA(t[0], LIMB_LEN);
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VADD(t[1], carry);
-    carry = VSRA(t[1], LIMB_LEN);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VADD(t[2], carry);
-    // Cross-lane ripple from the last vector back to the first
-    carry = VSRA(t[2], LIMB_LEN);
-    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
-    carry = VPERM512MASKZ(0xee, carry, idx_shift);
-    t[0] = VADD(t[0], carry);
+    // Carry propagation (3 cross-lane ripples + final straight ripple)
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3184,7 +3339,17 @@ void fp_sub_2x4(__m512i* res, __m512i* a, __m512i* b)
     t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
     carry = VPERM512MASKZ(0xee, carry, idx_shift);
     t[0] = VADD(t[0], carry);
-    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VAND(t[1], limb_mask);
+    t[2] = VADD(t[2], carry);
+    carry = VSRA(t[2], LIMB_LEN);
+    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3204,9 +3369,9 @@ void fp_neg_2x4(__m512i* res, __m512i* a)
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
     const __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
-    // Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
+    // Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation
     const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
-    // Broadcasts the sign bits from lanes 3 and 7 to their respective elements
+    // For duplicating sign bit in each half
     const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);
     const __m512i zero = VZERO();
     
@@ -3214,19 +3379,7 @@ void fp_neg_2x4(__m512i* res, __m512i* a)
     t[1] = VSUB(zero, a[1]);
     t[2] = VSUB(zero, a[2]);
     
-    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
-    // Straight ripple through the vectors
-    carry = VSRA(t[0], LIMB_LEN);
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VADD(t[1], carry);
-    carry = VSRA(t[1], LIMB_LEN);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VADD(t[2], carry);
-    // Cross-lane ripple from the last vector back to the first
-    carry = VSRA(t[2], LIMB_LEN);
-    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
-    carry = VPERM512MASKZ(0xee, carry, idx_shift);
-    t[0] = VADD(t[0], carry);
+    // Carry propagation (3 cross-lane ripples + final straight ripple)
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3247,7 +3400,17 @@ void fp_neg_2x4(__m512i* res, __m512i* a)
     t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
     carry = VPERM512MASKZ(0xee, carry, idx_shift);
     t[0] = VADD(t[0], carry);
-    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VAND(t[1], limb_mask);
+    t[2] = VADD(t[2], carry);
+    carry = VSRA(t[2], LIMB_LEN);
+    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3259,22 +3422,10 @@ void fp_neg_2x4(__m512i* res, __m512i* a)
     // If the result is negative, we add p
     sign_mask = VSRA(t[2], 63);
     sign_mask = VPERM512(idx_sign, sign_mask);
-    t[2] = VADD(t[2], VAND(p_top, sign_mask));
+    t[1] = VADD(t[1], VAND(p_top, sign_mask));
     t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
     
-    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
-    // Straight ripple through the vectors
-    carry = VSRA(t[0], LIMB_LEN);
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VADD(t[1], carry);
-    carry = VSRA(t[1], LIMB_LEN);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VADD(t[2], carry);
-    // Cross-lane ripple from the last vector back to the first
-    carry = VSRA(t[2], LIMB_LEN);
-    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
-    carry = VPERM512MASKZ(0xee, carry, idx_shift);
-    t[0] = VADD(t[0], carry);
+    // Carry propagation (3 cross-lane ripples + final straight ripple)
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3295,7 +3446,17 @@ void fp_neg_2x4(__m512i* res, __m512i* a)
     t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
     carry = VPERM512MASKZ(0xee, carry, idx_shift);
     t[0] = VADD(t[0], carry);
-    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VAND(t[1], limb_mask);
+    t[2] = VADD(t[2], carry);
+    carry = VSRA(t[2], LIMB_LEN);
+    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3315,9 +3476,9 @@ void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
     const __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
-    // Maps odd lanes to the next even lane (1->2, 3->4, 5->6)
+    // Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation
     const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
-    // Broadcasts the sign bits from lanes 3 and 7 to their respective elements
+    // For duplicating sign bit in each half
     const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);
     const __mmask8 sub_mask = ~add_mask;
     
@@ -3330,21 +3491,9 @@ void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     t[2] = VADDMASK(t[2], add_mask, a[2], b[2]);
     // Subtract p using the special shape of p
     t[0] = VADDMASK(t[0], add_mask, t[0], p_bot);
-    t[2] = VSUBMASK(t[2], add_mask, t[2], p_top);
+    t[1] = VSUBMASK(t[1], add_mask, t[1], p_top);
     
-    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
-    // Straight ripple through the vectors
-    carry = VSRA(t[0], LIMB_LEN);
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VADD(t[1], carry);
-    carry = VSRA(t[1], LIMB_LEN);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VADD(t[2], carry);
-    // Cross-lane ripple from the last vector back to the first
-    carry = VSRA(t[2], LIMB_LEN);
-    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
-    carry = VPERM512MASKZ(0xee, carry, idx_shift);
-    t[0] = VADD(t[0], carry);
+    // Carry propagation (3 cross-lane ripples + final straight ripple)
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3365,7 +3514,17 @@ void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
     carry = VPERM512MASKZ(0xee, carry, idx_shift);
     t[0] = VADD(t[0], carry);
-    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VAND(t[1], limb_mask);
+    t[2] = VADD(t[2], carry);
+    carry = VSRA(t[2], LIMB_LEN);
+    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3377,22 +3536,10 @@ void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     // If the result is negative, we add p
     sign_mask = VSRA(t[2], 63);
     sign_mask = VPERM512(idx_sign, sign_mask);
-    t[2] = VADD(t[2], VAND(p_top, sign_mask));
+    t[1] = VADD(t[1], VAND(p_top, sign_mask));
     t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
     
-    // Carry propagation (3 full cross-lane ripples to cross all 4 lanes)
-    // Straight ripple through the vectors
-    carry = VSRA(t[0], LIMB_LEN);
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VADD(t[1], carry);
-    carry = VSRA(t[1], LIMB_LEN);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VADD(t[2], carry);
-    // Cross-lane ripple from the last vector back to the first
-    carry = VSRA(t[2], LIMB_LEN);
-    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
-    carry = VPERM512MASKZ(0xee, carry, idx_shift);
-    t[0] = VADD(t[0], carry);
+    // Carry propagation (3 cross-lane ripples + final straight ripple)
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3413,7 +3560,17 @@ void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
     carry = VPERM512MASKZ(0xee, carry, idx_shift);
     t[0] = VADD(t[0], carry);
-    // Final straight ripple to finish the exact (4 * n24) limb sequence
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VAND(t[1], limb_mask);
+    t[2] = VADD(t[2], carry);
+    carry = VSRA(t[2], LIMB_LEN);
+    t[2] = VANDMASK(t[2], 0x77, t[2], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple
     carry = VSRA(t[0], LIMB_LEN);
     t[0] = VAND(t[0], limb_mask);
     t[1] = VADD(t[1], carry);
@@ -3555,7 +3712,7 @@ void mp_mul_2x4(__m512i* res, __m512i* a, __m512i* b)
     res[13] = t[13];
 }
 
-// Modfies a. Its length must be 23.
+// Modifies a. Its length must be at least 24.
 void rdc_2x4(__m512i* res, __m512i* a)
 {
     __m512i carry, lo, hi, shuf;
@@ -3575,6 +3732,7 @@ void rdc_2x4(__m512i* res, __m512i* a)
     a[20] = zero;
     a[21] = zero;
     a[22] = zero;
+    a[23] = zero;
     
     // Move each limb one step to the left, for each half
     const __m512i idx = VSET(1, 2, 3, 0, 5, 6, 7, 0);
@@ -3755,7 +3913,7 @@ void rdc_2x4(__m512i* res, __m512i* a)
 
 void fp_mul_2x4(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i t[23];
+    __m512i t[24];
     
     mp_mul_2x4(t, a, b);
     rdc_2x4(res, t);
@@ -3763,7 +3921,7 @@ void fp_mul_2x4(__m512i* res, __m512i* a, __m512i* b)
 
 void fp_sqr_2x4(__m512i* res, __m512i* a)
 {
-    __m512i t[23];
+    __m512i t[24];
     
     mp_mul_2x4(t, a, a);
     rdc_2x4(res, t);
@@ -3903,14 +4061,14 @@ void fp_64_to_limbs_2x4(__m512i* res, uint64_t* unvec)
         t[4*i] = ((unvec[NWORDS64 * i] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 1] & 0xffffffffULL) << 16);
         t[4*i + 1] = unvec[NWORDS64 * i + 3] & LIMB_MASK;
         t[4*i + 2] = (unvec[NWORDS64 * i + 5] >> 16) & LIMB_MASK;
-        t[4*i+3] = ((unvec[NWORDS64 * i + 7] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 8] & 0xffffULL) << 32);
+        t[4*i+3] = ((unvec[NWORDS64 * i + 7] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 8] & 0x1ffULL) << 32);
     }
     res[1] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
     for (int i = 0; i < 2; i++) {
         t[4*i] = ((unvec[NWORDS64 * i + 1] >> 32) & 0xffffffffULL) | ((unvec[NWORDS64 * i + 2] & 0xffffULL) << 32);
         t[4*i + 1] = ((unvec[NWORDS64 * i + 3] >> 48) & 0xffffULL) | ((unvec[NWORDS64 * i + 4] & 0xffffffffULL) << 16);
         t[4*i + 2] = unvec[NWORDS64 * i + 6] & LIMB_MASK;
-        t[4*i+3] = (unvec[NWORDS64 * i + 8] >> 16) & LIMB_MASK;
+        t[4*i+3] = (unvec[NWORDS64 * i + 8] >> 9) & LIMB_MASK;
     }
     res[2] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
 }
@@ -3955,15 +4113,14 @@ void fp_limbs_to_64_2x4(uint64_t* res, __m512i* src)
 void rand_fp_2x4(__m512i* res)
 {
     __m512i zero[3];
-    __m512i mask = VSETALL(LIMB_MASK);
+    __m512i mask;
     fp_setzero_2x4(zero);
     
-    for (int i = 0; i < 2; i++) {
-        res[i] = VAND(rand_512i(), mask);
-    }
-    
-    // Last limb is shorter
-    mask = VSET(LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK);
+    mask = VSET(LIMB_MASK, LIMB_MASK, LIMB_MASK, LIMB_MASK, LIMB_MASK, LIMB_MASK, LIMB_MASK, LIMB_MASK);
+    res[0] = VAND(rand_512i(), mask);
+    mask = VSET(LIMB_MASK, LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK);
+    res[1] = VAND(rand_512i(), mask);
+    mask = VSET(LIMB_MASK, LIMB_MASK, LIMB_MASK, 0, LIMB_MASK, LIMB_MASK, LIMB_MASK, 0);
     res[2] = VAND(rand_512i(), mask);
     
     // Reduction

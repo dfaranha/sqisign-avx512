@@ -111,6 +111,43 @@ void fp2_inv_8x1x1(__m512i* res, __m512i* a)
     fp_neg_8x1(res + 11, t1);
 }
 
+void fp2_sqrt_8x1x1(__m512i* res, __m512i* a)
+{
+    __m512i x0[11], x1[11], t0[11], t1[11];
+    __mmask8 is_zero;
+    
+    // From "Optimized One-Dimensional SQIsign Verification on Intel and
+    // Cortex-M4" by Aardal et al: https://eprint.iacr.org/2024/1563
+    
+    // x0 = \delta = sqrt(a0^2 + a1^2)
+    fp_sqr_8x1(x0, a);
+    fp_sqr_8x1(x1, a + 11);
+    fp_add_8x1(x0, x0, x1);
+    fp_sqrt_8x1(x0, x0);
+    // If a1 = 0, there is a risk of \delta = -a0, which makes x0 = 0 below.
+    // In that case, we restore the value \delta = a0.
+    is_zero = fp_is_zero_8x1(a + 11);
+    fp_select_8x1(x0, x0, a, is_zero);
+    // x0 = \delta + a0, t0 = 2 * x0.
+    fp_add_8x1(x0, x0, a);
+    fp_add_8x1(t0, x0, x0);
+    // x1 = t0^(p-3)/4.
+    fp_copy_8x1(x1, t0);
+    fp_exp3div4_8x1(x1, x1);
+    // x0 = x0 * x1, x1 = x1 * a1, t1 = (2x0)^2.
+    fp_mul_8x1(x0, x0, x1);
+    fp_mul_8x1(x1, x1, a + 11);
+    fp_add_8x1(t1, x0, x0);
+    fp_sqr_8x1(t1, t1);
+    // If t1 = t0, return x0 + x1*i, otherwise x1 - x0*i.
+    fp_sub_8x1(t0, t0, t1);
+    is_zero = fp_is_zero_8x1(t0);
+    fp_neg_8x1(t1, x0);
+    fp_copy_8x1(t0, x1);
+    fp_select_8x1(res, t0, x0, is_zero);
+    fp_select_8x1(res + 11, t1, x1, is_zero);
+}
+
 void fp2_tomont_8x1x1(__m512i* res, __m512i* a)
 {
     fp_tomont_8x1(res, a);
@@ -235,6 +272,43 @@ void fp2_inv_4x1x2(__m512i* res, __m512i* a)
     fp_mul_4x2(t1, a + 6, t0);
     fp_mul_4x2(res, a, t0);
     fp_neg_4x2(res + 6, t1);
+}
+
+void fp2_sqrt_4x1x2(__m512i* res, __m512i* a)
+{
+    __m512i x0[6], x1[6], t0[6], t1[6];
+    __mmask8 is_zero;
+    
+    // From "Optimized One-Dimensional SQIsign Verification on Intel and
+    // Cortex-M4" by Aardal et al: https://eprint.iacr.org/2024/1563
+    
+    // x0 = \delta = sqrt(a0^2 + a1^2)
+    fp_sqr_4x2(x0, a);
+    fp_sqr_4x2(x1, a + 6);
+    fp_add_4x2(x0, x0, x1);
+    fp_sqrt_4x2(x0, x0);
+    // If a1 = 0, there is a risk of \delta = -a0, which makes x0 = 0 below.
+    // In that case, we restore the value \delta = a0.
+    is_zero = fp_is_zero_4x2(a + 6);
+    fp_select_4x2(x0, x0, a, is_zero);
+    // x0 = \delta + a0, t0 = 2 * x0.
+    fp_add_4x2(x0, x0, a);
+    fp_add_4x2(t0, x0, x0);
+    // x1 = t0^(p-3)/4.
+    fp_copy_4x2(x1, t0);
+    fp_exp3div4_4x2(x1, x1);
+    // x0 = x0 * x1, x1 = x1 * a1, t1 = (2x0)^2.
+    fp_mul_4x2(x0, x0, x1);
+    fp_mul_4x2(x1, x1, a + 6);
+    fp_add_4x2(t1, x0, x0);
+    fp_sqr_4x2(t1, t1);
+    // If t1 = t0, return x0 + x1*i, otherwise x1 - x0*i.
+    fp_sub_4x2(t0, t0, t1);
+    is_zero = fp_is_zero_4x2(t0);
+    fp_neg_4x2(t1, x0);
+    fp_copy_4x2(t0, x1);
+    fp_select_4x2(res, t0, x0, is_zero);
+    fp_select_4x2(res + 6, t1, x1, is_zero);
 }
 
 void fp2_tomont_4x1x2(__m512i* res, __m512i* a)
@@ -386,6 +460,47 @@ void fp2_inv_4x2x1(__m512i* res, __m512i* a)
     fp_mul_4x2(re, re, t0);
     fp_mul_4x2(im, im, t0);
     fp_neg_4x2(im, im);
+    
+    fp_4x2_to_8x1(res, re, im);
+}
+
+void fp2_sqrt_4x2x1(__m512i* res, __m512i* a)
+{
+    __m512i re[6], im[6], x0[6], x1[6], t0[6], t1[6];
+    __mmask8 is_zero;
+    
+    // From "Optimized One-Dimensional SQIsign Verification on Intel and
+    // Cortex-M4" by Aardal et al: https://eprint.iacr.org/2024/1563
+    
+    fp_8x1_to_4x2(re, im, a);
+    
+    // x0 = \delta = sqrt(a0^2 + a1^2)
+    fp_sqr_4x2(x0, re);
+    fp_sqr_4x2(x1, im);
+    fp_add_4x2(x0, x0, x1);
+    fp_sqrt_4x2(x0, x0);
+    // If a1 = 0, there is a risk of \delta = -a0, which makes x0 = 0 below.
+    // In that case, we restore the value \delta = a0.
+    is_zero = fp_is_zero_4x2(im);
+    fp_select_4x2(x0, x0, re, is_zero);
+    // x0 = \delta + a0, t0 = 2 * x0.
+    fp_add_4x2(x0, x0, re);
+    fp_add_4x2(t0, x0, x0);
+    // x1 = t0^(p-3)/4.
+    fp_copy_4x2(x1, t0);
+    fp_exp3div4_4x2(x1, x1);
+    // x0 = x0 * x1, x1 = x1 * a1, t1 = (2x0)^2.
+    fp_mul_4x2(x0, x0, x1);
+    fp_mul_4x2(x1, x1, im);
+    fp_add_4x2(t1, x0, x0);
+    fp_sqr_4x2(t1, t1);
+    // If t1 = t0, return x0 + x1*i, otherwise x1 - x0*i.
+    fp_sub_4x2(t0, t0, t1);
+    is_zero = fp_is_zero_4x2(t0);
+    fp_neg_4x2(t1, x0);
+    fp_copy_4x2(t0, x1);
+    fp_select_4x2(re, t0, x0, is_zero);
+    fp_select_4x2(im, t1, x1, is_zero);
     
     fp_4x2_to_8x1(res, re, im);
 }
@@ -681,6 +796,50 @@ void fp2_inv_2x4x1(__m512i* res, __m512i* src)
     
     fp_2x4_to_4x2(re, re, im);
     fp_4x2_to_8x1(res, re, zero);
+}
+
+void fp2_sqrt_2x4x1(__m512i* res, __m512i* a)
+{
+    __m512i re[6], im[3], x0[3], x1[3], t0[3], t1[3];
+    __m512i zero[6];
+    __mmask8 is_zero;
+    
+    // From "Optimized One-Dimensional SQIsign Verification on Intel and
+    // Cortex-M4" by Aardal et al: https://eprint.iacr.org/2024/1563
+    
+    fp_8x1_to_4x2(re, zero, a);
+    fp_4x2_to_2x4(re, im, re);
+    
+    // x0 = \delta = sqrt(a0^2 + a1^2)
+    fp_sqr_2x4(x0, re);
+    fp_sqr_2x4(x1, im);
+    fp_add_2x4(x0, x0, x1);
+    fp_sqrt_2x4(x0, x0);
+    // If a1 = 0, there is a risk of \delta = -a0, which makes x0 = 0 below.
+    // In that case, we restore the value \delta = a0.
+    is_zero = fp_is_zero_2x4(im);
+    fp_select_2x4(x0, x0, re, is_zero);
+    // x0 = \delta + a0, t0 = 2 * x0.
+    fp_add_2x4(x0, x0, re);
+    fp_add_2x4(t0, x0, x0);
+    // x1 = t0^(p-3)/4.
+    fp_copy_2x4(x1, t0);
+    fp_exp3div4_2x4(x1, x1);
+    // x0 = x0 * x1, x1 = x1 * a1, t1 = (2x0)^2.
+    fp_mul_2x4(x0, x0, x1);
+    fp_mul_2x4(x1, x1, im);
+    fp_add_2x4(t1, x0, x0);
+    fp_sqr_2x4(t1, t1);
+    // If t1 = t0, return x0 + x1*i, otherwise x1 - x0*i.
+    fp_sub_2x4(t0, t0, t1);
+    is_zero = fp_is_zero_2x4(t0);
+    fp_neg_2x4(t1, x0);
+    fp_copy_2x4(t0, x1);
+    fp_select_2x4(re, t0, x0, is_zero);
+    fp_select_2x4(im, t1, x1, is_zero);
+    
+    fp_2x4_to_4x2(res, re, im);
+    fp_4x2_to_8x1(res, res, zero);
 }
 
 void fp2_tomont_2x4x1(__m512i* res, __m512i* a)

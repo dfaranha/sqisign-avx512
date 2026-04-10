@@ -16,16 +16,14 @@ def write_fp_include(f):
     f.line("#include \"utils.h\"")
     f.line()
 
-def write_fp_file(dir, pp, v, strat):
+def write_fp_file(dir, pp, v, strat, chain):
     path = f"{dir}/fp.c"
     f = FileWriter(path)
     print(f"Writing {path}")
-    print(pp)
-    print(strat)
 
     write_fp_include(f)
-    write_fp_8x1(f, pp, v, strat)
-    write_fp_4x2(f, pp, v, strat)
-    write_fp_2x4(f, pp, v, strat)
+    write_fp_8x1(f, pp, v, strat, chain)
+    write_fp_4x2(f, pp, v, strat, chain)
+    write_fp_2x4(f, pp, v, strat, chain)
     write_fp_conversions(f, pp, v)
     write_fp_inv_functions(f, pp, v)

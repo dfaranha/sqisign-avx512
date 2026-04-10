@@ -31,6 +31,11 @@ int fp_is_equal_8x1(__m512i* a, __m512i* b);
 int fp_is_zero_8x1(__m512i* a);
 
 /**
+ * Copies the i-th Fp element from a1 to res if the i-th bit of s is set, else it copies from a0.
+ */
+void fp_select_8x1(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s);
+
+/**
  *  res = a + b (mod p)
  */
 void fp_add_8x1(__m512i* res, __m512i* a, __m512i* b);
@@ -74,6 +79,9 @@ void fp_div3_8x1(__m512i* res, __m512i* src);
  * res = a^(-1) (mod p)
  */
 void fp_inv_8x1(__m512i* res, __m512i* src);
+
+void fp_sqrt_8x1(__m512i* res, __m512i* src);
+void fp_exp3div4_8x1(__m512i* res, __m512i* a);
 
 /**
  * res = a * R (mod p)
@@ -165,6 +173,11 @@ int fp_is_equal_4x2(__m512i* a, __m512i* b);
  */
 int fp_is_zero_4x2(__m512i* a);
 
+/**
+ * Copies the i-th Fp element from a1 to res if the i-th bit of s is set, else it copies from a0.
+ */
+void fp_select_4x2(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s);
+
 void fp_add_4x2(__m512i* res, __m512i* a, __m512i* b);
 
 void fp_sub_4x2(__m512i* res, __m512i* a, __m512i* b);
@@ -193,6 +206,8 @@ void fp_frommont_4x2(__m512i* res, __m512i* a);
 
 void fp_div3_4x2(__m512i* res, __m512i* a);
 void fp_inv_4x2(__m512i* res, __m512i* src);
+void fp_sqrt_4x2(__m512i* res, __m512i* src);
+void fp_exp3div4_4x2(__m512i* res, __m512i* a);
 
 void rand_fp_4x2(__m512i* res);
 

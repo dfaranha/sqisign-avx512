@@ -50,7 +50,6 @@ class Strat:
     gen_addchain: bool
     fp2_lazy: bool
     rdc_final_sub_p: bool
-    c1: bool
 
 def get_p(e, c):
     p = c * 2**e -1
@@ -86,14 +85,10 @@ def get_strat(e, c, limb_len, last_limb_len, gen_addchain):
     # last_limb_len + 1 <= limb_len, we can fit results in [0, 2p) without changes.
     rdc_final_sub_p = not (has_spare_bits or limb_len <= 49)
 
-    # Picking rdc_8x1 strategy:
-    c1 = c == 1
-
     return Strat(
         gen_addchain = gen_addchain,
         fp2_lazy = fp2_lazy,
-        rdc_final_sub_p = rdc_final_sub_p,
-        c1 = False
+        rdc_final_sub_p = rdc_final_sub_p
     )
 
 # TODO: Optimize Montgomery constant for lazy reduction like 48-bit limb case    

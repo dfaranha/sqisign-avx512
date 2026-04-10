@@ -410,6 +410,24 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Square root
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_8x1x1(a);
+        
+        fp2_sqr_8x1x1(b, a);
+        fp2_sqrt_8x1x1(c, b);
+        fp2_sqr_8x1x1(d, c);
+
+        if (fp2_is_equal_8x1x1(b, d) != 0xff) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("sqrt", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     printf("Fp2 lvl3 4x1x2 tests:\n");
     fp2_setzero_4x1x2(vR);
     fp_duplicate_4x2(vR, R);
@@ -799,6 +817,24 @@ bool test_fp2(int iterations)
         }
     }
     print_test_res("inv", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Square root
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_4x1x2(a);
+        
+        fp2_sqr_4x1x2(b, a);
+        fp2_sqrt_4x1x2(c, b);
+        fp2_sqr_4x1x2(d, c);
+
+        if (fp2_is_equal_4x1x2(b, d) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("sqrt", passed);
     if (passed == 0) {
         return false;
     }
@@ -1200,11 +1236,33 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Square root
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_4x2x1(a);
+        
+        fp2_sqr_4x2x1(b, a);
+        fp2_sqrt_4x2x1(c, b);
+        fp2_sqr_4x2x1(d, c);
+
+        if (fp2_is_equal_4x2x1(b, d) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("sqrt", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     printf("Fp2 lvl3 2x2x2 tests:\n");
     
     fp2_setzero_2x2x2(vR);
-    for(int i = 0; i < N4x2; i++) {
+    int rem4x2 = NUM_LIMBS % 2;
+    for(int i = 0; i < N4x2 - rem4x2; i++) {
         vR[i] = VSET(R[i], R[i+N4x2], 0, 0, R[i], R[i+N4x2], 0, 0);
+    }
+    if (rem4x2) {
+        vR[N4x2-1] = VSET(R[N4x2-1], 0, 0, 0, R[N4x2-1], 0, 0, 0);
     }
 
     // Equality test
@@ -1583,24 +1641,6 @@ bool test_fp2(int iterations)
         return false;
     }
 
-    // Square root
-    for (int i = 0; i < iterations; i++) {
-        rand_fp2_2x2x2(a);
-        
-        fp2_sqr_2x2x2(b, a);
-        fp2_sqrt_2x2x2(c, b);
-        fp2_sqr_2x2x2(d, c);
-
-        if (fp2_is_equal_2x2x2(b, d) != 0x3) {
-            passed = 0;
-            break;
-        }
-    }
-    print_test_res("sqrt", passed);
-    if (passed == 0) {
-        return false;
-    }
-
     // Inverse
     for (int i = 0; i < iterations; i++) {
         rand_fp2_2x2x2(a);
@@ -1617,6 +1657,24 @@ bool test_fp2(int iterations)
         }
     }
     print_test_res("inv", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Square root
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_2x2x2(a);
+        
+        fp2_sqr_2x2x2(b, a);
+        fp2_sqrt_2x2x2(c, b);
+        fp2_sqr_2x2x2(d, c);
+
+        if (fp2_is_equal_2x2x2(b, d) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("sqrt", passed);
     if (passed == 0) {
         return false;
     }
@@ -2020,6 +2078,24 @@ bool test_fp2(int iterations)
         }
     }
     print_test_res("inv", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Square root
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_2x4x1(a);
+        
+        fp2_sqr_2x4x1(b, a);
+        fp2_sqrt_2x4x1(c, b);
+        fp2_sqr_2x4x1(d, c);
+
+        if (fp2_is_equal_2x4x1(b, d) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("sqrt", passed);
     if (passed == 0) {
         return false;
     }

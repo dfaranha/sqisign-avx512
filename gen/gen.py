@@ -1,4 +1,5 @@
 import os
+from gen_addchain import run_addchain_exp3div4
 from gen_fp import write_fp_file
 from gen_fp2 import write_fp2_file
 from gen_fp_header import write_fp_header_file
@@ -53,13 +54,16 @@ c = 1
 #############
 
 pp, strat = comp_params_and_strat(e, c, num_kat, gen_addchain)
+print(pp)
+print(strat)
 v = get_param_names()
+chain = run_addchain_exp3div4(pp, strat)
 
 # if not os.path.exists(dir):
 #     os.mkdir(dir)
 
 write_fp_header_file("../include", pp, v)
-write_fp_file("../common", pp, v, strat)
+write_fp_file("../common", pp, v, strat, chain)
 write_fp2_file("../common", pp, v, strat)
 write_fp_kat_file("../test", pp, v)
 write_fp2_kat_file("../test", pp, v)

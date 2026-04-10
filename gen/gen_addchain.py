@@ -187,6 +187,15 @@ def run_addchain(expr_str):
     all_ops = _collapse_squarings(all_ops)
     return all_ops
 
+def run_addchain_exp3div4(pp, strat):
+    if not strat.gen_addchain:
+        return None
+    
+    print("Generating addchain")
+    
+    expr_str = f"{pp.c}*2^{pp.e-2} - 1"
+    return run_addchain(expr_str)
+
 def count_chain_ops(ops):
     """Return (n_squarings, n_multiplications) from an ops list."""
     n_sqr = 0
@@ -200,7 +209,7 @@ def count_chain_ops(ops):
             n_mul += 1
     return n_sqr, n_mul
 
-def generate_exp_function(f, pp, v, ops, func_name, fmt, arr_size):
+def write_exp_function(f, pp, v, ops, func_name, fmt, arr_size):
     """Generate a C exponentiation function from an addchain ops list.
     
     f:         file writer
@@ -253,5 +262,102 @@ def generate_exp_function(f, pp, v, ops, func_name, fmt, arr_size):
                 f.line(f'for (int i = 0; i < {n}; i++) {sqr_fn}({cn}, {cn});')
         elif op[0] == 'mul':
             f.line(f'{mul_fn}({c_name(op[1])}, {c_name(op[2])}, {c_name(op[3])});')
+
+    f.end()
+
+
+# Naive exp if addchain is turned off:
+# Computes t = a^k (or res = a^k if copy_to_res=True)
+def write_dbl_and_add(f, pp, v, k, fmt, copy_to_res=False):
+    assert k > 1
+    k_bits = bin(k)[2:]
+    sqr_count = 0
+    first_op = True
+    
+    # Iterate through the bits
+    # The msb is always 1, and corresponds to multiplying the accumulator 1 with a.
+    # Hence, we can skip it by setting t = a.
+    bits_to_process = k_bits[1:]
+    for idx, bit in enumerate(bits_to_process):
+        is_last_bit = (idx == len(bits_to_process) - 1)
+        sqr_count += 1
+        
+        if bit == '1':
+            # Perform the accumulated squarings. 
+            if first_op:
+                f.line(f"fp_sqr_{fmt}(t, a);")
+                if sqr_count > 1:
+                    f.line(f"for (int i = 1; i < {sqr_count}; i++) {{")
+                    f.indent()
+                    f.line(f"fp_sqr_{fmt}(t, t);")
+                    f.unindent()
+                    f.line("}")
+                first_op = False
+            else:
+                if sqr_count == 1:
+                    f.line(f"fp_sqr_{fmt}(t, t);")
+                else:
+                    f.line(f"for (int i = 0; i < {sqr_count}; i++) {{")
+                    f.indent()
+                    f.line(f"fp_sqr_{fmt}(t, t);")
+                    f.unindent()
+                    f.line("}")
+            
+            # If this is the very last bit of the entire exponent, route to res
+            dst = "res" if (copy_to_res and is_last_bit) else "t"
+            f.line(f"fp_mul_{fmt}({dst}, t, a);")
+            sqr_count = 0
+
+    # Handle trailing zeros in k
+    if sqr_count > 0:
+        if sqr_count == 1:
+            src = "a" if first_op else "t"
+            dst = "res" if copy_to_res else "t"
+            f.line(f"fp_sqrt_{fmt}({dst}, {src});")
+        elif sqr_count > 1 and not first_op and not copy_to_res:
+            f.line(f"for (int i = 0; i < {sqr_count}; i++) {{")
+            f.indent()
+            f.line(f"fp_sqr_{fmt}(t, t);")
+            f.unindent()
+            f.line("}")
+        elif sqr_count > 1 and first_op and not copy_to_res:
+            f.line(f"fp_sqr_{fmt}(t, a);")
+            f.line(f"for (int i = 1; i < {sqr_count}; i++) {{")
+            f.indent()
+            f.line(f"fp_sqr_{fmt}(t, t);")
+            f.unindent()
+            f.line("}")
+        elif sqr_count == 2 and copy_to_res:
+            src = "a" if first_op else "t"
+            f.line(f"fp_sqr_{fmt}(t, {src});")
+            f.line(f"fp_sqr_{fmt}(res, t);")
+        elif sqr_count == 3 and first_op and copy_to_res:
+            f.line(f"fp_sqr_{fmt}(t, a);")
+            f.line(f"fp_sqr_{fmt}(t, t);")
+            f.line(f"fp_sqr_{fmt}(res, t);")
+        elif sqr_count > 2 and not first_op and copy_to_res:
+            f.line(f"for (int i = 0; i < {sqr_count-1}; i++) {{")
+            f.indent()
+            f.line(f"fp_sqr_{fmt}(t, t);")
+            f.unindent()
+            f.line("}")
+            f.line(f"fp_sqr_{fmt}(res, t);")
+        else: #sqr_count > 3 and first_op and copy_to_res:
+            f.line(f"fp_sqr_{fmt}(t, a);")
+            f.line(f"for (int i = 1; i < {sqr_count-1}; i++) {{")
+            f.indent()
+            f.line(f"fp_sqr_{fmt}(t, t);")
+            f.unindent()
+            f.line("}")
+            f.line(f"fp_sqr_{fmt}(res, t);")
+
+def write_fp_exp3_div4_naive(f, pp, v, fmt, arr_size):
+    f.start(f"void fp_exp3div4_{fmt}(__m512i* res, __m512i* a)")
+
+    f.line(f"__m512i t[{arr_size}];")
+
+    exponent = (pp.p - 3) // 4
+    assert exponent == pp.c * 2**(pp.e-2) - 1
+    write_dbl_and_add(f, pp, v, exponent, fmt, copy_to_res=True)
 
     f.end()

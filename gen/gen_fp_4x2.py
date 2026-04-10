@@ -1,4 +1,4 @@
-from math import ceil, floor
+from gen_addchain import (write_dbl_and_add, write_fp_exp3_div4_naive, write_exp_function)
 
 # 4x2 format stores an Fp element in n42 vectors.
 # The i-th vector stores (a[i], a[i+n42], b[i], b[i+n42], c[i], c[i+n42], d[i], d[i+n42])
@@ -41,7 +41,18 @@ def fp_is_equal_4x2(f, pp, v):
 
     f.line("acc = 0xff;")
     for i in range(pp.n42):
-        f.line(f"acc &= VCMPEQ(norm_a[{i}], norm_b[{i}]);")
+        valid = 0
+        for lane in range(8):
+            sub = lane % 2
+            limb_idx = i + sub * pp.n42
+            if limb_idx < pp.num_limbs:
+                valid |= (1 << lane)
+
+        if valid == 0xff:
+            f.line(f"acc &= VCMPEQ(norm_a[{i}], norm_b[{i}]);")
+        else:
+            ignore = 0xff ^ valid
+            f.line(f"acc &= VCMPEQ(norm_a[{i}], norm_b[{i}]) | 0x{ignore:02x};")
     f.line()
 
     f.comment("a = b iff both halves are equal")  
@@ -68,7 +79,18 @@ def fp_is_zero_4x2(f, pp, v):
 
     f.line("acc = 0xff;")
     for i in range(pp.n42):
-        f.line(f"acc &= VCMPEQ(norm_a[{i}], zero[{i}]);")
+        valid = 0
+        for lane in range(8):
+            sub = lane % 2
+            limb_idx = i + sub * pp.n42
+            if limb_idx < pp.num_limbs:
+                valid |= (1 << lane)
+
+        if valid == 0xff:
+            f.line(f"acc &= VCMPEQ(norm_a[{i}], zero[{i}]);")
+        else:
+            ignore = 0xff ^ valid
+            f.line(f"acc &= VCMPEQ(norm_a[{i}], zero[{i}]) | 0x{ignore:02x};")
     f.line()
 
     f.comment("a = 0 iff both halves are 0")  
@@ -78,6 +100,27 @@ def fp_is_zero_4x2(f, pp, v):
     f.line("| ((acc >> 2) & (acc >> 3) & 0x4)")
     f.line("| ((acc >> 3) & (acc >> 4) & 0x8);")
     f.unindent()
+
+    f.end()
+
+def fp_select_4x2(f, pp, v):
+    f.start("void fp_select_4x2(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)")
+
+    f.line(f"__m512i t[{pp.n42}];")
+    f.line("__mmask8 mask = (s & 0x1) | ((s & 0x1) << 1)")
+    f.indent()
+    f.line("| ((s & 0x2) << 1) | ((s & 0x2) << 2)")
+    f.line("| ((s & 0x4) << 2) | ((s & 0x4) << 3)")
+    f.line("| ((s & 0x8) << 3) | ((s & 0x8) << 4);")
+    f.unindent()
+    f.line()
+
+    for i in range(pp.n42):
+        f.line(f"t[{i}] = VBLEND(mask, a0[{i}], a1[{i}]);")
+    f.line()
+
+    for i in range(pp.n42):
+        f.line(f"res[{i}] = t[{i}];")
 
     f.end()
 
@@ -561,6 +604,53 @@ def fp_inv_4x2(f, pp, v):
 
     f.end()
 
+def fp_sqrt_4x2(f, pp, v):
+    f.start("void fp_sqrt_4x2(__m512i* res, __m512i* a)")
+    
+    e_minus_2 = pp.e - 2
+    f.comment(f"Candidate root is a^((p+1)/4), with (p+1)/4 = {pp.c}*2^{e_minus_2}")
+    f.line(f"__m512i t[{pp.n42}];")
+    f.line()
+
+    # Step 1: Compute a^c
+    if pp.c > 1:
+        write_dbl_and_add(f, pp, v, pp.c, fmt="4x2")       
+
+    # Step 2: Compute ^(2^(e-2))
+    if pp.c > 1:
+        if e_minus_2 > 1: # current result in t
+            f.line(f"for (int i = 0; i < {e_minus_2 - 1}; i++) {{")
+            f.indent()
+            f.line("fp_sqr_4x2(t, t);")
+            f.unindent()
+            f.line("}")
+        
+        if e_minus_2 > 0:
+            f.line("fp_sqr_4x2(res, t);")
+    else: # current result in a
+        if e_minus_2 == 1:
+            f.line("fp_sqr_4x2(res, a);")
+        elif e_minus_2 > 1:
+            f.line("fp_sqr_4x2(t, a);")
+            if e_minus_2 > 2:
+                f.line(f"for (int i = 0; i < {e_minus_2 - 2}; i++) {{")
+                f.indent()
+                f.line("fp_sqr_4x2(t, t);")
+                f.unindent()
+                f.line("}")
+            f.line("fp_sqr_4x2(res, t);")
+            
+    f.end()
+
+def fp_exp3div4_4x2(f, pp, v, strat, chain):
+    fmt = "4x2"
+    arr_size = pp.n42
+    if strat.gen_addchain:
+        fun_name = "fp_exp3div4_4x2"
+        write_exp_function(f, pp, v, chain, fun_name, fmt, arr_size)
+    else:
+        write_fp_exp3_div4_naive(f, pp, v, fmt, arr_size)
+
 def fp_64_to_limbs_4x2(f, pp, v):
     f.comment(f"Assumes unvec is an array of 4 * {v.num_words64} 64-bit ints")
     f.start("void fp_64_to_limbs_4x2(__m512i* res, uint64_t* unvec)")
@@ -599,14 +689,15 @@ def fp_64_to_limbs_4x2(f, pp, v):
         f.line(lines[j])
 
         plusi64 = "" if i64 == 0 else f" + {i64}"
+        l = pp.last_limb_len if j == n-1 else pp.limb_len
         if j == top_idx + 1: #num_limbs odd
             f.line(f"t[2*i+1] = 0;")
         elif leftover == 64:
             f.line(f"t[2*i+1] = unvec[{v.num_words64} * i{plusi64}] & {v.limb_mask};")
-        elif leftover >= l or j == top_idx:
+        elif leftover >= l:
            shift = 64 - leftover
            f.line(f"t[2*i+1] = (unvec[{v.num_words64} * i{plusi64}] >> {shift}) & {v.limb_mask};")
-        else: #leftover < l and j < n-1
+        else: #leftover < l
             rshift = 64 - leftover
             lshift = leftover
             rmask = (1 << leftover) - 1
@@ -655,7 +746,7 @@ def fp_limbs_to_64_4x2(f, pp, v):
             indices[j].append(i64)
             lines_l[j].append(f"res[{v.num_words64} * i{plusi64}]")
             lines_r[j].append(f"(t[2*i] & {v.limb_mask}) << {shift};")
-        else: #leftover < l and j < n-1
+        else: #leftover < l
             lshift = 64 - leftover
             rshift = leftover
             lmask = (1 << leftover) - 1
@@ -689,18 +780,19 @@ def fp_limbs_to_64_4x2(f, pp, v):
         f.line()
 
         plusi64 = "" if i64 == 0 else f" + {i64}"
+        l = pp.last_limb_len if j == n-1 else pp.limb_len
         if j == top_idx + 1:
             pass
         elif leftover == 64:
             op = "|=" if i64 in seen else "="
             seen.add(i64)
             f.line(f"res[{v.num_words64} * i{plusi64}] {op} t[2*i+1] & {v.limb_mask};")
-        elif leftover >= l or j == top_idx:
+        elif leftover >= l:
             shift = 64 - leftover
             op = "|=" if i64 in seen else "="
             seen.add(i64)
             f.line(f"res[{v.num_words64} * i{plusi64}] {op} (t[2*i+1] & {v.limb_mask}) << {shift};")
-        else: #leftover < l and j < n-1
+        else: #leftover < l
             lshift = 64 - leftover
             rshift = leftover
             lmask = (1 << leftover) - 1
@@ -759,7 +851,7 @@ def rand_fp_4x2(f, pp, v):
     f.end()
 
 
-def write_fp_4x2(f, pp, v, strat):
+def write_fp_4x2(f, pp, v, strat, chain):
     f.banner("4x2")
 
     fp_setzero_4x2(f, pp, v)
@@ -767,6 +859,8 @@ def write_fp_4x2(f, pp, v, strat):
     fp_duplicate_4x2(f, pp, v)
     fp_is_equal_4x2(f, pp, v)
     fp_is_zero_4x2(f, pp, v)
+    fp_select_4x2(f, pp, v)
+
     fp_add_4x2(f, pp, v)
     fp_sub_4x2(f, pp, v)
     fp_neg_4x2(f, pp, v)
@@ -784,6 +878,8 @@ def write_fp_4x2(f, pp, v, strat):
     fp_sqr_4x2(f, pp, v)
     fp_div3_4x2(f, pp, v)
     fp_inv_4x2(f, pp, v)
+    fp_sqrt_4x2(f, pp, v)
+    fp_exp3div4_4x2(f, pp, v, strat, chain)
 
     fp_tomont_4x2(f, pp, v)
     fp_frommont_4x2(f, pp, v)

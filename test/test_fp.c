@@ -10,6 +10,7 @@ bool test_fp(int iterations)
     __m512i a[NUM_LIMBS], b[NUM_LIMBS], c[NUM_LIMBS], d[NUM_LIMBS], e[NUM_LIMBS], f[NUM_LIMBS];
     __m512i g[NUM_LIMBS], h[NUM_LIMBS], zero[NUM_LIMBS], one[NUM_LIMBS], t;
     __m512i vR[NUM_LIMBS], vR2[NUM_LIMBS];
+    uint64_t a_64[8*NWORDS64];
     fp_setzero_8x1(zero);
     fp_setzero_8x1(one);
     one[0] = VSETALL(1);
@@ -423,6 +424,24 @@ bool test_fp(int iterations)
         return false;
     }
 
+    // Square root
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_8x1(a);
+        
+        fp_sqr_8x1(b, a);
+        fp_sqrt_8x1(c, b);
+        fp_sqr_8x1(d, c);
+
+        if (fp_is_equal_8x1(b, d) != 0xff) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("sqrt", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     printf("Fp lvl3 4x2 tests:\n");
     one[0] = VSET(1, 0, 1, 0, 1, 0, 1, 0);
 
@@ -822,6 +841,24 @@ bool test_fp(int iterations)
         return false;
     }
 
+    // Square root
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_4x2(a);
+        
+        fp_sqr_4x2(b, a);
+        fp_sqrt_4x2(c, b);
+        fp_sqr_4x2(d, c);
+
+        if (fp_is_equal_4x2(b, d) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("sqrt", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     printf("Fp lvl3 2x4 tests:\n");
 
     // Addition
@@ -869,8 +906,6 @@ bool test_fp(int iterations)
         fp_sub_4x2(d, a, b);
 
         if (fp_is_equal_4x2(c, d) != 0xf) {
-            print_fp_4x2_index(c, 0);
-            print_fp_4x2_index(e, 0);
             passed = 0;
             break;
         }
@@ -1095,66 +1130,6 @@ bool test_fp(int iterations)
     if (passed == 0) {
         return false;
     }
-
-    printf("Fp inversion tests\n");
-
-    // Inverse
-    for (int i = 0; i < iterations; i++) {
-        rand_fp_2x4(a);
-
-        if (fp_is_zero_2x4(a) != 0)
-            continue;
-        
-        fp_inv_2x4(b, a);
-        fp_mul_2x4(c, b, a);
-
-        if (fp_is_equal_2x4(c, vR) != 0x3) {
-            passed = 0;
-            break;
-        }
-    }
-    print_test_res("2x4", passed);
-    if (passed == 0) {
-        return false;
-    }
-
-    //Batched inversion
-    for (int i = 0; i < iterations; i++) {
-        rand_fp_4x2(a);
-        if (fp_is_zero_4x2(a) != 0) { continue; }
-
-        fp_inv_4x2(b, a);
-        fp_mul_4x2(c, a, b);
-
-        if (fp_is_equal_4x2(c, vR) != 0xf) {
-            passed = 0;
-            printf("a * a^-1 != 1 mod p\n");
-            break;
-        }
-    }
-    print_test_res("4x2", passed);
-    if (passed == 0) {
-        return false;
-    }
-
-    //Batched inversion
-    for (int i = 0; i < iterations; i++) {
-        rand_fp_8x1(a);
-        if (fp_is_zero_8x1(a) != 0) { continue; }
-
-        fp_inv_8x1(b, a);
-        fp_mul_8x1(c, a, b);
-
-        if (fp_is_equal_8x1(c, vR) != 0xff) {
-            passed = 0;
-            printf("a * a^-1 != 1 mod p\n");
-            break;
-        }
-    }
-    print_test_res("inversion", passed);
-    if (passed == 0) {
-        return false;
-    }
     
     printf("Conversions between Fp representations\n");
 
@@ -1238,6 +1213,133 @@ bool test_fp(int iterations)
         }
     }
     print_test_res("2x4 <-> 4x2", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // 8x1 <-> uint64_t
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_8x1(a);
+
+        // back and forth does nothing
+        fp_limbs_to_64_8x1(a_64, a);
+        fp_64_to_limbs_8x1(b, a_64);
+
+        if (fp_is_equal_8x1(b, a) != 0xff) {
+            passed = 0;
+            break;
+        }
+
+        // back and forth on even idx does nothing
+        fp_limbs_to_64_8x1_only_even_idx(a_64, a);
+        fp_64_to_limbs_8x1_only_even_idx(b, a_64);
+
+        if ((fp_is_equal_8x1(b, a) & 0x55) != 0x55) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("8x1 <-> 64", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // 4x2 <-> uint64_t
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_4x2(a);
+
+        // back and forth does nothing
+        fp_limbs_to_64_4x2(a_64, a);
+        fp_64_to_limbs_4x2(b, a_64);
+
+        if (fp_is_equal_4x2(b, a) != 0xf) {
+            passed = 0;
+            break;
+        }
+
+    }
+    print_test_res("4x2 <-> 64", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // 2x4 <-> uint64_t
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_2x4(a);
+
+        // back and forth does nothing
+        fp_limbs_to_64_2x4(a_64, a);
+        fp_64_to_limbs_2x4(b, a_64);
+
+        if (fp_is_equal_2x4(b, a) != 0x3) {
+            passed = 0;
+            break;
+        }
+
+    }
+    print_test_res("2x4 <-> 64", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    printf("Fp inversion tests\n");
+
+    // Inverse
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_2x4(a);
+
+        if (fp_is_zero_2x4(a) != 0)
+            continue;
+        
+        fp_inv_2x4(b, a);
+        fp_mul_2x4(c, b, a);
+
+        if (fp_is_equal_2x4(c, vR) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("2x4", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    //Batched inversion
+    fp_duplicate_4x2(vR, R);
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_4x2(a);
+        if (fp_is_zero_4x2(a) != 0) { continue; }
+
+        fp_inv_4x2(b, a);
+        fp_mul_4x2(c, a, b);
+
+        if (fp_is_equal_4x2(c, vR) != 0xf) {
+            passed = 0;
+            printf("a * a^-1 != 1 mod p\n");
+            break;
+        }
+    }
+    print_test_res("4x2", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    //Batched inversion
+    fp_duplicate_8x1(vR, R);
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_8x1(a);
+        if (fp_is_zero_8x1(a) != 0) { continue; }
+
+        fp_inv_8x1(b, a);
+        fp_mul_8x1(c, a, b);
+
+        if (fp_is_equal_8x1(c, vR) != 0xff) {
+            passed = 0;
+            printf("a * a^-1 != 1 mod p\n");
+            break;
+        }
+    }
+    print_test_res("inversion", passed);
     if (passed == 0) {
         return false;
     }

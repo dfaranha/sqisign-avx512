@@ -176,6 +176,47 @@ def fp2_inv_8x1x1(f, pp, v):
 
     f.end()
 
+def fp2_sqrt_8x1x1(f, pp, v):
+    f.start("void fp2_sqrt_8x1x1(__m512i* res, __m512i* a)")
+
+    f.line(f"__m512i x0[{pp.num_limbs}], x1[{pp.num_limbs}], t0[{pp.num_limbs}], t1[{pp.num_limbs}];")
+    f.line("__mmask8 is_zero;")
+    f.line()
+
+    f.comment("From \"Optimized One-Dimensional SQIsign Verification on Intel and")
+    f.comment("Cortex-M4\" by Aardal et al: https://eprint.iacr.org/2024/1563")
+    f.line()
+
+    f.comment("x0 = \\delta = sqrt(a0^2 + a1^2)")
+    f.line("fp_sqr_8x1(x0, a);")
+    f.line(f"fp_sqr_8x1(x1, a + {pp.num_limbs});")
+    f.line("fp_add_8x1(x0, x0, x1);")
+    f.line("fp_sqrt_8x1(x0, x0);")
+    f.comment("If a1 = 0, there is a risk of \\delta = -a0, which makes x0 = 0 below.")
+    f.comment("In that case, we restore the value \\delta = a0.")
+    f.line(f"is_zero = fp_is_zero_8x1(a + {pp.num_limbs});")
+    f.line("fp_select_8x1(x0, x0, a, is_zero);")
+    f.comment("x0 = \\delta + a0, t0 = 2 * x0.")
+    f.line("fp_add_8x1(x0, x0, a);")
+    f.line("fp_add_8x1(t0, x0, x0);")
+    f.comment("x1 = t0^(p-3)/4.")
+    f.line("fp_copy_8x1(x1, t0);")
+    f.line("fp_exp3div4_8x1(x1, x1);")
+    f.comment("x0 = x0 * x1, x1 = x1 * a1, t1 = (2x0)^2.")
+    f.line("fp_mul_8x1(x0, x0, x1);")
+    f.line(f"fp_mul_8x1(x1, x1, a + {pp.num_limbs});")
+    f.line("fp_add_8x1(t1, x0, x0);")
+    f.line("fp_sqr_8x1(t1, t1);")
+    f.comment("If t1 = t0, return x0 + x1*i, otherwise x1 - x0*i.")
+    f.line("fp_sub_8x1(t0, t0, t1);")
+    f.line("is_zero = fp_is_zero_8x1(t0);")
+    f.line("fp_neg_8x1(t1, x0);")
+    f.line("fp_copy_8x1(t0, x1);")
+    f.line("fp_select_8x1(res, t0, x0, is_zero);")
+    f.line(f"fp_select_8x1(res + {pp.num_limbs}, t1, x1, is_zero);")
+
+    f.end()
+
 def fp2_tomont_8x1x1(f, pp, v):
     f.start("void fp2_tomont_8x1x1(__m512i* res, __m512i* a)")
 
@@ -218,6 +259,7 @@ def fp2_8x1x1(f, pp, v, strat):
     fp2_muli_8x1x1(f, pp, v)
     fp2_div3_8x1x1(f, pp, v)
     fp2_inv_8x1x1(f, pp, v)
+    fp2_sqrt_8x1x1(f, pp, v)
 
     fp2_tomont_8x1x1(f, pp, v)
     fp2_frommont_8x1x1(f, pp, v)
@@ -394,6 +436,47 @@ def fp2_inv_4x1x2(f, pp, v):
 
     f.end()
 
+def fp2_sqrt_4x1x2(f, pp, v):
+    f.start("void fp2_sqrt_4x1x2(__m512i* res, __m512i* a)")
+
+    f.line(f"__m512i x0[{pp.n42}], x1[{pp.n42}], t0[{pp.n42}], t1[{pp.n42}];")
+    f.line("__mmask8 is_zero;")
+    f.line()
+
+    f.comment("From \"Optimized One-Dimensional SQIsign Verification on Intel and")
+    f.comment("Cortex-M4\" by Aardal et al: https://eprint.iacr.org/2024/1563")
+    f.line()
+
+    f.comment("x0 = \\delta = sqrt(a0^2 + a1^2)")
+    f.line("fp_sqr_4x2(x0, a);")
+    f.line(f"fp_sqr_4x2(x1, a + {pp.n42});")
+    f.line("fp_add_4x2(x0, x0, x1);")
+    f.line("fp_sqrt_4x2(x0, x0);")
+    f.comment("If a1 = 0, there is a risk of \\delta = -a0, which makes x0 = 0 below.")
+    f.comment("In that case, we restore the value \\delta = a0.")
+    f.line(f"is_zero = fp_is_zero_4x2(a + {pp.n42});")
+    f.line("fp_select_4x2(x0, x0, a, is_zero);")
+    f.comment("x0 = \\delta + a0, t0 = 2 * x0.")
+    f.line("fp_add_4x2(x0, x0, a);")
+    f.line("fp_add_4x2(t0, x0, x0);")
+    f.comment("x1 = t0^(p-3)/4.")
+    f.line("fp_copy_4x2(x1, t0);")
+    f.line("fp_exp3div4_4x2(x1, x1);")
+    f.comment("x0 = x0 * x1, x1 = x1 * a1, t1 = (2x0)^2.")
+    f.line("fp_mul_4x2(x0, x0, x1);")
+    f.line(f"fp_mul_4x2(x1, x1, a + {pp.n42});")
+    f.line("fp_add_4x2(t1, x0, x0);")
+    f.line("fp_sqr_4x2(t1, t1);")
+    f.comment("If t1 = t0, return x0 + x1*i, otherwise x1 - x0*i.")
+    f.line("fp_sub_4x2(t0, t0, t1);")
+    f.line("is_zero = fp_is_zero_4x2(t0);")
+    f.line("fp_neg_4x2(t1, x0);")
+    f.line("fp_copy_4x2(t0, x1);")
+    f.line("fp_select_4x2(res, t0, x0, is_zero);")
+    f.line(f"fp_select_4x2(res + {pp.n42}, t1, x1, is_zero);")
+
+    f.end()
+
 def fp2_tomont_4x1x2(f, pp, v):
     f.start("void fp2_tomont_4x1x2(__m512i* res, __m512i* a)")
 
@@ -436,6 +519,7 @@ def fp2_4x1x2(f, pp, v, strat):
     fp2_muli_4x1x2(f, pp, v)
     fp2_div3_4x1x2(f, pp, v)
     fp2_inv_4x1x2(f, pp, v)
+    fp2_sqrt_4x1x2(f, pp, v)
 
     fp2_tomont_4x1x2(f, pp, v)
     fp2_frommont_4x1x2(f, pp, v)
@@ -670,6 +754,53 @@ def fp2_inv_4x2x1(f, pp, v):
 
     f.end()
 
+def fp2_sqrt_4x2x1(f, pp, v):
+    f.start("void fp2_sqrt_4x2x1(__m512i* res, __m512i* a)")
+
+    f.line(f"__m512i re[{pp.n42}], im[{pp.n42}], x0[{pp.n42}], x1[{pp.n42}], t0[{pp.n42}], t1[{pp.n42}];")
+    f.line("__mmask8 is_zero;")
+    f.line()
+
+    f.comment("From \"Optimized One-Dimensional SQIsign Verification on Intel and")
+    f.comment("Cortex-M4\" by Aardal et al: https://eprint.iacr.org/2024/1563")
+    f.line()
+
+    f.line("fp_8x1_to_4x2(re, im, a);")
+    f.line()
+
+    f.comment("x0 = \\delta = sqrt(a0^2 + a1^2)")
+    f.line("fp_sqr_4x2(x0, re);")
+    f.line("fp_sqr_4x2(x1, im);")
+    f.line("fp_add_4x2(x0, x0, x1);")
+    f.line("fp_sqrt_4x2(x0, x0);")
+    f.comment("If a1 = 0, there is a risk of \\delta = -a0, which makes x0 = 0 below.")
+    f.comment("In that case, we restore the value \\delta = a0.")
+    f.line("is_zero = fp_is_zero_4x2(im);")
+    f.line("fp_select_4x2(x0, x0, re, is_zero);")
+    f.comment("x0 = \\delta + a0, t0 = 2 * x0.")
+    f.line("fp_add_4x2(x0, x0, re);")
+    f.line("fp_add_4x2(t0, x0, x0);")
+    f.comment("x1 = t0^(p-3)/4.")
+    f.line("fp_copy_4x2(x1, t0);")
+    f.line("fp_exp3div4_4x2(x1, x1);")
+    f.comment("x0 = x0 * x1, x1 = x1 * a1, t1 = (2x0)^2.")
+    f.line("fp_mul_4x2(x0, x0, x1);")
+    f.line("fp_mul_4x2(x1, x1, im);")
+    f.line("fp_add_4x2(t1, x0, x0);")
+    f.line("fp_sqr_4x2(t1, t1);")
+    f.comment("If t1 = t0, return x0 + x1*i, otherwise x1 - x0*i.")
+    f.line("fp_sub_4x2(t0, t0, t1);")
+    f.line("is_zero = fp_is_zero_4x2(t0);")
+    f.line("fp_neg_4x2(t1, x0);")
+    f.line("fp_copy_4x2(t0, x1);")
+    f.line("fp_select_4x2(re, t0, x0, is_zero);")
+    f.line("fp_select_4x2(im, t1, x1, is_zero);")
+    f.line()
+
+    f.line("fp_4x2_to_8x1(res, re, im);")
+
+    f.end()
+
 def fp2_tomont_4x2x1(f, pp, v):
     f.start("void fp2_tomont_4x2x1(__m512i* res, __m512i* a)")
 
@@ -711,6 +842,7 @@ def fp2_4x2x1(f, pp, v, strat):
     fp2_muli_4x2x1(f, pp, v)
     fp2_div3_4x2x1(f, pp, v)
     fp2_inv_4x2x1(f, pp, v)
+    fp2_sqrt_4x2x1(f, pp, v)
 
     fp2_tomont_4x2x1(f, pp, v)
     fp2_frommont_4x2x1(f, pp, v)
@@ -907,6 +1039,26 @@ def fp2_div3_2x2x2(f, pp, v):
 
     f.end()
 
+def fp2_inv_2x2x2(f, pp, v):
+    f.start("void fp2_inv_2x2x2(__m512i* res, __m512i* a)")
+
+    f.line(f"__m512i re[{pp.n24}], im[{pp.n24}], t0[{pp.n24}], t1[{pp.n24}];")
+    f.line("fp_4x2_to_2x4(re, im, a);")
+    f.line()
+
+    f.line("fp_sqr_2x4(t0, re);")
+    f.line("fp_sqr_2x4(t1, im);")
+    f.line("fp_add_2x4(t0, t0, t1);")
+    f.line("fp_inv_2x4(t0, t0);")
+    f.line("fp_mul_2x4(re, re, t0);")
+    f.line("fp_mul_2x4(im, im, t0);")
+    f.line("fp_neg_2x4(im, im);")
+    f.line()
+
+    f.line("fp_2x4_to_4x2(res, re, im);")
+
+    f.end()
+
 def fp2_sqrt_2x2x2(f, pp, v):
     f.start("void fp2_sqrt_2x2x2(__m512i* res, __m512i* a)")
 
@@ -948,26 +1100,6 @@ def fp2_sqrt_2x2x2(f, pp, v):
     f.line("fp_copy_2x4(t0, x1);")
     f.line("fp_select_2x4(re, t0, x0, is_zero);")
     f.line("fp_select_2x4(im, t1, x1, is_zero);")
-    f.line()
-
-    f.line("fp_2x4_to_4x2(res, re, im);")
-
-    f.end()
-
-def fp2_inv_2x2x2(f, pp, v):
-    f.start("void fp2_inv_2x2x2(__m512i* res, __m512i* a)")
-
-    f.line(f"__m512i re[{pp.n24}], im[{pp.n24}], t0[{pp.n24}], t1[{pp.n24}];")
-    f.line("fp_4x2_to_2x4(re, im, a);")
-    f.line()
-
-    f.line("fp_sqr_2x4(t0, re);")
-    f.line("fp_sqr_2x4(t1, im);")
-    f.line("fp_add_2x4(t0, t0, t1);")
-    f.line("fp_inv_2x4(t0, t0);")
-    f.line("fp_mul_2x4(re, re, t0);")
-    f.line("fp_mul_2x4(im, im, t0);")
-    f.line("fp_neg_2x4(im, im);")
     f.line()
 
     f.line("fp_2x4_to_4x2(res, re, im);")
@@ -1182,6 +1314,57 @@ def fp2_inv_2x4x1(f, pp, v):
 
     f.end()
 
+def fp2_sqrt_2x4x1(f, pp, v):
+    f.start("void fp2_sqrt_2x4x1(__m512i* res, __m512i* a)")
+
+    f.line(f"__m512i re[{pp.n42}], im[{pp.n24}], x0[{pp.n24}], x1[{pp.n24}], t0[{pp.n24}], t1[{pp.n24}];")
+    f.line(f"__m512i zero[{pp.n42}];")
+    f.line("__mmask8 is_zero;")
+    f.line()
+
+    f.comment("From \"Optimized One-Dimensional SQIsign Verification on Intel and")
+    f.comment("Cortex-M4\" by Aardal et al: https://eprint.iacr.org/2024/1563")
+    f.line()
+
+    f.line("fp_8x1_to_4x2(re, zero, a);")
+    f.line("fp_4x2_to_2x4(re, im, re);")
+    f.line()
+
+    f.comment("x0 = \\delta = sqrt(a0^2 + a1^2)")
+    f.line("fp_sqr_2x4(x0, re);")
+    f.line("fp_sqr_2x4(x1, im);")
+    f.line("fp_add_2x4(x0, x0, x1);")
+    f.line("fp_sqrt_2x4(x0, x0);")
+    f.comment("If a1 = 0, there is a risk of \\delta = -a0, which makes x0 = 0 below.")
+    f.comment("In that case, we restore the value \\delta = a0.")
+    f.line("is_zero = fp_is_zero_2x4(im);")
+    f.line("fp_select_2x4(x0, x0, re, is_zero);")
+    f.comment("x0 = \\delta + a0, t0 = 2 * x0.")
+    f.line("fp_add_2x4(x0, x0, re);")
+    f.line("fp_add_2x4(t0, x0, x0);")
+    f.comment("x1 = t0^(p-3)/4.")
+    f.line("fp_copy_2x4(x1, t0);")
+    f.line("fp_exp3div4_2x4(x1, x1);")
+    f.comment("x0 = x0 * x1, x1 = x1 * a1, t1 = (2x0)^2.")
+    f.line("fp_mul_2x4(x0, x0, x1);")
+    f.line("fp_mul_2x4(x1, x1, im);")
+    f.line("fp_add_2x4(t1, x0, x0);")
+    f.line("fp_sqr_2x4(t1, t1);")
+    f.comment("If t1 = t0, return x0 + x1*i, otherwise x1 - x0*i.")
+    f.line("fp_sub_2x4(t0, t0, t1);")
+    f.line("is_zero = fp_is_zero_2x4(t0);")
+    f.line("fp_neg_2x4(t1, x0);")
+    f.line("fp_copy_2x4(t0, x1);")
+    f.line("fp_select_2x4(re, t0, x0, is_zero);")
+    f.line("fp_select_2x4(im, t1, x1, is_zero);")
+    f.line()
+
+    
+    f.line("fp_2x4_to_4x2(res, re, im);")
+    f.line("fp_4x2_to_8x1(res, res, zero);")
+
+    f.end()
+
 def fp2_tomont_2x4x1(f, pp, v):
     f.start("void fp2_tomont_2x4x1(__m512i* res, __m512i* a)")
 
@@ -1226,6 +1409,7 @@ def fp2_2x4x1(f, pp, v):
     fp2_muli_2x4x1(f, pp, v)
     fp2_div3_2x4x1(f, pp, v)
     fp2_inv_2x4x1(f, pp, v)
+    fp2_sqrt_2x4x1(f, pp, v)
 
     fp2_tomont_2x4x1(f, pp, v)
     fp2_frommont_2x4x1(f, pp, v)

@@ -1,4 +1,5 @@
 from math import ceil
+from gen_addchain import (write_dbl_and_add, write_fp_exp3_div4_naive, write_exp_function)
 
 def fp_setzero_8x1(f, pp, v):
     f.start("void fp_setzero_8x1(__m512i* res)")
@@ -54,6 +55,14 @@ def fp_is_zero_8x1(f, pp, v):
     for i in range(pp.num_limbs):
         f.line(f"acc &= VCMPEQ(norm_a[{i}], zero[{i}]);")
     f.line("return acc;")
+
+    f.end()
+
+def fp_select_8x1(f, pp, v):
+    f.start("void fp_select_8x1(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)")
+
+    for i in range(pp.num_limbs):
+        f.line(f"res[{i}] = VBLEND(s, a0[{i}], a1[{i}]);")
 
     f.end()
 
@@ -492,6 +501,8 @@ def mp_mul_8x1_karat(f, pp, v):
 
     f.end()
 
+# c == 1 and e = 0 mod limb_len can not happen at the same time, for primes > 52 bits.
+# Mersenne primes need e prime.
 def rdc_8x1(f, pp, v, strat):
     f.start("void rdc_8x1(__m512i* res, __m512i* a)")
 
@@ -684,6 +695,53 @@ def fp_inv_8x1(f, pp, v):
 
     f.end()
 
+def fp_sqrt_8x1(f, pp, v):
+    f.start("void fp_sqrt_8x1(__m512i* res, __m512i* a)")
+    
+    e_minus_2 = pp.e - 2
+    f.comment(f"Candidate root is a^((p+1)/4), with (p+1)/4 = {pp.c}*2^{e_minus_2}")
+    f.line(f"__m512i t[{pp.num_limbs}];")
+    f.line()
+
+    # Step 1: Compute a^c
+    if pp.c > 1:
+        write_dbl_and_add(f, pp, v, pp.c, fmt="8x1")       
+
+    # Step 2: Compute ^(2^(e-2))
+    if pp.c > 1:
+        if e_minus_2 > 1: # current result in t
+            f.line(f"for (int i = 0; i < {e_minus_2 - 1}; i++) {{")
+            f.indent()
+            f.line("fp_sqr_8x1(t, t);")
+            f.unindent()
+            f.line("}")
+        
+        if e_minus_2 > 0:
+            f.line("fp_sqr_8x1(res, t);")
+    else: # current result in a
+        if e_minus_2 == 1:
+            f.line("fp_sqr_8x1(res, a);")
+        elif e_minus_2 > 1:
+            f.line("fp_sqr_8x1(t, a);")
+            if e_minus_2 > 2:
+                f.line(f"for (int i = 0; i < {e_minus_2 - 2}; i++) {{")
+                f.indent()
+                f.line("fp_sqr_8x1(t, t);")
+                f.unindent()
+                f.line("}")
+            f.line("fp_sqr_8x1(res, t);")
+            
+    f.end()
+
+def fp_exp3div4_8x1(f, pp, v, strat, chain):
+    fmt = "8x1"
+    arr_size = pp.num_limbs
+    if strat.gen_addchain:
+        fun_name = "fp_exp3div4_8x1"
+        write_exp_function(f, pp, v, chain, fun_name, fmt, arr_size)
+    else:
+        write_fp_exp3_div4_naive(f, pp, v, fmt, arr_size)
+
 def fp_64_to_limbs_8x1(f, pp, v):
     f.comment(f"Assumes unvec is an array of 8 * {v.num_words64} 64-bit ints")
     f.start("void fp_64_to_limbs_8x1(__m512i* res, uint64_t* unvec)")
@@ -692,19 +750,19 @@ def fp_64_to_limbs_8x1(f, pp, v):
     f.line()
 
     n = pp.num_limbs
-    l = pp.limb_len
     leftover = 64
     i64 = 0
     for j in range(n):
         f.line("for (int i = 0; i < 8; i++) {")
         f.indent()
         plusi64 = "" if i64 == 0 else f" + {i64}"
+        l = pp.last_limb_len if j == n-1 else pp.limb_len
         if leftover == 64:
             f.line(f"t[i] = unvec[{v.num_words64} * i{plusi64}] & {v.limb_mask};")
-        elif leftover >= l or j == n-1:
+        elif leftover >= l:
            shift = 64 - leftover
            f.line(f"t[i] = (unvec[{v.num_words64} * i{plusi64}] >> {shift}) & {v.limb_mask};")
-        else: #leftover < l and j < n-1
+        else: #leftover < l
             rshift = 64 - leftover
             lshift = leftover
             rmask = (1 << leftover) - 1
@@ -730,19 +788,19 @@ def fp_64_to_limbs_8x1_only_even_idx(f, pp, v):
     f.line()
 
     n = pp.num_limbs
-    l = pp.limb_len
     leftover = 64
     i64 = 0
     for j in range(n):
         f.line("for (int i = 0; i < 4; i++) {")
         f.indent()
         plusi64 = "" if i64 == 0 else f" + {i64}"
+        l = pp.last_limb_len if j == n-1 else pp.limb_len
         if leftover == 64:
             f.line(f"t[i] = unvec[{v.num_words64} * i{plusi64}] & {v.limb_mask};")
-        elif leftover >= l or j == n-1:
+        elif leftover >= l:
            shift = 64 - leftover
            f.line(f"t[i] = (unvec[{v.num_words64} * i{plusi64}] >> {shift}) & {v.limb_mask};")
-        else: #leftover < l and j < n-1
+        else: #leftover < l
             rshift = 64 - leftover
             lshift = leftover
             rmask = (1 << leftover) - 1
@@ -760,7 +818,6 @@ def fp_64_to_limbs_8x1_only_even_idx(f, pp, v):
 
     f.end()
 
-#TODO: Assumes fully reduced, but after mul lowest limb can be one bit larger
 def fp_limbs_to_64_8x1(f, pp, v):
     f.start("void fp_limbs_to_64_8x1(uint64_t* res, __m512i* src)")
 
@@ -773,7 +830,6 @@ def fp_limbs_to_64_8x1(f, pp, v):
     f.line()
 
     n = pp.num_limbs
-    l = pp.limb_len
     i64 = 0
     leftover = 64
     for j in range(n):
@@ -782,12 +838,13 @@ def fp_limbs_to_64_8x1(f, pp, v):
         f.indent()
 
         plusi64 = "" if i64 == 0 else f" + {i64}"
+        l = pp.last_limb_len if j == n-1 else pp.limb_len
         if leftover == 64:
             f.line(f"res[{v.num_words64} * i{plusi64}] = t[i] & {v.limb_mask};")
-        elif leftover >= l or j == n - 1:
+        elif leftover >= l:
             shift = 64 - leftover
             f.line(f"res[{v.num_words64} * i{plusi64}] |= (t[i] & {v.limb_mask}) << {shift};")
-        else: #leftover < l and j < n-1
+        else: #leftover < l
             lshift = 64 - leftover
             rshift = leftover
             lmask = (1 << leftover) - 1
@@ -805,7 +862,6 @@ def fp_limbs_to_64_8x1(f, pp, v):
 
     f.end()
 
-#TODO: Assumes fully reduced, but after mul lowest limb can be one bit larger
 def fp_limbs_to_64_8x1_only_even_idx(f, pp, v):
     f.start("void fp_limbs_to_64_8x1_only_even_idx(uint64_t* res, __m512i* src)")
 
@@ -818,7 +874,6 @@ def fp_limbs_to_64_8x1_only_even_idx(f, pp, v):
     f.line()
 
     n = pp.num_limbs
-    l = pp.limb_len
     i64 = 0
     leftover = 64
     for j in range(n):
@@ -827,12 +882,13 @@ def fp_limbs_to_64_8x1_only_even_idx(f, pp, v):
         f.indent()
 
         plusi64 = "" if i64 == 0 else f" + {i64}"
+        l = pp.last_limb_len if j == n-1 else pp.limb_len
         if leftover == 64:
             f.line(f"res[{v.num_words64} * i{plusi64}] = t[2*i] & {v.limb_mask};")
-        elif leftover >= l or j == n - 1:
+        elif leftover >= l:
             shift = 64 - leftover
             f.line(f"res[{v.num_words64} * i{plusi64}] |= (t[2*i] & {v.limb_mask}) << {shift};")
-        else: #leftover < l and j < n-1
+        else: #leftover < l
             lshift = 64 - leftover
             rshift = leftover
             lmask = (1 << leftover) - 1
@@ -880,7 +936,7 @@ def rand_fp_8x1(f, pp, v):
     f.line("fp_add_8x1(res, res, zero);")
     f.end()
 
-def write_fp_8x1(f, pp, v, strat):
+def write_fp_8x1(f, pp, v, strat, chain):
     f.banner("8x1")
 
     fp_setzero_8x1(f, pp, v)
@@ -888,6 +944,8 @@ def write_fp_8x1(f, pp, v, strat):
     fp_duplicate_8x1(f, pp, v)
     fp_is_equal_8x1(f, pp, v)
     fp_is_zero_8x1(f, pp, v)
+    fp_select_8x1(f, pp, v)
+
     fp_add_8x1(f, pp, v)
     fp_sub_8x1(f, pp, v)
     fp_neg_8x1(f, pp, v)
@@ -907,6 +965,8 @@ def write_fp_8x1(f, pp, v, strat):
     fp_sqr_8x1(f, pp, v)
     fp_div3_8x1(f, pp, v)
     fp_inv_8x1(f, pp, v)
+    fp_sqrt_8x1(f, pp, v)
+    fp_exp3div4_8x1(f, pp, v, strat, chain)
 
     fp_tomont_8x1(f, pp, v)
     fp_frommont_8x1(f, pp, v)
