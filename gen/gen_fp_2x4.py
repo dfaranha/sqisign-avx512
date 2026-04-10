@@ -224,7 +224,7 @@ def fp_sub_2x4(f, pp, v):
     f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
     f.line("const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
     f.comment("For duplicating sign bit in each half")
-    f.line("const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);")
+    f.line(f"const __m512i idx_sign = VSET({limb_top}, {limb_top}, {limb_top}, {limb_top}, {limb_top+4}, {limb_top+4}, {limb_top+4}, {limb_top+4});")
     f.line()
 
     for i in range(pp.n24):
@@ -259,7 +259,7 @@ def fp_neg_2x4(f, pp, v):
     f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
     f.line("const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
     f.comment("For duplicating sign bit in each half")
-    f.line("const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);")
+    f.line(f"const __m512i idx_sign = VSET({limb_top}, {limb_top}, {limb_top}, {limb_top}, {limb_top+4}, {limb_top+4}, {limb_top+4}, {limb_top+4});")
     f.line("const __m512i zero = VZERO();")
     f.line()
 
@@ -295,7 +295,7 @@ def fp_mixaddsub_2x4(f, pp, v):
     f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
     f.line("const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
     f.comment("For duplicating sign bit in each half")
-    f.line("const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);")
+    f.line(f"const __m512i idx_sign = VSET({limb_top}, {limb_top}, {limb_top}, {limb_top}, {limb_top+4}, {limb_top+4}, {limb_top+4}, {limb_top+4});")
     f.line("const __mmask8 sub_mask = ~add_mask;")
     f.line()
 
@@ -372,6 +372,19 @@ def mp_mul_2x4(f, pp, v):
 
     f.end()
 
+def get_fold_mask(pp):
+    """Compute the VPERM fold mask for rdc_2x4.
+    The fold rotates (lane 0 <- 1, 1 <- 2, 2 <- 3, 3 <- 0).
+    Lane 3 is always masked (wrap-around not needed).
+    Lane 2 must also be masked if quarter 3 has no limbs,
+    since it reads from lane 3 (garbage).
+    """
+    q3_limbs = max(0, pp.num_limbs - 3 * pp.n24)
+    if q3_limbs == 0:
+        return 0x33  # zero lanes 2,3,6,7
+    else:
+        return 0x77  # zero lanes 3,7 only
+
 def get_rdc_2x4_size(pp, strat):
     n_low = pp.num_limbs + 1 if strat.fp2_lazy else pp.num_limbs
     return n_low + 4 * pp.n24
@@ -402,6 +415,8 @@ def rdc_2x4(f, pp, v, strat):
         f.line(f"a[{i}] = zero;")
     f.line()
 
+    fold_mask = get_fold_mask(pp)
+
     f.comment("Move each limb one step to the left, for each half")
     f.line("const __m512i idx = VSET(1, 2, 3, 0, 5, 6, 7, 0);")
     f.line()
@@ -417,7 +432,7 @@ def rdc_2x4(f, pp, v, strat):
         f.line(f"hi = VMULADDH(zero, shuf, p_top);")
         f.line(f"a[{i + top_offset + 1}] = VADD(a[{i + top_offset + 1}], VSL(hi, {v.limb_align}));")
         
-        f.line(f"a[{i + n24}] = VADD(a[{i + n24}], VPERM512MASKZ(0x77, a[{i}], idx));")
+        f.line(f"a[{i + n24}] = VADD(a[{i + n24}], VPERM512MASKZ(0x{fold_mask:02x}, a[{i}], idx));")
         f.line()
 
     f.comment("Propagate carries")
@@ -427,9 +442,9 @@ def rdc_2x4(f, pp, v, strat):
         f.line(f"a[{i+1}] = VADD(a[{i+1}], carry);")
         
         if i + n24 <= 2 * N:
-            f.line(f"a[{i + n24}] = VADD(a[{i + n24}], VPERM512MASKZ(0x77, a[{i}], idx));")
+            f.line(f"a[{i + n24}] = VADD(a[{i + n24}], VPERM512MASKZ(0x{fold_mask:02x}, a[{i}], idx));")
         f.line()
-
+    
     f.comment("Final reduction step to get the result down to the strict bit boundary")
     if strat.rdc_final_sub_p:
         shift = 64 - (pp.last_limb_len + 1)
@@ -451,6 +466,7 @@ def rdc_2x4(f, pp, v, strat):
         f.line(f"res[{k}] = VBLENDPERM(idx_pack, lo, hi);")
         if k < n24 - 1:
             f.line()
+
     f.end()
 
 
@@ -607,6 +623,10 @@ def fp_64_to_limbs_2x4(f, pp, v):
     for j in range(3*n):
         plusi64 = "" if i64 == 0 else f" + {i64}"
         t_idx = "4*i" if j < n else f"4*i + {j // n}"
+        if j >= pp.num_limbs:
+            lines[j % n].append(f"t[{t_idx}] = 0;")
+            continue
+        
         if leftover == 64:
             line = f"t[{t_idx}] = unvec[{v.num_words64} * i{plusi64}] & {v.limb_mask};"
         elif leftover >= l:
@@ -631,24 +651,29 @@ def fp_64_to_limbs_2x4(f, pp, v):
         for line in lines[j]:
             f.line(line)
 
-        plusi64 = "" if i64 == 0 else f" + {i64}"
-        l = pp.last_limb_len if (j + 3 * n >= pp.num_limbs - 1 and j + 3 * n < pp.num_limbs) else pp.limb_len
-        if leftover == 64:
-            f.line(f"t[4*i+3] = unvec[{v.num_words64} * i{plusi64}] & {v.limb_mask};")
-        elif leftover >= l:
-           shift = 64 - leftover
-           f.line(f"t[4*i+3] = (unvec[{v.num_words64} * i{plusi64}] >> {shift}) & {v.limb_mask};")
-        else: #leftover < l
-            rshift = 64 - leftover
-            lshift = leftover
-            rmask = (1 << leftover) - 1
-            lmask = (1 << (l-leftover)) - 1
-            f.line(f"t[4*i+3] = ((unvec[{v.num_words64} * i{plusi64}] >> {rshift}) & 0x{rmask:x}ULL) | ((unvec[{v.num_words64} * i + {i64+1}] & 0x{lmask:x}ULL) << {lshift});")
-        
-        leftover -= l
-        if leftover <= 0:
-            leftover += 64
-            i64 += 1
+
+        limb_idx = 3 * n + j
+        if limb_idx >= pp.num_limbs:
+            f.line("t[4*i+3] = 0;")
+        else:
+            plusi64 = "" if i64 == 0 else f" + {i64}"
+            l = pp.last_limb_len if limb_idx == pp.num_limbs-1 else pp.limb_len
+            if leftover == 64:
+                f.line(f"t[4*i+3] = unvec[{v.num_words64} * i{plusi64}] & {v.limb_mask};")
+            elif leftover >= l:
+                shift = 64 - leftover
+                f.line(f"t[4*i+3] = (unvec[{v.num_words64} * i{plusi64}] >> {shift}) & {v.limb_mask};")
+            else: #leftover < l
+                rshift = 64 - leftover
+                lshift = leftover
+                rmask = (1 << leftover) - 1
+                lmask = (1 << (l-leftover)) - 1
+                f.line(f"t[4*i+3] = ((unvec[{v.num_words64} * i{plusi64}] >> {rshift}) & 0x{rmask:x}ULL) | ((unvec[{v.num_words64} * i + {i64+1}] & 0x{lmask:x}ULL) << {lshift});")
+            
+            leftover -= l
+            if leftover <= 0:
+                leftover += 64
+                i64 += 1
             
         f.unindent()
         f.line("}")
@@ -674,7 +699,7 @@ def fp_limbs_to_64_2x4(f, pp, v):
     lines_l = [[] for _ in range(n)]
     lines_r = [[] for _ in range(n)]
 
-    for j in range(3*n):
+    for j in range(min(3*n, pp.num_limbs)):
         idx = j % n
         t_idx = "4*i" if j < n else f"4*i + {j // n}"
         plusi64 = "" if i64 == 0 else f" + {i64}"
@@ -718,31 +743,33 @@ def fp_limbs_to_64_2x4(f, pp, v):
             f.line(f"{line_l} {op} {line_r}")
             seen.add(idx)
 
-        plusi64 = "" if i64 == 0 else f" + {i64}"
-        op = "|=" if i64 in seen else "="
-        seen.add(i64)
+        limb_idx = 3*n + j
+        if limb_idx < pp.num_limbs:
+            plusi64 = "" if i64 == 0 else f" + {i64}"
+            op = "|=" if i64 in seen else "="
+            seen.add(i64)
 
-        l = pp.last_limb_len if j == n-1 else pp.limb_len
+            l = pp.last_limb_len if j == n-1 else pp.limb_len
 
-        if leftover == 64:
-            f.line(f"res[{v.num_words64} * i{plusi64}] {op} t[4*i+3] & {v.limb_mask};")
-        elif leftover >= l:
-            shift = 64 - leftover
-            f.line(f"res[{v.num_words64} * i{plusi64}] {op} (t[4*i+3] & {v.limb_mask}) << {shift};")
-        else: #leftover < l
-            lshift = 64 - leftover
-            rshift = leftover
-            lmask = (1 << leftover) - 1
-            rmask = (1 << (l - leftover)) - 1
-            op_next = "|=" if (i64+1) in seen else "="
-            seen.add(i64+1)
-            f.line(f"res[{v.num_words64} * i{plusi64}] {op} (t[4*i+3] & 0x{lmask:x}ULL) << {lshift};")
-            f.line(f"res[{v.num_words64} * i + {i64+1}] {op_next} (t[4*i+3] >> {rshift}) & 0x{rmask:x}ULL;")
+            if leftover == 64:
+                f.line(f"res[{v.num_words64} * i{plusi64}] {op} t[4*i+3] & {v.limb_mask};")
+            elif leftover >= l:
+                shift = 64 - leftover
+                f.line(f"res[{v.num_words64} * i{plusi64}] {op} (t[4*i+3] & {v.limb_mask}) << {shift};")
+            else: #leftover < l
+                lshift = 64 - leftover
+                rshift = leftover
+                lmask = (1 << leftover) - 1
+                rmask = (1 << (l - leftover)) - 1
+                op_next = "|=" if (i64+1) in seen else "="
+                seen.add(i64+1)
+                f.line(f"res[{v.num_words64} * i{plusi64}] {op} (t[4*i+3] & 0x{lmask:x}ULL) << {lshift};")
+                f.line(f"res[{v.num_words64} * i + {i64+1}] {op_next} (t[4*i+3] >> {rshift}) & 0x{rmask:x}ULL;")
 
-        leftover -= l
-        if leftover <= 0:
-            leftover += 64
-            i64 += 1
+            leftover -= l
+            if leftover <= 0:
+                leftover += 64
+                i64 += 1
 
         f.unindent()
         f.line("}")

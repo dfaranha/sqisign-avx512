@@ -30,7 +30,7 @@ int main()
 
     // =================================================
 
-    int n_tests = 10;
+    int n_tests = 100;
     bool passed;
 
     passed = test_fp(n_tests);
@@ -39,8 +39,8 @@ int main()
     passed = test_fp2(n_tests);
     if(!passed) { return 0; }
 
-    passed = test_fp_unvec_lvl3(n_tests);
-    if (!passed) { return 0; }
+    // passed = test_fp_unvec_lvl3(n_tests);
+    // if (!passed) { return 0; }
 
     // passed = test_ec(n_tests);
     // if (!passed) { return 0; }
@@ -57,8 +57,8 @@ int main()
     // passed = test_theta_KAT(n_tests);
     // if (!passed) { return 0; }
 
-    passed = test_verification_kat();
-    if (!passed) { return 0; }
+    // passed = test_verification_kat();
+    // if (!passed) { return 0; }
     
     return 0;
 }

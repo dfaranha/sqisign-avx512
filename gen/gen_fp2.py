@@ -88,11 +88,21 @@ def fp2_mul_8x1x1_standard(f, pp, v):
     f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}], s3[{pp.num_limbs}];")
     f.line()
 
+    f.line(f"__m512i zero[{pp.num_limbs}];")
+    f.line(f"fp_setzero_8x1(zero);")
+    f.line()
+
     f.line(f"fp_add_8x1(s1, a, a + {pp.num_limbs});")
     f.line(f"fp_add_8x1(s2, b, b + {pp.num_limbs});")
     f.line(f"fp_mul_8x1(s3, s1, s2);")
     f.line(f"fp_mul_8x1(s1, a, b);")
     f.line(f"fp_mul_8x1(s2, a + {pp.num_limbs}, b + {pp.num_limbs});")
+
+    f.comment("Normalize to [0, p) — rdc output can be in [0, 2p)")
+    f.line(f"fp_add_8x1(s1, s1, zero);")
+    f.line(f"fp_add_8x1(s2, s2, zero);")
+    f.line(f"fp_add_8x1(s3, s3, zero);")
+
     f.line(f"fp_sub_8x1(s3, s3, s1);")
     f.line(f"fp_sub_8x1(res + {pp.num_limbs}, s3, s2);")
     f.line(f"fp_sub_8x1(res, s1, s2);")

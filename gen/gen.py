@@ -35,21 +35,25 @@ from params import (comp_params_and_strat, get_param_names)
 num_kat = 20
 gen_addchain = True # Requires addchain to be installed
 
+#lvl1
+# e = 248
+# c = 5
+
 # lvl3
 # e = 376
 # c = 65
 
 # lvl5
-# e = 500
-# c = 27
+e = 500
+c = 27
 
 # no shift
 # e = 2601
 # c = 609
 
 # mersenne
-e = 521
-c = 1
+# e = 521
+# c = 1
 
 #############
 

@@ -225,12 +225,14 @@ bool test_fp2(int iterations)
         fp2_mul_8x1x1(d, a, zero);
         if (fp2_is_zero_8x1x1(d) != 0xff) {
             passed = 0;
+            printf("a * 0 != 0\n");
             break;
         }
 
         // (a * R)/R == a
         fp2_mul_8x1x1(d, a, vR);
         if (fp2_is_equal_8x1x1(d, a) != 0xff) {
+            printf("(a * R)/R != a\n");
             passed = 0;
             break;
         }
@@ -240,6 +242,7 @@ bool test_fp2(int iterations)
         fp2_frommont_8x1x1(e, d);
         if (fp2_is_equal_8x1x1(a, e) != 0xff) {
             passed = 0;
+            printf("tomont -> frommont != id\n");
             break;
         }
 
@@ -247,6 +250,7 @@ bool test_fp2(int iterations)
         fp2_tomont_8x1x1(e, d);
         if (fp2_is_equal_8x1x1(a, e) != 0xff) {
             passed = 0;
+            printf("frommont -> tomont != id\n");
             break;
         }
 
@@ -255,6 +259,7 @@ bool test_fp2(int iterations)
         fp2_mul_8x1x1(e, b, a);
         if (fp2_is_equal_8x1x1(d, e) != 0xff) {
             passed = 0;
+            printf("a * b != b * a\n");
             break;
         }
 
@@ -265,6 +270,7 @@ bool test_fp2(int iterations)
         fp2_mul_8x1x1(e, e, c);
         if (fp2_is_equal_8x1x1(d, e) != 0xff) {
             passed = 0;
+            printf("a * (b * c) != (a * b) * c\n");
             break;
         }
 
@@ -276,6 +282,7 @@ bool test_fp2(int iterations)
         fp2_add_8x1x1(e, e, f);
         if (fp2_is_equal_8x1x1(d, e) != 0xff) {
             passed = 0;
+            printf("a * (b+c) != a*b + a*c\n");
             break;
         }
 
@@ -307,6 +314,7 @@ bool test_fp2(int iterations)
         fp2_sqr_8x1x1(d, zero);
         if (fp2_is_zero_8x1x1(d) != 0xff) {
             passed = 0;
+            printf("0^2 != 0\n");
             break;
         }
 
@@ -314,6 +322,7 @@ bool test_fp2(int iterations)
         fp2_sqr_8x1x1(d, a);
         fp2_mul_8x1x1(e, a, a);
         if (fp2_is_equal_8x1x1(d, e) != 0xff) {
+            printf("a^2 != a * a\n");
             passed = 0;
             break;
         }
@@ -329,6 +338,7 @@ bool test_fp2(int iterations)
         fp2_add_8x1x1(e, e, f);
         if (fp2_is_equal_8x1x1(d, e) != 0xff) {
             passed = 0;
+            printf("(a+b)^2 != a^2 + 2ab + b^2\n");
             break;
         }
     }

@@ -89,45 +89,49 @@ def fp_4x2_to_2x4_ugly(f, pp, v):
         f.comment("For the last vector (src[n24-1] paired with src[0])")
         f.line(f"const __m512i idx_last_ac = VSET(0, 9, 0, 0, 4, 13, 0, 0);")
         f.line(f"const __m512i idx_last_bd = VSET(2, 11, 0, 0, 6, 15, 0, 0);")
-        f.line("__m512i lo, hi;")
+        f.line(f"__m512i t[{pp.n42}], lo, hi;")
+        f.line()
+
+        for i in range(pp.n42):
+            f.line(f"t[{i}] = src[{i}];")
         f.line()
 
         # Main loop: i = 0..n24-3 (all 4 source vectors available)
         for i in range(pp.n24 - 2):
             if i + pp.n24 + 1 < pp.n42:
-                f.line(f"lo = VBLENDPERM(idx_lo_ac, src[{i}], src[{i+pp.n24}]);")
-                f.line(f"hi = VBLENDPERM(idx_hi_ac, src[{i+1}], src[{i+pp.n24+1}]);")
+                f.line(f"lo = VBLENDPERM(idx_lo_ac, t[{i}], t[{i+pp.n24}]);")
+                f.line(f"hi = VBLENDPERM(idx_hi_ac, t[{i+1}], t[{i+pp.n24+1}]);")
                 f.line(f"res1[{i}] = VBLEND(0xcc, lo, hi);")
-                f.line(f"lo = VBLENDPERM(idx_lo_bd, src[{i}], src[{i+pp.n24}]);")
-                f.line(f"hi = VBLENDPERM(idx_hi_bd, src[{i+1}], src[{i+pp.n24+1}]);")
+                f.line(f"lo = VBLENDPERM(idx_lo_bd, t[{i}], t[{i+pp.n24}]);")
+                f.line(f"hi = VBLENDPERM(idx_hi_bd, t[{i+1}], t[{i+pp.n24+1}]);")
                 f.line(f"res2[{i}] = VBLEND(0xcc, lo, hi);")
             else:
-                # src[i+n24+1] out of bounds, lane 3,7 padding
-                f.line(f"lo = VBLENDPERM(idx_lo_ac, src[{i}], src[{i+pp.n24}]);")
-                f.line(f"hi = VPERM512MASKZ(0x44, src[{i+1}], perm_ac);")
+                # t[i+n24+1] out of bounds, lane 3,7 padding
+                f.line(f"lo = VBLENDPERM(idx_lo_ac, t[{i}], t[{i+pp.n24}]);")
+                f.line(f"hi = VPERM512MASKZ(0x44, t[{i+1}], perm_ac);")
                 f.line(f"res1[{i}] = VBLEND(0xcc, lo, hi);")
-                f.line(f"lo = VBLENDPERM(idx_lo_bd, src[{i}], src[{i+pp.n24}]);")
-                f.line(f"hi = VPERM512MASKZ(0x44, src[{i+1}], perm_bd);")
+                f.line(f"lo = VBLENDPERM(idx_lo_bd, t[{i}], t[{i+pp.n24}]);")
+                f.line(f"hi = VPERM512MASKZ(0x44, t[{i+1}], perm_bd);")
                 f.line(f"res2[{i}] = VBLEND(0xcc, lo, hi);")
             f.line()
 
         # i = n24-2: src[i+n24+1] = src[2*n24-1] = src[n42] out of bounds
         i = pp.n24 - 2
-        f.line(f"lo = VBLENDPERM(idx_lo_ac, src[{i}], src[{i+pp.n24}]);")
-        f.line(f"hi = VPERM512MASKZ(0x44, src[{i+1}], perm_ac);")
+        f.line(f"lo = VBLENDPERM(idx_lo_ac, t[{i}], t[{i+pp.n24}]);")
+        f.line(f"hi = VPERM512MASKZ(0x44, t[{i+1}], perm_ac);")
         f.line(f"res1[{i}] = VBLEND(0xcc, lo, hi);")
-        f.line(f"lo = VBLENDPERM(idx_lo_bd, src[{i}], src[{i+pp.n24}]);")
-        f.line(f"hi = VPERM512MASKZ(0x44, src[{i+1}], perm_bd);")
+        f.line(f"lo = VBLENDPERM(idx_lo_bd, t[{i}], t[{i+pp.n24}]);")
+        f.line(f"hi = VPERM512MASKZ(0x44, t[{i+1}], perm_bd);")
         f.line(f"res2[{i}] = VBLEND(0xcc, lo, hi);")
         f.line()
 
         # i = n24-1: different source pairing (src[n24-1] with src[0])
         i = pp.n24 - 1
-        f.line(f"lo = VBLENDPERM(idx_last_ac, src[{pp.n24-1}], src[0]);")
-        f.line(f"hi = VPERM512MASKZ(0x44, src[{pp.n24}], perm_ac);")
+        f.line(f"lo = VBLENDPERM(idx_last_ac, t[{pp.n24-1}], t[0]);")
+        f.line(f"hi = VPERM512MASKZ(0x44, t[{pp.n24}], perm_ac);")
         f.line(f"res1[{i}] = VBLEND(0xcc, lo, hi);")
-        f.line(f"lo = VBLENDPERM(idx_last_bd, src[{pp.n24-1}], src[0]);")
-        f.line(f"hi = VPERM512MASKZ(0x44, src[{pp.n24}], perm_bd);")
+        f.line(f"lo = VBLENDPERM(idx_last_bd, t[{pp.n24-1}], t[0]);")
+        f.line(f"hi = VPERM512MASKZ(0x44, t[{pp.n24}], perm_bd);")
         f.line(f"res2[{i}] = VBLEND(0xcc, lo, hi);")
 
 
@@ -164,7 +168,11 @@ def fp_2x4_to_4x2_ugly(f, pp, v):
     for s in range(max_sub + 1):
         vals = [s, s, s+8, s+8, s+4, s+4, s+12, s+12]
         f.line(f"const __m512i idx_{s} = VSET({', '.join(str(x) for x in vals)});")
-    f.line("__m512i even, odd;")
+    f.line(f"__m512i t1[{pp.n24}], t2[{pp.n24}], even, odd;")
+    f.line()
+
+    for i in range(pp.n24):
+        f.line(f"t1[{i}] = src1[{i}], t2[{i}] = src2[{i}];")
     f.line()
 
     for j in range(pp.n42):
@@ -172,9 +180,9 @@ def fp_2x4_to_4x2_ugly(f, pp, v):
         m0 = j % pp.n24
         s1 = (j + pp.n42) // pp.n24
         m1 = (j + pp.n42) % pp.n24
-
-        f.line(f"even = VBLENDPERM(idx_{s0}, src1[{m0}], src2[{m0}]);")
-        f.line(f"odd  = VBLENDPERM(idx_{s1}, src1[{m1}], src2[{m1}]);")
+        
+        f.line(f"even = VBLENDPERM(idx_{s0}, t1[{m0}], t2[{m0}]);")
+        f.line(f"odd  = VBLENDPERM(idx_{s1}, t1[{m1}], t2[{m1}]);")
         f.line(f"res[{j}] = VBLEND(0xaa, even, odd);")
         if j < pp.n42 - 1:
             f.line()

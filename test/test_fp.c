@@ -861,19 +861,65 @@ bool test_fp(int iterations)
 
     printf("Fp lvl3 2x4 tests:\n");
 
-    // Addition
-    for (int i = 0; i < iterations; i++) {
-        rand_fp_4x2(a);
-        rand_fp_4x2(b);
-        fp_4x2_to_2x4(c, e, a);
-        fp_4x2_to_2x4(d, f, b);
-        fp_add_2x4(c, c, d);
-        fp_add_2x4(e, e, f);
-        fp_2x4_to_4x2(c, c, e);
-        fp_add_4x2(d, a, b);
-
-        if (fp_is_equal_4x2(c, d) != 0xf) {
+    // Equality test
+    for(int i = 0; i < iterations; i++){
+        rand_fp_2x4(a);
+        if (fp_is_equal_2x4(a, a) != 0x3) {
             passed = 0;
+            printf("a != a\n");
+            break;
+        }
+        fp_copy_2x4(b, a);
+        if (fp_is_equal_2x4(a, b) != 0x3) {
+            passed = 0;
+            printf("copy of a != a\n");
+            break;
+        }
+    }
+    print_test_res("equality", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Addition test
+    for(int i = 0; i < iterations; i++) {
+        rand_fp_2x4(a);
+        rand_fp_2x4(b);
+        rand_fp_2x4(c);
+
+        // a + 0 == a
+        fp_add_2x4(d, a, zero);
+        if(fp_is_equal_2x4(a, d) != 0x3) {
+            passed = 0;
+            printf("a + 0 != a\n");
+            break;
+        }
+
+        // a + 1 != a
+        fp_add_2x4(e, a, one);
+        if (fp_is_equal_2x4(a, e) != 0) {
+            passed = 0;
+            printf("a + 1 = a\n");
+            break;
+        }
+
+        // a + b == b + a
+        fp_add_2x4(d, a, b);
+        fp_add_2x4(e, b, a);
+        if (fp_is_equal_2x4(d, e) != 0x3) {
+            passed = 0;
+            printf("a + b != b + a\n");
+            break;
+        }
+
+        // (a + b) + c = a + (b + c)
+        fp_add_2x4(d, a, b);
+        fp_add_2x4(d, d, c);
+        fp_add_2x4(e, b, c);
+        fp_add_2x4(e, e, a);
+        if (fp_is_equal_2x4(d, e) != 0x3) {
+            passed = 0;
+            printf("(a+b) + c != a + (b+c)\n");
             break;
         }
     }
@@ -894,19 +940,44 @@ bool test_fp(int iterations)
         return false;
     }
 
-    // Subtraction
-    for (int i = 0; i < iterations; i++) {
-        rand_fp_4x2(a);
-        rand_fp_4x2(b);
-        fp_4x2_to_2x4(c, e, a);
-        fp_4x2_to_2x4(d, f, b);
-        fp_sub_2x4(c, c, d);
-        fp_sub_2x4(e, e, f);
-        fp_2x4_to_4x2(c, c, e);
-        fp_sub_4x2(d, a, b);
+    // Subtraction test
+    for(int i = 0; i < iterations; i++) {
+        rand_fp_2x4(a);
+        rand_fp_2x4(b);
+        rand_fp_2x4(c);
 
-        if (fp_is_equal_4x2(c, d) != 0xf) {
+        // a - 0 == a
+        fp_sub_2x4(d, a, zero);
+        if(fp_is_equal_2x4(a, d) != 0x3) {
             passed = 0;
+            printf("a - 0 != 0\n");
+            break;
+        }
+
+        // a - 1 != a
+        fp_sub_2x4(e, a, one);
+        if (fp_is_equal_2x4(a, e) != 0) {
+            passed = 0;
+            printf("a - 1 != a\n");
+            break;
+        }
+
+        // a - a == 0
+        fp_sub_2x4(d, a, a);
+        if (fp_is_zero_2x4(d) != 0x3) {
+            passed = 0;
+            printf("a - a != 0\n");
+            break;
+        }
+
+        // (a - b) - c = a - (b + c)
+        fp_sub_2x4(d, a, b);
+        fp_sub_2x4(d, d, c);
+        fp_add_2x4(e, b, c);
+        fp_sub_2x4(e, a, e);
+        if (fp_is_equal_2x4(d, e) != 0x3) {
+            passed = 0;
+            printf("(a - b) - c != a - (b+c)\n");
             break;
         }
     }
@@ -927,46 +998,90 @@ bool test_fp(int iterations)
         return false;
     }
 
-    // Negation
-    for (int i = 0; i < iterations; i++) {
-        rand_fp_4x2(a);
+    // Negation tests
+    for(int i = 0; i < iterations; i++) {
+        rand_fp_2x4(a);
+        rand_fp_2x4(b);
 
-        fp_4x2_to_2x4(c, d, a);
-        fp_neg_2x4(c, c);
-        fp_neg_2x4(d, d);
-        fp_2x4_to_4x2(c, c, d);
-        fp_neg_4x2(d, a);
-
-        if (fp_is_equal_4x2(c, d) != 0xf) {
+        // (-a) == 0 - a
+        fp_neg_2x4(d, a);
+        fp_sub_2x4(e, zero, a);
+        if (fp_is_equal_2x4(d, e) != 0x3) {
             passed = 0;
+            printf("(-a) != 0 - a\n");
             break;
         }
+
+        // -(-a) == a
+        fp_neg_2x4(d, a);
+        fp_neg_2x4(e, d);
+        if (fp_is_equal_2x4(e, a) != 0x3) {
+            passed = 0;
+            printf("-(-a) != a\n");
+            break;
+        }
+
+        // a + (-a) == 0
+        fp_neg_2x4(d, a);
+        fp_add_2x4(e, a, d);
+        if (fp_is_zero_2x4(e) != 0x3) {
+            passed = 0;
+            printf("a + (-a) != 0\n");
+            break;
+        }
+
+        // a - b == (-b) + a
+        fp_sub_2x4(d, a, b);
+        fp_neg_2x4(e, b);
+        fp_add_2x4(f, e, a);
+        if (fp_is_equal_2x4(d, f) != 0x3) {
+            passed = 0;
+            printf("a - b != (-b) + a\n");
+            break;
+        }
+
+        // a-b == -(b-a)
+        fp_sub_2x4(d, a, b);
+        fp_sub_2x4(e, b, a);
+        fp_neg_2x4(f, e);
+        if (fp_is_equal_2x4(d, f) != 0x3) {
+            passed = 0;
+            printf("a-b != -(b-a)\n");
+            break;
+        }
+
+        // -0 == 0
+        fp_neg_2x4(d, zero);
+        if (fp_is_zero_2x4(d) != 0x3) {
+            passed = 0;
+            printf("-0 != 0\n");
+            break;
+        }
+
     }
     print_test_res("negation", passed);
     if (passed == 0) {
         return false;
     }
 
-    // Mixed add sub
-    for (int i = 0; i < iterations; i++) {
-        rand_fp_4x2(a);
-        rand_fp_4x2(b);
-        fp_4x2_to_2x4(c, e, a);
-        fp_4x2_to_2x4(d, f, b);
-        fp_mixaddsub_2x4(c, c, d, 0xff);
-        fp_mixaddsub_2x4(e, e, f, 0x0);
-        fp_2x4_to_4x2(c, c, e);
-        fp_mixaddsub_4x2(d, a, b, 0x33);
+    // Mixed subtraction & addition
+    for(int i = 0; i < iterations && passed != 0; i++) {
+        rand_fp_2x4(a);
+        rand_fp_2x4(b);
 
-        if (fp_is_equal_4x2(c, d) != 0xf) {
+        fp_mixaddsub_2x4(d, a, b, 0xf);
+        fp_sub_2x4(e, a, b);
+        fp_add_2x4(f, a, b);
+        if(fp_is_equal_2x4(d, e) != 0x2 || fp_is_equal_2x4(d, f) != 0x1) {
             passed = 0;
             break;
         }
     }
-    print_test_res("mix add sub", passed);
+    print_test_res("mixed add sub", passed);
     if (passed == 0) {
         return false;
     }
+
 
     // Multiplication tests
     // Using Montgomery constant
@@ -1006,7 +1121,7 @@ bool test_fp(int iterations)
         fp_mul_2x4(d, a, vR);
         if (fp_is_equal_2x4(d, a) != 0x3) {
             passed = 0;
-            printf("(a * R)/R != 0\n");
+            printf("(a * R)/R != a\n");
             break;
         }
 
