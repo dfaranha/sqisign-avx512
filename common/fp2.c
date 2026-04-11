@@ -226,7 +226,7 @@ void fp2_mul_4x1x2(__m512i* res, __m512i* a, __m512i* b)
     __m512i t1[9], t2[9], t3[9];
     
     mp_add_4x2(t3, a, a + 3);
-    fp_add_4x2(t3 + 3, b, b + 3);
+    mp_add_4x2(t3 + 3, b, b + 3);
     mp_mul_4x2(t1, a, b);
     mp_mul_4x2(t2, a+3, b+3);
     mp_mul_4x2(t3, t3, t3+3);

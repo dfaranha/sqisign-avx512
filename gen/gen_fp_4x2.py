@@ -388,6 +388,7 @@ def mp_subx2_4x2(f, pp, v):
     f.end()
 
 def mp_mul_4x2(f, pp, v):
+    #uses accumulator format
     f.comment("Algorithm 2 from \"Finite Field Arithmetic Using AVX-512 For Isogeny-Based Cryptography\" by Orisaka, Aranha and López")
     f.start("void mp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)")
 
@@ -451,6 +452,8 @@ def rdc_4x2(f, pp, v, strat):
     if strat.fp2_mode != Fp2Mode.lazy_no_carry:
         f.line(f"__m512i sign_mask;")
         f.line(f"const __m512i bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
+        f.line(f"const __m512i two_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
+        f.line(f"const __m512i two_top = VADD(top, top);")
     f.line()
 
     if strat.fp2_mode == Fp2Mode.lazy_no_carry:
@@ -488,19 +491,25 @@ def rdc_4x2(f, pp, v, strat):
 
     f.comment(f"The result is in [0, 2p).")
     if strat.fp2_mode != Fp2Mode.lazy_no_carry:
-        f.comment(f"We fully reduce the result down to [0, p-1].")
+        top_sub_idx = start_idx + pp.n42 - 1 - pp.rem42
 
-        f.comment("Subtract p, using special shape of p")
-        f.line(f"a[{start_idx}] = VADD(a[{start_idx}], bot);")
-        f.line(f"a[{top_idx}] = VSUBMASK(a[{top_idx}], 0xaa, a[{top_idx}], top);")
+        f.comment("Reduce from [-p, 2p) to [0, p)")
         f.line()
 
-        carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx) #TODO fix mp function
+        f.line(f"sign_mask = VSRA(a[{top_sub_idx}], 63);")
+        f.line(f"a[{start_idx}] = VADD(a[{start_idx}], bot);")
+        f.line(f"a[{top_sub_idx}] = VSUBMASK(a[{top_sub_idx}], 0xaa, a[{top_sub_idx}], top);")
+        f.line(f"sign_mask = VSHUFFLEMASKZ(0xffff, sign_mask, 0x4e);")
+        f.line(f"a[{start_idx}] = VSUB(a[{start_idx}], VAND(two_bot, sign_mask));")
+        f.line(f"sign_mask = VSHUFFLEMASKZ(0xffff, sign_mask, 0x4e);")
+        f.line(f"a[{top_sub_idx}] = VADDMASK(a[{top_sub_idx}], 0xaa, a[{top_sub_idx}], VAND(sign_mask, two_top));")
+        f.line()
 
-        f.comment("If result is negative, we undo the subtraction by p")
-        f.comment("sign_mask = {0, sign_mask1, 0, sign_mask2, ...}")
-        f.line(f"sign_mask = VSRA(a[{top_idx}], 63);")
-        f.line(f"a[{top_idx}] = VADDMASK(a[{top_idx}], 0xaa, a[{top_idx}], VAND(sign_mask, p_top));")
+        carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
+
+        f.comment("If still negative, add p")
+        f.line(f"sign_mask = VSRA(a[{top_sub_idx}], 63);")
+        f.line(f"a[{top_sub_idx}] = VADDMASK(a[{top_sub_idx}], 0xaa, a[{top_sub_idx}], VAND(sign_mask, top));")
         f.line(f"sign_mask = VSHUFFLEMASKZ(0xffff, sign_mask, 0x4e);")
         f.line(f"a[{start_idx}] = VSUB(a[{start_idx}], VAND(bot, sign_mask));")
         f.line()
@@ -878,11 +887,13 @@ def write_fp_4x2(f, pp, v, strat, chain):
     fp_neg_4x2(f, pp, v)
     fp_mixaddsub_4x2(f, pp, v)
 
-    mp_add_4x2(f, pp, v)
-    mp_add_p_sub_4x2(f, pp, v)
-    mp_mixaddsubx2_4x2(f, pp, v)
-    mp_dblsubx2_4x2(f, pp, v)
-    mp_subx2_4x2(f, pp, v)
+    if strat.fp2_mode != Fp2Mode.reduce_everything:
+        mp_add_4x2(f, pp, v)
+        mp_add_p_sub_4x2(f, pp, v)
+        mp_mixaddsubx2_4x2(f, pp, v)
+        mp_dblsubx2_4x2(f, pp, v)
+        mp_subx2_4x2(f, pp, v)
+
     mp_mul_4x2(f, pp, v)
     rdc_4x2(f, pp, v, strat)
 

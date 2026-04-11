@@ -117,8 +117,8 @@ def fp2_mul_8x1x1_lazy(f, pp, v):
     f.line(f"mp_mul_8x1_karat(tt1, a, b);")
     f.line(f"mp_mul_8x1_karat(tt2, a + {pp.num_limbs}, b + {pp.num_limbs});")
     f.line(f"mp_mul_8x1_karat(tt3, tt3, tt3 + {pp.num_limbs});")
-    f.line(f"mp_dblsubx2_8x1(tt3, tt1, tt2);")
-    f.line(f"mp_subx2_8x1(tt1, tt2);")
+    f.line(f"mp_dblsubx2_8x1(tt3, tt1, tt2);") # Always >=0
+    f.line(f"mp_subx2_8x1(tt1, tt2);") # Can be negative
     f.line(f"rdc_8x1(res + {pp.num_limbs}, tt3);")
     f.line(f"rdc_8x1(res, tt1);")
 
@@ -372,7 +372,7 @@ def fp2_mul_4x1x2_lazy(f, pp, v):
     f.line()
 
     f.line(f"mp_add_4x2(t3, a, a + {pp.n42});")
-    f.line(f"fp_add_4x2(t3 + {pp.n42}, b, b + {pp.n42});")
+    f.line(f"mp_add_4x2(t3 + {pp.n42}, b, b + {pp.n42});")
     f.line(f"mp_mul_4x2(t1, a, b);")
     f.line(f"mp_mul_4x2(t2, a+{pp.n42}, b+{pp.n42});")
     f.line(f"mp_mul_4x2(t3, t3, t3+{pp.n42});")

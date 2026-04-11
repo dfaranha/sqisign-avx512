@@ -55,6 +55,15 @@ c = 5
 # e = 521
 # c = 1
 
+# last_limb_len 51:
+# e = 398
+# c = 893
+
+# last_limb_len = limb_len - 1:
+# e = 397
+# c = 729
+
+
 #############
 
 pp, strat = comp_params_and_strat(e, c, num_kat, gen_addchain)

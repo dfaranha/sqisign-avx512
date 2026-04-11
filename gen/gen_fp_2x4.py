@@ -330,6 +330,7 @@ def fp_mixaddsub_2x4(f, pp, v):
 
 def mp_mul_2x4(f, pp, v):
     f.start("void mp_mul_2x4(__m512i* res, __m512i* a, __m512i* b)")
+    # uses accumulator format
 
     n_prod = pp.n24 + pp.num_limbs
     f.line(f"__m512i t[{n_prod}];")
@@ -390,6 +391,7 @@ def get_rdc_2x4_size(pp, strat):
     n_low = pp.num_limbs + 1 if strat.fp2_mode == Fp2Mode.lazy_no_carry else pp.num_limbs
     return n_low + 4 * pp.n24
 
+# Not designed for fp2 lazy red, correction step would need to handle input in [-p, 2p) like other fmts
 def rdc_2x4(f, pp, v, strat):
     f.comment(f"Modifies a. Its length must be at least {get_rdc_2x4_size(pp, strat)}.")
     f.start("void rdc_2x4(__m512i* res, __m512i* a)")
@@ -397,6 +399,7 @@ def rdc_2x4(f, pp, v, strat):
     N = pp.num_limbs
     n24 = pp.n24
     top_offset = N - 1 - n24
+    idx_top, limb_top = get_top_idx(pp)
     if strat.fp2_mode == Fp2Mode.lazy_no_carry:
         n_low = pp.num_limbs + 1
     else:
@@ -405,10 +408,14 @@ def rdc_2x4(f, pp, v, strat):
 
     f.line("__m512i carry, lo, hi, shuf;")
     f.line("const __m512i zero = VZERO();")
-    f.line("const __m512i one = VSETALL(1);")
-    f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
+    f.line(f"const __m512i p_top_all = VSETALL({v.p_plus_1_top});")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    f.line("__mmask8 msb_mask;")
+    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+        f.line("__m512i sign_mask;")
+        f.line(f"const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);")
+        write_p_top(f, v, limb_top)
+        f.line(f"const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
+        f.line(f"const __m512i idx_sign = VSET({limb_top}, {limb_top}, {limb_top}, {limb_top}, {limb_top+4}, {limb_top+4}, {limb_top+4}, {limb_top+4});")
     f.line()
 
     f.comment("Initialize the upper accumulators to zero")
@@ -429,8 +436,8 @@ def rdc_2x4(f, pp, v, strat):
         f.line(f"a[{i+1}] = VADD(a[{i+1}], carry);")
         
         f.line(f"shuf = VSHUFFLEMASKZ(0x0c0c, a[{i}], 0x4e);")
-        f.line(f"a[{i + top_offset}] = VMULADDL(a[{i + top_offset}], shuf, p_top);")
-        f.line(f"hi = VMULADDH(zero, shuf, p_top);")
+        f.line(f"a[{i + top_offset}] = VMULADDL(a[{i + top_offset}], shuf, p_top_all);")
+        f.line(f"hi = VMULADDH(zero, shuf, p_top_all);")
         f.line(f"a[{i + top_offset + 1}] = VADD(a[{i + top_offset + 1}], VSL(hi, {v.limb_align}));")
         
         f.line(f"a[{i + n24}] = VADD(a[{i + n24}], VPERM512MASKZ(0x{fold_mask:02x}, a[{i}], idx));")
@@ -445,18 +452,6 @@ def rdc_2x4(f, pp, v, strat):
         if i + n24 <= 2 * N:
             f.line(f"a[{i + n24}] = VADD(a[{i + n24}], VPERM512MASKZ(0x{fold_mask:02x}, a[{i}], idx));")
         f.line()
-    
-    f.comment("Final reduction step to get the result down to the strict bit boundary")
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
-        shift = 64 - (pp.last_limb_len + 1)
-        f.line(f"hi = VSL(a[{2 * N}], {shift});")
-        f.line("msb_mask = VSIGN(hi);")
-        f.line("__mmask8 mask_top = msb_mask & 0x11;")
-        f.line()
-        f.line(f"a[{2 * N}] = VSUBMASK(a[{2 * N}], mask_top, a[{2 * N}], p_top);")
-        f.line(f"a[{start_idx}] = VADDMASK(a[{start_idx}], mask_top, a[{start_idx}], one);")
-        f.line(f"a[{2 * N}] = VAND(a[{2 * N}], limb_mask);")
-        f.line()
 
     f.comment("Pack result from pos 0 of the accumulators back into 2x4 format")
     f.line("const __m512i idx_pack = VSET(0, 1, 8, 9, 4, 5, 12, 13);")
@@ -467,9 +462,39 @@ def rdc_2x4(f, pp, v, strat):
         f.line(f"res[{k}] = VBLENDPERM(idx_pack, lo, hi);")
         if k < n24 - 1:
             f.line()
+    f.line()
+
+    # Zero padding lanes to detect sign correctly.
+    for k in range(n24):
+        valid = 0
+        for lane in range(8):
+            q = lane % 4
+            limb_idx = k + q * n24
+            if limb_idx < N:
+                valid |= (1 << lane)
+        if valid != 0xff:
+            f.line(f"res[{k}] = VBLEND(0x{valid:02x}, zero, res[{k}]);")
+    f.line()
+
+    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+        f.comment("Reduce from [0, 2p) to [0, p)")
+        f.comment("Subtract p")
+        f.line(f"res[0] = VADD(res[0], p_bot);")
+        f.line(f"res[{idx_top}] = VSUB(res[{idx_top}], p_top);")
+        f.line()
+
+        carry_prop_2x4(f, pp, v, "res", "limb_mask", "carry", "idx_shift")
+
+        f.comment("If negative, add p back")
+        f.line(f"sign_mask = VSRA(res[{n24-1}], 63);")
+        f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
+        f.line(f"res[{idx_top}] = VADD(res[{idx_top}], VAND(p_top, sign_mask));")
+        f.line(f"res[0] = VSUB(res[0], VAND(p_bot, sign_mask));")
+        f.line()
+
+        carry_prop_2x4(f, pp, v, "res", "limb_mask", "carry", "idx_shift")
 
     f.end()
-
 
 def fp_mul_2x4(f, pp, v, strat):
     f.start("void fp_mul_2x4(__m512i* res, __m512i* a, __m512i* b)")

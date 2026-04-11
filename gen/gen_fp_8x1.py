@@ -329,10 +329,6 @@ def mp_subx2_8x1(f, pp, v, strat):
 
     num_limbs_prod = get_num_limbs_prod(pp)
     f.line(f"__m512i t[2*{v.num_limbs}];")
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
-        f.line("__m512i sign_mask;")
-        f.line("const __m512i p_bot = VSETALL(1);")
-        f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line()
 
@@ -341,16 +337,6 @@ def mp_subx2_8x1(f, pp, v, strat):
     f.line()
 
     carry_prop_8x1(f, pp, v, num_limbs_prod, "t", "limb_mask")
-
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
-        # if result is negative, add p*R. 
-        # Keeps output in [0, r*P), ensuring that Montgomery red gives result in [0, 2p)
-        start_idx = num_limbs_prod-pp.num_limbs
-        f.line(f"sign_mask = VSRA(t[{num_limbs_prod-1}], 63);")
-        f.line(f"t[{start_idx}] = VSUB(t[{start_idx}], VAND(p_bot, sign_mask));")
-        f.line(f"t[{num_limbs_prod-1}] = VADD(t[{num_limbs_prod-1}], VAND(p_top, sign_mask));")
-
-        carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask", start_idx)
 
     for i in range(num_limbs_prod):
         f.line(f"res[{i}] = t[{i}];")
@@ -386,20 +372,25 @@ def mp_add_p_sub_8x1(f, pp, v, strat):
     f.start("void mp_add_p_sub_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
     f.line(f"__m512i t[{v.num_limbs}];")
-    f.line(f"__m512i p_bot = VSETALL({v.limb_mask});")
-    f.line(f"__m512i p_top = VSETALL({v.p_plus_1_top}-1);")
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+    if strat.fp2_mode == Fp2Mode.lazy_no_carry:
+        f.line(f"const __m512i p_bot = VSETALL({v.limb_mask});")
+        f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top}-1);")
+    else:
+        f.line(f"const __m512i p_bot = VSETALL(1);")
+        f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
         f.line(f"const __m512i limb_mask = VSETALL(LIMB_MASK);")
     f.line()
 
     f.comment("Add p")
-    for i in range(pp.num_limbs-1):
-        f.line(f"t[{i}] = VADD(a[{i}], p_bot);")
-    f.line(f"t[{pp.num_limbs-1}] = VADD(a[{pp.num_limbs-1}], p_top);")
-    f.line()
-
-    for i in range(pp.num_limbs):
-        f.line(f"t[{i}] = VSUB(t[{i}], b[{i}]);")
+    if strat.fp2_mode == Fp2Mode.lazy_no_carry:
+        for i in range(pp.num_limbs-1):
+            f.line(f"t[{i}] = VSUB(VADD(a[{i}], p_bot), b[{i}]);")
+        f.line(f"t[{pp.num_limbs-1}] = VSUB(VADD(a[{pp.num_limbs-1}], p_top), b[{pp.num_limbs-1}]);")
+    else:
+        f.line(f"t[0] = VSUB(VSUB(a[0], p_bot), b[0]);")
+        for i in range(1, pp.num_limbs-1):
+            f.line(f"t[{i}] = VSUB(a[{i}], b[{i}]);")
+        f.line(f"t[{pp.num_limbs-1}] = VSUB(VADD(a[{pp.num_limbs-1}], p_top), b[{pp.num_limbs-1}]);")
     f.line()
 
     if strat.fp2_mode != Fp2Mode.lazy_no_carry:
@@ -539,12 +530,15 @@ def rdc_8x1(f, pp, v, strat):
     f.array_to_single_vars(var_name="a", arr_name="a", count=2*nl)
     f.declare_single_vars(var_name="t", count=n_t)
     f.line("__mmask8 msb_mask;")
+    f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
     if strat.fp2_mode == Fp2Mode.lazy_no_carry:
         f.line(f"__m512i s{nl-1}, s{nl}, hi;")
     else:
-        f.line(f"__m512i s{nl-1}, hi, sign_mask;")
         f.line(f"const __m512i bot = VSETALL(1);")
-    f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
+        f.line(f"const __m512i two_bot = VSETALL(2);")
+        f.line(f"const __m512i two_top = VSETALL(2*{v.p_plus_1_top});")
+        f.line(f"__m512i s{nl-1}, hi, sign_mask;")
+    
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i zero = VZERO();")
     f.line(f"const __m512i one = VSETALL(1);")
@@ -603,22 +597,26 @@ def rdc_8x1(f, pp, v, strat):
     carry_prop_8x1_var(f, pp, v, n_t, "t", "limb_mask")
 
     f.comment(f"After dividing by 2^n, the result is in t{result_start}, ..., t{n_t-1}")
-    f.comment(f"The result is in [0, 2p-1].")
 
     if strat.fp2_mode != Fp2Mode.lazy_no_carry:
-        f.comment(f"We fully reduce the result down to [0, p-1].")
+        f.comment("Reduce from [-p, 2p) to [0, p)")
+        f.comment("If negative add p, if non-negative subtract p")
+        f.comment("Implemented as: always subtract p, then add 2p if was negative")
+        f.line()
 
-        f.comment("Subtract p, using special shape of p")
-        f.line(f"t{result_start} = VADD(t{result_start}, bot);")
+        f.line(f"sign_mask = VSRA(t{n_t-1}, 63);")
+        f.line(f"t{result_start} = VADD(t{result_start}, one);")
         f.line(f"t{n_t-1} = VSUB(t{n_t-1}, top);")
+        f.line(f"t{result_start} = VSUB(t{result_start}, VAND(two_bot, sign_mask));")
+        f.line(f"t{n_t-1} = VADD(t{n_t-1}, VAND(two_top, sign_mask));")
         f.line()
 
         carry_prop_8x1_var(f, pp, v, nl, "t", "limb_mask", start_idx=result_start)
 
-        f.comment("If result is negative, we undo the subtraction by p")
+        f.comment("If still negative, add p")
         f.line(f"sign_mask = VSRA(t{n_t-1}, 63);")
-        f.line(f"t{result_start} = VSUB(t{result_start}, VAND(bot, sign_mask));")
-        f.line(f"t{n_t-1} = VADD(t{n_t - 1}, VAND(top, sign_mask));")
+        f.line(f"t{result_start} = VSUB(t{result_start}, VAND(one, sign_mask));")
+        f.line(f"t{n_t-1} = VADD(t{n_t-1}, VAND(top, sign_mask));")
         f.line()
 
         carry_prop_8x1_var(f, pp, v, nl, "t", "limb_mask", start_idx=result_start)
@@ -973,12 +971,14 @@ def write_fp_8x1(f, pp, v, strat, chain):
     fp_neg_8x1(f, pp, v)
     fp_mixaddsub_8x1(f, pp, v)
 
-    mp_add_8x1(f, pp, v, strat)
-    mp_sub_8x1(f, pp, v, strat)
-    mp_dblsubx2_8x1(f, pp, v)
-    mp_subx2_8x1(f, pp, v, strat)
-    mp_mixaddsubx2_8x1(f, pp, v)
-    mp_add_p_sub_8x1(f, pp, v, strat)
+    if strat.fp2_mode != Fp2Mode.reduce_everything:
+        mp_add_8x1(f, pp, v, strat)
+        mp_sub_8x1(f, pp, v, strat)
+        mp_dblsubx2_8x1(f, pp, v)
+        mp_subx2_8x1(f, pp, v, strat)
+        mp_mixaddsubx2_8x1(f, pp, v)
+        mp_add_p_sub_8x1(f, pp, v, strat)
+
     mp_mul_8x1_karat(f, pp, v)
     rdc_8x1(f, pp, v, strat)
 
