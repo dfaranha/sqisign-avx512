@@ -101,7 +101,8 @@ def carry_prop_8x1_swap(f, pp, v, len, tmp_arr, tmp_var, mask, start_idx=0):
 def fp_add_8x1(f, pp, v):
     f.start("void fp_add_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
-    f.line(f"__m512i t[{v.num_limbs}], sign_mask;")
+    f.declare_single_vars(var_name="t", count=pp.num_limbs)
+    f.line(f"__m512i sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i p_bot = VSETALL(1);")
     f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
@@ -109,33 +110,33 @@ def fp_add_8x1(f, pp, v):
 
     f.comment("Add limbs")
     for i in range(pp.num_limbs):
-        f.line(f"t[{i}] = VADD(a[{i}], b[{i}]);")
+        f.line(f"t{i} = VADD(a[{i}], b[{i}]);")
     f.line()
 
     f.comment("Subtract p, using special shape of p")
-    f.line(f"t[0] = VADD(t[0], p_bot);")
-    f.line(f"t[{pp.num_limbs-1}] = VSUB(t[{pp.num_limbs-1}], p_top);")
+    f.line(f"t0 = VADD(t0, p_bot);")
+    f.line(f"t{pp.num_limbs-1} = VSUB(t{pp.num_limbs-1}, p_top);")
     f.line()
 
-    carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask")
+    carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
     f.comment("If result is negative, we undo the subtraction by p")
-    f.line(f"sign_mask = VSRA(t[{pp.num_limbs-1}], 63);")
-    f.line(f"t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
-    f.line(f"t[{pp.num_limbs-1}] = VADD(t[{pp.num_limbs-1}], VAND(p_top, sign_mask));")
+    f.line(f"sign_mask = VSRA(t{pp.num_limbs-1}, 63);")
+    f.line(f"t0 = VSUB(t0, VAND(p_bot, sign_mask));")
+    f.line(f"t{pp.num_limbs-1} = VADD(t{pp.num_limbs-1}, VAND(p_top, sign_mask));")
     f.line()
 
-    carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask")
+    carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
-    for i in range(pp.num_limbs):
-        f.line(f"res[{i}] = t[{i}];")
+    f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
 
     f.end()
 
 def fp_sub_8x1(f, pp, v):
     f.start("void fp_sub_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
-    f.line(f"__m512i t[{v.num_limbs}], sign_mask;")
+    f.declare_single_vars(var_name="t", count=pp.num_limbs)
+    f.line(f"__m512i sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i p_bot = VSETALL(1);")
     f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
@@ -143,28 +144,28 @@ def fp_sub_8x1(f, pp, v):
 
     f.comment("Subtract limbs")
     for i in range(pp.num_limbs):
-        f.line(f"t[{i}] = VSUB(a[{i}], b[{i}]);")
+        f.line(f"t{i} = VSUB(a[{i}], b[{i}]);")
     f.line()
 
-    carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask")
+    carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
     f.comment("If result is negative, we undo the subtraction by p")
-    f.line(f"sign_mask = VSRA(t[{pp.num_limbs-1}], 63);")
-    f.line(f"t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
-    f.line(f"t[{pp.num_limbs-1}] = VADD(t[{pp.num_limbs-1}], VAND(p_top, sign_mask));")
+    f.line(f"sign_mask = VSRA(t{pp.num_limbs-1}, 63);")
+    f.line(f"t0 = VSUB(t0, VAND(p_bot, sign_mask));")
+    f.line(f"t{pp.num_limbs-1} = VADD(t{pp.num_limbs-1}, VAND(p_top, sign_mask));")
     f.line()
 
-    carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask")
+    carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
-    for i in range(pp.num_limbs):
-        f.line(f"res[{i}] = t[{i}];")
+    f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
 
     f.end()
 
 def fp_neg_8x1(f, pp, v):
     f.start("void fp_neg_8x1(__m512i* res, __m512i* a)")
 
-    f.line(f"__m512i t[{v.num_limbs}], sign_mask;")
+    f.declare_single_vars(var_name="t", count=pp.num_limbs)
+    f.line(f"__m512i sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i p_bot = VSETALL(1);")
     f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
@@ -173,28 +174,28 @@ def fp_neg_8x1(f, pp, v):
 
     f.comment("0 - a")
     for i in range(pp.num_limbs):
-        f.line(f"t[{i}] = VSUB(zero, a[{i}]);")
+        f.line(f"t{i} = VSUB(zero, a[{i}]);")
     f.line()
 
-    carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask")
+    carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
     f.comment("If result is negative, we undo the subtraction by p")
-    f.line(f"sign_mask = VSRA(t[{pp.num_limbs-1}], 63);")
-    f.line(f"t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
-    f.line(f"t[{pp.num_limbs-1}] = VADD(t[{pp.num_limbs-1}], VAND(p_top, sign_mask));")
+    f.line(f"sign_mask = VSRA(t{pp.num_limbs-1}, 63);")
+    f.line(f"t0 = VSUB(t0, VAND(p_bot, sign_mask));")
+    f.line(f"t{pp.num_limbs-1} = VADD(t{pp.num_limbs-1}, VAND(p_top, sign_mask));")
     f.line()
 
-    carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask")
+    carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
-    for i in range(pp.num_limbs):
-        f.line(f"res[{i}] = t[{i}];")
+    f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
 
     f.end()
 
 def fp_mixaddsub_8x1(f, pp, v):
     f.start("void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)")
 
-    f.line(f"__m512i t[{v.num_limbs}], sign_mask;")
+    f.declare_single_vars(var_name="t", count=pp.num_limbs)
+    f.line(f"__m512i sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i p_bot = VSETALL(1);")
     f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
@@ -202,30 +203,29 @@ def fp_mixaddsub_8x1(f, pp, v):
     f.line()
 
     for i in range(pp.num_limbs):
-        f.line(f"t[{i}] = VSUBMASK(a[{i}], sub_mask, a[{i}], b[{i}]);")
+        f.line(f"t{i} = VSUBMASK(a[{i}], sub_mask, a[{i}], b[{i}]);")
     f.line()
 
     for i in range(pp.num_limbs):
-        f.line(f"t[{i}] = VADDMASK(t[{i}], add_mask, a[{i}], b[{i}]);")
+        f.line(f"t{i} = VADDMASK(t{i}, add_mask, a[{i}], b[{i}]);")
     f.line()
 
     f.comment("Subtract p, using special shape of p")
-    f.line(f"t[0] = VADDMASK(t[0], add_mask, t[0], p_bot);")
-    f.line(f"t[{pp.num_limbs-1}] = VSUBMASK(t[{pp.num_limbs-1}], add_mask, t[{pp.num_limbs-1}], p_top);")
+    f.line(f"t0 = VADDMASK(t0, add_mask, t0, p_bot);")
+    f.line(f"t{pp.num_limbs-1} = VSUBMASK(t{pp.num_limbs-1}, add_mask, t{pp.num_limbs-1}, p_top);")
     f.line()
 
-    carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask")
+    carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
     f.comment("If the result is negative, we add p")
-    f.line(f"sign_mask = VSRA(t[{pp.num_limbs-1}], 63);")
-    f.line(f"t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
-    f.line(f"t[{pp.num_limbs-1}] = VADD(t[{pp.num_limbs-1}], VAND(p_top, sign_mask));")
+    f.line(f"sign_mask = VSRA(t{pp.num_limbs-1}, 63);")
+    f.line(f"t0 = VSUB(t0, VAND(p_bot, sign_mask));")
+    f.line(f"t{pp.num_limbs-1} = VADD(t{pp.num_limbs-1}, VAND(p_top, sign_mask));")
     f.line()
 
-    carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask")
+    carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
-    for i in range(pp.num_limbs):
-        f.line(f"res[{i}] = t[{i}];")
+    f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
 
     f.end()
 
@@ -257,20 +257,19 @@ def mp_add_8x1(f, pp, v, strat):
     f.comment("Single-length multiprecision addition, no correction, no carry propagation")
     f.start("void mp_add_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
-    f.line(f"__m512i t[{v.num_limbs}];")
+    f.declare_single_vars(var_name="t", count=pp.num_limbs)
     if strat.fp2_mode != Fp2Mode.lazy_no_carry:
         f.line(f"const __m512i limb_mask = VSETALL(LIMB_MASK);")
     f.line()
 
     for i in range(pp.num_limbs):
-        f.line(f"t[{i}] = VADD(a[{i}], b[{i}]);")
+        f.line(f"t{i} = VADD(a[{i}], b[{i}]);")
     f.line()
 
     if strat.fp2_mode != Fp2Mode.lazy_no_carry:
-        carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask")
+        carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
-    for i in range(pp.num_limbs):
-        f.line(f"res[{i}] = t[{i}];")
+    f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
 
     f.end()
 
@@ -278,20 +277,19 @@ def mp_sub_8x1(f, pp, v, strat):
     f.comment("Single-length multiprecision addition, no correction, no carry propagation")
     f.start("void mp_sub_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
-    f.line(f"__m512i t[{v.num_limbs}];")
+    f.declare_single_vars(var_name="t", count=pp.num_limbs)
     if strat.fp2_mode != Fp2Mode.lazy_no_carry:
         f.line(f"const __m512i limb_mask = VSETALL(LIMB_MASK);")
     f.line()
 
     for i in range(pp.num_limbs):
-        f.line(f"t[{i}] = VSUB(a[{i}], b[{i}]);")
+        f.line(f"t{i} = VSUB(a[{i}], b[{i}]);")
     f.line()
 
     if strat.fp2_mode != Fp2Mode.lazy_no_carry:
-        carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask")
+        carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
-    for i in range(pp.num_limbs):
-        f.line(f"res[{i}] = t[{i}];")
+    f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
 
     f.end()
 
@@ -304,42 +302,40 @@ def mp_dblsubx2_8x1(f, pp, v):
     f.start("void mp_dblsubx2_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
     num_limbs_prod = get_num_limbs_prod(pp)
-    f.line(f"__m512i t[2*{v.num_limbs}];")
+    f.declare_single_vars(var_name="t", count=num_limbs_prod)
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line()
 
     for i in range(num_limbs_prod):
-        f.line(f"t[{i}] = VSUB(res[{i}], a[{i}]);")
+        f.line(f"t{i} = VSUB(res[{i}], a[{i}]);")
     f.line()
 
     for i in range(num_limbs_prod):
-        f.line(f"t[{i}] = VSUB(t[{i}], b[{i}]);")
+        f.line(f"t{i} = VSUB(t{i}, b[{i}]);")
     f.line()
 
-    carry_prop_8x1(f, pp, v, num_limbs_prod, "t", "limb_mask")
+    carry_prop_8x1_var(f, pp, v, num_limbs_prod, "t", "limb_mask")
 
-    for i in range(num_limbs_prod):
-        f.line(f"res[{i}] = t[{i}];")
+    f.single_vars_to_array(var_name="t", arr_name="res", count=num_limbs_prod)
 
     f.end()
 
-def mp_subx2_8x1(f, pp, v, strat):
+def mp_subx2_8x1(f, pp, v):
     f.comment("Double-length multiprecision subtraction res = res - a")
     f.start("void mp_subx2_8x1(__m512i* res, __m512i* a)")
 
     num_limbs_prod = get_num_limbs_prod(pp)
-    f.line(f"__m512i t[2*{v.num_limbs}];")
+    f.declare_single_vars(var_name="t", count=num_limbs_prod)
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line()
 
     for i in range(num_limbs_prod):
-        f.line(f"t[{i}] = VSUB(res[{i}], a[{i}]);")
+        f.line(f"t{i} = VSUB(res[{i}], a[{i}]);")
     f.line()
 
-    carry_prop_8x1(f, pp, v, num_limbs_prod, "t", "limb_mask")
+    carry_prop_8x1_var(f, pp, v, num_limbs_prod, "t", "limb_mask")
 
-    for i in range(num_limbs_prod):
-        f.line(f"res[{i}] = t[{i}];")
+    f.single_vars_to_array(var_name="t", arr_name="res", count=num_limbs_prod)
 
     f.end()
 
@@ -347,23 +343,22 @@ def mp_mixaddsubx2_8x1(f, pp, v):
     f.start("void mp_mixaddsubx2_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)")
 
     num_limbs_prod = get_num_limbs_prod(pp)
-    f.line(f"__m512i t[2*{v.num_limbs}];")
+    f.declare_single_vars(var_name="t", count=num_limbs_prod)
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __mmask8 sub_mask = ~add_mask;")
     f.line()
 
     for i in range(num_limbs_prod):
-        f.line(f"t[{i}] = VSUBMASK(a[{i}], sub_mask, a[{i}], b[{i}]);")
+        f.line(f"t{i} = VSUBMASK(a[{i}], sub_mask, a[{i}], b[{i}]);")
     f.line()
 
     for i in range(num_limbs_prod):
-        f.line(f"t[{i}] = VADDMASK(t[{i}], add_mask, a[{i}], b[{i}]);")
+        f.line(f"t{i} = VADDMASK(t{i}, add_mask, a[{i}], b[{i}]);")
     f.line()
 
-    carry_prop_8x1(f, pp, v, num_limbs_prod, "t", "limb_mask")
+    carry_prop_8x1_var(f, pp, v, num_limbs_prod, "t", "limb_mask")
 
-    for i in range(num_limbs_prod):
-        f.line(f"res[{i}] = t[{i}];")
+    f.single_vars_to_array(var_name="t", arr_name="res", count=num_limbs_prod)
 
     f.end()
 
@@ -371,7 +366,7 @@ def mp_add_p_sub_8x1(f, pp, v, strat):
     f.comment("Computes res = a + p - b without any carry propagation or conditional masks")
     f.start("void mp_add_p_sub_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
-    f.line(f"__m512i t[{v.num_limbs}];")
+    f.declare_single_vars(var_name="t", count=pp.num_limbs)
     if strat.fp2_mode == Fp2Mode.lazy_no_carry:
         f.line(f"const __m512i p_bot = VSETALL({v.limb_mask});")
         f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top}-1);")
@@ -384,20 +379,19 @@ def mp_add_p_sub_8x1(f, pp, v, strat):
     f.comment("Add p")
     if strat.fp2_mode == Fp2Mode.lazy_no_carry:
         for i in range(pp.num_limbs-1):
-            f.line(f"t[{i}] = VSUB(VADD(a[{i}], p_bot), b[{i}]);")
-        f.line(f"t[{pp.num_limbs-1}] = VSUB(VADD(a[{pp.num_limbs-1}], p_top), b[{pp.num_limbs-1}]);")
+            f.line(f"t{i} = VSUB(VADD(a[{i}], p_bot), b[{i}]);")
+        f.line(f"t{pp.num_limbs-1} = VSUB(VADD(a[{pp.num_limbs-1}], p_top), b[{pp.num_limbs-1}]);")
     else:
-        f.line(f"t[0] = VSUB(VSUB(a[0], p_bot), b[0]);")
+        f.line(f"t0 = VSUB(VSUB(a[0], p_bot), b[0]);")
         for i in range(1, pp.num_limbs-1):
-            f.line(f"t[{i}] = VSUB(a[{i}], b[{i}]);")
-        f.line(f"t[{pp.num_limbs-1}] = VSUB(VADD(a[{pp.num_limbs-1}], p_top), b[{pp.num_limbs-1}]);")
+            f.line(f"t{i} = VSUB(a[{i}], b[{i}]);")
+        f.line(f"t{pp.num_limbs-1} = VSUB(VADD(a[{pp.num_limbs-1}], p_top), b[{pp.num_limbs-1}]);")
     f.line()
 
     if strat.fp2_mode != Fp2Mode.lazy_no_carry:
-        carry_prop_8x1(f, pp, v, pp.num_limbs, "t", "limb_mask")
+        carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
-    for i in range(pp.num_limbs):
-        f.line(f"res[{i}] = t[{i}];")
+    f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
 
     f.end()
 
@@ -975,7 +969,7 @@ def write_fp_8x1(f, pp, v, strat, chain):
         mp_add_8x1(f, pp, v, strat)
         mp_sub_8x1(f, pp, v, strat)
         mp_dblsubx2_8x1(f, pp, v)
-        mp_subx2_8x1(f, pp, v, strat)
+        mp_subx2_8x1(f, pp, v)
         mp_mixaddsubx2_8x1(f, pp, v)
         mp_add_p_sub_8x1(f, pp, v, strat)
 

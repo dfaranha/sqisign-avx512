@@ -84,201 +84,189 @@ void fp_select_8x1(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)
 
 void fp_add_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i t[NUM_LIMBS], sign_mask;
+    __m512i t0, t1, t2, t3, t4;
+    __m512i sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     const __m512i p_bot = VSETALL(1);
     const __m512i p_top = VSETALL(P_PLUS_1_TOP);
     
     // Add limbs
-    t[0] = VADD(a[0], b[0]);
-    t[1] = VADD(a[1], b[1]);
-    t[2] = VADD(a[2], b[2]);
-    t[3] = VADD(a[3], b[3]);
-    t[4] = VADD(a[4], b[4]);
+    t0 = VADD(a[0], b[0]);
+    t1 = VADD(a[1], b[1]);
+    t2 = VADD(a[2], b[2]);
+    t3 = VADD(a[3], b[3]);
+    t4 = VADD(a[4], b[4]);
     
     // Subtract p, using special shape of p
-    t[0] = VADD(t[0], p_bot);
-    t[4] = VSUB(t[4], p_top);
+    t0 = VADD(t0, p_bot);
+    t4 = VSUB(t4, p_top);
     
     // Carry propagation
-    t[1] = VADD(t[1], VSRA(t[0], LIMB_LEN));
-    t[2] = VADD(t[2], VSRA(t[1], LIMB_LEN));
-    t[3] = VADD(t[3], VSRA(t[2], LIMB_LEN));
-    t[4] = VADD(t[4], VSRA(t[3], LIMB_LEN));
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VAND(t[2], limb_mask);
-    t[3] = VAND(t[3], limb_mask);
+    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VAND(t3, limb_mask);
     
     // If result is negative, we undo the subtraction by p
-    sign_mask = VSRA(t[4], 63);
-    t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
-    t[4] = VADD(t[4], VAND(p_top, sign_mask));
+    sign_mask = VSRA(t4, 63);
+    t0 = VSUB(t0, VAND(p_bot, sign_mask));
+    t4 = VADD(t4, VAND(p_top, sign_mask));
     
     // Carry propagation
-    t[1] = VADD(t[1], VSRA(t[0], LIMB_LEN));
-    t[2] = VADD(t[2], VSRA(t[1], LIMB_LEN));
-    t[3] = VADD(t[3], VSRA(t[2], LIMB_LEN));
-    t[4] = VADD(t[4], VSRA(t[3], LIMB_LEN));
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VAND(t[2], limb_mask);
-    t[3] = VAND(t[3], limb_mask);
+    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VAND(t3, limb_mask);
     
-    res[0] = t[0];
-    res[1] = t[1];
-    res[2] = t[2];
-    res[3] = t[3];
-    res[4] = t[4];
+    res[0] = t0; res[1] = t1; res[2] = t2; res[3] = t3; res[4] = t4;
 }
 
 void fp_sub_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i t[NUM_LIMBS], sign_mask;
+    __m512i t0, t1, t2, t3, t4;
+    __m512i sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     const __m512i p_bot = VSETALL(1);
     const __m512i p_top = VSETALL(P_PLUS_1_TOP);
     
     // Subtract limbs
-    t[0] = VSUB(a[0], b[0]);
-    t[1] = VSUB(a[1], b[1]);
-    t[2] = VSUB(a[2], b[2]);
-    t[3] = VSUB(a[3], b[3]);
-    t[4] = VSUB(a[4], b[4]);
+    t0 = VSUB(a[0], b[0]);
+    t1 = VSUB(a[1], b[1]);
+    t2 = VSUB(a[2], b[2]);
+    t3 = VSUB(a[3], b[3]);
+    t4 = VSUB(a[4], b[4]);
     
     // Carry propagation
-    t[1] = VADD(t[1], VSRA(t[0], LIMB_LEN));
-    t[2] = VADD(t[2], VSRA(t[1], LIMB_LEN));
-    t[3] = VADD(t[3], VSRA(t[2], LIMB_LEN));
-    t[4] = VADD(t[4], VSRA(t[3], LIMB_LEN));
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VAND(t[2], limb_mask);
-    t[3] = VAND(t[3], limb_mask);
+    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VAND(t3, limb_mask);
     
     // If result is negative, we undo the subtraction by p
-    sign_mask = VSRA(t[4], 63);
-    t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
-    t[4] = VADD(t[4], VAND(p_top, sign_mask));
+    sign_mask = VSRA(t4, 63);
+    t0 = VSUB(t0, VAND(p_bot, sign_mask));
+    t4 = VADD(t4, VAND(p_top, sign_mask));
     
     // Carry propagation
-    t[1] = VADD(t[1], VSRA(t[0], LIMB_LEN));
-    t[2] = VADD(t[2], VSRA(t[1], LIMB_LEN));
-    t[3] = VADD(t[3], VSRA(t[2], LIMB_LEN));
-    t[4] = VADD(t[4], VSRA(t[3], LIMB_LEN));
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VAND(t[2], limb_mask);
-    t[3] = VAND(t[3], limb_mask);
+    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VAND(t3, limb_mask);
     
-    res[0] = t[0];
-    res[1] = t[1];
-    res[2] = t[2];
-    res[3] = t[3];
-    res[4] = t[4];
+    res[0] = t0; res[1] = t1; res[2] = t2; res[3] = t3; res[4] = t4;
 }
 
 void fp_neg_8x1(__m512i* res, __m512i* a)
 {
-    __m512i t[NUM_LIMBS], sign_mask;
+    __m512i t0, t1, t2, t3, t4;
+    __m512i sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     const __m512i p_bot = VSETALL(1);
     const __m512i p_top = VSETALL(P_PLUS_1_TOP);
     const __m512i zero = VZERO();
     
     // 0 - a
-    t[0] = VSUB(zero, a[0]);
-    t[1] = VSUB(zero, a[1]);
-    t[2] = VSUB(zero, a[2]);
-    t[3] = VSUB(zero, a[3]);
-    t[4] = VSUB(zero, a[4]);
+    t0 = VSUB(zero, a[0]);
+    t1 = VSUB(zero, a[1]);
+    t2 = VSUB(zero, a[2]);
+    t3 = VSUB(zero, a[3]);
+    t4 = VSUB(zero, a[4]);
     
     // Carry propagation
-    t[1] = VADD(t[1], VSRA(t[0], LIMB_LEN));
-    t[2] = VADD(t[2], VSRA(t[1], LIMB_LEN));
-    t[3] = VADD(t[3], VSRA(t[2], LIMB_LEN));
-    t[4] = VADD(t[4], VSRA(t[3], LIMB_LEN));
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VAND(t[2], limb_mask);
-    t[3] = VAND(t[3], limb_mask);
+    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VAND(t3, limb_mask);
     
     // If result is negative, we undo the subtraction by p
-    sign_mask = VSRA(t[4], 63);
-    t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
-    t[4] = VADD(t[4], VAND(p_top, sign_mask));
+    sign_mask = VSRA(t4, 63);
+    t0 = VSUB(t0, VAND(p_bot, sign_mask));
+    t4 = VADD(t4, VAND(p_top, sign_mask));
     
     // Carry propagation
-    t[1] = VADD(t[1], VSRA(t[0], LIMB_LEN));
-    t[2] = VADD(t[2], VSRA(t[1], LIMB_LEN));
-    t[3] = VADD(t[3], VSRA(t[2], LIMB_LEN));
-    t[4] = VADD(t[4], VSRA(t[3], LIMB_LEN));
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VAND(t[2], limb_mask);
-    t[3] = VAND(t[3], limb_mask);
+    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VAND(t3, limb_mask);
     
-    res[0] = t[0];
-    res[1] = t[1];
-    res[2] = t[2];
-    res[3] = t[3];
-    res[4] = t[4];
+    res[0] = t0; res[1] = t1; res[2] = t2; res[3] = t3; res[4] = t4;
 }
 
 void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)
 {
-    __m512i t[NUM_LIMBS], sign_mask;
+    __m512i t0, t1, t2, t3, t4;
+    __m512i sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     const __m512i p_bot = VSETALL(1);
     const __m512i p_top = VSETALL(P_PLUS_1_TOP);
     const __mmask8 sub_mask = ~add_mask;
     
-    t[0] = VSUBMASK(a[0], sub_mask, a[0], b[0]);
-    t[1] = VSUBMASK(a[1], sub_mask, a[1], b[1]);
-    t[2] = VSUBMASK(a[2], sub_mask, a[2], b[2]);
-    t[3] = VSUBMASK(a[3], sub_mask, a[3], b[3]);
-    t[4] = VSUBMASK(a[4], sub_mask, a[4], b[4]);
+    t0 = VSUBMASK(a[0], sub_mask, a[0], b[0]);
+    t1 = VSUBMASK(a[1], sub_mask, a[1], b[1]);
+    t2 = VSUBMASK(a[2], sub_mask, a[2], b[2]);
+    t3 = VSUBMASK(a[3], sub_mask, a[3], b[3]);
+    t4 = VSUBMASK(a[4], sub_mask, a[4], b[4]);
     
-    t[0] = VADDMASK(t[0], add_mask, a[0], b[0]);
-    t[1] = VADDMASK(t[1], add_mask, a[1], b[1]);
-    t[2] = VADDMASK(t[2], add_mask, a[2], b[2]);
-    t[3] = VADDMASK(t[3], add_mask, a[3], b[3]);
-    t[4] = VADDMASK(t[4], add_mask, a[4], b[4]);
+    t0 = VADDMASK(t0, add_mask, a[0], b[0]);
+    t1 = VADDMASK(t1, add_mask, a[1], b[1]);
+    t2 = VADDMASK(t2, add_mask, a[2], b[2]);
+    t3 = VADDMASK(t3, add_mask, a[3], b[3]);
+    t4 = VADDMASK(t4, add_mask, a[4], b[4]);
     
     // Subtract p, using special shape of p
-    t[0] = VADDMASK(t[0], add_mask, t[0], p_bot);
-    t[4] = VSUBMASK(t[4], add_mask, t[4], p_top);
+    t0 = VADDMASK(t0, add_mask, t0, p_bot);
+    t4 = VSUBMASK(t4, add_mask, t4, p_top);
     
     // Carry propagation
-    t[1] = VADD(t[1], VSRA(t[0], LIMB_LEN));
-    t[2] = VADD(t[2], VSRA(t[1], LIMB_LEN));
-    t[3] = VADD(t[3], VSRA(t[2], LIMB_LEN));
-    t[4] = VADD(t[4], VSRA(t[3], LIMB_LEN));
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VAND(t[2], limb_mask);
-    t[3] = VAND(t[3], limb_mask);
+    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VAND(t3, limb_mask);
     
     // If the result is negative, we add p
-    sign_mask = VSRA(t[4], 63);
-    t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
-    t[4] = VADD(t[4], VAND(p_top, sign_mask));
+    sign_mask = VSRA(t4, 63);
+    t0 = VSUB(t0, VAND(p_bot, sign_mask));
+    t4 = VADD(t4, VAND(p_top, sign_mask));
     
     // Carry propagation
-    t[1] = VADD(t[1], VSRA(t[0], LIMB_LEN));
-    t[2] = VADD(t[2], VSRA(t[1], LIMB_LEN));
-    t[3] = VADD(t[3], VSRA(t[2], LIMB_LEN));
-    t[4] = VADD(t[4], VSRA(t[3], LIMB_LEN));
-    t[0] = VAND(t[0], limb_mask);
-    t[1] = VAND(t[1], limb_mask);
-    t[2] = VAND(t[2], limb_mask);
-    t[3] = VAND(t[3], limb_mask);
+    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VAND(t3, limb_mask);
     
-    res[0] = t[0];
-    res[1] = t[1];
-    res[2] = t[2];
-    res[3] = t[3];
-    res[4] = t[4];
+    res[0] = t0; res[1] = t1; res[2] = t2; res[3] = t3; res[4] = t4;
 }
 
 // Single-length multiprecision addition, no correction, no carry propagation
@@ -1585,6 +1573,8 @@ void rdc_4x2(__m512i* res, __m512i* a)
     const __m512i zero = VZERO();
     __m512i sign_mask;
     const __m512i bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);
+    const __m512i two_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);
+    const __m512i two_top = VADD(top, top);
     
     // Montgomery reduction loop
     // using the fact that -p^{-1} mod 2^(limb_len) = 1 + c* 2^f mod 2^(limb_len) = 1 as f > limb_len
@@ -1656,8 +1646,6 @@ void rdc_4x2(__m512i* res, __m512i* a)
     
     // The result is in [0, 2p).
     // Reduce from [-p, 2p) to [0, p)
-    const __m512i two_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);
-    const __m512i two_top = VADD(top, top);
     
     sign_mask = VSRA(a[6], 63);
     a[5] = VADD(a[5], bot);

@@ -16,7 +16,7 @@ void bench_fp(int iterations)
     rand_fp_8x1(b);
     rand_fp_8x1(c);
 
-    printf("Fp lvl3 8x1 benchmarks:\n");
+    printf("Fp 8x1 benchmarks:\n");
 
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
@@ -96,7 +96,7 @@ void bench_fp(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("inversion", cycles[(N_RUNS/2) -1], tmp);
 
-    printf("Fp lvl3 4x2 benchmarks:\n");
+    printf("Fp 4x2 benchmarks:\n");
 
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
@@ -176,7 +176,7 @@ void bench_fp(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("inversion", cycles[(N_RUNS/2) -1], tmp);
 
-    printf("Fp lvl3 2x4 benchmarks:\n");
+    printf("Fp 2x4 benchmarks:\n");
 
     // Addition
     for(int i = 0; i < N_RUNS; i++) {

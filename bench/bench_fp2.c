@@ -21,7 +21,7 @@ void bench_fp2(int iterations)
         arr[j] = rand_uint64();
     }
 
-    printf("Fp2 lvl3 8x1x1 benchmarks:\n");
+    printf("Fp2 8x1x1 benchmarks:\n");
 
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
@@ -88,7 +88,7 @@ void bench_fp2(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
 
-    printf("Fp2 lvl3 4x1x2 benchmarks:\n");
+    printf("Fp2 4x1x2 benchmarks:\n");
 
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
@@ -155,7 +155,7 @@ void bench_fp2(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
 
-    printf("Fp2 lvl3 4x2x1 benchmarks:\n");
+    printf("Fp2 4x2x1 benchmarks:\n");
 
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
@@ -222,7 +222,7 @@ void bench_fp2(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
 
-    printf("Fp2 lvl3 2x2x2 benchmarks:\n");
+    printf("Fp2 2x2x2 benchmarks:\n");
 
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
@@ -315,7 +315,7 @@ void bench_fp2(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("inv", cycles[(N_RUNS/2) -1], tmp);
 
-    printf("Fp2 lvl3 2x4x1 benchmarks:\n");
+    printf("Fp2 2x4x1 benchmarks:\n");
 
     // Addition
     for(int i = 0; i < N_RUNS; i++) {
