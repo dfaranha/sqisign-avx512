@@ -9,7 +9,6 @@ from params import (comp_params_and_strat, get_param_names)
 
 
 # TODO:
-#   Move carry to rdc_8x1
 #   when 2 * last_limb_len <= limb_len, we can save one limb in the unreduced product.
 #   Test odd karatsuba
 #   Test 4x2 odd limbs. Is the carry pattern safe if I skip the last limb?
@@ -20,6 +19,7 @@ from params import (comp_params_and_strat, get_param_names)
 #   Optimize inv (twice as slow as lvl3 unvec)
 #   We have R as a constant, so defining a set_binary function is trivial
 #   Can we optimize Fp2 2x4x1 mul with lazy red?
+#   Change 4x2 and 2x4 to use single vars instead of tmp arrays.
 
 # Idea: Create strategies at the start instead of having conditional logic on the shape of p deep in the code.
 # Examples: R with num_limbs + 1 and lazy red in fp2. Don't subtract by p in Mont red.

@@ -437,8 +437,6 @@ def mp_mul_4x2(f, pp, v):
 
     f.end()
 
-#TODO this does not yet handle odd limbs or a smaller R
-
 def rdc_4x2(f, pp, v, strat):
     f.comment("Algorithm 3 from \"Finite Field Arithmetic Using AVX-512 For Isogeny-Based Cryptography\"")
     f.comment("by Orisaka, Aranha and López")
@@ -493,6 +491,7 @@ def rdc_4x2(f, pp, v, strat):
     if strat.fp2_mode != Fp2Mode.lazy_no_carry:
         top_sub_idx = start_idx + pp.n42 - 1 - pp.rem42
 
+        # Easier to handle negative result from mp_subx2 here than in accumulation format.
         f.comment("Reduce from [-p, 2p) to [0, p)")
         f.line()
 
