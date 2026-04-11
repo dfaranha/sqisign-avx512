@@ -36,12 +36,12 @@ num_kat = 20
 gen_addchain = True # Requires addchain to be installed
 
 #lvl1
-e = 248
-c = 5
+# e = 248
+# c = 5
 
 # lvl3
-# e = 376
-# c = 65
+e = 376
+c = 65
 
 # lvl5
 # e = 500
@@ -59,9 +59,18 @@ c = 5
 # e = 398
 # c = 893
 
-# last_limb_len = limb_len - 1:
+# limb_len: 51 last_limb_len: 50
 # e = 397
 # c = 729
+
+# limb_len: 50 last_limb_len: 50
+# e = 395
+# c = 19
+
+# limb_len: 50 last_limb_len: 49
+#e = 392
+#c = 123
+
 
 
 #############
