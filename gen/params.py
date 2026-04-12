@@ -44,14 +44,17 @@ class FpParamNames:
 class Fp2Mode(Enum):
     lazy = 0
     lazy_carry = 1
-    reduce_everything = 2
+    reduce = 2
+    reduce_everything = 3
 
 @dataclass
 class Strat:
     gen_addchain: bool
-    mode_8x1x1: Fp2Mode
     R_ext: bool
     mod_2p: bool
+    mul_8x1: Fp2Mode
+    sqr_8x1: Fp2Mode
+    sqr_4x2: Fp2Mode
 
 def get_p(e, c):
     p = c * 2**e -1
@@ -60,7 +63,10 @@ def get_p(e, c):
     # script only designed for cryptographically sized primes
     assert pbits >= 51*4 
 
+    # min_limb_len <= 39 when num_limbs >= 4
     assert c.bit_length() <= 39
+
+    
 
     return p, pbits
 
@@ -71,7 +77,8 @@ def get_limb_params(pbits, e, c):
     limb_len = ceil(pbits/num_limbs)
     last_limb_len = pbits - limb_len*(num_limbs-1)
 
-    # For simplicity we require the cofactor c to be small
+    # For simplicity we require that all but the last limb of c is limb_mask
+    assert c == 1 or (c.bit_length() + (e % limb_len) <= last_limb_len)
 
     return num_limbs, limb_len, last_limb_len, num_words64
 
@@ -82,32 +89,62 @@ def get_len_42_24(num_limbs):
     rem24 = num_limbs % 4
     return n42, n24, rem42, rem24
 
-def get_strat(limb_len, last_limb_len, gen_addchain):
+def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
     #TODO:
-    # mp_add_p_sub_8x1???
-    # Fix mp_subx2_8x1 and mp_mixaddsubx2_8x1 so not negative
-    # Fix rdc_4x2 and potentially mp_subx2 so not negative? Atm does sign correction in 
-    # Fix in case where c_bits + (e mod limb_len) > 51 (mult by c, shift by e mod limb_limb_len)
+    # mp_add_p_sub relies on all but top limb of p being limb_mask
+    #   which is why we have the assert in get_limb_params. Generalize to the case c_bits + (e mod limb_len) > last_limb_len
+    #  (mult by c, shift by e mod limb_limb_len) Find example with limb_len 51
 
-    if limb_len <= 50:
-        mode_8x1x1 = Fp2Mode.lazy
+    if limb_len <= 49:
+        mul_8x1 = Fp2Mode.lazy
+        sqr_8x1 = Fp2Mode.lazy
+        sqr_4x2 = Fp2Mode.lazy
         R_ext = True
         mod_2p = True
-
-    elif last_limb_len < limb_len:
-        mode_8x1x1 = Fp2Mode.lazy_carry
+    elif limb_len == 50 and last_limb_len <= 49: # 8x1 sqr needs carry when limb_ln = 50
+        mul_8x1 = Fp2Mode.lazy
+        sqr_8x1 = Fp2Mode.lazy_carry
+        sqr_4x2 = Fp2Mode.lazy
+        R_ext = True
+        mod_2p = True
+    elif limb_len == 50 and last_limb_len == 50: # 8x1 sqr needs mod p
+        mul_8x1 = Fp2Mode.lazy
+        sqr_8x1 = Fp2Mode.lazy_carry
+        sqr_4x2 = Fp2Mode.lazy
+        R_ext = True
+        mod_2p = False
+    elif last_limb_len <= 48: # 8x1 mul & 4x2 sqr requires carry
+        mul_8x1 = Fp2Mode.lazy_carry
+        sqr_8x1 = Fp2Mode.lazy_carry
+        sqr_4x2 = Fp2Mode.lazy_carry
+        R_ext = num_limbs > 5 # Experimental data shows this is efficiency threshold
+        mod_2p = True
+    elif last_limb_len == 49: # 8x1 squaring must switch to mod p
+        mul_8x1 = Fp2Mode.lazy_carry
+        sqr_8x1 = Fp2Mode.lazy_carry
+        sqr_4x2 = Fp2Mode.lazy_carry
         R_ext = False
-        mod_2p = last_limb_len <= limb_len - 3
-    else:
-        mode_8x1x1 = Fp2Mode.reduce_everything
-        R_ext = False
+        mod_2p = False
+    elif last_limb_len == 50: # 8x1 squaring must reduce sub, need R_ext to keep square within [0, pR)
+        mul_8x1 = Fp2Mode.lazy_carry
+        sqr_8x1 = Fp2Mode.reduce
+        sqr_4x2 = Fp2Mode.lazy_carry
+        R_ext = True
+        mod_2p = False
+    else: #8x1x1 lazy mult & squaring doesn't work
+        mul_8x1 = Fp2Mode.reduce_everything
+        sqr_8x1 = Fp2Mode.reduce_everything
+        sqr_4x2 = Fp2Mode.lazy_carry
+        R_ext = True
         mod_2p = False
 
     # TODO: Can we save one limb in prod when last_limb_len < 2 * limb_len?
 
     return Strat(
         gen_addchain = gen_addchain,
-        mode_8x1x1 = mode_8x1x1,
+        mul_8x1 = mul_8x1,
+        sqr_8x1 = sqr_8x1,
+        sqr_4x2 = sqr_4x2,
         R_ext = R_ext,
         mod_2p = mod_2p
     )
@@ -127,7 +164,7 @@ def comp_params_and_strat(e, c, num_kat, gen_addchain):
     p, pbits = get_p(e, c)
     num_limbs, limb_len, last_limb_len, num_words64 = get_limb_params(pbits, e, c)
     n42, n24, rem42, rem24 = get_len_42_24(num_limbs)
-    strat = get_strat(limb_len, last_limb_len, gen_addchain)
+    strat = get_strat(num_limbs, limb_len, last_limb_len, gen_addchain)
     num_limbs_R, R, R2 = get_mont_const(p, num_limbs, limb_len, strat)
 
     pp = FpParams(

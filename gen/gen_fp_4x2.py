@@ -1,4 +1,5 @@
 from gen_addchain import (write_dbl_and_add, write_fp_exp3_div4_naive, write_exp_function)
+from params import Fp2Mode
 
 # 4x2 format stores an Fp element in n42 vectors.
 # The i-th vector stores (a[i], a[i+n42], b[i], b[i+n42], c[i], c[i+n42], d[i], d[i+n42])
@@ -159,9 +160,11 @@ def fp_add_4x2(f, pp, v, strat):
     if strat.mod_2p:
         f.line(f"const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
         f.line(f"const __m512i p_top = VSET(0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top});")
+        p_txt = "2p"
     else:
         f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
         f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
+        p_txt = "p"
     f.line()
 
     f.comment("Add limbs")
@@ -169,7 +172,7 @@ def fp_add_4x2(f, pp, v, strat):
         f.line(f"t[{i}] = VADD(a[{i}], b[{i}]);")
     f.line()
 
-    f.comment("Subtract p, using special shape of p")
+    f.comment(f"Subtract {p_txt}, using special shape of p")
     top_idx = pp.n42 - 1 - pp.rem42
     f.line("t[0] = VADD(t[0], p_bot);")
     f.line(f"t[{top_idx}] = VSUB(t[{top_idx}], p_top);")
@@ -177,7 +180,7 @@ def fp_add_4x2(f, pp, v, strat):
 
     carry_prop_4x2(f, pp, v, "t", "limb_mask", "carry")
 
-    f.comment("If result is negative, we undo the subtraction by p")
+    f.comment(f"If result is negative, we undo the subtraction by {p_txt}")
     f.comment("sign_mask = {0, sign_mask1, 0, sign_mask2, ...}")
     f.line(f"sign_mask = VSRA(t[{top_idx}], 63);")
     f.line(f"t[{top_idx}] = VADD(t[{top_idx}], VAND(sign_mask, p_top));")
@@ -200,9 +203,11 @@ def fp_sub_4x2(f, pp, v, strat):
     if strat.mod_2p:
         f.line(f"const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
         f.line(f"const __m512i p_top = VSET(0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top});")
+        p_txt = "2p"
     else:
         f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
         f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
+        p_txt = "p"
     f.line()
 
     f.comment("Subtract limbs")
@@ -212,7 +217,7 @@ def fp_sub_4x2(f, pp, v, strat):
 
     carry_prop_4x2(f, pp, v, "t", "limb_mask", "carry")
 
-    f.comment("If result is negative, we undo the subtraction by p")
+    f.comment(f"If result is negative, we add {p_txt}")
     f.comment("sign_mask = {0, sign_mask1, 0, sign_mask2, ...}")
     top_idx = pp.n42 - 1 - pp.rem42
     f.line(f"sign_mask = VSRA(t[{top_idx}], 63);")
@@ -237,9 +242,11 @@ def fp_neg_4x2(f, pp, v, strat):
     if strat.mod_2p:
         f.line(f"const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
         f.line(f"const __m512i p_top = VSET(0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top});")
+        p_txt = "2p"
     else:
         f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
         f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
+        p_txt = "p"
     
     f.line()
 
@@ -250,7 +257,7 @@ def fp_neg_4x2(f, pp, v, strat):
 
     carry_prop_4x2(f, pp, v, "t", "limb_mask", "carry")
 
-    f.comment("If result is negative, we undo the subtraction by p")
+    f.comment(f"If result is negative, we add {p_txt}")
     f.comment("sign_mask = {0, sign_mask1, 0, sign_mask2, ...}")
     top_idx = pp.n42 - 1 - pp.rem42
     f.line(f"sign_mask = VSRA(t[{top_idx}], 63);")
@@ -273,9 +280,11 @@ def fp_mixaddsub_4x2(f, pp, v, strat):
     if strat.mod_2p:
         f.line(f"const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
         f.line(f"const __m512i p_top = VSET(0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top});")
+        p_txt = "2p"
     else:
         f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
         f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
+        p_txt = "p"
     f.line(f"const __mmask8 sub_mask = ~add_mask;")
     f.line()
 
@@ -287,7 +296,7 @@ def fp_mixaddsub_4x2(f, pp, v, strat):
         f.line(f"t[{i}] = VADDMASK(t[{i}], add_mask, a[{i}], b[{i}]);")
     f.line()
 
-    f.comment("a + b - p")
+    f.comment(f"We subtract {p_txt}, using the special shape of p")
     top_idx = pp.n42 - 1 - pp.rem42
     f.line("t[0] = VADDMASK(t[0], add_mask, t[0], p_bot);")
     f.line(f"t[{top_idx}] = VSUBMASK(t[{top_idx}], add_mask, t[{top_idx}], p_top);")
@@ -295,7 +304,7 @@ def fp_mixaddsub_4x2(f, pp, v, strat):
 
     carry_prop_4x2(f, pp, v, "t", "limb_mask", "carry")
 
-    f.comment("If result is negative, we undo the subtraction by p")
+    f.comment(f"If result is negative, we add {p_txt}")
     f.comment("sign_mask = {0, sign_mask1, 0, sign_mask2, ...}")
     f.line(f"sign_mask = VSRA(t[{top_idx}], 63);")
     f.line(f"t[{top_idx}] = VADD(t[{top_idx}], VAND(sign_mask, p_top));")
@@ -366,31 +375,53 @@ def mp_add_p_sub_4x2(f, pp, v, strat):
     f.start("void mp_add_p_sub_4x2(__m512i* res, __m512i* a, __m512i* b)")
 
     f.line(f"__m512i t[{pp.n42}];")
-    m = 2 if strat.mod_2p else 1
-    b = f"{m}*{v.limb_mask}"
-    t = f"{m}*{v.p_plus_1_top}-{m}"
-    f.line(f"const __m512i p_bod = VSETALL({b});")
-    f.line(f"const __m512i p_top = VSET({b}, {t}, {b}, {t}, {b}, {t}, {b}, {t});")
-    f.line()
-
     top_idx = pp.n42-1 - pp.rem42
-    for i in range(top_idx):
-        f.line(f"t[{i}] = VSUB(VADD(a[{i}], p_bod), b[{i}]);")
-    f.line(f"t[{top_idx}] = VSUB(VADD(a[{top_idx}], p_top), b[{top_idx}]);")
-    if pp.rem42 == 1:
-        f.line(f"t[{top_idx+1}] = VADDMASK(a[{top_idx+1}], 0x55, a[{top_idx+1}], p_bod);")
-        f.line(f"t[{top_idx+1}] = VSUBMASK(t[{top_idx+1}], 0x55, t[{top_idx+1}], b[{top_idx+1}]);")
-    f.line()
+
+    if strat.sqr_4x2 == Fp2Mode.lazy:
+        b = f"2*{v.limb_mask}" if strat.mod_2p else v.limb_mask
+        t = f"2*{v.p_plus_1_top}-2" if strat.mod_2p else f"{v.p_plus_1_top}-1"
+        f.line(f"const __m512i p_bod = VSETALL({b});")
+        f.line(f"const __m512i p_top = VSET({b}, {t}, {b}, {t}, {b}, {t}, {b}, {t});")
+        f.line()
+        
+        for i in range(top_idx):
+            f.line(f"t[{i}] = VSUB(VADD(a[{i}], p_bod), b[{i}]);")
+        f.line(f"t[{top_idx}] = VSUB(VADD(a[{top_idx}], p_top), b[{top_idx}]);")
+        if pp.rem42 == 1:
+            f.line(f"t[{top_idx+1}] = VADDMASK(a[{top_idx+1}], 0x55, a[{top_idx+1}], p_bod);")
+            f.line(f"t[{top_idx+1}] = VSUBMASK(t[{top_idx+1}], 0x55, t[{top_idx+1}], b[{top_idx+1}]);")
+        f.line()
+    else:
+        f.line("__m512i carry;")
+        f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
+        m = 2 if strat.mod_2p else 1
+        f.line(f"const __m512i p_bot = VSET({m}, 0, {m}, 0, {m}, 0, {m}, 0);")
+        f.line(f"const __m512i p_top = VSET(0, {m}*{v.p_plus_1_top}, 0, {m}*{v.p_plus_1_top}, 0, {m}*{v.p_plus_1_top}, 0, {m}*{v.p_plus_1_top});")
+        f.line()
+
+        f.line(f"t[0] = VSUB(VSUB(a[0], p_bot), b[0]);")
+        for i in range(1, top_idx):
+            f.line(f"t[{i}] = VSUB(a[{i}], b[{i}]);")
+        f.line(f"t[{top_idx}] = VSUB(VADD(a[{top_idx}], p_top), b[{top_idx}]);")
+        if pp.rem42 == 1:
+            f.line(f"t[{top_idx+1}] = VSUB(a[{top_idx+1}], b[{top_idx+1}]);")
+        f.line()
+        
+        carry_prop_4x2(f, pp, v, "t", "limb_mask", "carry")
 
     for i in range(pp.n42):
         f.line(f"res[{i}] = t[{i}];")
 
     f.end()
 
-def mp_mixaddsubx2_4x2(f, pp, v):
+def mp_mixaddsubx2_4x2(f, pp, v, strat):
     f.start("void mp_mixaddsubx2_4x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)")
-    n_prod = 3*pp.n42
+    n_prod = pp.n42 + pp.num_limbs
     f.line(f"__m512i t[{n_prod}];")
+    if strat.R_ext:
+        f.comment("We can get subtraction result in [0, p*R) by always adding p * 2^(num_limbs * limb_len)")
+        f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
+        f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line("const __mmask8 sub_mask = ~add_mask;")
     f.line()
@@ -398,6 +429,10 @@ def mp_mixaddsubx2_4x2(f, pp, v):
     for i in range(n_prod):
         f.line(f"t[{i}] = VSUBMASK(a[{i}], sub_mask, a[{i}], b[{i}]);")
     f.line()
+
+    if strat.R_ext:
+        f.line(f"t[{pp.num_limbs}] = VSUBMASK(t[{pp.num_limbs}], sub_mask, t[{pp.num_limbs}], p_bot);")
+        f.line(f"t[{n_prod-1-pp.rem42}] = VADDMASK(t[{pp.num_limbs}], sub_mask, t[{n_prod-1-pp.rem42}], p_top);")
 
     for i in range(n_prod):
         f.line(f"t[{i}] = VADDMASK(t[{i}], add_mask, a[{i}], b[{i}]);")
@@ -412,7 +447,7 @@ def mp_dblsubx2_4x2(f, pp, v):
     f.comment("Double-length multiprecision subtraction res = res - a - b, no correction")
     f.start("void mp_dblsubx2_4x2(__m512i* res, __m512i* a, __m512i* b)")
 
-    n_prod = 3*pp.n42
+    n_prod = pp.n42+pp.num_limbs
     f.line(f"__m512i t[{n_prod}];")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line()
@@ -430,18 +465,26 @@ def mp_dblsubx2_4x2(f, pp, v):
 
     f.end()
 
-def mp_subx2_4x2(f, pp, v):
+def mp_subx2_4x2(f, pp, v, strat):
     f.comment("Double-length multiprecision subtraction res = res - a")
     f.start("void mp_subx2_4x2(__m512i* res, __m512i* a)")
 
-    n_prod = 3*pp.n42
+    n_prod = pp.n42 + pp.num_limbs
     f.line(f"__m512i t[{n_prod}];")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
+    if strat.R_ext:
+        f.comment("We can get result in [0, p*R) by always adding p * 2^(num_limbs * limb_len)")
+        f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
+        f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
     f.line()
 
     for i in range(n_prod):
         f.line(f"t[{i}] = VSUB(res[{i}], a[{i}]);")
     f.line()
+
+    if strat.R_ext:
+        f.line(f"t[{pp.num_limbs}] = VSUB(t[{pp.num_limbs}], p_bot);")
+        f.line(f"t[{n_prod-1-pp.rem42}] = VADD(t[{n_prod-1-pp.rem42}], p_top);")
 
     for i in range(n_prod):
         f.line(f"res[{i}] = t[{i}];")
@@ -493,13 +536,10 @@ def mp_mul_4x2(f, pp, v, strat):
     for i in range(n_prod):
         f.line(f"res[{i}] = t[{i}];")
 
-    #TODO this is only when R is larger to allow lazy red and the number of limbs is even
     if strat.R_ext:
         f.line(f"res[{n_prod}] = zero;")
 
     f.end()
-
-#TODO this does not yet handle odd limbs or a smaller R
 
 def rdc_4x2(f, pp, v, strat):
     f.comment("Algorithm 3 from \"Finite Field Arithmetic Using AVX-512 For Isogeny-Based Cryptography\"")
@@ -511,11 +551,13 @@ def rdc_4x2(f, pp, v, strat):
     f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i zero = VZERO();")
-    if not strat.mod_2p:
+    if not strat.mod_2p or not strat.R_ext:
         f.line(f"__m512i sign_mask;")
+    if not strat.mod_2p:
         f.line(f"const __m512i bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
+    if not strat.R_ext:
         f.line(f"const __m512i two_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
-        f.line(f"const __m512i two_top = VADD(top, top);")
+        f.line(f"const __m512i two_top = VSETALL(2*{v.p_plus_1_top});")
     f.line()
 
     start_idx = pp.num_limbs_R
@@ -546,20 +588,17 @@ def rdc_4x2(f, pp, v, strat):
     f.comment(f"Result is now in a[{start_idx}], ..., a[{start_idx + pp.n42 - 1}]")
     carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
 
-    f.comment(f"The result is in [0, 2p).")
+    top_sub_idx = start_idx + pp.n42 - 1 - pp.rem42
     if not strat.mod_2p:
-        top_sub_idx = start_idx + pp.n42 - 1 - pp.rem42
-
-        f.comment("Reduce from [-p, 2p) to [0, p)")
+        f.comment("Reducing to [0, p)")
         f.line()
-
         f.line(f"sign_mask = VSRA(a[{top_sub_idx}], 63);")
         f.line(f"a[{start_idx}] = VADD(a[{start_idx}], bot);")
         f.line(f"a[{top_sub_idx}] = VSUBMASK(a[{top_sub_idx}], 0xaa, a[{top_sub_idx}], top);")
-        f.line(f"sign_mask = VSHUFFLEMASKZ(0xffff, sign_mask, 0x4e);")
-        f.line(f"a[{start_idx}] = VSUB(a[{start_idx}], VAND(two_bot, sign_mask));")
-        f.line(f"sign_mask = VSHUFFLEMASKZ(0xffff, sign_mask, 0x4e);")
-        f.line(f"a[{top_sub_idx}] = VADDMASK(a[{top_sub_idx}], 0xaa, a[{top_sub_idx}], VAND(sign_mask, two_top));")
+        if not strat.R_ext:
+            f.line(f"a[{top_sub_idx}] = VADDMASK(a[{top_sub_idx}], 0xaa, a[{top_sub_idx}], VAND(sign_mask, two_top));")
+            f.line(f"sign_mask = VSHUFFLE(sign_mask, 0x4e);")
+            f.line(f"a[{start_idx}] = VSUB(a[{start_idx}], VAND(two_bot, sign_mask));")
         f.line()
 
         carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
@@ -567,14 +606,20 @@ def rdc_4x2(f, pp, v, strat):
         f.comment("If still negative, add p")
         f.line(f"sign_mask = VSRA(a[{top_sub_idx}], 63);")
         f.line(f"a[{top_sub_idx}] = VADDMASK(a[{top_sub_idx}], 0xaa, a[{top_sub_idx}], VAND(sign_mask, top));")
-        f.line(f"sign_mask = VSHUFFLEMASKZ(0xffff, sign_mask, 0x4e);")
+        f.line(f"sign_mask = VSHUFFLE(sign_mask, 0x4e);")
         f.line(f"a[{start_idx}] = VSUB(a[{start_idx}], VAND(bot, sign_mask));")
         f.line()
 
         carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
+    elif not strat.R_ext:
+        f.comment("Correcting sign")
+        f.line(f"sign_mask = VSRA(a[{top_sub_idx}], 63);")
+        f.line(f"a[{top_sub_idx}] = VADDMASK(a[{top_sub_idx}], 0xaa, a[{top_sub_idx}], VAND(sign_mask, two_top));")
+        f.line(f"sign_mask = VSHUFFLE(sign_mask, 0x4e);")
+        f.line(f"a[{start_idx}] = VSUB(a[{start_idx}], VAND(two_bot, sign_mask));")
+        f.line()
 
-    else:
-        f.comment("Output result: final carry propagation is left for the final result.")
+        carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
 
     for i in range(pp.n42):
         f.line(f"res[{i}] = a[{i+start_idx}];")
@@ -946,9 +991,9 @@ def write_fp_4x2(f, pp, v, strat, chain):
 
     mp_add_4x2(f, pp, v)
     mp_add_p_sub_4x2(f, pp, v, strat)
-    mp_mixaddsubx2_4x2(f, pp, v)
+    mp_mixaddsubx2_4x2(f, pp, v, strat)
     mp_dblsubx2_4x2(f, pp, v)
-    mp_subx2_4x2(f, pp, v)
+    mp_subx2_4x2(f, pp, v, strat)
 
     mp_mul_4x2(f, pp, v, strat)
     rdc_4x2(f, pp, v, strat)

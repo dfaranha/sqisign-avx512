@@ -77,7 +77,7 @@ def fp2_mixaddsub_8x1x1(f, pp, v):
 def fp2_mul_8x1x1(f, pp, v, strat):
     f.start("void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)")
 
-    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
+    if strat.mul_8x1 == Fp2Mode.reduce_everything:
         fp2_mul_8x1x1_standard(f, pp, v)
     else:
         fp2_mul_8x1x1_lazy(f, pp, v)
@@ -125,10 +125,10 @@ def fp2_mul_8x1x1_lazy(f, pp, v):
 def fp2_sqr_8x1x1(f, pp, v, strat):
     f.start("void fp2_sqr_8x1x1(__m512i* res, __m512i* a)")
 
-    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
+    if strat.sqr_8x1 == Fp2Mode.reduce_everything:
         fp2_sqr_8x1x1_standard(f, pp, v)
     else:
-        fp2_sqr_8x1x1_lazy(f, pp, v)
+        fp2_sqr_8x1x1_lazy(f, pp, v, strat)
 
     f.end()
 
@@ -142,12 +142,15 @@ def fp2_sqr_8x1x1_standard(f, pp, v):
     f.line(f"fp_mul_8x1(res + {pp.num_limbs}, s3, a + {pp.num_limbs});")
     f.line(f"fp_mul_8x1(res, s1, s2);")
 
-def fp2_sqr_8x1x1_lazy(f, pp, v):
+def fp2_sqr_8x1x1_lazy(f, pp, v, strat):
     f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}], s3[{pp.num_limbs}];")
     f.line()
 
     f.line(f"mp_add_8x1(s1, a, a + {pp.num_limbs});")
-    f.line(f"mp_add_p_sub_8x1(s2, a, a + {pp.num_limbs});")
+    if strat.sqr_8x1 == Fp2Mode.reduce:
+        f.line(f"fp_sub_8x1(s2, a, a + {pp.num_limbs});")
+    else:
+        f.line(f"mp_add_p_sub_8x1(s2, a, a + {pp.num_limbs});")
     f.line(f"mp_add_8x1(s3, a, a);")
     f.line(f"fp_mul_8x1(res, s1, s2);")
     f.line(f"fp_mul_8x1(res + {pp.num_limbs}, s3, a + {pp.num_limbs});")
@@ -346,10 +349,7 @@ def fp2_mixaddsub_4x1x2(f, pp, v):
 def fp2_mul_4x1x2(f, pp, v, strat):
     f.start("void fp2_mul_4x1x2(__m512i* res, __m512i* a, __m512i* b)")
 
-    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
-        fp2_mul_4x1x2_standard(f, pp, v)
-    else:
-        fp2_mul_4x1x2_lazy(f, pp, v)
+    fp2_mul_4x1x2_lazy(f, pp, v)
 
     f.end()
 
@@ -384,10 +384,7 @@ def fp2_mul_4x1x2_lazy(f, pp, v):
 def fp2_sqr_4x1x2(f, pp, v, strat):
     f.start("void fp2_sqr_4x1x2(__m512i* res, __m512i* a)")
 
-    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
-        fp2_sqr_4x1x2_standard(f, pp, v)
-    else:
-        fp2_sqr_4x1x2_lazy(f, pp, v)
+    fp2_sqr_4x1x2_lazy(f, pp, v)
 
     f.end()
 
@@ -610,10 +607,7 @@ def fp2_mixaddsub_4x2x1(f, pp, v):
 def fp2_mul_4x2x1(f, pp, v, strat):
     f.start("void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b)")
 
-    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
-        fp2_mul_4x2x1_standard(f, pp, v)
-    else:
-        fp2_mul_4x2x1_lazy(f, pp, v)
+    fp2_mul_4x2x1_lazy(f, pp, v)
 
     f.end()
 
@@ -653,10 +647,10 @@ def fp2_mul_4x2x1_lazy(f, pp, v):
 def fp2_sqr_4x2x1(f, pp, v, strat):
     f.start("void fp2_sqr_4x2x1(__m512i* res, __m512i* a)")
 
-    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
+    if strat.sqr_8x1 == Fp2Mode.reduce_everything:
         fp2_sqr_4x2x1_standard(f, pp, v)
     else:
-        fp2_sqr_4x2x1_lazy(f, pp, v)
+        fp2_sqr_4x2x1_lazy(f, pp, v, strat)
 
     f.end()
 
@@ -674,10 +668,10 @@ def fp2_sqr_4x2x1_standard(f, pp, v):
     f.line("}")
 
     f.line("fp_add_8x1(s1, s1, s3);")
-    f.line(f"fp_sub_8x1(s2, a, s2);")
+    f.line("fp_sub_8x1(s2, a, s2);")
     f.line("fp_mul_8x1(res, s1, s2);")
 
-def fp2_sqr_4x2x1_lazy(f, pp, v):
+def fp2_sqr_4x2x1_lazy(f, pp, v, strat):
     f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}], s3[{pp.num_limbs}];")
     f.line("__mmask16 mask = 0b0011001100110011;")
     f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
@@ -691,7 +685,10 @@ def fp2_sqr_4x2x1_lazy(f, pp, v):
     f.line("}")
 
     f.line("mp_add_8x1(s1, s1, s3);")
-    f.line(f"mp_add_p_sub_8x1(s2, a, s2);")
+    if strat.sqr_8x1 == Fp2Mode.reduce:
+        f.line(f"fp_sub_8x1(s2, a, s2);")
+    else:
+        f.line(f"mp_add_p_sub_8x1(s2, a, s2);")
     f.line("fp_mul_8x1(res, s1, s2);")
 
 def fp2_mulx2_4x2x1(f, pp, v):
@@ -921,10 +918,7 @@ def fp2_mixaddsub_2x2x2(f, pp, v):
 def fp2_mul_2x2x2(f, pp, v, strat):
     f.start("void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b)")
 
-    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
-        fp2_mul_2x2x2_standard(f, pp, v)
-    else:
-        fp2_mul_2x2x2_lazy(f, pp, v)
+    fp2_mul_2x2x2_lazy(f, pp, v)
 
     f.end()
 
@@ -969,10 +963,7 @@ def fp2_mul_2x2x2_lazy(f, pp, v):
 def fp2_sqr_2x2x2(f, pp, v, strat):
     f.start("void fp2_sqr_2x2x2(__m512i* res, __m512i* a)")
 
-    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
-        fp2_sqr_2x2x2_standard(f, pp, v)
-    else:
-        fp2_sqr_2x2x2_lazy(f, pp, v)
+    fp2_sqr_2x2x2_lazy(f, pp, v, strat)
 
     f.end()
 
@@ -1001,7 +992,7 @@ def fp2_sqr_2x2x2_standard(f, pp, v):
     f.line("fp_sub_4x2(s2, a, s2); // a0 - a1, a1")
     f.line("fp_mul_4x2(res, s1, s2);")
 
-def fp2_sqr_2x2x2_lazy(f, pp, v):
+def fp2_sqr_2x2x2_lazy(f, pp, v, strat):
     f.line(f"__m512i s1[{pp.n42}], s2[{pp.n42}];")
     f.line()
 
@@ -1023,7 +1014,10 @@ def fp2_sqr_2x2x2_lazy(f, pp, v):
 
     f.unindent()
     f.line("}")
-    f.line("mp_add_p_sub_4x2(s2, a, s2); // a0 - a1, a1")
+    if strat.sqr_4x2 == Fp2Mode.reduce:
+        f.line("fp_sub_4x2(s2, a, s2); // a0 - a1, a1")
+    else:
+        f.line("mp_add_p_sub_4x2(s2, a, s2); // a0 - a1, a1")
     f.line("fp_mul_4x2(res, s1, s2);")
 
 def fp2_muli_2x2x2(f, pp, v):

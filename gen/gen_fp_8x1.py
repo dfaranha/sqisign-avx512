@@ -112,9 +112,11 @@ def fp_add_8x1(f, pp, v, strat):
     if strat.mod_2p:
         f.line(f"const __m512i p_bot = VSETALL(2);")
         f.line(f"const __m512i p_top = VSETALL(2*{v.p_plus_1_top});")
+        p_txt = "2p"
     else:
         f.line(f"const __m512i p_bot = VSETALL(1);")
         f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
+        p_txt = "p"
     f.line()
 
     f.comment("Add limbs")
@@ -122,14 +124,14 @@ def fp_add_8x1(f, pp, v, strat):
         f.line(f"t{i} = VADD(a[{i}], b[{i}]);")
     f.line()
 
-    f.comment("Subtract p, using special shape of p")
+    f.comment(f"Subtract {p_txt}, using special shape of p")
     f.line(f"t0 = VADD(t0, p_bot);")
     f.line(f"t{pp.num_limbs-1} = VSUB(t{pp.num_limbs-1}, p_top);")
     f.line()
 
     carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
-    f.comment("If result is negative, we undo the subtraction by p")
+    f.comment(f"If result is negative, we undo the subtraction by {p_txt}")
     f.line(f"sign_mask = VSRA(t{pp.num_limbs-1}, 63);")
     f.line(f"t0 = VSUB(t0, VAND(p_bot, sign_mask));")
     f.line(f"t{pp.num_limbs-1} = VADD(t{pp.num_limbs-1}, VAND(p_top, sign_mask));")
@@ -150,9 +152,11 @@ def fp_sub_8x1(f, pp, v, strat):
     if strat.mod_2p:
         f.line(f"const __m512i p_bot = VSETALL(2);")
         f.line(f"const __m512i p_top = VSETALL(2*{v.p_plus_1_top});")
+        p_txt = "2p"
     else:
         f.line(f"const __m512i p_bot = VSETALL(1);")
         f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
+        p_txt = "p"
     f.line()
 
     f.comment("Subtract limbs")
@@ -162,7 +166,7 @@ def fp_sub_8x1(f, pp, v, strat):
 
     carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
-    f.comment("If result is negative, we undo the subtraction by p")
+    f.comment(f"If result is negative, we add {p_txt}")
     f.line(f"sign_mask = VSRA(t{pp.num_limbs-1}, 63);")
     f.line(f"t0 = VSUB(t0, VAND(p_bot, sign_mask));")
     f.line(f"t{pp.num_limbs-1} = VADD(t{pp.num_limbs-1}, VAND(p_top, sign_mask));")
@@ -184,9 +188,11 @@ def fp_neg_8x1(f, pp, v, strat):
     if strat.mod_2p:
         f.line(f"const __m512i p_bot = VSETALL(2);")
         f.line(f"const __m512i p_top = VSETALL(2*{v.p_plus_1_top});")
+        p_txt = "2p"
     else:
         f.line(f"const __m512i p_bot = VSETALL(1);")
         f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
+        p_txt = "p"
     f.line()
 
     f.comment("0 - a")
@@ -196,7 +202,7 @@ def fp_neg_8x1(f, pp, v, strat):
 
     carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
-    f.comment("If result is negative, we undo the subtraction by p")
+    f.comment(f"If result is negative, we add {p_txt}")
     f.line(f"sign_mask = VSRA(t{pp.num_limbs-1}, 63);")
     f.line(f"t0 = VSUB(t0, VAND(p_bot, sign_mask));")
     f.line(f"t{pp.num_limbs-1} = VADD(t{pp.num_limbs-1}, VAND(p_top, sign_mask));")
@@ -217,9 +223,11 @@ def fp_mixaddsub_8x1(f, pp, v, strat):
     if strat.mod_2p:
         f.line(f"const __m512i p_bot = VSETALL(2);")
         f.line(f"const __m512i p_top = VSETALL(2*{v.p_plus_1_top});")
+        p_txt = "2p"
     else:
         f.line(f"const __m512i p_bot = VSETALL(1);")
         f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
+        p_txt = "p"
     f.line("const __mmask8 sub_mask = ~add_mask;")
     f.line()
 
@@ -231,14 +239,14 @@ def fp_mixaddsub_8x1(f, pp, v, strat):
         f.line(f"t{i} = VADDMASK(t{i}, add_mask, a[{i}], b[{i}]);")
     f.line()
 
-    f.comment("Subtract p, using special shape of p")
+    f.comment(f"Subtract {p_txt}, using special shape of p")
     f.line(f"t0 = VADDMASK(t0, add_mask, t0, p_bot);")
     f.line(f"t{pp.num_limbs-1} = VSUBMASK(t{pp.num_limbs-1}, add_mask, t{pp.num_limbs-1}, p_top);")
     f.line()
 
     carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
-    f.comment("If the result is negative, we add p")
+    f.comment(f"If the result is negative, we add {p_txt}")
     f.line(f"sign_mask = VSRA(t{pp.num_limbs-1}, 63);")
     f.line(f"t0 = VSUB(t0, VAND(p_bot, sign_mask));")
     f.line(f"t{pp.num_limbs-1} = VADD(t{pp.num_limbs-1}, VAND(p_top, sign_mask));")
@@ -309,7 +317,7 @@ def mp_add_8x1(f, pp, v, strat):
     f.start("void mp_add_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
     f.declare_single_vars(var_name="t", count=pp.num_limbs)
-    if strat.mode_8x1x1 == Fp2Mode.lazy_carry:
+    if strat.mul_8x1 == Fp2Mode.lazy_carry:
         f.line(f"const __m512i limb_mask = VSETALL(LIMB_MASK);")
     f.line()
 
@@ -317,7 +325,7 @@ def mp_add_8x1(f, pp, v, strat):
         f.line(f"t{i} = VADD(a[{i}], b[{i}]);")
     f.line()
 
-    if strat.mode_8x1x1 == Fp2Mode.lazy_carry:
+    if strat.mul_8x1 == Fp2Mode.lazy_carry:
         carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
     f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
@@ -357,10 +365,10 @@ def mp_subx2_8x1(f, pp, v, strat):
 
     num_limbs_prod = get_num_limbs_prod(pp)
     f.declare_single_vars(var_name="t", count=num_limbs_prod)
-    if strat.mode_8x1x1 == Fp2Mode.lazy_carry:
+    if not strat.R_ext:
         f.line("__m512i sign_mask;")
-        f.line("const __m512i p_bot = VSETALL(1);")
-        f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
+    f.line("const __m512i p_bot = VSETALL(1);")
+    f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line()
 
@@ -368,17 +376,22 @@ def mp_subx2_8x1(f, pp, v, strat):
         f.line(f"t{i} = VSUB(res[{i}], a[{i}]);")
     f.line()
 
+    if strat.R_ext:
+        f.comment("We can get result in [0, p*R) by always adding p * 2^(num_limbs * limb_len)")
+        f.line(f"t{pp.num_limbs} = VSUB(t{pp.num_limbs}, p_bot);")
+        f.line(f"t{num_limbs_prod-1} = VADD(t{num_limbs_prod-1}, p_top);")
+        f.line()
+
     carry_prop_8x1_var(f, pp, v, num_limbs_prod, "t", "limb_mask")
 
-    if strat.mode_8x1x1 == Fp2Mode.lazy_carry:
+    if not strat.R_ext:
         # if result is negative, add p*R. 
         # Keeps output in [0, p*R), ensuring that Montgomery red gives result in [0, 2p)
-        start_idx = num_limbs_prod-pp.num_limbs
         f.line(f"sign_mask = VSRA(t{num_limbs_prod-1}, 63);")
-        f.line(f"t{start_idx} = VSUB(t{start_idx}, VAND(p_bot, sign_mask));")
+        f.line(f"t{pp.num_limbs} = VSUB(t{pp.num_limbs}, VAND(p_bot, sign_mask));")
         f.line(f"t{num_limbs_prod-1} = VADD(t{num_limbs_prod-1}, VAND(p_top, sign_mask));")
 
-        carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask", start_idx)
+        carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask", pp.num_limbs)
 
     f.single_vars_to_array(var_name="t", arr_name="res", count=num_limbs_prod)
 
@@ -389,10 +402,10 @@ def mp_mixaddsubx2_8x1(f, pp, v, strat):
 
     num_limbs_prod = get_num_limbs_prod(pp)
     f.declare_single_vars(var_name="t", count=num_limbs_prod)
-    if strat.mode_8x1x1 == Fp2Mode.lazy_carry:
+    if not strat.R_ext:
         f.line("__m512i sign_mask;")
-        f.line("const __m512i p_bot = VSETALL(1);")
-        f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
+    f.line("const __m512i p_bot = VSETALL(1);")
+    f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __mmask8 sub_mask = ~add_mask;")
     f.line()
@@ -401,21 +414,26 @@ def mp_mixaddsubx2_8x1(f, pp, v, strat):
         f.line(f"t{i} = VSUBMASK(a[{i}], sub_mask, a[{i}], b[{i}]);")
     f.line()
 
+    if strat.R_ext:
+        f.comment("We can get result in [0, p*R) by always adding p * 2^(num_limbs * limb_len)")
+        f.line(f"t{pp.num_limbs} = VSUB(t{pp.num_limbs}, p_bot);")
+        f.line(f"t{num_limbs_prod-1} = VADD(t{num_limbs_prod-1}, p_top);")
+        f.line()
+
     for i in range(num_limbs_prod):
         f.line(f"t{i} = VADDMASK(t{i}, add_mask, a[{i}], b[{i}]);")
     f.line()
 
     carry_prop_8x1_var(f, pp, v, num_limbs_prod, "t", "limb_mask")
 
-    if strat.mode_8x1x1 == Fp2Mode.lazy_carry:
+    if not strat.R_ext:
         # if result is negative, add p*R. 
         # Keeps output in [0, p*R), ensuring that Montgomery red gives result in [0, 2p)
-        start_idx = num_limbs_prod-pp.num_limbs
         f.line(f"sign_mask = VSRA(t{num_limbs_prod-1}, 63);")
-        f.line(f"t{start_idx} = VSUB(t{start_idx}, VAND(p_bot, sign_mask));")
+        f.line(f"t{pp.num_limbs} = VSUB(t{pp.num_limbs}, VAND(p_bot, sign_mask));")
         f.line(f"t{num_limbs_prod-1} = VADD(t{num_limbs_prod-1}, VAND(p_top, sign_mask));")
 
-        carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask", start_idx)
+        carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask", pp.num_limbs)
 
     f.single_vars_to_array(var_name="t", arr_name="res", count=num_limbs_prod)
 
@@ -428,7 +446,7 @@ def mp_add_p_sub_8x1(f, pp, v, strat):
 
     f.declare_single_vars(var_name="t", count=pp.num_limbs)
     m = 2 if strat.mod_2p else 1
-    if strat.mode_8x1x1 == Fp2Mode.lazy:
+    if strat.sqr_8x1 == Fp2Mode.lazy:
         f.line(f"const __m512i p_bot = VSETALL({m}*{v.limb_mask});")
         f.line(f"const __m512i p_top = VSETALL({m}*{v.p_plus_1_top}-{m});")
     else:
@@ -437,8 +455,7 @@ def mp_add_p_sub_8x1(f, pp, v, strat):
         f.line(f"const __m512i limb_mask = VSETALL(LIMB_MASK);")
     f.line()
 
-    f.comment("Add p")
-    if strat.mode_8x1x1 == Fp2Mode.lazy:
+    if strat.sqr_8x1 == Fp2Mode.lazy: # This is faster than carry, can be pipelined
         for i in range(pp.num_limbs-1):
             f.line(f"t{i} = VSUB(VADD(a[{i}], p_bot), b[{i}]);")
         f.line(f"t{pp.num_limbs-1} = VSUB(VADD(a[{pp.num_limbs-1}], p_top), b[{pp.num_limbs-1}]);")
@@ -449,7 +466,7 @@ def mp_add_p_sub_8x1(f, pp, v, strat):
         f.line(f"t{pp.num_limbs-1} = VSUB(VADD(a[{pp.num_limbs-1}], p_top), b[{pp.num_limbs-1}]);")
     f.line()
 
-    if strat.mode_8x1x1 != Fp2Mode.lazy:
+    if strat.sqr_8x1 != Fp2Mode.lazy:
         carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
     f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
@@ -588,7 +605,9 @@ def rdc_8x1(f, pp, v, strat):
     if strat.R_ext:
         f.line(f"__m512i s{nl-1}, s{nl}, hi;")
     else:
-        f.line(f"__m512i s{nl-1}, hi, sign_mask;")
+        f.line(f"__m512i s{nl-1}, hi;")
+    if not strat.mod_2p:
+        f.line("__m512i sign_mask;")
         f.line(f"const __m512i bot = VSETALL(1);")
     f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
@@ -1021,12 +1040,13 @@ def write_fp_8x1(f, pp, v, strat, chain):
     fp_mixaddsub_8x1(f, pp, v, strat)
     fp_normalize_8x1(f, pp, v)
 
-    if strat.mode_8x1x1 != Fp2Mode.reduce_everything:
-        mp_add_8x1(f, pp, v, strat)
-        mp_dblsubx2_8x1(f, pp, v)
+    
+    mp_add_8x1(f, pp, v, strat)
+    mp_dblsubx2_8x1(f, pp, v)
+    if strat.mul_8x1 != Fp2Mode.reduce:
         mp_subx2_8x1(f, pp, v, strat)
-        mp_mixaddsubx2_8x1(f, pp, v, strat)
-        mp_add_p_sub_8x1(f, pp, v, strat)
+    mp_mixaddsubx2_8x1(f, pp, v, strat)
+    mp_add_p_sub_8x1(f, pp, v, strat)
 
     mp_mul_8x1_karat(f, pp, v)
     rdc_8x1(f, pp, v, strat)

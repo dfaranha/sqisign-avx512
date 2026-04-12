@@ -195,6 +195,7 @@ def fp_add_2x4(f, pp, v, strat):
     f.line(f"__m512i t[{pp.n24}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     write_p(f, v, strat.mod_2p, limb_top)
+    p_txt = "2p" if strat.mod_2p else "p"
     f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
     f.line(f"const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
     f.comment("For duplicating sign bit in each half")
@@ -205,14 +206,14 @@ def fp_add_2x4(f, pp, v, strat):
         f.line(f"t[{i}] = VADD(a[{i}], b[{i}]);")
     f.line()
 
-    f.comment("Subtract p using the special shape of p")
+    f.comment(f"Subtract {p_txt} using the special shape of p")
     f.line(f"t[0] = VADD(t[0], p_bot);")
     f.line(f"t[{idx_top}] = VSUB(t[{idx_top}], p_top);")
     f.line()
 
     carry_prop_2x4(f, pp, v, "t", "limb_mask", "carry", "idx_shift")
 
-    f.comment("If the result is negative, add p back")
+    f.comment(f"If the result is negative, add {p_txt} back")
     f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);") # We carry the last ripple all the way to the end
     f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
     f.line(f"t[{idx_top}] = VADD(t[{idx_top}], VAND(p_top, sign_mask));")
@@ -234,6 +235,7 @@ def fp_sub_2x4(f, pp, v, strat):
     f.line(f"__m512i t[{pp.n24}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     write_p(f, v, strat.mod_2p, limb_top)
+    p_txt = "2p" if strat.mod_2p else "p"
     f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
     f.line("const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
     f.comment("For duplicating sign bit in each half")
@@ -246,7 +248,7 @@ def fp_sub_2x4(f, pp, v, strat):
 
     carry_prop_2x4(f, pp, v, "t", "limb_mask", "carry", "idx_shift")
 
-    f.comment("If the result is negative, we add p")
+    f.comment(f"If the result is negative, we add {p_txt}")
     f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);")
     f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
     f.line(f"t[{idx_top}] = VADD(t[{idx_top}], VAND(p_top, sign_mask));")
@@ -268,6 +270,7 @@ def fp_neg_2x4(f, pp, v, strat):
     f.line(f"__m512i t[{pp.n24}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     write_p(f, v, strat.mod_2p, limb_top)
+    p_txt = "2p" if strat.mod_2p else "p"
     f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
     f.line("const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
     f.comment("For duplicating sign bit in each half")
@@ -281,7 +284,7 @@ def fp_neg_2x4(f, pp, v, strat):
 
     carry_prop_2x4(f, pp, v, "t", "limb_mask", "carry", "idx_shift")
 
-    f.comment("If the result is negative, we add p")
+    f.comment(f"If the result is negative, we add {p_txt}")
     f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);")
     f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
     f.line(f"t[{idx_top}] = VADD(t[{idx_top}], VAND(p_top, sign_mask));")
@@ -303,6 +306,7 @@ def fp_mixaddsub_2x4(f, pp, v, strat):
     f.line(f"__m512i t[{pp.n24}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     write_p(f, v, strat.mod_2p, limb_top)
+    p_txt = "2p" if strat.mod_2p else "p"
     f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
     f.line("const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
     f.comment("For duplicating sign bit in each half")
@@ -317,14 +321,14 @@ def fp_mixaddsub_2x4(f, pp, v, strat):
     for i in range(pp.n24):
         f.line(f"t[{i}] = VADDMASK(t[{i}], add_mask, a[{i}], b[{i}]);")
 
-    f.comment("Subtract p using the special shape of p")
+    f.comment(f"Subtract {p_txt} using the special shape of p")
     f.line(f"t[0] = VADDMASK(t[0], add_mask, t[0], p_bot);")
     f.line(f"t[{idx_top}] = VSUBMASK(t[{idx_top}], add_mask, t[{idx_top}], p_top);")
     f.line()
 
     carry_prop_2x4(f, pp, v, "t", "limb_mask", "carry", "idx_shift")
 
-    f.comment("If the result is negative, we add p")
+    f.comment(f"If the result is negative, we add {p_txt}")
     f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);")
     f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
     f.line(f"t[{idx_top}] = VADD(t[{idx_top}], VAND(p_top, sign_mask));")
@@ -354,13 +358,12 @@ def fp_normalize_2x4(f, pp, v):
     f.line(f"const __m512i idx_sign = VSET({limb_top}, {limb_top}, {limb_top}, {limb_top}, {limb_top+4}, {limb_top+4}, {limb_top+4}, {limb_top+4});")
     f.line()
 
-
     f.comment("Subtract p using the special shape of p")
     f.line(f"t[0] = VADD(a[0], p_bot);")
     if idx_top == 0:
         f.line(f"t[0] = VSUB(t[0], p_top);")
         for i in range(1, pp.n24):
-            f.line(f"t[{i}] = VADD(a[{i}], b[{i}]);")
+            f.line(f"t[{i}] = a[{i}];")
     else:
         for i in range(1, pp.n24):
             if i == idx_top:

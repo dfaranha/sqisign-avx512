@@ -36,12 +36,12 @@ num_kat = 20
 gen_addchain = True # Requires addchain to be installed
 
 #lvl1
-# e = 248
-# c = 5
+e = 248
+c = 5
 
 # lvl3
-e = 376
-c = 65
+# e = 376
+# c = 65
 
 # lvl5
 # e = 500
@@ -55,11 +55,11 @@ c = 65
 # e = 521
 # c = 1
 
-# last_limb_len 51:
+# limb_len = last_limb_len = 51: FAILS 2x4 mul a * (b * c) != (a * b) * c and KAT
 # e = 398
 # c = 893
 
-# limb_len: 51 last_limb_len: 50
+# limb_len = 51, last_limb_len = 50
 # e = 397
 # c = 729
 
@@ -68,9 +68,20 @@ c = 65
 # c = 19
 
 # limb_len: 50 last_limb_len: 49
-#e = 392
-#c = 123
+# e = 392
+# c = 123
 
+# limb_len: 50 last_limb_len: 48
+# e = 338
+# c = 683
+
+# limb_len: 50 last_limb_len 47 
+# e = 343
+# c = 9
+
+# limb_len: 50 last_limb_len 45
+# e = 336
+# c = 297
 
 
 #############
