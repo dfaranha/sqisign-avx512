@@ -1,5 +1,4 @@
 from gen_addchain import (write_dbl_and_add, write_fp_exp3_div4_naive, write_exp_function)
-from params import Fp2Mode
 
 # 4x2 format stores an Fp element in n42 vectors.
 # The i-th vector stores (a[i], a[i+n42], b[i], b[i+n42], c[i], c[i+n42], d[i], d[i+n42])
@@ -387,7 +386,7 @@ def mp_subx2_4x2(f, pp, v):
 
     f.end()
 
-def mp_mul_4x2(f, pp, v):
+def mp_mul_4x2(f, pp, v, strat):
     #uses accumulator format
     f.comment("Algorithm 2 from \"Finite Field Arithmetic Using AVX-512 For Isogeny-Based Cryptography\" by Orisaka, Aranha and López")
     f.start("void mp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)")
@@ -433,7 +432,8 @@ def mp_mul_4x2(f, pp, v):
         f.line(f"res[{i}] = t[{i}];")
 
     #TODO this is only when R is larger to allow lazy red and the number of limbs is even
-    f.line(f"res[{n_prod}] = zero;")
+    if strat.R_ext:
+        f.line(f"res[{n_prod}] = zero;")
 
     f.end()
 
@@ -449,23 +449,18 @@ def rdc_4x2(f, pp, v, strat):
     f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i zero = VZERO();")
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+    if not strat.mod_2p:
         f.line(f"__m512i sign_mask;")
         f.line(f"const __m512i bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
         f.line(f"const __m512i two_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
         f.line(f"const __m512i two_top = VADD(top, top);")
     f.line()
 
-    if strat.fp2_mode == Fp2Mode.lazy_no_carry:
-        n_low = pp.num_limbs + 1
-    else:
-        n_low = pp.num_limbs
-
-    start_idx = n_low
+    start_idx = pp.num_limbs_R
 
     f.comment("Montgomery reduction loop")
     top_idx = pp.n42 - 1 - pp.rem42 # idx of the last limb
-    for i in range(n_low):
+    for i in range(start_idx):
         if i == 0:
             f.comment("using the fact that -p^{-1} mod 2^(limb_len) = 1 + c* 2^f mod 2^(limb_len) = 1 as f > limb_len")
         f.line(f"carry = VSRA(a[{i}], {v.limb_len});")
@@ -490,7 +485,7 @@ def rdc_4x2(f, pp, v, strat):
     carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
 
     f.comment(f"The result is in [0, 2p).")
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+    if not strat.mod_2p:
         top_sub_idx = start_idx + pp.n42 - 1 - pp.rem42
 
         f.comment("Reduce from [-p, 2p) to [0, p)")
@@ -528,8 +523,7 @@ def fp_mul_4x2(f, pp, v):
     f.start("void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)")
 
     # We need one extra limb for lazy red. When n42 is odd, there is a limb available in the last vec.
-    # TODO: Depends on Montgomery constant used, may not need last limb if R = 2^(num_limbs * limb_len) mod p
-    f.line(f"__m512i t[{pp.n42 + pp.num_limbs + 1}];")
+    f.line(f"__m512i t[{pp.n42 + pp.num_limbs_R}];")
     f.line()
 
     f.line("mp_mul_4x2(t, a, b);")
@@ -887,14 +881,13 @@ def write_fp_4x2(f, pp, v, strat, chain):
     fp_neg_4x2(f, pp, v)
     fp_mixaddsub_4x2(f, pp, v)
 
-    if strat.fp2_mode != Fp2Mode.reduce_everything:
-        mp_add_4x2(f, pp, v)
-        mp_add_p_sub_4x2(f, pp, v)
-        mp_mixaddsubx2_4x2(f, pp, v)
-        mp_dblsubx2_4x2(f, pp, v)
-        mp_subx2_4x2(f, pp, v)
+    mp_add_4x2(f, pp, v)
+    mp_add_p_sub_4x2(f, pp, v)
+    mp_mixaddsubx2_4x2(f, pp, v)
+    mp_dblsubx2_4x2(f, pp, v)
+    mp_subx2_4x2(f, pp, v)
 
-    mp_mul_4x2(f, pp, v)
+    mp_mul_4x2(f, pp, v, strat)
     rdc_4x2(f, pp, v, strat)
 
     fp_mul_4x2(f, pp, v)

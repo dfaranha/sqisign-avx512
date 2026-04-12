@@ -258,7 +258,7 @@ def mp_add_8x1(f, pp, v, strat):
     f.start("void mp_add_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
     f.declare_single_vars(var_name="t", count=pp.num_limbs)
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+    if strat.mode_8x1x1 == Fp2Mode.lazy_carry:
         f.line(f"const __m512i limb_mask = VSETALL(LIMB_MASK);")
     f.line()
 
@@ -266,27 +266,7 @@ def mp_add_8x1(f, pp, v, strat):
         f.line(f"t{i} = VADD(a[{i}], b[{i}]);")
     f.line()
 
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
-        carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
-
-    f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
-
-    f.end()
-
-def mp_sub_8x1(f, pp, v, strat):
-    f.comment("Single-length multiprecision addition, no correction, no carry propagation")
-    f.start("void mp_sub_8x1(__m512i* res, __m512i* a, __m512i* b)")
-
-    f.declare_single_vars(var_name="t", count=pp.num_limbs)
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
-        f.line(f"const __m512i limb_mask = VSETALL(LIMB_MASK);")
-    f.line()
-
-    for i in range(pp.num_limbs):
-        f.line(f"t{i} = VSUB(a[{i}], b[{i}]);")
-    f.line()
-
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+    if strat.mode_8x1x1 == Fp2Mode.lazy_carry:
         carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
     f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
@@ -326,7 +306,7 @@ def mp_subx2_8x1(f, pp, v, strat):
 
     num_limbs_prod = get_num_limbs_prod(pp)
     f.declare_single_vars(var_name="t", count=num_limbs_prod)
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+    if strat.mode_8x1x1 == Fp2Mode.lazy_carry:
         f.line("__m512i sign_mask;")
         f.line("const __m512i p_bot = VSETALL(1);")
         f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
@@ -339,7 +319,7 @@ def mp_subx2_8x1(f, pp, v, strat):
 
     carry_prop_8x1_var(f, pp, v, num_limbs_prod, "t", "limb_mask")
 
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+    if strat.mode_8x1x1 == Fp2Mode.lazy_carry:
         # if result is negative, add p*R. 
         # Keeps output in [0, p*R), ensuring that Montgomery red gives result in [0, 2p)
         start_idx = num_limbs_prod-pp.num_limbs
@@ -358,7 +338,7 @@ def mp_mixaddsubx2_8x1(f, pp, v, strat):
 
     num_limbs_prod = get_num_limbs_prod(pp)
     f.declare_single_vars(var_name="t", count=num_limbs_prod)
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+    if strat.mode_8x1x1 == Fp2Mode.lazy_carry:
         f.line("__m512i sign_mask;")
         f.line("const __m512i p_bot = VSETALL(1);")
         f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
@@ -376,7 +356,7 @@ def mp_mixaddsubx2_8x1(f, pp, v, strat):
 
     carry_prop_8x1_var(f, pp, v, num_limbs_prod, "t", "limb_mask")
 
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+    if strat.mode_8x1x1 == Fp2Mode.lazy_carry:
         # if result is negative, add p*R. 
         # Keeps output in [0, p*R), ensuring that Montgomery red gives result in [0, 2p)
         start_idx = num_limbs_prod-pp.num_limbs
@@ -395,7 +375,7 @@ def mp_add_p_sub_8x1(f, pp, v, strat):
     f.start("void mp_add_p_sub_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
     f.declare_single_vars(var_name="t", count=pp.num_limbs)
-    if strat.fp2_mode == Fp2Mode.lazy_no_carry:
+    if strat.mode_8x1x1 == Fp2Mode.lazy:
         f.line(f"const __m512i p_bot = VSETALL({v.limb_mask});")
         f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top}-1);")
     else:
@@ -405,7 +385,7 @@ def mp_add_p_sub_8x1(f, pp, v, strat):
     f.line()
 
     f.comment("Add p")
-    if strat.fp2_mode == Fp2Mode.lazy_no_carry:
+    if strat.mode_8x1x1 == Fp2Mode.lazy:
         for i in range(pp.num_limbs-1):
             f.line(f"t{i} = VSUB(VADD(a[{i}], p_bot), b[{i}]);")
         f.line(f"t{pp.num_limbs-1} = VSUB(VADD(a[{pp.num_limbs-1}], p_top), b[{pp.num_limbs-1}]);")
@@ -416,7 +396,7 @@ def mp_add_p_sub_8x1(f, pp, v, strat):
         f.line(f"t{pp.num_limbs-1} = VSUB(VADD(a[{pp.num_limbs-1}], p_top), b[{pp.num_limbs-1}]);")
     f.line()
 
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+    if strat.mode_8x1x1 != Fp2Mode.lazy:
         carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
     f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
@@ -534,7 +514,7 @@ def mp_mul_8x1_karat(f, pp, v):
 def rdc_8x1(f, pp, v, strat):
     f.start("void rdc_8x1(__m512i* res, __m512i* a)")
 
-    plus1 = " + 1" if strat.fp2_mode == Fp2Mode.lazy_no_carry else ""
+    plus1 = " + 1" if strat.R_ext else ""
     f.comment(f"Montgomery reduction with R = 2^n mod p, with n = ((num_limbs{plus1}) * limb_len)")
     f.comment("low(a) = (a_0, a_1, ... , a_num_limbs)")
     f.comment("m = -p^(-1) mod 2^n = p + 2 = c * 2^e + 1")
@@ -542,7 +522,7 @@ def rdc_8x1(f, pp, v, strat):
     f.line()
 
     nl = pp.num_limbs
-    if strat.fp2_mode == Fp2Mode.lazy_no_carry:
+    if strat.R_ext:
         n_t = nl + 2
         result_start = 2
     else:
@@ -552,7 +532,7 @@ def rdc_8x1(f, pp, v, strat):
     f.array_to_single_vars(var_name="a", arr_name="a", count=2*nl)
     f.declare_single_vars(var_name="t", count=n_t)
     f.line("__mmask8 msb_mask;")
-    if strat.fp2_mode == Fp2Mode.lazy_no_carry:
+    if strat.R_ext:
         f.line(f"__m512i s{nl-1}, s{nl}, hi;")
     else:
         f.line(f"__m512i s{nl-1}, hi, sign_mask;")
@@ -564,7 +544,7 @@ def rdc_8x1(f, pp, v, strat):
     f.line()
 
     # Compute s = low(a) * m mod 2^n
-    if strat.fp2_mode == Fp2Mode.lazy_no_carry:
+    if strat.R_ext:
         f.comment(f"s = low(a) * m mod 2^n, n = ({nl}+1)*{pp.limb_len}")
         f.comment(f"s0 = a0, ..., s{nl-2} = a{nl-2}")
         f.line(f"s{nl-1} = VMULADDL(a{nl-1}, a0, top);")
@@ -600,7 +580,7 @@ def rdc_8x1(f, pp, v, strat):
     f.line(f"hi = VSL(hi, {v.limb_align});")
     f.line()
 
-    if strat.fp2_mode == Fp2Mode.lazy_no_carry:
+    if strat.R_ext:
         f.line(f"t{nl} = VMULADDL(hi, s{nl}, top);")
         f.line(f"t{nl+1} = VMULADDH(zero, s{nl}, top);")
         f.line(f"t{nl+1} = VSL(t{nl+1}, {v.limb_align});")
@@ -617,7 +597,7 @@ def rdc_8x1(f, pp, v, strat):
 
     f.comment(f"After dividing by 2^n, the result is in t{result_start}, ..., t{n_t-1}")
 
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+    if not strat.mod_2p:
         f.comment(f"We fully reduce the result down to [0, p).")
 
         f.comment("Subtract p, using special shape of p")
@@ -985,9 +965,8 @@ def write_fp_8x1(f, pp, v, strat, chain):
     fp_neg_8x1(f, pp, v)
     fp_mixaddsub_8x1(f, pp, v)
 
-    if strat.fp2_mode != Fp2Mode.reduce_everything:
+    if strat.mode_8x1x1 != Fp2Mode.reduce_everything:
         mp_add_8x1(f, pp, v, strat)
-        mp_sub_8x1(f, pp, v, strat)
         mp_dblsubx2_8x1(f, pp, v)
         mp_subx2_8x1(f, pp, v, strat)
         mp_mixaddsubx2_8x1(f, pp, v, strat)

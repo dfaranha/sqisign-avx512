@@ -1,5 +1,4 @@
 from gen_addchain import (write_exp_function, write_dbl_and_add, write_fp_exp3_div4_naive)
-from params import Fp2Mode
 
 def fp_setzero_2x4(f, pp, v):
     f.start("void fp_setzero_2x4(__m512i* res)")
@@ -387,30 +386,25 @@ def get_fold_mask(pp):
     else:
         return 0x77  # zero lanes 3,7 only
 
-def get_rdc_2x4_size(pp, strat):
-    n_low = pp.num_limbs + 1 if strat.fp2_mode == Fp2Mode.lazy_no_carry else pp.num_limbs
-    return n_low + 4 * pp.n24
+def get_rdc_2x4_size(pp):
+    return pp.num_limbs_R + 4 * pp.n24
 
 # Not designed for fp2 lazy red, correction step would need to handle input in [-p, 2p) like other fmts
 def rdc_2x4(f, pp, v, strat):
-    f.comment(f"Modifies a. Its length must be at least {get_rdc_2x4_size(pp, strat)}.")
+    f.comment(f"Modifies a. Its length must be at least {get_rdc_2x4_size(pp)}.")
     f.start("void rdc_2x4(__m512i* res, __m512i* a)")
 
     N = pp.num_limbs
     n24 = pp.n24
     top_offset = N - 1 - n24
     idx_top, limb_top = get_top_idx(pp)
-    if strat.fp2_mode == Fp2Mode.lazy_no_carry:
-        n_low = pp.num_limbs + 1
-    else:
-        n_low = pp.num_limbs
-    start_idx = n_low
+    start_idx = pp.num_limbs_R
 
     f.line("__m512i carry, lo, hi, shuf;")
     f.line("const __m512i zero = VZERO();")
     f.line(f"const __m512i p_top_all = VSETALL({v.p_plus_1_top});")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+    if not strat.mod_2p:
         f.line("__m512i sign_mask;")
         f.line(f"const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);")
         write_p_top(f, v, limb_top)
@@ -430,7 +424,7 @@ def rdc_2x4(f, pp, v, strat):
     f.line()
 
     f.comment("Generalized Montgomery reduction loop")
-    for i in range(n_low):
+    for i in range(start_idx):
         f.line(f"carry = VSRA(a[{i}], {v.limb_len});")
         f.line(f"a[{i}] = VAND(a[{i}], limb_mask);")
         f.line(f"a[{i+1}] = VADD(a[{i+1}], carry);")
@@ -476,7 +470,7 @@ def rdc_2x4(f, pp, v, strat):
             f.line(f"res[{k}] = VBLEND(0x{valid:02x}, zero, res[{k}]);")
     f.line()
 
-    if strat.fp2_mode != Fp2Mode.lazy_no_carry:
+    if not strat.mod_2p:
         f.comment("Reduce from [0, 2p) to [0, p)")
         f.comment("Subtract p")
         f.line(f"res[0] = VADD(res[0], p_bot);")
@@ -496,10 +490,10 @@ def rdc_2x4(f, pp, v, strat):
 
     f.end()
 
-def fp_mul_2x4(f, pp, v, strat):
+def fp_mul_2x4(f, pp, v):
     f.start("void fp_mul_2x4(__m512i* res, __m512i* a, __m512i* b)")
 
-    rdc_size = get_rdc_2x4_size(pp, strat)
+    rdc_size = get_rdc_2x4_size(pp)
     f.line(f"__m512i t[{rdc_size}];")
     f.line()
 
@@ -508,10 +502,10 @@ def fp_mul_2x4(f, pp, v, strat):
 
     f.end()
 
-def fp_sqr_2x4(f, pp, v, strat):
+def fp_sqr_2x4(f, pp, v):
     f.start("void fp_sqr_2x4(__m512i* res, __m512i* a)")
 
-    rdc_size = get_rdc_2x4_size(pp, strat)
+    rdc_size = get_rdc_2x4_size(pp)
     f.line(f"__m512i t[{rdc_size}];")
     f.line()
 
@@ -850,8 +844,8 @@ def write_fp_2x4(f, pp, v, strat, chain):
 
     mp_mul_2x4(f, pp, v)
     rdc_2x4(f, pp, v, strat)
-    fp_mul_2x4(f, pp, v, strat)
-    fp_sqr_2x4(f, pp, v, strat)
+    fp_mul_2x4(f, pp, v)
+    fp_sqr_2x4(f, pp, v)
     fp_tomont_2x4(f, pp, v)
     fp_frommont_2x4(f, pp, v)
 

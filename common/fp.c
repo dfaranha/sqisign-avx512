@@ -372,24 +372,6 @@ void mp_add_8x1(__m512i* res, __m512i* a, __m512i* b)
     res[6] = t6; res[7] = t7;
 }
 
-// Single-length multiprecision addition, no correction, no carry propagation
-void mp_sub_8x1(__m512i* res, __m512i* a, __m512i* b)
-{
-    __m512i t0, t1, t2, t3, t4, t5, t6, t7;
-    
-    t0 = VSUB(a[0], b[0]);
-    t1 = VSUB(a[1], b[1]);
-    t2 = VSUB(a[2], b[2]);
-    t3 = VSUB(a[3], b[3]);
-    t4 = VSUB(a[4], b[4]);
-    t5 = VSUB(a[5], b[5]);
-    t6 = VSUB(a[6], b[6]);
-    t7 = VSUB(a[7], b[7]);
-    
-    res[0] = t0; res[1] = t1; res[2] = t2; res[3] = t3; res[4] = t4; res[5] = t5;
-    res[6] = t6; res[7] = t7;
-}
-
 // Double-length multiprecision subtraction res = res - a - b, no correction
 void mp_dblsubx2_8x1(__m512i* res, __m512i* a, __m512i* b)
 {

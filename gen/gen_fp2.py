@@ -77,7 +77,7 @@ def fp2_mixaddsub_8x1x1(f, pp, v):
 def fp2_mul_8x1x1(f, pp, v, strat):
     f.start("void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)")
 
-    if strat.fp2_mode == Fp2Mode.reduce_everything:
+    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
         fp2_mul_8x1x1_standard(f, pp, v)
     else:
         fp2_mul_8x1x1_lazy(f, pp, v)
@@ -125,7 +125,7 @@ def fp2_mul_8x1x1_lazy(f, pp, v):
 def fp2_sqr_8x1x1(f, pp, v, strat):
     f.start("void fp2_sqr_8x1x1(__m512i* res, __m512i* a)")
 
-    if strat.fp2_mode == Fp2Mode.reduce_everything:
+    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
         fp2_sqr_8x1x1_standard(f, pp, v)
     else:
         fp2_sqr_8x1x1_lazy(f, pp, v)
@@ -346,7 +346,7 @@ def fp2_mixaddsub_4x1x2(f, pp, v):
 def fp2_mul_4x1x2(f, pp, v, strat):
     f.start("void fp2_mul_4x1x2(__m512i* res, __m512i* a, __m512i* b)")
 
-    if strat.fp2_mode == Fp2Mode.reduce_everything:
+    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
         fp2_mul_4x1x2_standard(f, pp, v)
     else:
         fp2_mul_4x1x2_lazy(f, pp, v)
@@ -384,7 +384,7 @@ def fp2_mul_4x1x2_lazy(f, pp, v):
 def fp2_sqr_4x1x2(f, pp, v, strat):
     f.start("void fp2_sqr_4x1x2(__m512i* res, __m512i* a)")
 
-    if strat.fp2_mode == Fp2Mode.reduce_everything:
+    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
         fp2_sqr_4x1x2_standard(f, pp, v)
     else:
         fp2_sqr_4x1x2_lazy(f, pp, v)
@@ -610,7 +610,7 @@ def fp2_mixaddsub_4x2x1(f, pp, v):
 def fp2_mul_4x2x1(f, pp, v, strat):
     f.start("void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b)")
 
-    if strat.fp2_mode == Fp2Mode.reduce_everything:
+    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
         fp2_mul_4x2x1_standard(f, pp, v)
     else:
         fp2_mul_4x2x1_lazy(f, pp, v)
@@ -653,7 +653,7 @@ def fp2_mul_4x2x1_lazy(f, pp, v):
 def fp2_sqr_4x2x1(f, pp, v, strat):
     f.start("void fp2_sqr_4x2x1(__m512i* res, __m512i* a)")
 
-    if strat.fp2_mode == Fp2Mode.reduce_everything:
+    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
         fp2_sqr_4x2x1_standard(f, pp, v)
     else:
         fp2_sqr_4x2x1_lazy(f, pp, v)
@@ -921,7 +921,7 @@ def fp2_mixaddsub_2x2x2(f, pp, v):
 def fp2_mul_2x2x2(f, pp, v, strat):
     f.start("void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b)")
 
-    if strat.fp2_mode == Fp2Mode.reduce_everything:
+    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
         fp2_mul_2x2x2_standard(f, pp, v)
     else:
         fp2_mul_2x2x2_lazy(f, pp, v)
@@ -969,7 +969,7 @@ def fp2_mul_2x2x2_lazy(f, pp, v):
 def fp2_sqr_2x2x2(f, pp, v, strat):
     f.start("void fp2_sqr_2x2x2(__m512i* res, __m512i* a)")
 
-    if strat.fp2_mode == Fp2Mode.reduce_everything:
+    if strat.mode_8x1x1 == Fp2Mode.reduce_everything:
         fp2_sqr_2x2x2_standard(f, pp, v)
     else:
         fp2_sqr_2x2x2_lazy(f, pp, v)
