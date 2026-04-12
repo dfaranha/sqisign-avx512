@@ -56,6 +56,11 @@ void fp_neg_8x1(__m512i* res, __m512i* a);
 void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
 
 /**
+ * Reduces from [0, 2p) to [0, p)
+ */
+void fp_normalize_8x1(__m512i* res, __m512i* a);
+
+/**
  *  res = a * b (mod p), multiprecision multiplication using schoolbook
  */
 void fp_mul_8x1_school(__m512i* res, __m512i* a, __m512i* b);
@@ -188,7 +193,12 @@ void fp_neg_4x2(__m512i* res, __m512i* a);
  *  Denote the 4 Fp elements stored in a by a0, a1, a2, a3, and in b by b0, b1, b2, b3.
  *  Computes a0 - b0, a1 + b1, a2 - b2, a3 + b3.
  */
- void fp_mixaddsub_4x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
+void fp_mixaddsub_4x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
+
+/**
+ * Reduces from [0, 2p) to [0, p)
+ */
+void fp_normalize_4x2(__m512i* res, __m512i* a);
 
 void mp_add_4x2(__m512i* res, __m512i* a, __m512i* b);
 void mp_add_p_sub_4x2(__m512i* res, __m512i* a, __m512i* b);
@@ -252,6 +262,11 @@ void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b);
 void fp_sub_2x4(__m512i* res, __m512i* a, __m512i* b);
 void fp_neg_2x4(__m512i* res, __m512i* a);
 void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
+
+/**
+ * Reduces from [0, 2p) to [0, p)
+ */
+void fp_normalize_2x4(__m512i* res, __m512i* a);
 
 void fp_mul_2x4(__m512i* res, __m512i* a, __m512i* b);
 void fp_sqr_2x4(__m512i* res, __m512i* a);

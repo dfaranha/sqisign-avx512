@@ -26,20 +26,22 @@ def fp_duplicate_4x2(f, pp, v):
         f.line(f"res[{n_full}] = VSET(a[{n_full}], 0, a[{n_full}], 0, a[{n_full}], 0, a[{n_full}], 0);")
     f.end()
 
-def fp_is_equal_4x2(f, pp, v):
+def fp_is_equal_4x2(f, pp, v, strat):
     f.start("int fp_is_equal_4x2(__m512i* a, __m512i* b)")
 
-    f.line(f"__m512i zero[{v.n42}], norm_a[{v.n42}], norm_b[{v.n42}];")
-    f.line(f"__mmask8 acc;")
-    f.line(f"fp_setzero_4x2(zero);")
-    f.line()
+    if strat.mod_2p:
+        f.line(f"__m512i norm_a[{v.n42}], norm_b[{v.n42}];")
+        f.line("fp_normalize_4x2(norm_a, a);")
+        f.line("fp_normalize_4x2(norm_b, b);")
+        f.line()
+        var_a = "norm_a"
+        var_b = "norm_b"
+    else:
+        var_a = "a"
+        var_b = "b"
+    
 
-    f.comment("Normalize both to [0, p-1] by adding zero")
-    f.line("fp_add_4x2(norm_a, a, zero);")
-    f.line("fp_add_4x2(norm_b, b, zero);")
-    f.line()
-
-    f.line("acc = 0xff;")
+    f.line("__mmask8 acc = 0xff;")
     for i in range(pp.n42):
         valid = 0
         for lane in range(8):
@@ -49,10 +51,10 @@ def fp_is_equal_4x2(f, pp, v):
                 valid |= (1 << lane)
 
         if valid == 0xff:
-            f.line(f"acc &= VCMPEQ(norm_a[{i}], norm_b[{i}]);")
+            f.line(f"acc &= VCMPEQ({var_a}[{i}], {var_b}[{i}]);")
         else:
             ignore = 0xff ^ valid
-            f.line(f"acc &= VCMPEQ(norm_a[{i}], norm_b[{i}]) | 0x{ignore:02x};")
+            f.line(f"acc &= VCMPEQ({var_a}[{i}], {var_b}[{i}]) | 0x{ignore:02x};")
     f.line()
 
     f.comment("a = b iff both halves are equal")  
@@ -65,19 +67,23 @@ def fp_is_equal_4x2(f, pp, v):
 
     f.end()
 
-def fp_is_zero_4x2(f, pp, v):
+def fp_is_zero_4x2(f, pp, v, strat):
     f.start("int fp_is_zero_4x2(__m512i* a)")
 
-    f.line(f"__m512i zero[{v.n42}], norm_a[{v.n42}];")
-    f.line(f"__mmask8 acc;")
-    f.line(f"fp_setzero_4x2(zero);")
+    if strat.mod_2p:
+        f.line(f"__m512i norm_a[{v.n42}];")
+    f.line(f"const __m512i zero = VZERO();")
     f.line()
 
-    f.comment("Normalize a to [0, p-1] by adding zero")
-    f.line("fp_add_4x2(norm_a, a, zero);")
-    f.line()
+    if strat.mod_2p:
+        f.comment("Normalize a to [0, p)")
+        f.line("fp_normalize_4x2(norm_a, a);")
+        f.line()
+        var = "norm_a"
+    else:
+        var = "a"
 
-    f.line("acc = 0xff;")
+    f.line("__mmask8 acc = 0xff;")
     for i in range(pp.n42):
         valid = 0
         for lane in range(8):
@@ -87,10 +93,10 @@ def fp_is_zero_4x2(f, pp, v):
                 valid |= (1 << lane)
 
         if valid == 0xff:
-            f.line(f"acc &= VCMPEQ(norm_a[{i}], zero[{i}]);")
+            f.line(f"acc &= VCMPEQ({var}[{i}], zero);")
         else:
             ignore = 0xff ^ valid
-            f.line(f"acc &= VCMPEQ(norm_a[{i}], zero[{i}]) | 0x{ignore:02x};")
+            f.line(f"acc &= VCMPEQ({var}[{i}], zero) | 0x{ignore:02x};")
     f.line()
 
     f.comment("a = 0 iff both halves are 0")  
@@ -145,13 +151,17 @@ def carry_prop_4x2(f, pp, v, tmp_name, mask_name, carry_name, start_idx=0):
         f.line(f"{tmp_name}[{pp.n42-1 + start_idx}] = VANDMASK({tmp_name}[{pp.n42-1 + start_idx}], 0x55, {tmp_name}[{pp.n42-1 + start_idx}], {mask_name});")
     f.line()
 
-def fp_add_4x2(f, pp, v):
+def fp_add_4x2(f, pp, v, strat):
     f.start("void fp_add_4x2(__m512i* res, __m512i* a, __m512i* b)")
 
     f.line(f"__m512i t[{pp.n42}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
-    f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
+    if strat.mod_2p:
+        f.line(f"const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
+        f.line(f"const __m512i p_top = VSET(0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top});")
+    else:
+        f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
+        f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
     f.line()
 
     f.comment("Add limbs")
@@ -182,13 +192,17 @@ def fp_add_4x2(f, pp, v):
 
     f.end()
 
-def fp_sub_4x2(f, pp, v):
+def fp_sub_4x2(f, pp, v, strat):
     f.start("void fp_sub_4x2(__m512i* res, __m512i* a, __m512i* b)")
 
     f.line(f"__m512i t[{pp.n42}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
-    f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
+    if strat.mod_2p:
+        f.line(f"const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
+        f.line(f"const __m512i p_top = VSET(0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top});")
+    else:
+        f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
+        f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
     f.line()
 
     f.comment("Subtract limbs")
@@ -214,14 +228,19 @@ def fp_sub_4x2(f, pp, v):
 
     f.end()
 
-def fp_neg_4x2(f, pp, v):
+def fp_neg_4x2(f, pp, v, strat):
     f.start("void fp_neg_4x2(__m512i* res, __m512i* a)")
 
     f.line(f"__m512i t[{pp.n42}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
-    f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
     f.line(f"const __m512i zero = VZERO();")
+    if strat.mod_2p:
+        f.line(f"const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
+        f.line(f"const __m512i p_top = VSET(0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top});")
+    else:
+        f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
+        f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
+    
     f.line()
 
     f.comment("Subtract limbs")
@@ -247,12 +266,16 @@ def fp_neg_4x2(f, pp, v):
 
     f.end()
 
-def fp_mixaddsub_4x2(f, pp, v):
+def fp_mixaddsub_4x2(f, pp, v, strat):
     f.start("void fp_mixaddsub_4x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)")
     f.line(f"__m512i t[{pp.n42}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
-    f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
+    if strat.mod_2p:
+        f.line(f"const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
+        f.line(f"const __m512i p_top = VSET(0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top});")
+    else:
+        f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
+        f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
     f.line(f"const __mmask8 sub_mask = ~add_mask;")
     f.line()
 
@@ -268,6 +291,42 @@ def fp_mixaddsub_4x2(f, pp, v):
     top_idx = pp.n42 - 1 - pp.rem42
     f.line("t[0] = VADDMASK(t[0], add_mask, t[0], p_bot);")
     f.line(f"t[{top_idx}] = VSUBMASK(t[{top_idx}], add_mask, t[{top_idx}], p_top);")
+    f.line()
+
+    carry_prop_4x2(f, pp, v, "t", "limb_mask", "carry")
+
+    f.comment("If result is negative, we undo the subtraction by p")
+    f.comment("sign_mask = {0, sign_mask1, 0, sign_mask2, ...}")
+    f.line(f"sign_mask = VSRA(t[{top_idx}], 63);")
+    f.line(f"t[{top_idx}] = VADD(t[{top_idx}], VAND(sign_mask, p_top));")
+    f.line(f"sign_mask = VSHUFFLEMASKZ(0xffff, sign_mask, 0x4e);")
+    f.line("t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
+    f.line()
+
+    carry_prop_4x2(f, pp, v, "t", "limb_mask", "carry")
+
+    for i in range(pp.n42):
+        f.line(f"res[{i}] = t[{i}];")
+
+    f.end()
+
+def fp_normalize_4x2(f, pp, v):
+    f.start("void fp_normalize_4x2(__m512i* res, __m512i* a)")
+
+    f.line(f"__m512i t[{pp.n42}], carry, sign_mask;")
+    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
+    f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
+    f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
+    f.line()
+
+    f.comment("Subtract p, using special shape of p")
+    top_idx = pp.n42 - 1 - pp.rem42
+    f.line("t[0] = VADD(a[0], p_bot);")
+    for i in range(1, top_idx):
+        f.line(f"t[{i}] = a[{i}];")
+    f.line(f"t[{top_idx}] = VSUB(a[{top_idx}], p_top);")
+    if pp.rem42 == 1:
+        f.line(f"t[{pp.n42-1}] = a[{pp.n42-1}];")
     f.line()
 
     carry_prop_4x2(f, pp, v, "t", "limb_mask", "carry")
@@ -303,12 +362,15 @@ def mp_add_4x2(f, pp, v):
 
     f.end()
 
-def mp_add_p_sub_4x2(f, pp, v):
+def mp_add_p_sub_4x2(f, pp, v, strat):
     f.start("void mp_add_p_sub_4x2(__m512i* res, __m512i* a, __m512i* b)")
 
     f.line(f"__m512i t[{pp.n42}];")
-    f.line(f"const __m512i p_bod = VSETALL({v.limb_mask});")
-    f.line(f"const __m512i p_top = VSET({v.limb_mask}, {v.p_plus_1_top}-1, {v.limb_mask}, {v.p_plus_1_top}-1, {v.limb_mask}, {v.p_plus_1_top}-1, {v.limb_mask}, {v.p_plus_1_top}-1);")
+    m = 2 if strat.mod_2p else 1
+    b = f"{m}*{v.limb_mask}"
+    t = f"{m}*{v.p_plus_1_top}-{m}"
+    f.line(f"const __m512i p_bod = VSETALL({b});")
+    f.line(f"const __m512i p_top = VSET({b}, {t}, {b}, {t}, {b}, {t}, {b}, {t});")
     f.line()
 
     top_idx = pp.n42-1 - pp.rem42
@@ -730,16 +792,16 @@ def fp_64_to_limbs_4x2(f, pp, v):
 
     f.end()
 
-def fp_limbs_to_64_4x2(f, pp, v):
-    f.comment("Assumes src is fully redduced")
+def fp_limbs_to_64_4x2(f, pp, v, strat):
     f.start("void fp_limbs_to_64_4x2(uint64_t* res, __m512i* src)")
 
     f.line(f"uint64_t t[8];")
-    f.line(f"__m512i s[{pp.n42}], zero[{pp.n42}];")
-    f.comment("Normalize input")
-    f.line("fp_setzero_4x2(zero);")
-    f.line("fp_add_4x2(s, src, zero);")
-    f.line()
+    if strat.mod_2p:
+        f.line(f"__m512i s[{pp.n42}];")
+        f.line("fp_normalize_4x2(s, src);")
+        src = "s"
+    else:
+        src = "src"
     f.line()
 
     n = pp.n42
@@ -782,7 +844,7 @@ def fp_limbs_to_64_4x2(f, pp, v):
     seen = set()
     top_idx = n - 1 - pp.rem42
     for j in range(n):
-        f.line(f"VSTORE(t, s[{j}]);")
+        f.line(f"VSTORE(t, {src}[{j}]);")
         f.line("for (int i = 0; i < 4; i++) {")
         f.indent()
         for k in range(len(indices[j])):
@@ -872,17 +934,18 @@ def write_fp_4x2(f, pp, v, strat, chain):
     fp_setzero_4x2(f, pp, v)
     fp_copy_4x2(f, pp, v)
     fp_duplicate_4x2(f, pp, v)
-    fp_is_equal_4x2(f, pp, v)
-    fp_is_zero_4x2(f, pp, v)
+    fp_is_equal_4x2(f, pp, v, strat)
+    fp_is_zero_4x2(f, pp, v, strat)
     fp_select_4x2(f, pp, v)
 
-    fp_add_4x2(f, pp, v)
-    fp_sub_4x2(f, pp, v)
-    fp_neg_4x2(f, pp, v)
-    fp_mixaddsub_4x2(f, pp, v)
+    fp_add_4x2(f, pp, v, strat)
+    fp_sub_4x2(f, pp, v, strat)
+    fp_neg_4x2(f, pp, v, strat)
+    fp_mixaddsub_4x2(f, pp, v, strat)
+    fp_normalize_4x2(f, pp, v)
 
     mp_add_4x2(f, pp, v)
-    mp_add_p_sub_4x2(f, pp, v)
+    mp_add_p_sub_4x2(f, pp, v, strat)
     mp_mixaddsubx2_4x2(f, pp, v)
     mp_dblsubx2_4x2(f, pp, v)
     mp_subx2_4x2(f, pp, v)
@@ -901,6 +964,6 @@ def write_fp_4x2(f, pp, v, strat, chain):
     fp_frommont_4x2(f, pp, v)
 
     fp_64_to_limbs_4x2(f, pp, v)
-    fp_limbs_to_64_4x2(f, pp, v)
+    fp_limbs_to_64_4x2(f, pp, v, strat)
 
     rand_fp_4x2(f, pp, v)

@@ -47,15 +47,11 @@ void fp_duplicate_8x1(__m512i* res, const uint64_t* a)
 
 int fp_is_equal_8x1(__m512i* a, __m512i* b)
 {
-    __m512i zero[NUM_LIMBS], norm_a[NUM_LIMBS], norm_b[NUM_LIMBS];
-    __mmask8 acc;
-    fp_setzero_8x1(zero);
+    __m512i norm_a[NUM_LIMBS], norm_b[NUM_LIMBS];
+    fp_normalize_8x1(norm_a, a);
+    fp_normalize_8x1(norm_b, b);
     
-    // Normalize both to [0, p-1] by adding zero
-    fp_add_8x1(norm_a, a, zero);
-    fp_add_8x1(norm_b, b, zero);
-    
-    acc = 0xff;
+    __mmask8 acc = 0xff;
     acc &= VCMPEQ(norm_a[0], norm_b[0]);
     acc &= VCMPEQ(norm_a[1], norm_b[1]);
     acc &= VCMPEQ(norm_a[2], norm_b[2]);
@@ -69,22 +65,21 @@ int fp_is_equal_8x1(__m512i* a, __m512i* b)
 
 int fp_is_zero_8x1(__m512i* a)
 {
-    __m512i zero[NUM_LIMBS], norm_a[NUM_LIMBS];
-    __mmask8 acc;
-    fp_setzero_8x1(zero);
+    __m512i norm_a[NUM_LIMBS];
+    const __m512i zero = VZERO();
     
-    // Normalize a to [0, p-1] by adding zero
-    fp_add_8x1(norm_a, a, zero);
+    // Normalize a to [0, p)
+    fp_normalize_8x1(norm_a, a);
     
-    acc = 0xff;
-    acc &= VCMPEQ(norm_a[0], zero[0]);
-    acc &= VCMPEQ(norm_a[1], zero[1]);
-    acc &= VCMPEQ(norm_a[2], zero[2]);
-    acc &= VCMPEQ(norm_a[3], zero[3]);
-    acc &= VCMPEQ(norm_a[4], zero[4]);
-    acc &= VCMPEQ(norm_a[5], zero[5]);
-    acc &= VCMPEQ(norm_a[6], zero[6]);
-    acc &= VCMPEQ(norm_a[7], zero[7]);
+    __mmask8 acc = 0xff;
+    acc &= VCMPEQ(norm_a[0], zero);
+    acc &= VCMPEQ(norm_a[1], zero);
+    acc &= VCMPEQ(norm_a[2], zero);
+    acc &= VCMPEQ(norm_a[3], zero);
+    acc &= VCMPEQ(norm_a[4], zero);
+    acc &= VCMPEQ(norm_a[5], zero);
+    acc &= VCMPEQ(norm_a[6], zero);
+    acc &= VCMPEQ(norm_a[7], zero);
     return acc;
 }
 
@@ -105,8 +100,8 @@ void fp_add_8x1(__m512i* res, __m512i* a, __m512i* b)
     __m512i t0, t1, t2, t3, t4, t5, t6, t7;
     __m512i sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
-    const __m512i p_bot = VSETALL(1);
-    const __m512i p_top = VSETALL(P_PLUS_1_TOP);
+    const __m512i p_bot = VSETALL(2);
+    const __m512i p_top = VSETALL(2*P_PLUS_1_TOP);
     
     // Add limbs
     t0 = VADD(a[0], b[0]);
@@ -168,8 +163,8 @@ void fp_sub_8x1(__m512i* res, __m512i* a, __m512i* b)
     __m512i t0, t1, t2, t3, t4, t5, t6, t7;
     __m512i sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
-    const __m512i p_bot = VSETALL(1);
-    const __m512i p_top = VSETALL(P_PLUS_1_TOP);
+    const __m512i p_bot = VSETALL(2);
+    const __m512i p_top = VSETALL(2*P_PLUS_1_TOP);
     
     // Subtract limbs
     t0 = VSUB(a[0], b[0]);
@@ -227,9 +222,9 @@ void fp_neg_8x1(__m512i* res, __m512i* a)
     __m512i t0, t1, t2, t3, t4, t5, t6, t7;
     __m512i sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
-    const __m512i p_bot = VSETALL(1);
-    const __m512i p_top = VSETALL(P_PLUS_1_TOP);
     const __m512i zero = VZERO();
+    const __m512i p_bot = VSETALL(2);
+    const __m512i p_top = VSETALL(2*P_PLUS_1_TOP);
     
     // 0 - a
     t0 = VSUB(zero, a[0]);
@@ -287,8 +282,8 @@ void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     __m512i t0, t1, t2, t3, t4, t5, t6, t7;
     __m512i sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
-    const __m512i p_bot = VSETALL(1);
-    const __m512i p_top = VSETALL(P_PLUS_1_TOP);
+    const __m512i p_bot = VSETALL(2);
+    const __m512i p_top = VSETALL(2*P_PLUS_1_TOP);
     const __mmask8 sub_mask = ~add_mask;
     
     t0 = VSUBMASK(a[0], sub_mask, a[0], b[0]);
@@ -334,6 +329,64 @@ void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     t0 = VSUB(t0, VAND(p_bot, sign_mask));
     t7 = VADD(t7, VAND(p_top, sign_mask));
     
+    // Carry propagation
+    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+    t5 = VADD(t5, VSRA(t4, LIMB_LEN));
+    t6 = VADD(t6, VSRA(t5, LIMB_LEN));
+    t7 = VADD(t7, VSRA(t6, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VAND(t3, limb_mask);
+    t4 = VAND(t4, limb_mask);
+    t5 = VAND(t5, limb_mask);
+    t6 = VAND(t6, limb_mask);
+    
+    res[0] = t0; res[1] = t1; res[2] = t2; res[3] = t3; res[4] = t4; res[5] = t5;
+    res[6] = t6; res[7] = t7;
+}
+
+// Reduces from [0, 2p) to [0, p)
+void fp_normalize_8x1(__m512i* res, __m512i* a)
+{
+    __m512i t0, t1, t2, t3, t4, t5, t6, t7;
+    __m512i sign_mask;
+    const __m512i limb_mask = VSETALL(LIMB_MASK);
+    const __m512i p_bot = VSETALL(1);
+    const __m512i p_top = VSETALL(P_PLUS_1_TOP);
+    
+    // Subtract p, using the special shape of p
+    t0 = VADD(a[0], p_bot);
+    t1 = a[1];
+    t2 = a[2];
+    t3 = a[3];
+    t4 = a[4];
+    t5 = a[5];
+    t6 = a[6];
+    t7 = VSUB(a[7], p_top);
+    // Carry propagation
+    t1 = VADD(t1, VSRA(t0, LIMB_LEN));
+    t2 = VADD(t2, VSRA(t1, LIMB_LEN));
+    t3 = VADD(t3, VSRA(t2, LIMB_LEN));
+    t4 = VADD(t4, VSRA(t3, LIMB_LEN));
+    t5 = VADD(t5, VSRA(t4, LIMB_LEN));
+    t6 = VADD(t6, VSRA(t5, LIMB_LEN));
+    t7 = VADD(t7, VSRA(t6, LIMB_LEN));
+    t0 = VAND(t0, limb_mask);
+    t1 = VAND(t1, limb_mask);
+    t2 = VAND(t2, limb_mask);
+    t3 = VAND(t3, limb_mask);
+    t4 = VAND(t4, limb_mask);
+    t5 = VAND(t5, limb_mask);
+    t6 = VAND(t6, limb_mask);
+    
+    // If the result is negative, we add p
+    sign_mask = VSRA(t7, 63);
+    t0 = VSUB(t0, VAND(p_bot, sign_mask));
+    t7 = VADD(t7, VAND(p_top, sign_mask));
     // Carry propagation
     t1 = VADD(t1, VSRA(t0, LIMB_LEN));
     t2 = VADD(t2, VSRA(t1, LIMB_LEN));
@@ -586,12 +639,12 @@ void mp_mixaddsubx2_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add
     res[12] = t12; res[13] = t13; res[14] = t14; res[15] = t15;
 }
 
-// Computes res = a + p - b without any carry propagation or conditional masks
+// Computes res = a + 2p - b without any carry propagation or conditional masks
 void mp_add_p_sub_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t0, t1, t2, t3, t4, t5, t6, t7;
-    const __m512i p_bot = VSETALL(LIMB_MASK);
-    const __m512i p_top = VSETALL(P_PLUS_1_TOP-1);
+    const __m512i p_bot = VSETALL(2*LIMB_MASK);
+    const __m512i p_top = VSETALL(2*P_PLUS_1_TOP-2);
     
     // Add p
     t0 = VSUB(VADD(a[0], p_bot), b[0]);
@@ -1191,11 +1244,8 @@ void fp_64_to_limbs_8x1_only_even_idx(__m512i* res, uint64_t* unvec)
 void fp_limbs_to_64_8x1(uint64_t* res, __m512i* src)
 {
     uint64_t t[8];
-    __m512i s[8], zero[8];
-    // Normalize input
-    fp_setzero_8x1(zero);
-    fp_add_8x1(s, src, zero);
-    
+    __m512i s[8];
+    fp_normalize_8x1(s, src);
     
     VSTORE(t, s[0]);
     for (int i = 0; i < 8; i++) {
@@ -1238,11 +1288,8 @@ void fp_limbs_to_64_8x1(uint64_t* res, __m512i* src)
 void fp_limbs_to_64_8x1_only_even_idx(uint64_t* res, __m512i* src)
 {
     uint64_t t[8];
-    __m512i s[8], zero[8];
-    // Normalize input
-    fp_setzero_8x1(zero);
-    fp_add_8x1(s, src, zero);
-    
+    __m512i s[8];
+    fp_normalize_8x1(s, src);
     
     VSTORE(t, s[0]);
     for (int i = 0; i < 4; i++) {
@@ -1329,15 +1376,11 @@ void fp_duplicate_4x2(__m512i* res, const uint64_t* a)
 
 int fp_is_equal_4x2(__m512i* a, __m512i* b)
 {
-    __m512i zero[N4x2], norm_a[N4x2], norm_b[N4x2];
-    __mmask8 acc;
-    fp_setzero_4x2(zero);
+    __m512i norm_a[N4x2], norm_b[N4x2];
+    fp_normalize_4x2(norm_a, a);
+    fp_normalize_4x2(norm_b, b);
     
-    // Normalize both to [0, p-1] by adding zero
-    fp_add_4x2(norm_a, a, zero);
-    fp_add_4x2(norm_b, b, zero);
-    
-    acc = 0xff;
+    __mmask8 acc = 0xff;
     acc &= VCMPEQ(norm_a[0], norm_b[0]);
     acc &= VCMPEQ(norm_a[1], norm_b[1]);
     acc &= VCMPEQ(norm_a[2], norm_b[2]);
@@ -1352,18 +1395,17 @@ int fp_is_equal_4x2(__m512i* a, __m512i* b)
 
 int fp_is_zero_4x2(__m512i* a)
 {
-    __m512i zero[N4x2], norm_a[N4x2];
-    __mmask8 acc;
-    fp_setzero_4x2(zero);
+    __m512i norm_a[N4x2];
+    const __m512i zero = VZERO();
     
-    // Normalize a to [0, p-1] by adding zero
-    fp_add_4x2(norm_a, a, zero);
+    // Normalize a to [0, p)
+    fp_normalize_4x2(norm_a, a);
     
-    acc = 0xff;
-    acc &= VCMPEQ(norm_a[0], zero[0]);
-    acc &= VCMPEQ(norm_a[1], zero[1]);
-    acc &= VCMPEQ(norm_a[2], zero[2]);
-    acc &= VCMPEQ(norm_a[3], zero[3]);
+    __mmask8 acc = 0xff;
+    acc &= VCMPEQ(norm_a[0], zero);
+    acc &= VCMPEQ(norm_a[1], zero);
+    acc &= VCMPEQ(norm_a[2], zero);
+    acc &= VCMPEQ(norm_a[3], zero);
     
     // a = 0 iff both halves are 0
     return (acc & (acc >> 1) & 0x1)
@@ -1395,8 +1437,8 @@ void fp_add_4x2(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t[4], carry, sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
-    const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);
-    const __m512i p_top = VSET(0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP);
+    const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);
+    const __m512i p_top = VSET(0, 2*P_PLUS_1_TOP, 0, 2*P_PLUS_1_TOP, 0, 2*P_PLUS_1_TOP, 0, 2*P_PLUS_1_TOP);
     
     // Add limbs
     t[0] = VADD(a[0], b[0]);
@@ -1455,8 +1497,8 @@ void fp_sub_4x2(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t[4], carry, sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
-    const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);
-    const __m512i p_top = VSET(0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP);
+    const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);
+    const __m512i p_top = VSET(0, 2*P_PLUS_1_TOP, 0, 2*P_PLUS_1_TOP, 0, 2*P_PLUS_1_TOP, 0, 2*P_PLUS_1_TOP);
     
     // Subtract limbs
     t[0] = VSUB(a[0], b[0]);
@@ -1511,9 +1553,9 @@ void fp_neg_4x2(__m512i* res, __m512i* a)
 {
     __m512i t[4], carry, sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
-    const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);
-    const __m512i p_top = VSET(0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP);
     const __m512i zero = VZERO();
+    const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);
+    const __m512i p_top = VSET(0, 2*P_PLUS_1_TOP, 0, 2*P_PLUS_1_TOP, 0, 2*P_PLUS_1_TOP, 0, 2*P_PLUS_1_TOP);
     
     // Subtract limbs
     t[0] = VSUB(zero, a[0]);
@@ -1568,8 +1610,8 @@ void fp_mixaddsub_4x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
 {
     __m512i t[4], carry, sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
-    const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);
-    const __m512i p_top = VSET(0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP);
+    const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);
+    const __m512i p_top = VSET(0, 2*P_PLUS_1_TOP, 0, 2*P_PLUS_1_TOP, 0, 2*P_PLUS_1_TOP, 0, 2*P_PLUS_1_TOP);
     const __mmask8 sub_mask = ~add_mask;
     
     t[0] = VSUBMASK(a[0], sub_mask, a[0], b[0]);
@@ -1585,6 +1627,62 @@ void fp_mixaddsub_4x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     // a + b - p
     t[0] = VADDMASK(t[0], add_mask, t[0], p_bot);
     t[3] = VSUBMASK(t[3], add_mask, t[3], p_top);
+    
+    // Carry propagation
+    t[1] = VADDMASK(t[1], 0x55, t[1], VSRA(t[0], LIMB_LEN));
+    t[2] = VADDMASK(t[2], 0x55, t[2], VSRA(t[1], LIMB_LEN));
+    t[3] = VADDMASK(t[3], 0x55, t[3], VSRA(t[2], LIMB_LEN));
+    carry = VSRA(t[3], LIMB_LEN);
+    carry = VSHUFFLEMASKZ(0xcccc, carry, 0x4e);
+    t[0] = VADDMASK(t[0], 0xaa, t[0], carry);
+    t[1] = VADDMASK(t[1], 0xaa, t[1], VSRA(t[0], LIMB_LEN));
+    t[2] = VADDMASK(t[2], 0xaa, t[2], VSRA(t[1], LIMB_LEN));
+    t[3] = VADDMASK(t[3], 0xaa, t[3], VSRA(t[2], LIMB_LEN));
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VAND(t[1], limb_mask);
+    t[2] = VAND(t[2], limb_mask);
+    t[3] = VANDMASK(t[3], 0x55, t[3], limb_mask);
+    
+    // If result is negative, we undo the subtraction by p
+    // sign_mask = {0, sign_mask1, 0, sign_mask2, ...}
+    sign_mask = VSRA(t[3], 63);
+    t[3] = VADD(t[3], VAND(sign_mask, p_top));
+    sign_mask = VSHUFFLEMASKZ(0xffff, sign_mask, 0x4e);
+    t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
+    
+    // Carry propagation
+    t[1] = VADDMASK(t[1], 0x55, t[1], VSRA(t[0], LIMB_LEN));
+    t[2] = VADDMASK(t[2], 0x55, t[2], VSRA(t[1], LIMB_LEN));
+    t[3] = VADDMASK(t[3], 0x55, t[3], VSRA(t[2], LIMB_LEN));
+    carry = VSRA(t[3], LIMB_LEN);
+    carry = VSHUFFLEMASKZ(0xcccc, carry, 0x4e);
+    t[0] = VADDMASK(t[0], 0xaa, t[0], carry);
+    t[1] = VADDMASK(t[1], 0xaa, t[1], VSRA(t[0], LIMB_LEN));
+    t[2] = VADDMASK(t[2], 0xaa, t[2], VSRA(t[1], LIMB_LEN));
+    t[3] = VADDMASK(t[3], 0xaa, t[3], VSRA(t[2], LIMB_LEN));
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VAND(t[1], limb_mask);
+    t[2] = VAND(t[2], limb_mask);
+    t[3] = VANDMASK(t[3], 0x55, t[3], limb_mask);
+    
+    res[0] = t[0];
+    res[1] = t[1];
+    res[2] = t[2];
+    res[3] = t[3];
+}
+
+void fp_normalize_4x2(__m512i* res, __m512i* a)
+{
+    __m512i t[4], carry, sign_mask;
+    const __m512i limb_mask = VSETALL(LIMB_MASK);
+    const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);
+    const __m512i p_top = VSET(0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP, 0, P_PLUS_1_TOP);
+    
+    // Subtract p, using special shape of p
+    t[0] = VADD(a[0], p_bot);
+    t[1] = a[1];
+    t[2] = a[2];
+    t[3] = VSUB(a[3], p_top);
     
     // Carry propagation
     t[1] = VADDMASK(t[1], 0x55, t[1], VSRA(t[0], LIMB_LEN));
@@ -1648,8 +1746,8 @@ void mp_add_4x2(__m512i* res, __m512i* a, __m512i* b)
 void mp_add_p_sub_4x2(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t[4];
-    const __m512i p_bod = VSETALL(LIMB_MASK);
-    const __m512i p_top = VSET(LIMB_MASK, P_PLUS_1_TOP-1, LIMB_MASK, P_PLUS_1_TOP-1, LIMB_MASK, P_PLUS_1_TOP-1, LIMB_MASK, P_PLUS_1_TOP-1);
+    const __m512i p_bod = VSETALL(2*LIMB_MASK);
+    const __m512i p_top = VSET(2*LIMB_MASK, 2*P_PLUS_1_TOP-2, 2*LIMB_MASK, 2*P_PLUS_1_TOP-2, 2*LIMB_MASK, 2*P_PLUS_1_TOP-2, 2*LIMB_MASK, 2*P_PLUS_1_TOP-2);
     
     t[0] = VSUB(VADD(a[0], p_bod), b[0]);
     t[1] = VSUB(VADD(a[1], p_bod), b[1]);
@@ -2233,15 +2331,11 @@ void fp_64_to_limbs_4x2(__m512i* res, uint64_t* unvec)
     res[3] = VSET(t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7]);
 }
 
-// Assumes src is fully redduced
 void fp_limbs_to_64_4x2(uint64_t* res, __m512i* src)
 {
     uint64_t t[8];
-    __m512i s[4], zero[4];
-    // Normalize input
-    fp_setzero_4x2(zero);
-    fp_add_4x2(s, src, zero);
-    
+    __m512i s[4];
+    fp_normalize_4x2(s, src);
     
     VSTORE(t, s[0]);
     for (int i = 0; i < 4; i++) {
@@ -2315,12 +2409,9 @@ void fp_duplicate_2x4(__m512i* res, const uint64_t* a)
 
 int fp_is_equal_2x4(__m512i* a, __m512i* b)
 {
-    __m512i zero[2], norm_a[2], norm_b[2];
-    fp_setzero_2x4(zero);
-    
-    // Normalize both to [0, p-1] by adding zero
-    fp_add_2x4(norm_a, a, zero);
-    fp_add_2x4(norm_b, b, zero);
+    __m512i norm_a[2], norm_b[2];
+    fp_normalize_2x4(norm_a, a);
+    fp_normalize_2x4(norm_b, b);
     
     __mmask8 acc = 0xff;
     acc &= VCMPEQ(norm_a[0], norm_b[0]);
@@ -2332,15 +2423,14 @@ int fp_is_equal_2x4(__m512i* a, __m512i* b)
 
 int fp_is_zero_2x4(__m512i* a)
 {
-    __m512i zero[2], norm_a[2];
-    fp_setzero_2x4(zero);
+    __m512i norm_a[2];
+    const __m512i zero = VZERO();
     
-    // Normalize a to [0, p-1] by adding zero
-    fp_add_2x4(norm_a, a, zero);
+    fp_normalize_2x4(norm_a, a);
     
     __mmask8 acc = 0xff;
-    acc &= VCMPEQ(norm_a[0], zero[0]);
-    acc &= VCMPEQ(norm_a[1], zero[1]);
+    acc &= VCMPEQ(norm_a[0], zero);
+    acc &= VCMPEQ(norm_a[1], zero);
     
     return (acc & (acc >> 1) & (acc >> 2) & (acc >> 3) & 0x1)
         | ((acc >> 3) & (acc >> 4) & (acc >> 5) & (acc >> 6) & 0x2);
@@ -2364,8 +2454,8 @@ void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t[2], carry, sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
-    const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
-    const __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
+    const __m512i p_bot = VSET(2, 0, 0, 0, 2, 0, 0, 0);
+    const __m512i p_top = VSET(0, 0, 0, 2*P_PLUS_1_TOP, 0, 0, 0, 2*P_PLUS_1_TOP);
     // Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation
     const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
     // For duplicating sign bit in each half
@@ -2448,8 +2538,8 @@ void fp_sub_2x4(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t[2], carry, sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
-    const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
-    const __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
+    const __m512i p_bot = VSET(2, 0, 0, 0, 2, 0, 0, 0);
+    const __m512i p_top = VSET(0, 0, 0, 2*P_PLUS_1_TOP, 0, 0, 0, 2*P_PLUS_1_TOP);
     // Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation
     const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
     // For duplicating sign bit in each half
@@ -2528,8 +2618,8 @@ void fp_neg_2x4(__m512i* res, __m512i* a)
 {
     __m512i t[2], carry, sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
-    const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
-    const __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
+    const __m512i p_bot = VSET(2, 0, 0, 0, 2, 0, 0, 0);
+    const __m512i p_top = VSET(0, 0, 0, 2*P_PLUS_1_TOP, 0, 0, 0, 2*P_PLUS_1_TOP);
     // Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation
     const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
     // For duplicating sign bit in each half
@@ -2609,8 +2699,8 @@ void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
 {
     __m512i t[2], carry, sign_mask;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
-    const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
-    const __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
+    const __m512i p_bot = VSET(2, 0, 0, 0, 2, 0, 0, 0);
+    const __m512i p_top = VSET(0, 0, 0, 2*P_PLUS_1_TOP, 0, 0, 0, 2*P_PLUS_1_TOP);
     // Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation
     const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
     // For duplicating sign bit in each half
@@ -2655,6 +2745,87 @@ void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_m
     t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
     
     // If the result is negative, we add p
+    sign_mask = VSRA(t[1], 63);
+    sign_mask = VPERM512(idx_sign, sign_mask);
+    t[1] = VADD(t[1], VAND(p_top, sign_mask));
+    t[0] = VSUB(t[0], VAND(p_bot, sign_mask));
+    
+    // Carry propagation (3 cross-lane ripples + final straight ripple)
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    
+    res[0] = t[0];
+    res[1] = t[1];
+}
+
+void fp_normalize_2x4(__m512i* res, __m512i* a)
+{
+    __m512i t[2], carry, sign_mask;
+    const __m512i limb_mask = VSETALL(LIMB_MASK);
+    const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);
+    const __m512i p_top = VSET(0, 0, 0, P_PLUS_1_TOP, 0, 0, 0, P_PLUS_1_TOP);
+    // Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation
+    const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);
+    // For duplicating sign bit in each half
+    const __m512i idx_sign = VSET(3, 3, 3, 3, 7, 7, 7, 7);
+    
+    // Subtract p using the special shape of p
+    t[0] = VADD(a[0], p_bot);
+    t[1] = VSUB(a[1], p_top);
+    
+    // Carry propagation (3 cross-lane ripples + final straight ripple)
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    carry = VSRA(t[1], LIMB_LEN);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    carry = VPERM512MASKZ(0xee, carry, idx_shift);
+    t[0] = VADD(t[0], carry);
+    // Final straight ripple
+    carry = VSRA(t[0], LIMB_LEN);
+    t[0] = VAND(t[0], limb_mask);
+    t[1] = VADD(t[1], carry);
+    t[1] = VANDMASK(t[1], 0x77, t[1], limb_mask);
+    
+    // If the result is negative, add p back
     sign_mask = VSRA(t[1], 63);
     sign_mask = VPERM512(idx_sign, sign_mask);
     t[1] = VADD(t[1], VAND(p_top, sign_mask));
@@ -2778,6 +2949,8 @@ void rdc_2x4(__m512i* res, __m512i* a)
     const __m512i zero = VZERO();
     const __m512i p_top_all = VSETALL(P_PLUS_1_TOP);
     const __m512i limb_mask = VSETALL(LIMB_MASK);
+    const __m512i p_bot = VSET(2, 0, 0, 0, 2, 0, 0, 0);
+    const __m512i p_top = VSET(0, 0, 0, 2*P_PLUS_1_TOP, 0, 0, 0, 2*P_PLUS_1_TOP);
     
     // Initialize the upper accumulators to zero
     a[10] = zero;
@@ -3104,10 +3277,8 @@ void fp_64_to_limbs_2x4(__m512i* res, uint64_t* unvec)
 void fp_limbs_to_64_2x4(uint64_t* res, __m512i* src)
 {
     uint64_t t[8];
-    __m512i s[2], zero[2];
-    // Normalize input
-    fp_setzero_2x4(zero);
-    fp_add_2x4(s, src, zero);
+    __m512i s[2];
+    fp_normalize_2x4(s, src);
     
     VSTORE(t, s[0]);
     for (int i = 0; i < 2; i++) {

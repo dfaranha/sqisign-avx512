@@ -24,17 +24,19 @@ def fp_duplicate_2x4(f, pp, v):
 
     f.end()
 
-def fp_is_equal_2x4(f, pp, v):
+def fp_is_equal_2x4(f, pp, v, strat):
     f.start("int fp_is_equal_2x4(__m512i* a, __m512i* b)")
 
-    f.line(f"__m512i zero[{pp.n24}], norm_a[{pp.n24}], norm_b[{pp.n24}];")
-    f.line(f"fp_setzero_2x4(zero);")
-    f.line("")
-
-    f.comment("Normalize both to [0, p-1] by adding zero")
-    f.line("fp_add_2x4(norm_a, a, zero);")
-    f.line("fp_add_2x4(norm_b, b, zero);")
-    f.line()
+    if strat.mod_2p:
+        f.line(f"__m512i norm_a[{pp.n24}], norm_b[{pp.n24}];")
+        f.line("fp_normalize_2x4(norm_a, a);")
+        f.line("fp_normalize_2x4(norm_b, b);")
+        f.line()
+        var_a = "norm_a"
+        var_b = "norm_b"
+    else:
+        var_a = "a"
+        var_b = "b"
 
     f.line("__mmask8 acc = 0xff;")
     for i in range(pp.n24):
@@ -46,10 +48,10 @@ def fp_is_equal_2x4(f, pp, v):
                 valid |= (1 << lane)
 
         if valid == 0xff:
-            f.line(f"acc &= VCMPEQ(norm_a[{i}], norm_b[{i}]);")
+            f.line(f"acc &= VCMPEQ({var_a}[{i}], {var_b}[{i}]);")
         else:
             ignore = 0xff ^ valid
-            f.line(f"acc &= VCMPEQ(norm_a[{i}], norm_b[{i}]) | 0x{ignore:02x};")
+            f.line(f"acc &= VCMPEQ({var_a}[{i}], {var_b}[{i}]) | 0x{ignore:02x};")
     f.line()
 
     f.line("return (acc & (acc >> 1) & (acc >> 2) & (acc >> 3) & 0x1)")
@@ -59,16 +61,22 @@ def fp_is_equal_2x4(f, pp, v):
 
     f.end()
 
-def fp_is_zero_2x4(f, pp, v):
+def fp_is_zero_2x4(f, pp, v, strat):
     f.start("int fp_is_zero_2x4(__m512i* a)")
 
-    f.line(f"__m512i zero[{pp.n24}], norm_a[{pp.n24}];")
-    f.line(f"fp_setzero_2x4(zero);")
-    f.line("")
-
-    f.comment("Normalize a to [0, p-1] by adding zero")
-    f.line("fp_add_2x4(norm_a, a, zero);")
+    
+    if strat.mod_2p:
+        f.line(f"__m512i norm_a[{pp.n24}];")
+    f.line("const __m512i zero = VZERO();")
     f.line()
+
+    if strat.mod_2p:
+        f.line("fp_normalize_2x4(norm_a, a);")
+        f.line()
+        var = "norm_a"
+    else:
+        var = "a"
+    
 
     f.line("__mmask8 acc = 0xff;")
     for i in range(pp.n24):
@@ -80,10 +88,10 @@ def fp_is_zero_2x4(f, pp, v):
                 valid |= (1 << lane)
 
         if valid == 0xff:
-            f.line(f"acc &= VCMPEQ(norm_a[{i}], zero[{i}]);")
+            f.line(f"acc &= VCMPEQ({var}[{i}], zero);")
         else:
             ignore = 0xff ^ valid
-            f.line(f"acc &= VCMPEQ(norm_a[{i}], zero[{i}]) | 0x{ignore:02x};")
+            f.line(f"acc &= VCMPEQ({var}[{i}], zero) | 0x{ignore:02x};")
     f.line()
 
     f.line("return (acc & (acc >> 1) & (acc >> 2) & (acc >> 3) & 0x1)")
@@ -118,8 +126,15 @@ def get_top_idx(pp):
     limb_top = (pp.num_limbs - 1) // pp.n24   # idx within the vector
     return idx_top, limb_top
 
-def write_p_top(f, v, limb_top):
-    top_list = [(v.p_plus_1_top if i % 4 == limb_top else "0")  for i in range(8)]
+def write_p(f, v, mod_2p, limb_top):
+    if mod_2p:
+        f.line(f"const __m512i p_bot = VSET(2, 0, 0, 0, 2, 0, 0, 0);")
+        top_val = f"2*{v.p_plus_1_top}"
+    else:
+        f.line(f"const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);")
+        top_val = v.p_plus_1_top
+
+    top_list = [(top_val if i % 4 == limb_top else "0")  for i in range(8)]
     top_str = ", ".join(top_list)
     f.line(f"const __m512i p_top = VSET({top_str});")
 
@@ -172,15 +187,14 @@ def carry_prop_2x4(f, pp, v, tmp_name, mask_name, carry_name, idx_shift_name):
     f.line(f"{tmp_name}[{n24-1}] = VANDMASK({tmp_name}[{n24-1}], 0x{sign_preserve_mask:02x}, {tmp_name}[{n24-1}], {mask_name});")
     f.line()
 
-def fp_add_2x4(f, pp, v):
+def fp_add_2x4(f, pp, v, strat):
     f.start("void fp_add_2x4(__m512i* res, __m512i* a, __m512i* b)")
 
     idx_top, limb_top = get_top_idx(pp)
 
     f.line(f"__m512i t[{pp.n24}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    f.line(f"const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);")
-    write_p_top(f, v, limb_top)
+    write_p(f, v, strat.mod_2p, limb_top)
     f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
     f.line(f"const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
     f.comment("For duplicating sign bit in each half")
@@ -212,15 +226,14 @@ def fp_add_2x4(f, pp, v):
 
     f.end()
 
-def fp_sub_2x4(f, pp, v):
+def fp_sub_2x4(f, pp, v, strat):
     f.start("void fp_sub_2x4(__m512i* res, __m512i* a, __m512i* b)")
 
     idx_top, limb_top = get_top_idx(pp)
 
     f.line(f"__m512i t[{pp.n24}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    f.line(f"const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);")
-    write_p_top(f, v, limb_top)
+    write_p(f, v, strat.mod_2p, limb_top)
     f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
     f.line("const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
     f.comment("For duplicating sign bit in each half")
@@ -247,15 +260,14 @@ def fp_sub_2x4(f, pp, v):
 
     f.end()
 
-def fp_neg_2x4(f, pp, v):
+def fp_neg_2x4(f, pp, v, strat):
     f.start("void fp_neg_2x4(__m512i* res, __m512i* a)")
 
     idx_top, limb_top = get_top_idx(pp)
 
     f.line(f"__m512i t[{pp.n24}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    f.line(f"const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);")
-    write_p_top(f, v, limb_top)
+    write_p(f, v, strat.mod_2p, limb_top)
     f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
     f.line("const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
     f.comment("For duplicating sign bit in each half")
@@ -283,15 +295,14 @@ def fp_neg_2x4(f, pp, v):
 
     f.end()
 
-def fp_mixaddsub_2x4(f, pp, v):
+def fp_mixaddsub_2x4(f, pp, v, strat):
     f.start("void fp_mixaddsub_2x4(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)")
 
     idx_top, limb_top = get_top_idx(pp)
 
     f.line(f"__m512i t[{pp.n24}], carry, sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    f.line(f"const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);")
-    write_p_top(f, v, limb_top)
+    write_p(f, v, strat.mod_2p, limb_top)
     f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
     f.line("const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
     f.comment("For duplicating sign bit in each half")
@@ -315,6 +326,53 @@ def fp_mixaddsub_2x4(f, pp, v):
 
     f.comment("If the result is negative, we add p")
     f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);")
+    f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
+    f.line(f"t[{idx_top}] = VADD(t[{idx_top}], VAND(p_top, sign_mask));")
+    f.line(f"t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
+    f.line()
+
+    carry_prop_2x4(f, pp, v, "t", "limb_mask", "carry", "idx_shift")
+
+    for i in range(pp.n24):
+        f.line(f"res[{i}] = t[{i}];")
+
+    f.end()
+
+def fp_normalize_2x4(f, pp, v):
+    f.start("void fp_normalize_2x4(__m512i* res, __m512i* a)")
+
+    idx_top, limb_top = get_top_idx(pp)
+
+    f.line(f"__m512i t[{pp.n24}], carry, sign_mask;")
+    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
+
+    write_p(f, v, False, limb_top)
+
+    f.comment("Maps odd lanes to the next even lane (1->2, 3->4, 5->6) for propagation")
+    f.line(f"const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
+    f.comment("For duplicating sign bit in each half")
+    f.line(f"const __m512i idx_sign = VSET({limb_top}, {limb_top}, {limb_top}, {limb_top}, {limb_top+4}, {limb_top+4}, {limb_top+4}, {limb_top+4});")
+    f.line()
+
+
+    f.comment("Subtract p using the special shape of p")
+    f.line(f"t[0] = VADD(a[0], p_bot);")
+    if idx_top == 0:
+        f.line(f"t[0] = VSUB(t[0], p_top);")
+        for i in range(1, pp.n24):
+            f.line(f"t[{i}] = VADD(a[{i}], b[{i}]);")
+    else:
+        for i in range(1, pp.n24):
+            if i == idx_top:
+                f.line(f"t[{i}] = VSUB(a[{i}], p_top);")
+            else:
+                f.line(f"t[{i}] = a[{i}];")
+    f.line()
+
+    carry_prop_2x4(f, pp, v, "t", "limb_mask", "carry", "idx_shift")
+
+    f.comment("If the result is negative, add p back")
+    f.line(f"sign_mask = VSRA(t[{pp.n24-1}], 63);") # We carry the last ripple all the way to the end
     f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
     f.line(f"t[{idx_top}] = VADD(t[{idx_top}], VAND(p_top, sign_mask));")
     f.line(f"t[0] = VSUB(t[0], VAND(p_bot, sign_mask));")
@@ -406,10 +464,9 @@ def rdc_2x4(f, pp, v, strat):
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     if not strat.mod_2p:
         f.line("__m512i sign_mask;")
-        f.line(f"const __m512i p_bot = VSET(1, 0, 0, 0, 1, 0, 0, 0);")
-        write_p_top(f, v, limb_top)
         f.line(f"const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
         f.line(f"const __m512i idx_sign = VSET({limb_top}, {limb_top}, {limb_top}, {limb_top}, {limb_top+4}, {limb_top+4}, {limb_top+4}, {limb_top+4});")
+    write_p(f, v, strat.mod_2p, limb_top)
     f.line()
 
     f.comment("Initialize the upper accumulators to zero")
@@ -701,14 +758,16 @@ def fp_64_to_limbs_2x4(f, pp, v):
 
     f.end()
 
-def fp_limbs_to_64_2x4(f, pp, v):
+def fp_limbs_to_64_2x4(f, pp, v, strat):
     f.start("void fp_limbs_to_64_2x4(uint64_t* res, __m512i* src)")
 
     f.line(f"uint64_t t[8];")
-    f.line(f"__m512i s[{pp.n24}], zero[{pp.n24}];")
-    f.comment("Normalize input")
-    f.line("fp_setzero_2x4(zero);")
-    f.line("fp_add_2x4(s, src, zero);")
+    if strat.mod_2p:
+        f.line(f"__m512i s[{pp.n24}];")
+        f.line("fp_normalize_2x4(s, src);")
+        src = "s"
+    else:
+        src = "src"
     f.line()
 
     n = pp.n24
@@ -752,7 +811,7 @@ def fp_limbs_to_64_2x4(f, pp, v):
     seen = set()
 
     for j in range(n):
-        f.line(f"VSTORE(t, s[{j}]);")
+        f.line(f"VSTORE(t, {src}[{j}]);")
         f.line("for (int i = 0; i < 2; i++) {")
         f.indent()
         for k in range(len(indices[j])):
@@ -833,14 +892,15 @@ def write_fp_2x4(f, pp, v, strat, chain):
     fp_setzero_2x4(f, pp, v)
     fp_copy_2x4(f, pp, v)
     fp_duplicate_2x4(f, pp, v)
-    fp_is_equal_2x4(f, pp, v)
-    fp_is_zero_2x4(f, pp, v)
+    fp_is_equal_2x4(f, pp, v, strat)
+    fp_is_zero_2x4(f, pp, v, strat)
     fp_select_2x4(f, pp, v)
 
-    fp_add_2x4(f, pp, v)
-    fp_sub_2x4(f, pp, v)
-    fp_neg_2x4(f, pp, v)
-    fp_mixaddsub_2x4(f, pp, v)
+    fp_add_2x4(f, pp, v, strat)
+    fp_sub_2x4(f, pp, v, strat)
+    fp_neg_2x4(f, pp, v, strat)
+    fp_mixaddsub_2x4(f, pp, v, strat)
+    fp_normalize_2x4(f, pp, v)
 
     mp_mul_2x4(f, pp, v)
     rdc_2x4(f, pp, v, strat)
@@ -855,6 +915,6 @@ def write_fp_2x4(f, pp, v, strat, chain):
     fp_exp3div4_2x4(f, pp, v, strat, chain)
 
     fp_64_to_limbs_2x4(f, pp, v)
-    fp_limbs_to_64_2x4(f, pp, v)
+    fp_limbs_to_64_2x4(f, pp, v, strat)
 
     rand_fp_2x4(f, pp, v)

@@ -20,41 +20,46 @@ def fp_duplicate_8x1(f, pp, v):
         f.line(f"res[{i}] = VSETALL(a[{i}]);")
     f.end()
 
-def fp_is_equal_8x1(f, pp, v):
+def fp_is_equal_8x1(f, pp, v, strat):
     f.start("int fp_is_equal_8x1(__m512i* a, __m512i* b)")
 
-    f.line(f"__m512i zero[{v.num_limbs}], norm_a[{v.num_limbs}], norm_b[{v.num_limbs}];")
-    f.line(f"__mmask8 acc;")
-    f.line(f"fp_setzero_8x1(zero);")
-    f.line()
+    if strat.mod_2p:
+        f.line(f"__m512i norm_a[{v.num_limbs}], norm_b[{v.num_limbs}];")
+        f.line("fp_normalize_8x1(norm_a, a);")
+        f.line("fp_normalize_8x1(norm_b, b);")
+        f.line()
+        var_a = "norm_a"
+        var_b = "norm_b"
+    else:
+        var_a = "a"
+        var_b = "b"
 
-    f.comment("Normalize both to [0, p-1] by adding zero")
-    f.line("fp_add_8x1(norm_a, a, zero);")
-    f.line("fp_add_8x1(norm_b, b, zero);")
-    f.line()
-
-    f.line("acc = 0xff;")
+    f.line("__mmask8 acc = 0xff;")
     for i in range(pp.num_limbs):
-        f.line(f"acc &= VCMPEQ(norm_a[{i}], norm_b[{i}]);")
+        f.line(f"acc &= VCMPEQ({var_a}[{i}], {var_b}[{i}]);")
     f.line("return acc;")
 
     f.end()
 
-def fp_is_zero_8x1(f, pp, v):
+def fp_is_zero_8x1(f, pp, v, strat):
     f.start("int fp_is_zero_8x1(__m512i* a)")
 
-    f.line(f"__m512i zero[{v.num_limbs}], norm_a[{v.num_limbs}];")
-    f.line(f"__mmask8 acc;")
-    f.line(f"fp_setzero_8x1(zero);")
+    if strat.mod_2p:
+        f.line(f"__m512i norm_a[{v.num_limbs}];")
+    f.line(f"const __m512i zero = VZERO();")
     f.line()
 
-    f.comment("Normalize a to [0, p-1] by adding zero")
-    f.line("fp_add_8x1(norm_a, a, zero);")
-    f.line()
+    if strat.mod_2p:
+        f.comment("Normalize a to [0, p)")
+        f.line("fp_normalize_8x1(norm_a, a);")
+        f.line()
+        var_a = "norm_a"
+    else:
+        var_a = "a"
 
-    f.line("acc = 0xff;")
+    f.line("__mmask8 acc = 0xff;")
     for i in range(pp.num_limbs):
-        f.line(f"acc &= VCMPEQ(norm_a[{i}], zero[{i}]);")
+        f.line(f"acc &= VCMPEQ({var_a}[{i}], zero);")
     f.line("return acc;")
 
     f.end()
@@ -98,14 +103,18 @@ def carry_prop_8x1_swap(f, pp, v, len, tmp_arr, tmp_var, mask, start_idx=0):
         f.line(f"{tmp_arr}[{i}] = VAND({tmp_var}{i}, {mask});")
     f.line()
 
-def fp_add_8x1(f, pp, v):
+def fp_add_8x1(f, pp, v, strat):
     f.start("void fp_add_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
     f.declare_single_vars(var_name="t", count=pp.num_limbs)
     f.line(f"__m512i sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    f.line(f"const __m512i p_bot = VSETALL(1);")
-    f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
+    if strat.mod_2p:
+        f.line(f"const __m512i p_bot = VSETALL(2);")
+        f.line(f"const __m512i p_top = VSETALL(2*{v.p_plus_1_top});")
+    else:
+        f.line(f"const __m512i p_bot = VSETALL(1);")
+        f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
     f.line()
 
     f.comment("Add limbs")
@@ -132,14 +141,18 @@ def fp_add_8x1(f, pp, v):
 
     f.end()
 
-def fp_sub_8x1(f, pp, v):
+def fp_sub_8x1(f, pp, v, strat):
     f.start("void fp_sub_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
     f.declare_single_vars(var_name="t", count=pp.num_limbs)
     f.line(f"__m512i sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    f.line(f"const __m512i p_bot = VSETALL(1);")
-    f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
+    if strat.mod_2p:
+        f.line(f"const __m512i p_bot = VSETALL(2);")
+        f.line(f"const __m512i p_top = VSETALL(2*{v.p_plus_1_top});")
+    else:
+        f.line(f"const __m512i p_bot = VSETALL(1);")
+        f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
     f.line()
 
     f.comment("Subtract limbs")
@@ -161,15 +174,19 @@ def fp_sub_8x1(f, pp, v):
 
     f.end()
 
-def fp_neg_8x1(f, pp, v):
+def fp_neg_8x1(f, pp, v, strat):
     f.start("void fp_neg_8x1(__m512i* res, __m512i* a)")
 
     f.declare_single_vars(var_name="t", count=pp.num_limbs)
     f.line(f"__m512i sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    f.line(f"const __m512i p_bot = VSETALL(1);")
-    f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
     f.line("const __m512i zero = VZERO();")
+    if strat.mod_2p:
+        f.line(f"const __m512i p_bot = VSETALL(2);")
+        f.line(f"const __m512i p_top = VSETALL(2*{v.p_plus_1_top});")
+    else:
+        f.line(f"const __m512i p_bot = VSETALL(1);")
+        f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
     f.line()
 
     f.comment("0 - a")
@@ -191,14 +208,18 @@ def fp_neg_8x1(f, pp, v):
 
     f.end()
 
-def fp_mixaddsub_8x1(f, pp, v):
+def fp_mixaddsub_8x1(f, pp, v, strat):
     f.start("void fp_mixaddsub_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)")
 
     f.declare_single_vars(var_name="t", count=pp.num_limbs)
     f.line(f"__m512i sign_mask;")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    f.line(f"const __m512i p_bot = VSETALL(1);")
-    f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
+    if strat.mod_2p:
+        f.line(f"const __m512i p_bot = VSETALL(2);")
+        f.line(f"const __m512i p_top = VSETALL(2*{v.p_plus_1_top});")
+    else:
+        f.line(f"const __m512i p_bot = VSETALL(1);")
+        f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
     f.line("const __mmask8 sub_mask = ~add_mask;")
     f.line()
 
@@ -222,6 +243,36 @@ def fp_mixaddsub_8x1(f, pp, v):
     f.line(f"t0 = VSUB(t0, VAND(p_bot, sign_mask));")
     f.line(f"t{pp.num_limbs-1} = VADD(t{pp.num_limbs-1}, VAND(p_top, sign_mask));")
     f.line()
+
+    carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
+
+    f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
+
+    f.end()
+
+def fp_normalize_8x1(f, pp, v):
+    f.comment("Reduces from [0, 2p) to [0, p)")
+    f.start("void fp_normalize_8x1(__m512i* res, __m512i* a)")
+
+    f.declare_single_vars(var_name="t", count=pp.num_limbs)
+    f.line(f"__m512i sign_mask;")
+    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
+    f.line(f"const __m512i p_bot = VSETALL(1);")
+    f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
+    f.line()
+
+    f.comment("Subtract p, using the special shape of p")
+    f.line(f"t0 = VADD(a[0], p_bot);")
+    for i in range(1, pp.num_limbs-1):
+        f.line(f"t{i} = a[{i}];")
+    f.line(f"t{pp.num_limbs-1} = VSUB(a[{pp.num_limbs-1}], p_top);")
+
+    carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
+
+    f.comment("If the result is negative, we add p")
+    f.line(f"sign_mask = VSRA(t{pp.num_limbs-1}, 63);")
+    f.line(f"t0 = VSUB(t0, VAND(p_bot, sign_mask));")
+    f.line(f"t{pp.num_limbs-1} = VADD(t{pp.num_limbs-1}, VAND(p_top, sign_mask));")
 
     carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
@@ -371,16 +422,18 @@ def mp_mixaddsubx2_8x1(f, pp, v, strat):
     f.end()
 
 def mp_add_p_sub_8x1(f, pp, v, strat):
-    f.comment("Computes res = a + p - b without any carry propagation or conditional masks")
+    plus_txt = "2p" if strat.mod_2p else "p"
+    f.comment(f"Computes res = a + {plus_txt} - b without any carry propagation or conditional masks")
     f.start("void mp_add_p_sub_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
     f.declare_single_vars(var_name="t", count=pp.num_limbs)
+    m = 2 if strat.mod_2p else 1
     if strat.mode_8x1x1 == Fp2Mode.lazy:
-        f.line(f"const __m512i p_bot = VSETALL({v.limb_mask});")
-        f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top}-1);")
+        f.line(f"const __m512i p_bot = VSETALL({m}*{v.limb_mask});")
+        f.line(f"const __m512i p_top = VSETALL({m}*{v.p_plus_1_top}-{m});")
     else:
-        f.line(f"const __m512i p_bot = VSETALL(1);")
-        f.line(f"const __m512i p_top = VSETALL({v.p_plus_1_top});")
+        f.line(f"const __m512i p_bot = VSETALL({m});")
+        f.line(f"const __m512i p_top = VSETALL({m}*{v.p_plus_1_top});")
         f.line(f"const __m512i limb_mask = VSETALL(LIMB_MASK);")
     f.line()
 
@@ -832,22 +885,23 @@ def fp_64_to_limbs_8x1_only_even_idx(f, pp, v):
 
     f.end()
 
-def fp_limbs_to_64_8x1(f, pp, v):
+def fp_limbs_to_64_8x1(f, pp, v, strat):
     f.start("void fp_limbs_to_64_8x1(uint64_t* res, __m512i* src)")
 
     f.line(f"uint64_t t[8];")
-    f.line(f"__m512i s[{pp.num_limbs}], zero[{pp.num_limbs}];")
-    f.comment("Normalize input")
-    f.line("fp_setzero_8x1(zero);")
-    f.line("fp_add_8x1(s, src, zero);")
-    f.line()
+    if strat.mod_2p:
+        f.line(f"__m512i s[{pp.num_limbs}];")
+        f.line("fp_normalize_8x1(s, src);")
+        src = "s"
+    else:
+        src = "src"
     f.line()
 
     n = pp.num_limbs
     i64 = 0
     leftover = 64
     for j in range(n):
-        f.line(f"VSTORE(t, s[{j}]);")
+        f.line(f"VSTORE(t, {src}[{j}]);")
         f.line("for (int i = 0; i < 8; i++) {")
         f.indent()
 
@@ -876,22 +930,23 @@ def fp_limbs_to_64_8x1(f, pp, v):
 
     f.end()
 
-def fp_limbs_to_64_8x1_only_even_idx(f, pp, v):
+def fp_limbs_to_64_8x1_only_even_idx(f, pp, v, strat):
     f.start("void fp_limbs_to_64_8x1_only_even_idx(uint64_t* res, __m512i* src)")
 
     f.line(f"uint64_t t[8];")
-    f.line(f"__m512i s[{pp.num_limbs}], zero[{pp.num_limbs}];")
-    f.comment("Normalize input")
-    f.line("fp_setzero_8x1(zero);")
-    f.line("fp_add_8x1(s, src, zero);")
-    f.line()
+    if strat.mod_2p:
+        f.line(f"__m512i s[{pp.num_limbs}];")
+        f.line("fp_normalize_8x1(s, src);")
+        src = "s"
+    else:
+        src = "src"
     f.line()
 
     n = pp.num_limbs
     i64 = 0
     leftover = 64
     for j in range(n):
-        f.line(f"VSTORE(t, s[{j}]);")
+        f.line(f"VSTORE(t, {src}[{j}]);")
         f.line("for (int i = 0; i < 4; i++) {")
         f.indent()
 
@@ -956,14 +1011,15 @@ def write_fp_8x1(f, pp, v, strat, chain):
     fp_setzero_8x1(f, pp, v)
     fp_copy_8x1(f, pp, v)
     fp_duplicate_8x1(f, pp, v)
-    fp_is_equal_8x1(f, pp, v)
-    fp_is_zero_8x1(f, pp, v)
+    fp_is_equal_8x1(f, pp, v, strat)
+    fp_is_zero_8x1(f, pp, v, strat)
     fp_select_8x1(f, pp, v)
 
-    fp_add_8x1(f, pp, v)
-    fp_sub_8x1(f, pp, v)
-    fp_neg_8x1(f, pp, v)
-    fp_mixaddsub_8x1(f, pp, v)
+    fp_add_8x1(f, pp, v, strat)
+    fp_sub_8x1(f, pp, v, strat)
+    fp_neg_8x1(f, pp, v, strat)
+    fp_mixaddsub_8x1(f, pp, v, strat)
+    fp_normalize_8x1(f, pp, v)
 
     if strat.mode_8x1x1 != Fp2Mode.reduce_everything:
         mp_add_8x1(f, pp, v, strat)
@@ -987,7 +1043,7 @@ def write_fp_8x1(f, pp, v, strat, chain):
 
     fp_64_to_limbs_8x1(f, pp, v)
     fp_64_to_limbs_8x1_only_even_idx(f, pp, v)
-    fp_limbs_to_64_8x1(f, pp, v)
-    fp_limbs_to_64_8x1_only_even_idx(f, pp, v)
+    fp_limbs_to_64_8x1(f, pp, v, strat)
+    fp_limbs_to_64_8x1_only_even_idx(f, pp, v, strat)
     
     rand_fp_8x1(f, pp, v)
