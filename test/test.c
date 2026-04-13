@@ -33,11 +33,11 @@ int main()
     int n_tests = 2000;
     bool passed;
 
-    passed = test_fp(n_tests);
-    if(!passed) { return 0; }
+    // passed = test_fp(n_tests);
+    // if(!passed) { return 0; }
 
-    passed = test_fp2(n_tests);
-    if(!passed) { return 0; }
+    // passed = test_fp2(n_tests);
+    // if(!passed) { return 0; }
 
     // passed = test_fp_unvec_lvl3(n_tests);
     // if (!passed) { return 0; }

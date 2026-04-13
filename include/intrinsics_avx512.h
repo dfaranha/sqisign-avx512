@@ -32,6 +32,7 @@
 #define VSETALL(a) _mm512_set1_epi64(a) // DST is filled with 8 copies of a
 #define VZERO() _mm512_setzero_si512() // DST = 0
 #define VSTORE(a, B) _mm512_storeu_epi64(a, B) // Store the 512-bit vector B as 8 64-bit integers in the array a.
+#define MASKZ(mask, A) _mm512_maskz_mov_epi64(mask, A)
 
 // Permutations & Shuffles
 #define VSHUFFLE(A, pattern) _mm512_shuffle_epi32(A, pattern) // Shuffles 32-bit limbs within each 128-bit lane, according to pattern. The first two bits of pattern specify where the first limb goes, etc.

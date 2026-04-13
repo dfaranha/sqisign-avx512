@@ -24,6 +24,7 @@ def fp_set_binary_4x2(f, pp, v):
         f.line(f"res[{i}] = VSET(R[{i}] & m0, R[{i+pp.n42}] & m0, R[{i}] & m1, R[{i+pp.n42}] & m1, R[{i}] & m2, R[{i+pp.n42}] & m2, R[{i}] & m3, R[{i+pp.n42}] & m3);")
     if pp.rem42 == 1:
         f.line(f"res[{n_full}] = VSET(R[{n_full}] & m0, 0, R[{n_full}] & m1, 0, R[{n_full}] & m2, 0, R[{n_full}] & m3, 0);")
+    
     f.end()
 
 def fp_copy_4x2(f, pp, v):

@@ -225,9 +225,7 @@ void ec_point_1x2x4x1_to_unvec(ec_point_t* res, __m512i* P)
 // TODO: Do we want to make this more efficient without a mul?
 void ec_set_zero_1x2x4x1(__m512i* P)
 {
-    fp2_setzero_2x4x1(P);
-    P[0] = VSET(1, 0, 0, 0, 0, 0, 0, 0);
-    fp2_tomont_2x4x1(P, P);
+    fp2_set_binary_2x4x1(P, 0b1);
 }
 
 // TODO: Do we want to make this more efficient without a mul?
@@ -1597,9 +1595,7 @@ void ec_point_1x2x2x2_to_unvec(ec_point_t* res, __m512i* P)
 
 void ec_set_zero_1x2x2x2(__m512i* P)
 {
-    fp2_setzero_2x2x2(P);
-    P[0] = VSET(1, 0, 0, 0, 0, 0, 0, 0);
-    fp2_tomont_2x2x2(P, P);
+    fp2_set_binary_2x2x2(P, 0b01);
 }
 
 // Does not assume A24 has been normalized.
@@ -2252,9 +2248,46 @@ bool ec_biscalar_mul_pair_normA_1x2x2x2(
     return succ1 && succ2;
 }
 
-void ec_normalize_A24_2x2x2x2(__m512i* res1, __m512i* res2, __m512i* src1, __m512i* src2)
+void ec_normalize_A24_2x2x2x2(__m512i* res1, __m512i* res2, __m512i* A24_1, __m512i* A24_2)
 {
-    
+    __m512i A24[N4x2], C24[N4x2];
+    const __m512i idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    const __m512i idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+
+    // A24 = (A24_1, A24_2), C24 = (C24_1, C24_2)
+    for (int i = 0; i < N4x2; i++) {
+        A24[i] = VBLENDPERM(idx0, A24_1[i], A24_2[i]);
+        C24[i] = VBLENDPERM(idx1, A24_1[i], A24_2[i]);
+    }
+
+    fp2_inv_2x2x2(C24, C24);
+    fp2_mul_2x2x2(A24, A24, C24);
+
+    // res1 = (A24_1 / C24_1, 1), res2 = (A24_2 / C24_2, 1)
+    fp2_set_binary_2x2x2(C24, 0b11);
+    for (int i = 0; i < N4x2; i++) {
+        res1[i] = VBLENDPERM(idx0, A24[i], C24[i]);
+        res2[i] = VBLENDPERM(idx1, A24[i], C24[i]);
+    }
+}
+
+// A = 4*A24 - 2
+void ec_normA24_to_normA_1x2x2x2(__m512i* res, __m512i* normA24)
+{
+    __m512i two[N4x2], normA[N4x2];
+    const __m512i idx = VSET(0, 1, 2, 3, 12, 13, 14, 15);
+
+    fp2_set_binary_2x2x2(two, 0b01);
+    fp2_add_2x2x2(two, two, two);
+
+    fp2_add_2x2x2(normA, normA24, normA24);
+    fp2_add_2x2x2(normA, normA, normA);
+    fp2_sub_2x2x2(normA, normA, two);
+
+    // Assuming normA24 is normalized, we exploit that it's second component is 1.
+    for (int i = 0; i < N4x2; i++) {
+        res[i] = VBLENDPERM(idx, normA[i], normA24[i]);
+    }
 }
 
 // Debugging functions

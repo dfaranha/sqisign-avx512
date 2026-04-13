@@ -352,6 +352,9 @@ bool ec_biscalar_mul_pair_normA_1x2x2x2(
     __m512i* basis
 );
 
+void ec_normalize_A24_2x2x2x2(__m512i* res1, __m512i* res2, __m512i* A24_1, __m512i* A24_2);
+void ec_normA24_to_normA_1x2x2x2(__m512i* res, __m512i* normA24);
+
 // Debugging functions
 bool test_point_order_twof_1x2x2x2(__m512i* P, __m512i* A24, unsigned int f);
 bool test_basis_order_twof_1x2x2x2(__m512i* B, __m512i* A24, unsigned int f);

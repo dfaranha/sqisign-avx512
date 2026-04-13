@@ -5,6 +5,7 @@
 #include "sqi_ec_params_lvl3.h"
 #include <assert.h>
 #include "fp_unvec_lvl3.h"
+#include "fp_consts.h"
 #include "fp2.h"
 #include "ec.h"
 #include "isog-1d.h"
@@ -190,13 +191,29 @@ challenge_and_aux_basis_verify(ec_basis_t *B_chall_can_unvec,
         return 0;
 
     // TODO: Pair these together
-    ec_normalize_curve_and_A24(E_chall); // to use normalized ladders
-    ec_normalize_curve_and_A24(E_aux); // for basis doubling
+
+    // setting to the right order
+
+    // We normalize E_chall to use normalized ladders
+    // and E_aux for faster basis doubling
+    __m512i A24_chall[N4x2], A24_aux[N4x2], A_chall[N4x2], B_chall_can[3*N4x2], B_aux_can[3*N4x2];
+    ec_point_unvec_to_1x2x2x2(A24_chall, &E_chall->A24);
+    ec_point_unvec_to_1x2x2x2(A24_aux, &E_aux->A24);
+    ec_normalize_A24_2x2x2x2(A24_chall, A24_aux, A24_chall, A24_aux);
+    ec_normA24_to_normA_1x2x2x2(A_chall, A24_chall);
+    ec_point_t AC;
+    ec_point_1x2x2x2_to_unvec(&AC, A_chall);
+    fp2_copy(&E_chall->A, &AC.x);
+    fp2_set_one(&E_chall->C);
+    ec_point_1x2x2x2_to_unvec(&E_chall->A24, A24_chall);
+    ec_point_1x2x2x2_to_unvec(&E_aux->A24, A24_aux);
+
+    // ec_normalize_curve_and_A24(E_chall); // to use normalized ladders
+    // ec_normalize_curve_and_A24(E_aux); // for basis doubling
 
     // ============== VECTORIZED ================================================================================
 
-    // setting to the right order
-    __m512i A24_chall[4], A24_aux[4], B_chall_can[12], B_aux_can[12];
+    
     ec_point_unvec_to_1x2x2x2(A24_chall, &E_chall->A24);
     ec_point_unvec_to_1x2x2x2(A24_aux, &E_aux->A24);
     ec_point_unvec_to_1x2x2x2(B_chall_can, &B_chall_can_unvec->P);
