@@ -13,6 +13,12 @@ void fp2_setzero_8x1x1(__m512i* res)
     fp_setzero_8x1(res+8);
 }
 
+void fp2_set_binary_8x1x1(__m512i* res, __mmask8 bits)
+{
+    fp_set_binary_8x1(res, bits);
+    fp_setzero_8x1(res + 8);
+}
+
 void fp2_copy_8x1x1(__m512i* res, __m512i* a)
 {
     fp_copy_8x1(res, a);
@@ -176,6 +182,12 @@ void fp2_setzero_4x1x2(__m512i* res)
     fp_setzero_4x2(res+4);
 }
 
+void fp2_set_binary_4x1x2(__m512i* res, __mmask8 bits)
+{
+    fp_set_binary_4x2(res, bits);
+    fp_setzero_8x1(res + 4);
+}
+
 void fp2_copy_4x1x2(__m512i* res, __m512i* a)
 {
     fp_copy_4x2(res, a);
@@ -336,6 +348,12 @@ void rand_fp2_4x1x2(__m512i* res)
 void fp2_setzero_4x2x1(__m512i* res)
 {
     fp_setzero_8x1(res);
+}
+
+void fp2_set_binary_4x2x1(__m512i* res, __mmask8 bits)
+{
+    __mmask8 bits_8x1 = (bits & 0x1) | ((bits & 0x2) << 1) | ((bits & 0x4) << 2) | ((bits & 0x8) << 3);
+    fp_set_binary_8x1(res, bits_8x1);
 }
 
 void fp2_copy_4x2x1(__m512i* res, __m512i* a)
@@ -529,6 +547,12 @@ void fp2_setzero_2x2x2(__m512i* res)
     fp_setzero_4x2(res);
 }
 
+void fp2_set_binary_2x2x2(__m512i* res, __mmask8 bits)
+{
+    __mmask8 bits_4x2 = (bits & 0x1) | ((bits & 0x2) << 1);
+    fp_set_binary_4x2(res, bits_4x2);
+}
+
 void fp2_copy_2x2x2(__m512i* res, __m512i* a)
 {
     fp_copy_4x2(res, a);
@@ -692,6 +716,12 @@ void rand_fp2_2x2x2(__m512i* res)
 void fp2_setzero_2x4x1(__m512i* res)
 {
     fp_setzero_8x1(res);
+}
+
+void fp2_set_binary_2x4x1(__m512i* res, __mmask8 bits)
+{
+    __mmask8 bits_8x1 = (bits & 0x1) | ((bits & 0x2) << 3);
+    fp_set_binary_8x1(res, bits_8x1);
 }
 
 void fp2_copy_2x4x1(__m512i* res, __m512i* a)

@@ -11,6 +11,21 @@ def fp_setzero_4x2(f, pp, v):
         f.line(f"res[{i}] = VZERO();")
     f.end()
 
+def fp_set_binary_4x2(f, pp, v):
+    f.comment("If bits[i] = 1, the i-th Fp element is set to 1 in the Montgomery representation.")
+    f.start("void fp_set_binary_4x2(__m512i* res, __mmask8 bits)")
+
+    f.line("uint64_t m0 = -(bits & 0x1);")
+    for i in range(1, 4):
+        f.line(f"uint64_t m{i} = -((bits >> {i}) & 0x1);")
+    f.line()
+    n_full = pp.n42-pp.rem42
+    for i in range(n_full):
+        f.line(f"res[{i}] = VSET(R[{i}] & m0, R[{i+pp.n42}] & m0, R[{i}] & m1, R[{i+pp.n42}] & m1, R[{i}] & m2, R[{i+pp.n42}] & m2, R[{i}] & m3, R[{i+pp.n42}] & m3);")
+    if pp.rem42 == 1:
+        f.line(f"res[{n_full}] = VSET(R[{n_full}] & m0, 0, R[{n_full}] & m1, 0, R[{n_full}] & m2, 0, R[{n_full}] & m3, 0);")
+    f.end()
+
 def fp_copy_4x2(f, pp, v):
     f.start("void fp_copy_4x2(__m512i* res, __m512i* a)")
     for i in range(pp.n42):
@@ -977,6 +992,7 @@ def write_fp_4x2(f, pp, v, strat, chain):
     f.banner("4x2")
 
     fp_setzero_4x2(f, pp, v)
+    fp_set_binary_4x2(f, pp, v)
     fp_copy_4x2(f, pp, v)
     fp_duplicate_4x2(f, pp, v)
     fp_is_equal_4x2(f, pp, v, strat)

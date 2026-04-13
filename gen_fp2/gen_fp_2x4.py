@@ -8,6 +8,27 @@ def fp_setzero_2x4(f, pp, v):
 
     f.end()
 
+def fp_set_binary_2x4(f, pp, v):
+    f.comment("If bits[i] = 1, the i-th Fp element is set to 1 in the Montgomery representation.")
+    f.start("void fp_set_binary_2x4(__m512i* res, __mmask8 bits)")
+
+    f.line("uint64_t m0 = -(bits & 0x1);")
+    f.line(f"uint64_t m1 = -((bits >> 1) & 0x1);")
+    f.line()
+
+    for i in range(pp.n24):
+        l0 = f"R[{i}] & m0"
+        l4 = f"R[{i}] & m1"
+        l1 = f"R[{i + pp.n24}] & m0" if i + pp.n24 < pp.num_limbs else "0"
+        l5 = f"R[{i + pp.n24}] & m1" if i + pp.n24 < pp.num_limbs else "0"
+        l2 = f"R[{i + 2*pp.n24}] & m0" if i + 2*pp.n24 < pp.num_limbs else "0"
+        l6 = f"R[{i + 2*pp.n24}] & m1" if i + 2*pp.n24 < pp.num_limbs else "0"
+        l3 = f"R[{i + 3*pp.n24}] & m0" if i + 3*pp.n24 < pp.num_limbs else "0"
+        l7 = f"R[{i + 3*pp.n24}] & m1" if i + 3*pp.n24 < pp.num_limbs else "0"
+        f.line(f"res[{i}] = VSET({l0}, {l1}, {l2}, {l3}, {l4}, {l5}, {l6}, {l7});")
+    
+    f.end()
+
 def fp_copy_2x4(f, pp, v):
     f.start("void fp_copy_2x4(__m512i* res, __m512i* a)")
     for i in range(pp.n24):
@@ -893,6 +914,7 @@ def write_fp_2x4(f, pp, v, strat, chain):
     f.banner("2x4")
 
     fp_setzero_2x4(f, pp, v)
+    fp_set_binary_2x4(f, pp, v)
     fp_copy_2x4(f, pp, v)
     fp_duplicate_2x4(f, pp, v)
     fp_is_equal_2x4(f, pp, v, strat)

@@ -21,6 +21,28 @@ void fp_setzero_8x1(__m512i* res)
     res[7] = VZERO();
 }
 
+// If bits[i] = 1, the i-th Fp element is set to 1 in the Montgomery representation.
+void fp_set_binary_8x1(__m512i* res, __mmask8 bits)
+{
+    uint64_t m0 = -(bits & 0x1);
+    uint64_t m1 = -((bits >> 1) & 0x1);
+    uint64_t m2 = -((bits >> 2) & 0x1);
+    uint64_t m3 = -((bits >> 3) & 0x1);
+    uint64_t m4 = -((bits >> 4) & 0x1);
+    uint64_t m5 = -((bits >> 5) & 0x1);
+    uint64_t m6 = -((bits >> 6) & 0x1);
+    uint64_t m7 = -((bits >> 7) & 0x1);
+    
+    res[0] = VSET(R[0] & m0, R[0] & m1, R[0] & m2, R[0] & m3, R[0] & m4, R[0] & m5, R[0] & m6, R[0] & m7);
+    res[1] = VSET(R[1] & m0, R[1] & m1, R[1] & m2, R[1] & m3, R[1] & m4, R[1] & m5, R[1] & m6, R[1] & m7);
+    res[2] = VSET(R[2] & m0, R[2] & m1, R[2] & m2, R[2] & m3, R[2] & m4, R[2] & m5, R[2] & m6, R[2] & m7);
+    res[3] = VSET(R[3] & m0, R[3] & m1, R[3] & m2, R[3] & m3, R[3] & m4, R[3] & m5, R[3] & m6, R[3] & m7);
+    res[4] = VSET(R[4] & m0, R[4] & m1, R[4] & m2, R[4] & m3, R[4] & m4, R[4] & m5, R[4] & m6, R[4] & m7);
+    res[5] = VSET(R[5] & m0, R[5] & m1, R[5] & m2, R[5] & m3, R[5] & m4, R[5] & m5, R[5] & m6, R[5] & m7);
+    res[6] = VSET(R[6] & m0, R[6] & m1, R[6] & m2, R[6] & m3, R[6] & m4, R[6] & m5, R[6] & m6, R[6] & m7);
+    res[7] = VSET(R[7] & m0, R[7] & m1, R[7] & m2, R[7] & m3, R[7] & m4, R[7] & m5, R[7] & m6, R[7] & m7);
+}
+
 void fp_copy_8x1(__m512i* res, __m512i* a)
 {
     res[0] = a[0];
@@ -1369,6 +1391,20 @@ void fp_setzero_4x2(__m512i* res)
     res[3] = VZERO();
 }
 
+// If bits[i] = 1, the i-th Fp element is set to 1 in the Montgomery representation.
+void fp_set_binary_4x2(__m512i* res, __mmask8 bits)
+{
+    uint64_t m0 = -(bits & 0x1);
+    uint64_t m1 = -((bits >> 1) & 0x1);
+    uint64_t m2 = -((bits >> 2) & 0x1);
+    uint64_t m3 = -((bits >> 3) & 0x1);
+    
+    res[0] = VSET(R[0] & m0, R[4] & m0, R[0] & m1, R[4] & m1, R[0] & m2, R[4] & m2, R[0] & m3, R[4] & m3);
+    res[1] = VSET(R[1] & m0, R[5] & m0, R[1] & m1, R[5] & m1, R[1] & m2, R[5] & m2, R[1] & m3, R[5] & m3);
+    res[2] = VSET(R[2] & m0, R[6] & m0, R[2] & m1, R[6] & m1, R[2] & m2, R[6] & m2, R[2] & m3, R[6] & m3);
+    res[3] = VSET(R[3] & m0, R[7] & m0, R[3] & m1, R[7] & m1, R[3] & m2, R[7] & m2, R[3] & m3, R[7] & m3);
+}
+
 void fp_copy_4x2(__m512i* res, __m512i* a)
 {
     res[0] = a[0];
@@ -2412,6 +2448,16 @@ void fp_setzero_2x4(__m512i* res)
 {
     res[0] = VZERO();
     res[1] = VZERO();
+}
+
+// If bits[i] = 1, the i-th Fp element is set to 1 in the Montgomery representation.
+void fp_set_binary_2x4(__m512i* res, __mmask8 bits)
+{
+    uint64_t m0 = -(bits & 0x1);
+    uint64_t m1 = -((bits >> 1) & 0x1);
+    
+    res[0] = VSET(R[0] & m0, R[2] & m0, R[4] & m0, R[6] & m0, R[0] & m1, R[2] & m1, R[4] & m1, R[6] & m1);
+    res[1] = VSET(R[1] & m0, R[3] & m0, R[5] & m0, R[7] & m0, R[1] & m1, R[3] & m1, R[5] & m1, R[7] & m1);
 }
 
 void fp_copy_2x4(__m512i* res, __m512i* a)

@@ -16,6 +16,14 @@ def fp2_setzero_8x1x1(f, pp, v):
 
     f.end()
 
+def fp2_set_binary_8x1x1(f, pp, v):
+    f.start("void fp2_set_binary_8x1x1(__m512i* res, __mmask8 bits)")
+
+    f.line(f"fp_set_binary_8x1(res, bits);")
+    f.line(f"fp_setzero_8x1(res + {pp.num_limbs});")
+
+    f.end()
+
 def fp2_copy_8x1x1(f, pp, v):
     f.start("void fp2_copy_8x1x1(__m512i* res, __m512i* a)")
     
@@ -259,6 +267,7 @@ def fp2_8x1x1(f, pp, v, strat):
     f.banner("8x1x1")
 
     fp2_setzero_8x1x1(f, pp, v)
+    fp2_set_binary_8x1x1(f, pp, v)
     fp2_copy_8x1x1(f, pp, v)
     fp2_is_equal_8x1x1(f, pp, v)
     fp2_is_zero_8x1x1(f, pp, v)
@@ -285,6 +294,14 @@ def fp2_setzero_4x1x2(f, pp, v):
 
     f.line("fp_setzero_4x2(res);")
     f.line(f"fp_setzero_4x2(res+{pp.n42});")
+
+    f.end()
+
+def fp2_set_binary_4x1x2(f, pp, v):
+    f.start("void fp2_set_binary_4x1x2(__m512i* res, __mmask8 bits)")
+
+    f.line(f"fp_set_binary_4x2(res, bits);")
+    f.line(f"fp_setzero_8x1(res + {pp.n42});")
 
     f.end()
 
@@ -513,6 +530,7 @@ def fp2_4x1x2(f, pp, v, strat):
     f.banner("4x1x2")
 
     fp2_setzero_4x1x2(f, pp, v)
+    fp2_set_binary_4x1x2(f, pp, v)
     fp2_copy_4x1x2(f, pp, v)
     fp2_is_equal_4x1x2(f, pp, v)
     fp2_is_zero_4x1x2(f, pp, v)
@@ -538,6 +556,15 @@ def fp2_setzero_4x2x1(f, pp, v):
     f.start("void fp2_setzero_4x2x1(__m512i* res)")
 
     f.line("fp_setzero_8x1(res);")
+
+    f.end()
+
+def fp2_set_binary_4x2x1(f, pp, v):
+    f.start("void fp2_set_binary_4x2x1(__m512i* res, __mmask8 bits)")
+
+    #Interleave with 0's to set im component 0
+    f.line(f"__mmask8 bits_8x1 = (bits & 0x1) | ((bits & 0x2) << 1) | ((bits & 0x4) << 2) | ((bits & 0x8) << 3);")
+    f.line(f"fp_set_binary_8x1(res, bits_8x1);")
 
     f.end()
 
@@ -834,6 +861,7 @@ def fp2_4x2x1(f, pp, v, strat):
     f.banner("4x2x1")
 
     fp2_setzero_4x2x1(f, pp, v)
+    fp2_set_binary_4x2x1(f, pp, v)
     fp2_copy_4x2x1(f, pp, v)
     fp2_is_equal_4x2x1(f, pp, v)
     fp2_is_zero_4x2x1(f, pp, v)
@@ -861,6 +889,15 @@ def fp2_setzero_2x2x2(f, pp, v):
     f.start("void fp2_setzero_2x2x2(__m512i* res)")
 
     f.line("fp_setzero_4x2(res);")
+
+    f.end()
+
+def fp2_set_binary_2x2x2(f, pp, v):
+    f.start("void fp2_set_binary_2x2x2(__m512i* res, __mmask8 bits)")
+
+    #Interleave with 0's to set im component 0
+    f.line(f"__mmask8 bits_4x2 = (bits & 0x1) | ((bits & 0x2) << 1);")
+    f.line(f"fp_set_binary_4x2(res, bits_4x2);")
 
     f.end()
 
@@ -1136,6 +1173,7 @@ def fp2_2x2x2(f, pp, v, strat):
     f.banner("2x2x2")
 
     fp2_setzero_2x2x2(f, pp, v)
+    fp2_set_binary_2x2x2(f, pp, v)
     fp2_copy_2x2x2(f, pp, v)
     fp2_is_equal_2x2x2(f, pp, v)
     fp2_is_zero_2x2x2(f, pp, v)
@@ -1161,6 +1199,15 @@ def fp2_setzero_2x4x1(f, pp, v):
     f.start("void fp2_setzero_2x4x1(__m512i* res)")
 
     f.line("fp_setzero_8x1(res);")
+
+    f.end()
+
+def fp2_set_binary_2x4x1(f, pp, v):
+    f.start("void fp2_set_binary_2x4x1(__m512i* res, __mmask8 bits)")
+
+    #Interleave with 0's to set im component 0
+    f.line(f"__mmask8 bits_8x1 = (bits & 0x1) | ((bits & 0x2) << 3);")
+    f.line(f"fp_set_binary_8x1(res, bits_8x1);")
 
     f.end()
 
@@ -1400,6 +1447,7 @@ def fp2_2x4x1(f, pp, v):
     f.banner("2x4x1")
 
     fp2_setzero_2x4x1(f, pp, v)
+    fp2_set_binary_2x4x1(f, pp, v)
     fp2_copy_2x4x1(f, pp, v)
     fp2_is_equal_2x4x1(f, pp, v)
     fp2_is_zero_2x4x1(f, pp, v)

@@ -8,6 +8,19 @@ def fp_setzero_8x1(f, pp, v):
         f.line(f"res[{i}] = VZERO();")
     f.end()
 
+def fp_set_binary_8x1(f, pp, v):
+    f.comment("If bits[i] = 1, the i-th Fp element is set to 1 in the Montgomery representation.")
+    f.start("void fp_set_binary_8x1(__m512i* res, __mmask8 bits)")
+
+    f.line("uint64_t m0 = -(bits & 0x1);")
+    for i in range(1, 8):
+        f.line(f"uint64_t m{i} = -((bits >> {i}) & 0x1);")
+    f.line()
+    for i in range(pp.num_limbs):
+        f.line(f"res[{i}] = VSET(R[{i}] & m0, R[{i}] & m1, R[{i}] & m2, R[{i}] & m3, R[{i}] & m4, R[{i}] & m5, R[{i}] & m6, R[{i}] & m7);")
+
+    f.end()
+
 def fp_copy_8x1(f, pp, v):
     f.start("void fp_copy_8x1(__m512i* res, __m512i* a)")
     for i in range(pp.num_limbs):
@@ -1028,6 +1041,7 @@ def write_fp_8x1(f, pp, v, strat, chain):
     f.banner("8x1")
 
     fp_setzero_8x1(f, pp, v)
+    fp_set_binary_8x1(f, pp, v)
     fp_copy_8x1(f, pp, v)
     fp_duplicate_8x1(f, pp, v)
     fp_is_equal_8x1(f, pp, v, strat)

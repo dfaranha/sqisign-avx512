@@ -21,6 +21,7 @@
  */
 
 void fp2_setzero_8x1x1(__m512i* res);
+void fp2_set_binary_8x1x1(__m512i* res, __mmask8 bits);
 void fp2_copy_8x1x1(__m512i* res, __m512i* a);
 
 /**
@@ -75,6 +76,7 @@ void rand_fp2_8x1x1(__m512i* res);
  */
 
 void fp2_setzero_4x1x2(__m512i* res);
+void fp2_set_binary_4x1x2(__m512i* res, __mmask8 bits);
 void fp2_copy_4x1x2(__m512i* res, __m512i* a);
 
 /**
@@ -115,6 +117,7 @@ void fp2_copy_4x1x2(__m512i* res, __m512i* a);
  */
 
 void fp2_setzero_4x2x1(__m512i* res);
+void fp2_set_binary_4x2x1(__m512i* res, __mmask8 bits);
 void fp2_copy_4x2x1(__m512i* res, __m512i* a);
 
 /**
@@ -171,6 +174,7 @@ void rand_fp2_4x2x1(__m512i* res);
  */
 
 void fp2_setzero_2x2x2(__m512i* res);
+void fp2_set_binary_2x2x2(__m512i* res, __mmask8 bits);
 void fp2_copy_2x2x2(__m512i* res, __m512i* a);
 
 /**
@@ -213,6 +217,7 @@ void rand_fp2_2x2x2(__m512i* res);
  */
 
  void fp2_setzero_2x4x1(__m512i* res);
+ void fp2_set_binary_2x4x1(__m512i* res, __mmask8 bits);
  void fp2_copy_2x4x1(__m512i* res, __m512i* a);
  
  /**

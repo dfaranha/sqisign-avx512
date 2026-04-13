@@ -12,6 +12,9 @@
 
 void fp_setzero_8x1(__m512i* res);
 
+// If bits[i] = 1, the i-th Fp element is set to 1 in the Montgomery representation
+void fp_set_binary_8x1(__m512i* res, __mmask8 bits);
+
 void fp_copy_8x1(__m512i* res, __m512i* a);
 
 /**
@@ -159,6 +162,8 @@ void fp_limbs_to_64_8x1_only_even_idx(uint64_t* res, __m512i* src);
  */
 
 void fp_setzero_4x2(__m512i* res);
+// If bits[i] = 1, the i-th Fp element is set to 1 in the Montgomery representation
+void fp_set_binary_4x2(__m512i* res, __mmask8 bits);
 void fp_copy_4x2(__m512i* res, __m512i* a);
 
 
@@ -234,6 +239,8 @@ void fp_limbs_to_64_4x2(uint64_t* res, __m512i* src);
  */
 
 void fp_setzero_2x4(__m512i* res);
+// If bits[i] = 1, the i-th Fp element is set to 1 in the Montgomery representation
+void fp_set_binary_2x4(__m512i* res, __mmask8 bits);
 void fp_copy_2x4(__m512i* res, __m512i* a);
 
 
