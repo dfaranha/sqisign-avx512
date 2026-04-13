@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include "bench.h"
-#include "fp_lvl3.h"
-#include "fp2_lvl3.h"
+#include "fp.h"
+#include "fp_unvec_lvl3.h"
+#include "fp2.h"
 #include "ec.h"
 
 #include "sqi_test_extras.h"

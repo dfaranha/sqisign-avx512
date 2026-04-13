@@ -48,7 +48,7 @@ int main()
     // bench_ec(n_bench);
     // bench_1d_isog(n_bench);
     // bench_theta(n_bench);
-    bench_verif(20);
+    //bench_verif(20);
 
     return 0;
 }

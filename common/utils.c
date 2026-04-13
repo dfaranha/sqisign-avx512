@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "utils.h"
-
-#include "fp2_lvl3.h"
+#include "fp_unvec_lvl3.h"
+#include "fp2.h"
 #include "sqi_test_extras.h"
 
 // TODO: Might not be cryptographically secure randomness.
@@ -110,83 +110,6 @@ void print_fp_2x4_index(__m512i* a, int index)
         printf("%d: %lx   ", 2*i+1, v1[4*index + i]);
     }
     printf("\n");
-}
-
-void rand_fp_8x1(__m512i* res)
-{
-    __m512i mask, zero[8];
-    mask = VSETALL(LIMB_MASK);
-    fp_setzero_8x1(zero);
-
-    for(int i = 0; i < 7; i++) {
-        res[i] = VAND(rand_512i(), mask);
-    }
-    // Last limb is shorter
-    mask = VSETALL(LAST_LIMB_MASK);
-    res[7] = VAND(rand_512i(), mask);
-    //Reduction
-    fp_add_8x1(res, res, zero);
-}
-
-void rand_fp_4x2(__m512i* res)
-{
-    __m512i mask, zero[4];
-    mask = VSETALL(LIMB_MASK);
-    fp_setzero_4x2(zero);
-
-    for(int i = 0; i < 3; i++) {
-        res[i] = VAND(rand_512i(), mask);
-    }
-    // Last limb is shorter
-    mask = VSET(LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK);
-    res[3] = VAND(rand_512i(), mask);
-    //Reduction
-    fp_add_4x2(res, res, zero);
-}
-
-void rand_fp_2x4(__m512i* res)
-{
-    __m512i mask, zero[2];
-    fp_setzero_2x4(zero);
-
-    mask = VSETALL(LIMB_MASK);
-    res[0] = VAND(rand_512i(), mask);
-    mask = VSET(LIMB_MASK, LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK, LIMB_MASK, LIMB_MASK, LIMB_MASK, LAST_LIMB_MASK);
-    res[1] = VAND(rand_512i(), mask);
-
-    //Reduction
-    fp_add_2x4(res, res, zero);
-}
-
-void rand_fp2_8x1x1(__m512i* res)
-{
-    rand_fp_8x1(res);
-    rand_fp_8x1(res+8);
-}
-
-void rand_fp2_4x1x2(__m512i* res)
-{
-    rand_fp_4x2(res);
-    rand_fp_4x2(res+4);
-}
-
-void rand_fp2_4x2x1(__m512i* res)
-{
-    rand_fp_8x1(res);
-}
-
-void rand_fp2_2x2x2(__m512i* res)
-{
-    rand_fp_4x2(res);
-}
-
-void rand_fp2_2x4x1(__m512i* res)
-{
-    rand_fp_8x1(res);
-    __m512i zero = VZERO();
-    for(int i = 0; i < 8; i++) {
-        res[i] = VBLEND(0x55, zero, res[i]);
-    }
 }
 
 void print_fp2_2x2x2(__m512i* a)
