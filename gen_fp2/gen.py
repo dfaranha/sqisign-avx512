@@ -36,12 +36,12 @@ num_kat = 20
 gen_addchain = True # Requires addchain to be installed
 
 #lvl1
-e = 248
-c = 5
+# e = 248
+# c = 5
 
 # lvl3
-# e = 376
-# c = 65
+e = 376
+c = 65
 
 # lvl5
 # e = 500
