@@ -369,10 +369,12 @@ void ec_normA24_to_normA_1x2x2x2(__m512i* res, __m512i* normA24);
 void ec_normalize_curve_2x2x2x2(__m512i* res_A24_1, __m512i* res_A24_2, __m512i* res_A_1, __m512i* res_A_2, __m512i* A24_1, __m512i* A24_2);
 
 void ec_proj_diff_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA);
+void ec_proj_diff_SQI_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA);
 // P, Q and normA are pairs of points in 4x2x1
 // P = (P1.x, P1.z, P2.x, P2.z)
 void ec_proj_diff_pair_4x2x1(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA);
 void ec_curve_to_basis_from_hint_1x2x2x2(__m512i* res_basis, __m512i* normA, const uint8_t hint_pk);
+void ec_curve_to_basis_from_hint_SQI_1x2x2x2(__m512i* res_basis, __m512i* normA, const uint8_t hint);
 void ec_curve_to_basis_from_hint_2x2x2x2(__m512i* res_basis1, __m512i* res_basis2, __m512i* normA1, __m512i* normA2, const uint8_t hint1, const uint8_t hint2);
 
 // Debugging functions

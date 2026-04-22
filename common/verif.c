@@ -80,7 +80,7 @@ compute_challenge_verify(ec_curve_t *E_chall, const signature_t *sig, const ec_c
     ec_point_unvec_to_1x2x2x2(A, &AC);
 
     // Compute basis for E_pk from hint
-    ec_curve_to_basis_from_hint_1x2x2x2(bas_Epk, A, hint_pk);
+    ec_curve_to_basis_from_hint_SQI_1x2x2x2(bas_Epk, A, hint_pk);
     
     // }
     // uint64_t end2 = cpucycles();
