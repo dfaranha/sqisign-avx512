@@ -425,7 +425,13 @@ bool test_fp(int iterations)
     }
 
     // Square root
-    for (int i = 0; i < iterations; i++) {
+    fp_sqrt_8x1(a, zero);
+    if (fp_is_zero_8x1(a) != 0xff) {
+        passed = 0;
+        printf("sqrt(0) != 0\n");
+    }
+
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp_8x1(a);
         
         fp_sqr_8x1(b, a);
@@ -842,7 +848,13 @@ bool test_fp(int iterations)
     }
 
     // Square root
-    for (int i = 0; i < iterations; i++) {
+    fp_sqrt_4x2(a, zero);
+    if (fp_is_zero_4x2(a) != 0xf) {
+        passed = 0;
+        printf("sqrt(0) != 0\n");
+    }
+
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp_4x2(a);
         
         fp_sqr_4x2(b, a);
@@ -1229,7 +1241,13 @@ bool test_fp(int iterations)
     }
 
     // Square root
-    for (int i = 0; i < iterations; i++) {
+    fp_sqrt_2x4(a, zero);
+    if (fp_is_zero_2x4(a) != 0x3) {
+        passed = 0;
+        printf("sqrt(0) != 0\n");
+    }
+
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp_2x4(a);
         
         fp_sqr_2x4(b, a);
@@ -1399,8 +1417,12 @@ bool test_fp(int iterations)
 
     printf("Fp inversion tests\n");
 
-    // Inverse
-    for (int i = 0; i < iterations; i++) {
+    fp_inv_2x4(a, zero);
+    if (fp_is_zero_2x4(a) != 0x3) {
+        passed = 0;
+        printf("Inv does not output 0 on input 0\n");
+    }
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp_2x4(a);
 
         if (fp_is_zero_2x4(a) != 0)
@@ -1420,8 +1442,14 @@ bool test_fp(int iterations)
     }
 
     //Batched inversion
+    fp_inv_4x2(a, zero);
+    if (fp_is_zero_4x2(a) != 0xf) {
+        passed = 0;
+        printf("Inv does not output 0 on input 0\n");
+    }
+
     fp_duplicate_4x2(vR, R);
-    for (int i = 0; i < iterations; i++) {
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp_4x2(a);
         if (fp_is_zero_4x2(a) != 0) { continue; }
 
@@ -1440,8 +1468,14 @@ bool test_fp(int iterations)
     }
 
     // Batched inversion
+    fp_inv_8x1(a, zero);
+    if (fp_is_zero_8x1(a) != 0xff) {
+        passed = 0;
+        printf("Inv does not output 0 on input 0\n");
+    }
+
     fp_duplicate_8x1(vR, R);
-    for (int i = 0; i < iterations; i++) {
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp_8x1(a);
         if (fp_is_zero_8x1(a) != 0) { continue; }
 

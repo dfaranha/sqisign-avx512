@@ -539,7 +539,7 @@ void ec_double_add_pair_8x1x1(__m512i* R1_R2_S1_S2, __m512i* P1_Q1_PQ1_A24, __m5
     fp2_mul_8x1x1(R1_R2_S1_S2, R1_R2_S1_S2, t0);
 }
 
-// Requires normalized A coordinate 4* (A24 / C4) - 2
+// Requires normalized A coordinate
 void ec_double_add_normA_1x4x2x1(__m512i* res, __m512i* P_Q, __m512i* PmQ_A)
 {
     __m512i t0[NUM_LIMBS], t1[NUM_LIMBS];
@@ -686,6 +686,42 @@ static void ec_scalar_mul_normA_inner_1x4x2x1(__m512i* X0_X1, __m512i* XD_A, con
         if (bit) { // swap
             for (int k = 0; k < NUM_LIMBS; k++) {
                 X0_X1[k] = VPERM512(idx_swap, X0_X1[k]);
+            }
+        }
+    }
+}
+
+static void ec_scalar_mul_pair_normA_inner_8x1x1(__m512i* X0_X1_XD_A, __m512i* Y0_Y1_YD_A, const digit_t* m, const unsigned int mbits) {
+    __m512i R1_R2_S1_S2[2*NUM_LIMBS], idx0, idx1;
+    unsigned int bit;
+
+    for (int i = mbits - 1; i >= 0; i--) {
+        bit = (m[i >> LOG2RADIX] >> (i & (RADIX - 1))) & 1;
+
+        if (bit) { // swap X0 and X1
+            idx0 = VSET(4, 1, 6, 3, 0, 5, 2, 7);
+            for (int k = 0; k < 2*NUM_LIMBS; k++) {
+                X0_X1_XD_A[k] = VPERM512(idx0, X0_X1_XD_A[k]);
+                Y0_Y1_YD_A[k] = VPERM512(idx0, Y0_Y1_YD_A[k]);
+            }
+        }
+
+        ec_double_add_pair_normA_8x1x1(R1_R2_S1_S2, X0_X1_XD_A, Y0_Y1_YD_A);
+
+        if (!bit) { // X0_X1 = R1_R2, Y0_Y1 = S1_S2
+            idx0 = VSET(8, 1, 10, 3, 12, 5, 14, 7);
+            idx1 = VSET(9, 1, 11, 3, 13, 5, 15, 7);
+            for (int k = 0; k < 2*NUM_LIMBS; k++) {
+                X0_X1_XD_A[k] = VBLENDPERM(idx0, X0_X1_XD_A[k], R1_R2_S1_S2[k]);
+                Y0_Y1_YD_A[k] = VBLENDPERM(idx1, Y0_Y1_YD_A[k], R1_R2_S1_S2[k]);
+            }
+            
+        } else { // swap
+            idx0 = VSET(12, 1, 14, 3, 8, 5, 10, 7);
+            idx1 = VSET(13, 1, 15, 3, 9, 5, 11, 7);
+            for (int k = 0; k < 2*NUM_LIMBS; k++) {
+                X0_X1_XD_A[k] = VBLENDPERM(idx0, X0_X1_XD_A[k], R1_R2_S1_S2[k]);
+                Y0_Y1_YD_A[k] = VBLENDPERM(idx1, Y0_Y1_YD_A[k], R1_R2_S1_S2[k]);
             }
         }
     }
@@ -1800,7 +1836,7 @@ void ec_scalar_mul_normA_1x2x2x2(__m512i* res, __m512i* P, __m512i* A, const dig
         return;
     }
 
-    // X0 = P, X1 = 0, XD = P
+    // X0 = 0, X1 = P, XD = P
     ec_set_zero_1x2x2x2(X0_X1);
     fp2_2x2x2_to_4x2x1(X0_X1, X0_X1, P);
     fp2_2x2x2_to_4x2x1(XD_A, P, A);
@@ -1809,6 +1845,37 @@ void ec_scalar_mul_normA_1x2x2x2(__m512i* res, __m512i* P, __m512i* A, const dig
 
     // Ignore X1 and output X0
     fp2_4x2x1_to_2x2x2(res, XD_A, X0_X1);
+}
+
+// res1 = [m]*P1, res2 = [m]*P2
+void ec_scalar_mul_pair_normA_2x2x2(__m512i* res1, __m512i* res2, __m512i* P1, __m512i* P2, __m512i* A1, __m512i* A2, const digit_t* m, const unsigned int mbits)
+{
+    __m512i X0_X1_XD_A[2*NUM_LIMBS], Y0_Y1_YD_A[2*NUM_LIMBS];
+    if (mbits == 0) {
+        fp2_copy_2x2x2(res1, P1);
+        fp2_copy_2x2x2(res2, P2);
+        return;
+    }
+
+    // X0 = 0, X1 = P, XD = P
+    ec_set_zero_1x2x2x2(X0_X1_XD_A);
+    fp2_2x2x2_to_4x2x1(X0_X1_XD_A, X0_X1_XD_A, P1);
+    fp2_2x2x2_to_4x2x1(X0_X1_XD_A + NUM_LIMBS, P1, A1);
+    fp2_4x2x1_to_8x1x1(X0_X1_XD_A, X0_X1_XD_A, X0_X1_XD_A + NUM_LIMBS);
+
+    ec_set_zero_1x2x2x2(Y0_Y1_YD_A);
+    fp2_2x2x2_to_4x2x1(Y0_Y1_YD_A, Y0_Y1_YD_A, P2);
+    fp2_2x2x2_to_4x2x1(Y0_Y1_YD_A + NUM_LIMBS, P2, A2);
+    fp2_4x2x1_to_8x1x1(Y0_Y1_YD_A, Y0_Y1_YD_A, Y0_Y1_YD_A + NUM_LIMBS);
+
+    ec_scalar_mul_pair_normA_inner_8x1x1(X0_X1_XD_A, Y0_Y1_YD_A, m, mbits);
+
+    // Output X0
+    fp2_8x1x1_to_4x2x1(X0_X1_XD_A, X0_X1_XD_A + NUM_LIMBS, X0_X1_XD_A);
+    fp2_4x2x1_to_2x2x2(res1, X0_X1_XD_A + NUM_LIMBS, X0_X1_XD_A);
+    
+    fp2_8x1x1_to_4x2x1(Y0_Y1_YD_A, Y0_Y1_YD_A + NUM_LIMBS, Y0_Y1_YD_A);
+    fp2_4x2x1_to_2x2x2(res2, Y0_Y1_YD_A + NUM_LIMBS, Y0_Y1_YD_A);
 }
 
 bool ec_ladder_3pt_1x2x2x2(__m512i* res, __m512i* A24, __m512i* basis, const digit_t* m)
@@ -2248,6 +2315,41 @@ bool ec_biscalar_mul_pair_normA_1x2x2x2(
     return succ1 && succ2;
 }
 
+void ec_normalize_curve_2x2x2x2(__m512i* res_A24_1, __m512i* res_A24_2, __m512i* res_A_1, __m512i* res_A_2, __m512i* A24_1, __m512i* A24_2)
+{
+    __m512i t0[N4x2], t1[N4x2];
+    const __m512i idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    const __m512i idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+
+    // t0 = (A24_1, A24_2), t1 = (C24_1, C24_2)
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VBLENDPERM(idx0, A24_1[i], A24_2[i]);
+        t1[i] = VBLENDPERM(idx1, A24_1[i], A24_2[i]);
+    }
+
+    // t0 = (A24_1 / C24_1, A24_2 / C24_2)
+    fp2_inv_2x2x2(t1, t1);
+    fp2_mul_2x2x2(t0, t0, t1);
+
+    // Output normalized A24
+    fp2_set_binary_2x2x2(t1, 0b11);
+    for (int i = 0; i < N4x2; i++) {
+        res_A24_1[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        res_A24_2[i] = VBLENDPERM(idx1, t0[i], t1[i]);
+    }
+
+    // A = 4*A24 - 2 = 2*(2*A24 - 1)
+    fp2_add_2x2x2(t0, t0, t0);
+    fp2_sub_2x2x2(t0, t0, t1);
+    fp2_add_2x2x2(t0, t0, t0);
+
+    // Output normalized A
+    for (int i = 0; i < N4x2; i++) {
+        res_A_1[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        res_A_2[i] = VBLENDPERM(idx1, t0[i], t1[i]);
+    }
+}
+
 void ec_normalize_A24_2x2x2x2(__m512i* res1, __m512i* res2, __m512i* A24_1, __m512i* A24_2)
 {
     __m512i A24[N4x2], C24[N4x2];
@@ -2290,6 +2392,334 @@ void ec_normA24_to_normA_1x2x2x2(__m512i* res, __m512i* normA24)
     }
 }
 
+void ec_proj_diff_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA)
+{
+    // Need t0 and t1 to be able to store two 2x2x2 elements.
+    __m512i t0[2*N4x2], t1[2*N4x2], t2[NUM_LIMBS];
+    __m512i idx0, idx1;
+
+    // TODO: Suboptimal, we do one extra permutation for t1, 
+    //       to have code that works regardless of NUM_LIMBS % 2.
+    // t0 = (P.x, P.z, P.x, P.z)
+    // t1 = (Q.x, Q.z, Q.z, Q.x)
+    idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);
+    for (int i = 0; i < N4x2; i++) {
+        t1[i] = VPERM512(idx0, Q[i]); // (Q.z, Q.x)
+    }
+    fp2_2x2x2_to_4x2x1(t0, P, P);
+    fp2_2x2x2_to_4x2x1(t1, Q, t1);
+
+    fp2_mul_4x2x1(t0, t0, t1);
+
+    // Hadamard
+    // t1 = (t0[0], t0[0], t0[2], t0[2])
+    //         +      -      +      -
+    // t2 = (t0[1], t0[1], t0[3], t0[3])
+    idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VPERM512(idx0, t0[i]);
+        t2[i] = VPERM512(idx1, t0[i]);
+    }
+
+    fp2_mixaddsub_4x2x1(t1, t1, t2, 0x33);
+
+    // t2 = (t1[2], t0[1], t1[1], t1[3])
+    // t1 = (t1[0], t0[0], t1[1], t1[3])
+    idx0 = VSET(12, 13, 2, 3, 10, 11, 14, 15);
+    idx1 = VSET(8, 9, 0, 1, 10, 11, 14, 15);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t2[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        t1[i] = VBLENDPERM(idx1, t0[i], t1[i]);
+    }
+    fp2_mul_4x2x1(t1, t1, t2);
+
+    // Convert to 2x2x2
+    fp2_4x2x1_to_2x2x2(t0, t0 + N4x2, t0);
+    fp2_4x2x1_to_2x2x2(t1, t1 + N4x2, t1);
+
+    // Conjugate t0[1] (we don't need the other entries anymore)
+    fp2_conjugate_2x2x2(t0, t0);
+
+    // t0 = (A * t1[1], t0[1]^2)
+    idx0 = VSET(8, 9, 10, 11, 4, 5, 6, 7);
+    idx1 = VSET(12, 13, 14, 15, 4, 5, 6, 7);
+    for (int i = 0; i < N4x2; i++) {
+        t2[i] = VBLENDPERM(idx0, t0[i], normA[i]);
+        t0[i] = VBLENDPERM(idx1, t0[i], t1[i]);
+    }
+    fp2_mul_2x2x2(t0, t0, t2);
+    
+    // t0 = (t10, lam)
+    // t1 = (t8, t9), (b_xx, b_zz)
+
+    // Annoying add
+    // t1[0] = t1[0] + 2*t0[0]
+    fp2_add_2x2x2(t1, t1, t0);
+    fp2_add_2x2x2(t1, t1, t0);
+
+    // TODO: This is suboptimal extra shuffle for code to be independent of NUM_LIMBS % 2
+    // t0 = (t0[1], t0[1], t0[1], t0[1])
+    idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(idx0, t0[i]);
+    }
+    fp2_2x2x2_to_4x2x1(t0, t0, t0);
+    fp2_2x2x2_to_4x2x1(t1, t1, t1 + N4x2);
+
+    // At this point we have
+    // t0 = (lam, -, lam, lam)
+    // t1 = (b_xz, -, b_xx, b_zz)
+
+    // 3 multiplications (1 wasted)
+    fp2_mul_4x2x1(t0, t0, t1);
+    
+    // TODO: Again suboptimal to be independent of NUM_LIMBS % 2
+    // t0 = (b_xz, b_xx, b_xz, b_zz)
+    idx0 = VSET(0, 1, 4, 5, 0, 1, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VPERM512(idx0, t0[i]);
+    }
+
+    // t0 = (b_xz^2, b_xx * b_zz), (b_xz, b_zz)
+    fp2_4x2x1_to_2x2x2(t0, t0 + N4x2, t0);
+    fp2_mul_2x2x2(t0, t0, t0 + N4x2);
+
+    // t0[0] = (t0[0] - t0[1], 0)
+    idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    for (int i = 0; i < N4x2; i++) {
+        t1[i] = VPERM512(idx0, t0[i]);
+    }
+    fp2_sub_2x2x2(t0, t0, t1);
+
+    // TODO: One wasted sqrt
+    // t0 = (delta, 0), (b_xz, b_zz)
+    fp2_sqrt_2x2x2(t0, t0);
+
+    // res_PmQ = (delta + b_xz, b_zz)
+    fp2_add_2x2x2(res_PmQ, t0, t0 + N4x2);
+}
+
+// P, Q and normA are pairs of points in 4x2x1
+// P = (P1.x, P1.z, P2.x, P2.z)
+void ec_proj_diff_pair_4x2x1(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA)
+{
+    __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
+    __m512i idx0, idx1;
+
+    // Comments are copied from the 1x2x2x2 variant
+    // We apply the operations independently to each point in the pair.
+    
+    // t0 = (P.x, P.z, P.x, P.z) in the original code
+    // t1 = (Q.x, Q.z, Q.z, Q.x)
+    // In 8x1x1, we actually have t0 = (P1.x, P1.x, P1.z, P1.z, P2.x, P2.x, P2.z, P2.z) etc.
+    fp2_4x2x1_to_8x1x1(t0, P, P);
+    idx0 = VSET(0, 2, 2, 0, 4, 6, 6, 4);
+    idx1 = VSET(1, 3, 3, 1, 5, 7, 7, 5);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VPERM512(idx0, Q[i]);
+        t1[i+NUM_LIMBS] = VPERM512(idx1, Q[i]);
+    }
+
+    fp2_mul_8x1x1(t0, t0, t1);
+
+    // Hadamard
+    // t1 = (t0[0], t0[0], t0[2], t0[2])
+    //         +      -      +      -
+    // t2 = (t0[1], t0[1], t0[3], t0[3])
+    idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t1[i] = VPERM512(idx0, t0[i]);
+        t2[i] = VPERM512(idx1, t0[i]);
+    }
+    fp2_mixaddsub_8x1x1(t1, t1, t2, 0x33, 0x33);
+
+    // t2 = (t1[2], t0[1], t1[1], t1[3])
+    // t1 = (t1[0], t0[0], t1[1], t1[3])
+    idx0 = VSET(9, 10, 2, 11, 13, 14, 6, 15);
+    idx1 = VSET(8, 10, 0, 11, 12, 14, 4, 15);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t2[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        t1[i] = VBLENDPERM(idx1, t0[i], t1[i]);
+    }
+
+    fp2_mul_8x1x1(t1, t1, t2);
+
+    // Convert to 4x2x1
+    fp2_8x1x1_to_4x2x1(t0, t0 + NUM_LIMBS, t0);
+    fp2_8x1x1_to_4x2x1(t1, t1 + NUM_LIMBS, t1);
+
+    // Conjugate t0[1] (we don't need the other entries anymore)
+    fp2_conjugate_4x2x1(t0, t0);
+
+    // t0 = (A * t1[1], t0[1]^2)
+    idx0 = VSET(8, 9, 2, 3, 12, 13, 6, 7);
+    idx1 = VSET(10, 11, 2, 3, 14, 15, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t2[i] = VBLENDPERM(idx0, t0[i], normA[i]);
+        t0[i] = VBLENDPERM(idx1, t0[i], t1[i]);
+    }
+    fp2_mul_4x2x1(t0, t0, t2);
+    
+    // t0 = (t10, lam)
+    // t1 = (t8, t9), (b_xx, b_zz)
+
+    // Annoying add
+    // t1[0] = t1[0] + 2*t0[0]
+    fp2_add_4x2x1(t1, t1, t0);
+    fp2_add_4x2x1(t1, t1, t0);
+
+    // t0 = (t0[1], t0[1], t0[1], t0[1])
+    idx0 = VSET(2, 2, 2, 2, 6, 6, 6, 6);
+    idx1 = VSET(3, 3, 3, 3, 7, 7, 7, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i+NUM_LIMBS] = VPERM512(idx1, t0[i]);
+        t0[i] = VPERM512(idx0, t0[i]);
+    }
+    fp2_4x2x1_to_8x1x1(t1, t1, t1 + NUM_LIMBS);
+
+    // At this point we have
+    // t0 = (lam, -, lam, lam)
+    // t1 = (b_xz, -, b_xx, b_zz)
+
+    // 3 multiplications (1 wasted)
+    fp2_mul_8x1x1(t0, t0, t1);
+    // in 8x1x1: (b_xz, b_xx, -, b_zz, -||-)
+
+    // t0 = (b_xz, b_xx), (b_xz, b_zz)
+    idx0 = VSET(0, 8, 1, 9, 4, 12, 5, 13);
+    idx1 = VSET(0, 8, 3, 11, 4, 12, 7, 15);
+    for(int i = 0; i < NUM_LIMBS; i++) {
+        __m512i s_re = t0[i], s_im = t0[i+NUM_LIMBS];
+        t0[i] = VBLENDPERM(idx0, s_re, s_im);
+        t0[i+NUM_LIMBS] = VBLENDPERM(idx1, s_re, s_im);
+    }
+
+    // t0 = (b_xz^2, b_xx * b_zz), (b_xz, b_zz)
+    fp2_mul_4x2x1(t0, t0, t0 + NUM_LIMBS);
+
+    // t0[0] = (t0[0] - t0[1], 0)
+    idx0 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VPERM512(idx0, t0[i]);
+    }
+    fp2_sub_4x2x1(t0, t0, t1);
+
+    // compute delta = sqrt(t0[0])
+    // TODO: Suboptimal shuffle to make code independent of NUM_LIMBS % 2
+    // With an alternating 4x2x1_to_2x2x2, this would be solved.
+    // t1 = (t0[0]), t2 = (b_xz)
+    idx0 = VSET(0, 1, 4, 5, 8, 9, 12, 13);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VBLENDPERM(idx0, t0[i], t0[i+NUM_LIMBS]);
+    }
+    fp2_4x2x1_to_2x2x2(t1, t2, t1);
+
+    // t1 = delta + b_xz
+    fp2_sqrt_2x2x2(t1, t1);
+    fp2_add_2x2x2(t1, t1, t2);
+    
+    // res_PmQ = (delta + b_xz, b_zz)
+    fp2_2x2x2_to_4x2x1(t0, t1, t1);
+    // TODO: Suboptimal shuffle to make code independent of NUM_LIMBS % 2
+    // With an alternating 4x2x1_to_2x2x2, this would be solved.
+    idx0 = VSET(0, 1, 10, 11, 2, 3, 14, 15);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        res_PmQ[i] = VBLENDPERM(idx0, t0[i], t0[i+NUM_LIMBS]);
+    }
+}
+
+// Assums hint_P != 0
+// Outputs P and Q (the cofactor has not been cleared)
+void ec_curve_to_basis_from_hint_1x2x2x2_inner_set_P_Q(__m512i* res_P, __m512i* res_Q, __m512i* normA, const uint8_t hint)
+{
+    __m512i t0[N4x2], t1[N4x2], t2[N4x2], idx0, idx1;
+
+    uint8_t hint_A = hint & 0x1;
+    uint8_t hint_P = hint / 2;
+
+    if (!hint_P) {
+        printf("Not implemented!\n");
+        return;
+    }
+
+    if (hint_A) {
+        // xP = -A, zP = 1 + hint_P*i
+        // xQ = A - A*zP = A*(1-zP) = (-A)*(zP-1) = (-A)*(hintP*i), zQ = zP
+
+        // t0 = (xP, .), t1 = (zP-1, zP)
+        fp2_neg_2x2x2(t0, normA);
+        fp2_setzero_2x2x2(t1);
+        t1[0] = VSET(0, 0, hint_P, 0, 1, 0, hint_P, 0);
+        fp2_tomont_2x2x2(t1, t1);
+
+        // t2 = (xQ, .)
+        fp2_mul_2x2x2(t2, t0, t1);
+
+        idx0 = VSET(0, 1, 2, 3, 12, 13, 14, 15);
+        for (int i = 0; i < N4x2; i++) {
+            res_P[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+            res_Q[i] = VBLENDPERM(idx0, t2[i], t1[i]);
+        }
+    } else {
+        // xP = hint_P * A, zP = 1
+        // xQ = -(xP + A) = (hint_P+1)*(-A), zQ = 1
+
+        // t0 = (A, -A)
+        fp2_neg_2x2x2(t0, normA);
+        idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+        for (int i = 0; i < N4x2; i++) {
+            t0[i] = VBLENDPERM(idx0, normA[i], t0[i]);
+        }
+        // t1 = (hint_P, hint_P + 1)
+        fp2_setzero_2x2x2(t1);
+        t1[0] = VSET(hint_P, 0, 0, 0, hint_P+1, 0, 0, 0);
+        fp2_tomont_2x2x2(t1, t1);
+
+        // t0 := t0 * t1 = (xP, xQ)
+        fp2_mul_2x2x2(t0, t0, t1);
+
+        // P = (t0[0], normA[1])
+        // Q = (t0[1], normA[1])
+        idx0 = VSET(0, 1, 2, 3, 12, 13, 14, 15);
+        idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+        for (int i = 0; i < N4x2; i++) {
+            res_P[i] = VBLENDPERM(idx0, t0[i], normA[i]);
+            res_Q[i] = VBLENDPERM(idx1, t0[i], normA[i]);
+        }
+    }
+}
+
+void ec_curve_to_basis_from_hint_1x2x2x2(__m512i* res_basis, __m512i* normA, const uint8_t hint)
+{
+    ec_curve_to_basis_from_hint_1x2x2x2_inner_set_P_Q(res_basis, res_basis+2*N4x2, normA, hint);
+
+    ec_scalar_mul_pair_normA_2x2x2(res_basis, res_basis + 2*N4x2, res_basis, res_basis + 2*N4x2, normA, normA, COFACTOR, COFACTOR_NBITS);
+
+    // compute PmQ, set PmQ to Q to ensure Q above (0,0)
+    ec_proj_diff_1x2x2x2(res_basis+N4x2, res_basis, res_basis+2*N4x2, normA);
+}
+
+void ec_curve_to_basis_from_hint_2x2x2x2(__m512i* res_basis1, __m512i* res_basis2, __m512i* normA1, __m512i* normA2, const uint8_t hint1, const uint8_t hint2)
+{
+    __m512i P[NUM_LIMBS], Q[NUM_LIMBS], A[NUM_LIMBS];
+
+    // Faster to do separately
+    ec_curve_to_basis_from_hint_1x2x2x2_inner_set_P_Q(res_basis1, res_basis1+2*N4x2, normA1, hint1);
+    ec_curve_to_basis_from_hint_1x2x2x2_inner_set_P_Q(res_basis2, res_basis2+2*N4x2, normA2, hint2);
+
+    ec_scalar_mul_pair_normA_2x2x2(res_basis1, res_basis1 + 2*N4x2, res_basis1, res_basis1 + 2*N4x2, normA1, normA1, COFACTOR, COFACTOR_NBITS);
+    ec_scalar_mul_pair_normA_2x2x2(res_basis2, res_basis2 + 2*N4x2, res_basis2, res_basis2 + 2*N4x2, normA2, normA2, COFACTOR, COFACTOR_NBITS);
+
+    // compute PmQ, set PmQ to Q to ensure Q above (0,0)
+    fp2_2x2x2_to_4x2x1(P, res_basis1, res_basis2);
+    fp2_2x2x2_to_4x2x1(Q, res_basis1 + 2*N4x2, res_basis2 + 2*N4x2);
+    fp2_2x2x2_to_4x2x1(A, normA1, normA2);
+    ec_proj_diff_pair_4x2x1(Q, P, Q, A);
+    fp2_4x2x1_to_2x2x2(res_basis1 + N4x2, res_basis2 + N4x2, Q);
+}
+
 // Debugging functions
 
 bool test_point_order_twof_1x2x2x2(__m512i* P, __m512i* A24, unsigned int f)
@@ -2319,58 +2749,4 @@ bool test_basis_order_twof_1x2x2x2(__m512i* B, __m512i* A24, unsigned int f)
         test_point_order_twof_1x2x2x2(B, A24, f) &
         test_point_order_twof_1x2x2x2(B+4, A24, f) &
         test_point_order_twof_1x2x2x2(B+8, A24, f);
-}
-
-void difference_point_normA_1x2x2x2(ec_point_t *PQ, const ec_point_t *P, const ec_point_t *Q, const ec_curve_t *curve)
-{
-    // Given P,Q in projective x-only, computes a deterministic choice for (P-Q)
-    // Based on Proposition 3 of https://eprint.iacr.org/2017/518.pdf
-
-    fp2_t Bxx, Bxz, Bzz, t0, t1;
-
-    fp2_mul(&t0, &P->x, &Q->x);
-    fp2_mul(&t1, &P->z, &Q->z);
-    fp2_sub(&Bxx, &t0, &t1);
-    fp2_sqr(&Bxx, &Bxx);
-    fp2_mul(&Bxx, &Bxx, &curve->C); // C*(P.x*Q.x-P.z*Q.z)^2
-    fp2_add(&Bxz, &t0, &t1);
-    fp2_mul(&t0, &P->x, &Q->z);
-    fp2_mul(&t1, &P->z, &Q->x);
-    fp2_add(&Bzz, &t0, &t1);
-    fp2_mul(&Bxz, &Bxz, &Bzz); // (P.x*Q.x+P.z*Q.z)(P.x*Q.z+P.z*Q.x)
-    fp2_sub(&Bzz, &t0, &t1);
-    fp2_sqr(&Bzz, &Bzz);
-    fp2_mul(&Bzz, &Bzz, &curve->C); // C*(P.x*Q.z-P.z*Q.x)^2
-    fp2_mul(&Bxz, &Bxz, &curve->C); // C*(P.x*Q.x+P.z*Q.z)(P.x*Q.z+P.z*Q.x)
-    fp2_mul(&t0, &t0, &t1);
-    fp2_mul(&t0, &t0, &curve->A);
-    fp2_add(&t0, &t0, &t0);
-    fp2_add(&Bxz, &Bxz, &t0); // C*(P.x*Q.x+P.z*Q.z)(P.x*Q.z+P.z*Q.x) + 2*A*P.x*Q.z*P.z*Q.x
-
-    // To ensure that the denominator is a fourth power in Fp, we normalize by
-    // C*C_bar^2*(P.z)_bar^2*(Q.z)_bar^2
-    fp_copy(&t0.re, &curve->C.re);
-    fp_neg(&t0.im, &curve->C.im);
-    fp2_sqr(&t0, &t0);
-    fp2_mul(&t0, &t0, &curve->C);
-    fp_copy(&t1.re, &P->z.re);
-    fp_neg(&t1.im, &P->z.im);
-    fp2_sqr(&t1, &t1);
-    fp2_mul(&t0, &t0, &t1);
-    fp_copy(&t1.re, &Q->z.re);
-    fp_neg(&t1.im, &Q->z.im);
-    fp2_sqr(&t1, &t1);
-    fp2_mul(&t0, &t0, &t1);
-    fp2_mul(&Bxx, &Bxx, &t0);
-    fp2_mul(&Bxz, &Bxz, &t0);
-    fp2_mul(&Bzz, &Bzz, &t0);
-
-    // Solving quadratic equation
-    fp2_sqr(&t0, &Bxz);
-    fp2_mul(&t1, &Bxx, &Bzz);
-    fp2_sub(&t0, &t0, &t1);
-    // No need to check if t0 is square, as per the entangled basis algorithm.
-    fp2_sqrt(&t0);
-    fp2_add(&PQ->x, &Bxz, &t0);
-    fp2_copy(&PQ->z, &Bzz);
 }

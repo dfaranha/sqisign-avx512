@@ -381,6 +381,61 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Conjugation
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_8x1x1(a);
+        rand_fp2_8x1x1(b);
+        
+        // conjugating twice = identity
+        fp2_conjugate_8x1x1(c, a);
+        fp2_conjugate_8x1x1(c, c);
+
+        if (fp2_is_equal_8x1x1(a, c) != 0xff) {
+            passed = 0;
+            printf("conjugating twice is not identity!\n");
+            break;
+        }
+
+        // conjugate(a) + conjugate(b) = conjugate(a+b)
+        fp2_conjugate_8x1x1(c, a);
+        fp2_conjugate_8x1x1(d, b);
+        fp2_add_8x1x1(c, c, d);
+        fp2_add_8x1x1(d, a, b);
+        fp2_conjugate_8x1x1(d, d);
+        if (fp2_is_equal_8x1x1(c, d) != 0xff) {
+            passed = 0;
+            printf("conjugate(a) + conjugate(b) != conjugate(a+b)\n");
+            break;
+        }
+
+        // conjugate(a)*conjugate(b) = conjugate(a*b)
+        fp2_conjugate_8x1x1(c, a);
+        fp2_conjugate_8x1x1(d, b);
+        fp2_mul_8x1x1(c, c, d);
+        fp2_mul_8x1x1(d, a, b);
+        fp2_conjugate_8x1x1(d, d);
+        if (fp2_is_equal_8x1x1(c, d) != 0xff) {
+            passed = 0;
+            printf("conjugate(a)*conjugate(b) != conjugate(a*b)\n");
+            break;
+        }
+
+        // a + conjugate(a) = 2*re(a)
+        fp2_conjugate_8x1x1(c, a);
+        fp2_add_8x1x1(c, c, a);
+        fp_add_8x1(d, a, a);
+        if (fp_is_equal_8x1(c, d) != 0xff || fp_is_zero_8x1(c + NUM_LIMBS) != 0xff)
+        {
+            passed = 0;
+            printf("a + conjugate(a) != 2*re(a)\n");
+            break;
+        }
+    }
+    print_test_res("conjugation", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     // Division by 3
     for (int i = 0; i < iterations; i++) {
         rand_fp2_8x1x1(a);
@@ -401,12 +456,19 @@ bool test_fp2(int iterations)
     }
 
     // Inverse
-    for (int i = 0; i < iterations; i++) {
+    fp2_inv_8x1x1(a, zero);
+    if (fp2_is_zero_8x1x1(a) != 0xff) {
+        passed = 0;
+        printf("Inv does not output 0 on input 0\n");
+    }
+
+    for (int i = 0; i < iterations && passed; i++) {
+        // a * a^-1 == 1
         rand_fp2_8x1x1(a);
 
         if (fp2_is_zero_8x1x1(a))
             continue;
-        
+
         fp2_inv_8x1x1(b, a);
         fp2_mul_8x1x1(b, b, a);
 
@@ -421,7 +483,13 @@ bool test_fp2(int iterations)
     }
 
     // Square root
-    for (int i = 0; i < iterations; i++) {
+    fp2_sqrt_8x1x1(a, zero);
+    if (fp2_is_zero_8x1x1(a) != 0xff) {
+        passed = 0;
+        printf("sqrt(0) != 0\n");
+    }
+
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp2_8x1x1(a);
         
         fp2_sqr_8x1x1(b, a);
@@ -792,6 +860,61 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Conjugation
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_4x1x2(a);
+        rand_fp2_4x1x2(b);
+        
+        // conjugating twice = identity
+        fp2_conjugate_4x1x2(c, a);
+        fp2_conjugate_4x1x2(c, c);
+
+        if (fp2_is_equal_4x1x2(a, c) != 0xf) {
+            passed = 0;
+            printf("conjugating twice is not identity!\n");
+            break;
+        }
+
+        // conjugate(a) + conjugate(b) = conjugate(a+b)
+        fp2_conjugate_4x1x2(c, a);
+        fp2_conjugate_4x1x2(d, b);
+        fp2_add_4x1x2(c, c, d);
+        fp2_add_4x1x2(d, a, b);
+        fp2_conjugate_4x1x2(d, d);
+        if (fp2_is_equal_4x1x2(c, d) != 0xf) {
+            passed = 0;
+            printf("conjugate(a) + conjugate(b) != conjugate(a+b)\n");
+            break;
+        }
+
+        // conjugate(a)*conjugate(b) = conjugate(a*b)
+        fp2_conjugate_4x1x2(c, a);
+        fp2_conjugate_4x1x2(d, b);
+        fp2_mul_4x1x2(c, c, d);
+        fp2_mul_4x1x2(d, a, b);
+        fp2_conjugate_4x1x2(d, d);
+        if (fp2_is_equal_4x1x2(c, d) != 0xf) {
+            passed = 0;
+            printf("conjugate(a)*conjugate(b) != conjugate(a*b)\n");
+            break;
+        }
+
+        // a + conjugate(a) = 2*re(a)
+        fp2_conjugate_4x1x2(c, a);
+        fp2_add_4x1x2(c, c, a);
+        fp_add_4x2(d, a, a);
+        if (fp_is_equal_4x2(c, d) != 0xf || fp_is_zero_4x2(c + N4x2) != 0xf)
+        {
+            passed = 0;
+            printf("a + conjugate(a) != 2*re(a)\n");
+            break;
+        }
+    }
+    print_test_res("conjugation", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     // Division by 3
     for (int i = 0; i < iterations; i++) {
         rand_fp2_4x1x2(a);
@@ -812,7 +935,13 @@ bool test_fp2(int iterations)
     }
 
     // Inverse
-    for (int i = 0; i < iterations; i++) {
+    fp2_inv_4x1x2(a, zero);
+    if (fp2_is_zero_4x1x2(a) != 0xf) {
+        passed = 0;
+        printf("Inv does not output 0 on input 0\n");
+    }
+
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp2_4x1x2(a);
 
         if (fp2_is_zero_4x1x2(a))
@@ -832,7 +961,13 @@ bool test_fp2(int iterations)
     }
 
     // Square root
-    for (int i = 0; i < iterations; i++) {
+    fp2_sqrt_4x1x2(a, zero);
+    if (fp2_is_zero_4x1x2(a) != 0xf) {
+        passed = 0;
+        printf("sqrt(0) != 0\n");
+    }
+
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp2_4x1x2(a);
         
         fp2_sqr_4x1x2(b, a);
@@ -1207,6 +1342,61 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Conjugation
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_4x2x1(a);
+        rand_fp2_4x2x1(b);
+        
+        // conjugating twice = identity
+        fp2_conjugate_4x2x1(c, a);
+        fp2_conjugate_4x2x1(c, c);
+
+        if (fp2_is_equal_4x2x1(a, c) != 0xf) {
+            passed = 0;
+            printf("conjugating twice is not identity!\n");
+            break;
+        }
+
+        // conjugate(a) + conjugate(b) = conjugate(a+b)
+        fp2_conjugate_4x2x1(c, a);
+        fp2_conjugate_4x2x1(d, b);
+        fp2_add_4x2x1(c, c, d);
+        fp2_add_4x2x1(d, a, b);
+        fp2_conjugate_4x2x1(d, d);
+        if (fp2_is_equal_4x2x1(c, d) != 0xf) {
+            passed = 0;
+            printf("conjugate(a) + conjugate(b) != conjugate(a+b)\n");
+            break;
+        }
+
+        // conjugate(a)*conjugate(b) = conjugate(a*b)
+        fp2_conjugate_4x2x1(c, a);
+        fp2_conjugate_4x2x1(d, b);
+        fp2_mul_4x2x1(c, c, d);
+        fp2_mul_4x2x1(d, a, b);
+        fp2_conjugate_4x2x1(d, d);
+        if (fp2_is_equal_4x2x1(c, d) != 0xf) {
+            passed = 0;
+            printf("conjugate(a)*conjugate(b) != conjugate(a*b)\n");
+            break;
+        }
+
+        // a + conjugate(a) = 2*re(a)
+        fp2_conjugate_4x2x1(c, a);
+        fp2_add_4x2x1(c, c, a);
+        fp2_add_4x2x1(d, a, a);
+        if (fp_is_equal_8x1(c, d) & 0x55 != 0x55 || fp_is_zero_8x1(c) & 0xaa != 0xaa)
+        {
+            passed = 0;
+            printf("a + conjugate(a) != 2*re(a)\n");
+            break;
+        }
+    }
+    print_test_res("conjugation", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     // Division by 3
     for (int i = 0; i < iterations; i++) {
         rand_fp2_4x2x1(a);
@@ -1227,7 +1417,13 @@ bool test_fp2(int iterations)
     }
 
     // Inverse
-    for (int i = 0; i < iterations; i++) {
+    fp2_inv_4x2x1(a, zero);
+    if (fp2_is_zero_4x2x1(a) != 0xf) {
+        passed = 0;
+        printf("Inv does not output 0 on input 0\n");
+    }
+
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp2_4x2x1(a);
 
         if (fp2_is_zero_4x2x1(a))
@@ -1247,7 +1443,13 @@ bool test_fp2(int iterations)
     }
 
     // Square root
-    for (int i = 0; i < iterations; i++) {
+    fp2_sqrt_4x2x1(a, zero);
+    if (fp2_is_zero_4x2x1(a) != 0xf) {
+        passed = 0;
+        printf("sqrt(0) != 0\n");
+    }
+
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp2_4x2x1(a);
         
         fp2_sqr_4x2x1(b, a);
@@ -1632,6 +1834,61 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Conjugation
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_2x2x2(a);
+        rand_fp2_2x2x2(b);
+        
+        // conjugating twice = identity
+        fp2_conjugate_2x2x2(c, a);
+        fp2_conjugate_2x2x2(c, c);
+
+        if (fp2_is_equal_2x2x2(a, c) != 0x3) {
+            passed = 0;
+            printf("conjugating twice is not identity!\n");
+            break;
+        }
+
+        // conjugate(a) + conjugate(b) = conjugate(a+b)
+        fp2_conjugate_2x2x2(c, a);
+        fp2_conjugate_2x2x2(d, b);
+        fp2_add_2x2x2(c, c, d);
+        fp2_add_2x2x2(d, a, b);
+        fp2_conjugate_2x2x2(d, d);
+        if (fp2_is_equal_2x2x2(c, d) != 0x3) {
+            passed = 0;
+            printf("conjugate(a) + conjugate(b) != conjugate(a+b)\n");
+            break;
+        }
+
+        // conjugate(a)*conjugate(b) = conjugate(a*b)
+        fp2_conjugate_2x2x2(c, a);
+        fp2_conjugate_2x2x2(d, b);
+        fp2_mul_2x2x2(c, c, d);
+        fp2_mul_2x2x2(d, a, b);
+        fp2_conjugate_2x2x2(d, d);
+        if (fp2_is_equal_2x2x2(c, d) != 0x3) {
+            passed = 0;
+            printf("conjugate(a)*conjugate(b) != conjugate(a*b)\n");
+            break;
+        }
+
+        // a + conjugate(a) = 2*re(a)
+        fp2_conjugate_2x2x2(c, a);
+        fp2_add_2x2x2(c, c, a);
+        fp2_add_2x2x2(d, a, a);
+        if (fp_is_equal_4x2(c, d) & 0x5 != 0x5 || fp_is_zero_4x2(c) & 0xa != 0xa)
+        {
+            passed = 0;
+            printf("a + conjugate(a) != 2*re(a)\n");
+            break;
+        }
+    }
+    print_test_res("conjugation", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     // Division by 3
     for (int i = 0; i < iterations; i++) {
         rand_fp2_2x2x2(a);
@@ -1652,7 +1909,13 @@ bool test_fp2(int iterations)
     }
 
     // Inverse
-    for (int i = 0; i < iterations; i++) {
+    fp2_inv_2x2x2(a, zero);
+    if (fp2_is_zero_2x2x2(a) != 0x3) {
+        passed = 0;
+        printf("Inv does not output 0 on input 0\n");
+    }
+
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp2_2x2x2(a);
 
         if (fp2_is_zero_2x2x2(a))
@@ -1672,7 +1935,13 @@ bool test_fp2(int iterations)
     }
 
     // Square root
-    for (int i = 0; i < iterations; i++) {
+    fp2_sqrt_2x2x2(a, zero);
+    if (fp2_is_zero_2x2x2(a) != 0x3) {
+        passed = 0;
+        printf("sqrt(0) != 0\n");
+    }
+
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp2_2x2x2(a);
         
         fp2_sqr_2x2x2(b, a);
@@ -2053,6 +2322,61 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Conjugation
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_2x4x1(a);
+        rand_fp2_2x4x1(b);
+        
+        // conjugating twice = identity
+        fp2_conjugate_2x4x1(c, a);
+        fp2_conjugate_2x4x1(c, c);
+
+        if (fp2_is_equal_2x4x1(a, c) != 0x3) {
+            passed = 0;
+            printf("conjugating twice is not identity!\n");
+            break;
+        }
+
+        // conjugate(a) + conjugate(b) = conjugate(a+b)
+        fp2_conjugate_2x4x1(c, a);
+        fp2_conjugate_2x4x1(d, b);
+        fp2_add_2x4x1(c, c, d);
+        fp2_add_2x4x1(d, a, b);
+        fp2_conjugate_2x4x1(d, d);
+        if (fp2_is_equal_2x4x1(c, d) != 0x3) {
+            passed = 0;
+            printf("conjugate(a) + conjugate(b) != conjugate(a+b)\n");
+            break;
+        }
+
+        // conjugate(a)*conjugate(b) = conjugate(a*b)
+        fp2_conjugate_2x4x1(c, a);
+        fp2_conjugate_2x4x1(d, b);
+        fp2_mul_2x4x1(c, c, d);
+        fp2_mul_2x4x1(d, a, b);
+        fp2_conjugate_2x4x1(d, d);
+        if (fp2_is_equal_2x4x1(c, d) != 0x3) {
+            passed = 0;
+            printf("conjugate(a)*conjugate(b) != conjugate(a*b)\n");
+            break;
+        }
+
+        // a + conjugate(a) = 2*re(a)
+        fp2_conjugate_2x4x1(c, a);
+        fp2_add_2x4x1(c, c, a);
+        fp2_add_2x4x1(d, a, a);
+        if (fp_is_equal_8x1(c, d) & 0x33 != 0x33 || fp_is_zero_8x1(c) & 0xcc != 0xcc)
+        {
+            passed = 0;
+            printf("a + conjugate(a) != 2*re(a)\n");
+            break;
+        }
+    }
+    print_test_res("conjugation", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     // Division by 3
     for (int i = 0; i < iterations; i++) {
         rand_fp2_2x4x1(a);
@@ -2073,6 +2397,12 @@ bool test_fp2(int iterations)
     }
 
     // Inverse
+    fp2_inv_2x4x1(a, zero);
+    if (fp2_is_zero_2x4x1(a) != 0x3) {
+        passed = 0;
+        printf("Inv does not output 0 on input 0\n");
+    }
+
     for (int i = 0; i < iterations; i++) {
         rand_fp2_2x4x1(a);
 
@@ -2093,7 +2423,13 @@ bool test_fp2(int iterations)
     }
 
     // Square root
-    for (int i = 0; i < iterations; i++) {
+    fp2_sqrt_2x4x1(a, zero);
+    if (fp2_is_zero_2x4x1(a) != 0x3) {
+        passed = 0;
+        printf("sqrt(0) != 0\n");
+    }
+
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp2_2x4x1(a);
         
         fp2_sqr_2x4x1(b, a);

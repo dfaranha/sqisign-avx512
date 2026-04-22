@@ -37,6 +37,14 @@ static const uint64_t INV3[NUM_LIMBS] =
     0xaaaaaaaaaaaa, 0xaaaaaaaaaaaa, 0xaaaaaaaaaaaa, 0x3faaaaaaaaaa
 };
 
+// Cofactor c of p = c*2^e - 1
+#define COFACTOR_NBITS 7
+#define COFACTOR_NWORDS64 1
+static const uint64_t COFACTOR[COFACTOR_NWORDS64] =
+{
+    0x41
+};
+
 // p in 64-bit repr.
 static const uint64_t P_64[NWORDS64] =
 {

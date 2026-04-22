@@ -38,6 +38,9 @@ class FpParamNames:
     p_64: str
     R_64: str
     inv_const_64: str
+    c: str
+    c_nbits: str
+    c_nwords64: str
     num_kat_fp: str
     num_kat_fp2: str
 
@@ -204,6 +207,9 @@ def get_param_names():
         p_64 = "P_64",
         R_64 = "R_64",
         inv_const_64 = "INV_CONST_64",
+        c = "COFACTOR",
+        c_nbits = "COFACTOR_NBITS",
+        c_nwords64 = "COFACTOR_NWORDS64",
         num_kat_fp="NUM_FP_KAT",
         num_kat_fp2="NUM_FP2_KAT"
     )

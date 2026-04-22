@@ -24,6 +24,7 @@ void print_fp_8x1_index(__m512i* a, int index);
 void print_fp_4x2_index(__m512i* a, int index);
 void print_fp_2x4_index(__m512i* a, int index);
 void print_fp2_2x4x1(__m512i* a);
+void print_fp2_2x2x2(__m512i* a);
 void print_fp2_4x2x1(__m512i* a);
 void print_fp2_8x1x1(__m512i* a);
 

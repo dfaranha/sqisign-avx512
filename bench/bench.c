@@ -43,12 +43,12 @@ int main()
 
     int n_bench = 1000000;
 
-    bench_fp(n_bench);
-    bench_fp2(n_bench);
+    // bench_fp(n_bench);
+    // bench_fp2(n_bench);
     // bench_ec(n_bench);
     // bench_1d_isog(n_bench);
     // bench_theta(n_bench);
-    //bench_verif(20);
+    bench_verif(20);
 
     return 0;
 }

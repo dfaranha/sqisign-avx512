@@ -11,6 +11,7 @@
 #include "isog-1d.h"
 #include "theta.h"
 #include "sqi_test_extras.h"
+#include "utils.h"
 
 // #include "bench.h"
 // #include <inttypes.h>
@@ -49,20 +50,24 @@ static int
 compute_challenge_verify(ec_curve_t *E_chall, const signature_t *sig, const ec_curve_t *Epk, const uint8_t hint_pk)
 {
     ec_basis_t bas_Epk_unvec;
+    ec_basis_t dummy;
     ec_point_t ker_unvec;
     copy_curve(E_chall, Epk);
 
     // Set domain and length of 2^n isogeny
     int len = TORSION_EVEN_POWER - sig->backtracking;
 
-    // Compute the basis from the supplied hint
-    // uint64_t start4 = cpucycles();
-    // for (int i = 0; i < 1000; i++) {
-    if (!ec_curve_to_basis_2f_from_hint(&bas_Epk_unvec, E_chall, TORSION_EVEN_POWER, hint_pk)) // canonical
-        return 0;
-    // }
-    // uint64_t end4 = cpucycles();
-    // printf("basis %" PRIu64 "\n", (end4-start4)/1000);
+    // TODO: Remove
+    // Computing normalized A24: 
+    // A = 4*A24 - 2  =>  A24 = (A + 2)/4
+    fp2_t tmp;
+    fp2_set_one(&tmp);
+    fp2_add(&tmp, &tmp, &tmp);
+    fp2_add(&tmp, &tmp, &E_chall->A);
+    fp2_half(&tmp, &tmp);
+    fp2_half(&E_chall->A24.x, &tmp);
+    fp2_set_one(&E_chall->A24.z);
+    E_chall->is_A24_computed_and_normalized = true;
 
     // ============== VECTORIZED ================================================================================
 
@@ -70,11 +75,13 @@ compute_challenge_verify(ec_curve_t *E_chall, const signature_t *sig, const ec_c
     // uint64_t start2 = cpucycles();
     // for (int i = 0; i < 1000; i++) {
     ec_point_unvec_to_1x2x2x2(A24, &E_chall->A24);
+    // We have already asserted that C = 1
     ec_point_t AC = {E_chall-> A, E_chall -> C};
     ec_point_unvec_to_1x2x2x2(A, &AC);
-    ec_point_unvec_to_1x2x2x2(bas_Epk, &bas_Epk_unvec.P);
-    ec_point_unvec_to_1x2x2x2(bas_Epk+4, &bas_Epk_unvec.Q);
-    ec_point_unvec_to_1x2x2x2(bas_Epk+8, &bas_Epk_unvec.PmQ);
+
+    // Compute basis for E_pk from hint
+    ec_curve_to_basis_from_hint_1x2x2x2(bas_Epk, A, hint_pk);
+    
     // }
     // uint64_t end2 = cpucycles();
     // printf("conv to 1x2x2x2 %" PRIu64 "\n", (end2-start2)/1000);
@@ -182,47 +189,21 @@ challenge_and_aux_basis_verify(ec_basis_t *B_chall_can_unvec,
                                signature_t *sig,
                                const int pow_dim2_deg_resp)
 {
-
-    // recovering the canonical basis as TORSION_EVEN_POWER for consistency with signing
-    if (!ec_curve_to_basis_2f_from_hint(B_chall_can_unvec, E_chall, TORSION_EVEN_POWER, sig->hint_chall))
-        return 0;
-
-    if (!ec_curve_to_basis_2f_from_hint(B_aux_can_unvec, E_aux, TORSION_EVEN_POWER, sig->hint_aux))
-        return 0;
-
-    // TODO: Pair these together
-
-    // setting to the right order
-
-    // We normalize E_chall to use normalized ladders
-    // and E_aux for faster basis doubling
-    __m512i A24_chall[N4x2], A24_aux[N4x2], A_chall[N4x2], B_chall_can[3*N4x2], B_aux_can[3*N4x2];
+    __m512i A24_chall[N4x2], A24_aux[N4x2], A_chall[N4x2], A_aux[N4x2], B_chall_can[3*N4x2], B_aux_can[3*N4x2];
+    AC_to_A24(&E_chall->A24, E_chall); // were not computed
+    AC_to_A24(&E_aux->A24, E_aux);
     ec_point_unvec_to_1x2x2x2(A24_chall, &E_chall->A24);
     ec_point_unvec_to_1x2x2x2(A24_aux, &E_aux->A24);
-    ec_normalize_A24_2x2x2x2(A24_chall, A24_aux, A24_chall, A24_aux);
-    ec_normA24_to_normA_1x2x2x2(A_chall, A24_chall);
-    ec_point_t AC;
-    ec_point_1x2x2x2_to_unvec(&AC, A_chall);
-    fp2_copy(&E_chall->A, &AC.x);
-    fp2_set_one(&E_chall->C);
-    ec_point_1x2x2x2_to_unvec(&E_chall->A24, A24_chall);
-    ec_point_1x2x2x2_to_unvec(&E_aux->A24, A24_aux);
-
-    // ec_normalize_curve_and_A24(E_chall); // to use normalized ladders
-    // ec_normalize_curve_and_A24(E_aux); // for basis doubling
 
     // ============== VECTORIZED ================================================================================
 
-    
-    ec_point_unvec_to_1x2x2x2(A24_chall, &E_chall->A24);
-    ec_point_unvec_to_1x2x2x2(A24_aux, &E_aux->A24);
-    ec_point_unvec_to_1x2x2x2(B_chall_can, &B_chall_can_unvec->P);
-    ec_point_unvec_to_1x2x2x2(B_chall_can + 4, &B_chall_can_unvec->Q);
-    ec_point_unvec_to_1x2x2x2(B_chall_can + 8, &B_chall_can_unvec->PmQ);
-    ec_point_unvec_to_1x2x2x2(B_aux_can, &B_aux_can_unvec->P);
-    ec_point_unvec_to_1x2x2x2(B_aux_can + 4, &B_aux_can_unvec->Q);
-    ec_point_unvec_to_1x2x2x2(B_aux_can + 8, &B_aux_can_unvec->PmQ);
+    // We normalize E_chall to use normalized ladders
+    // and E_aux for faster basis doubling
+    ec_normalize_curve_2x2x2x2(A24_chall, A24_aux, A_chall, A_aux, A24_chall, A24_aux);
 
+    // recovering the canonical basis as TORSION_EVEN_POWER for consistency with signing
+    ec_curve_to_basis_from_hint_2x2x2x2(B_chall_can, B_aux_can, A_chall, A_aux, sig->hint_chall, sig->hint_aux);
+    
     int n_chall = TORSION_EVEN_POWER - pow_dim2_deg_resp - HD_extra_torsion - sig->two_resp_length;
     int n_aux = TORSION_EVEN_POWER - pow_dim2_deg_resp - HD_extra_torsion;
 
@@ -241,6 +222,18 @@ challenge_and_aux_basis_verify(ec_basis_t *B_chall_can_unvec,
     ec_point_1x2x2x2_to_unvec(&B_aux_can_unvec->PmQ, B_aux_can+8);
 
     // ============== END ================================================================================
+
+    ec_point_t AC;
+    ec_point_1x2x2x2_to_unvec(&AC, A_chall);
+    fp2_copy(&E_chall->A, &AC.x);
+    fp2_set_one(&E_chall->C);
+    ec_point_1x2x2x2_to_unvec(&AC, A_aux);
+    fp2_copy(&E_aux->A, &AC.x);
+    fp2_set_one(&E_aux->C);
+    ec_point_1x2x2x2_to_unvec(&E_chall->A24, A24_chall);
+    ec_point_1x2x2x2_to_unvec(&E_aux->A24, A24_aux);
+    E_chall->is_A24_computed_and_normalized = true;
+    E_aux->is_A24_computed_and_normalized = true;
 
     // applying the change matrix on the basis of E_chall
     return matrix_scalar_application_even_basis(B_chall_can_unvec,
@@ -424,6 +417,7 @@ protocols_verify(signature_t *sig, const public_key_t *pk, const unsigned char *
     // computation of the challenge
     //uint64_t start = cpucycles();
     ec_curve_t E_chall;
+
     // for (int i = 0; i < 1000; i++) {
     if (!compute_challenge_verify(&E_chall, sig, &pk->curve, pk->hint_pk)) {
         return false;

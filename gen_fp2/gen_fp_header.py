@@ -29,6 +29,12 @@ def write_fp_consts(f, pp, v):
     inv3 = (pow(3, -1, pp.p) * pp.R) % pp.p
     f.limb_array_1d(inv3, pp.num_limbs, pp.limb_len, v.inv3, v.num_limbs)
 
+    f.comment("Cofactor c of p = c*2^e - 1")
+    c_nwords64 = (pp.c.bit_length()+63)//64
+    f.line(f"#define {v.c_nbits} {pp.c.bit_length()}")
+    f.line(f"#define {v.c_nwords64} {c_nwords64}")
+    f.limb_array_1d(pp.c, c_nwords64, 64, v.c, v.c_nwords64)
+
     f.comment("p in 64-bit repr.")
     f.limb_array_1d(pp.p, pp.num_words64, 64, v.p_64, v.num_words64)
     f.comment("R in 64-bit repr.")

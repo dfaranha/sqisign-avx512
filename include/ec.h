@@ -284,6 +284,18 @@ void ec_scalar_mul_1x2x2x2(__m512i* res, __m512i* P, __m512i* A24, const digit_t
 void ec_scalar_mul_normA_1x2x2x2(__m512i* res, __m512i* P, __m512i* A, const digit_t* m, const unsigned int mbits);
 
 /**
+ *  @param P1 (x,z) point in 2x2x2 on the curve E1
+ *  @param P2 (x,z) point in 2x2x2 on the curve E2
+ *  @param A1 The normalized A coefficient of the curve E1. Stored in a 2x2x2 where the second component is ignored.
+ *  @param A1 The normalized A coefficient of the curve E2. Stored in a 2x2x2 where the second component is ignored.
+ *  @param m The scalar as an array of digits
+ *  @param mbits The bit length of the scalar m
+ *  @param res1 Output: [m]*P1 in 2x2x2
+ *  @param res2 Output: [m]*P2 in 2x2x2
+ */
+void ec_scalar_mul_pair_normA_2x2x2(__m512i* res1, __m512i* res2, __m512i* P1, __m512i* P2, __m512i* A1, __m512i* A2, const digit_t* m, const unsigned int mbits);
+
+/**
  *  @param A24 The A24 of the curve in 2x2x2
  *  @param basis The basis P, Q stored with three points x(P), x(Q), x(P-Q) as consecutive 2x2x2's
  *  @param m The scalar as an array of NWORDS_ORDER digits
@@ -354,6 +366,14 @@ bool ec_biscalar_mul_pair_normA_1x2x2x2(
 
 void ec_normalize_A24_2x2x2x2(__m512i* res1, __m512i* res2, __m512i* A24_1, __m512i* A24_2);
 void ec_normA24_to_normA_1x2x2x2(__m512i* res, __m512i* normA24);
+void ec_normalize_curve_2x2x2x2(__m512i* res_A24_1, __m512i* res_A24_2, __m512i* res_A_1, __m512i* res_A_2, __m512i* A24_1, __m512i* A24_2);
+
+void ec_proj_diff_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA);
+// P, Q and normA are pairs of points in 4x2x1
+// P = (P1.x, P1.z, P2.x, P2.z)
+void ec_proj_diff_pair_4x2x1(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA);
+void ec_curve_to_basis_from_hint_1x2x2x2(__m512i* res_basis, __m512i* normA, const uint8_t hint_pk);
+void ec_curve_to_basis_from_hint_2x2x2x2(__m512i* res_basis1, __m512i* res_basis2, __m512i* normA1, __m512i* normA2, const uint8_t hint1, const uint8_t hint2);
 
 // Debugging functions
 bool test_point_order_twof_1x2x2x2(__m512i* P, __m512i* A24, unsigned int f);
