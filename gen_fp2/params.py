@@ -32,6 +32,8 @@ class FpParamNames:
     n42: str
     n24: str
     p_plus_1_top: str
+    p_plus_1_div2_top: str
+    p_plus_1_div2_top_hi: str
     R: str
     R2: str
     inv3: str
@@ -163,6 +165,19 @@ def get_limb_mask(pp):
     last_limb_mask = (1 << pp.last_limb_len) - 1
     return limb_mask, last_limb_mask
 
+# Assumes c is small.
+def get_div2_consts(e, c, num_limbs, limb_len):
+    # Need top limb(s) of (p+1)/2 = c*2^(e-1)
+    idx_start = (e-1)// limb_len
+    val = c << ((e-1) % limb_len)
+    if idx_start == num_limbs-1:
+        lo = val
+        hi = None
+    else:
+        lo = val & ((1 << limb_len) - 1)
+        hi = val >> limb_len
+    return lo, hi
+
 def comp_params_and_strat(e, c, num_kat, gen_addchain):
     p, pbits = get_p(e, c)
     num_limbs, limb_len, last_limb_len, num_words64 = get_limb_params(pbits, e, c)
@@ -201,6 +216,8 @@ def get_param_names():
         limb_mask = "LIMB_MASK", 
         last_limb_mask = "LAST_LIMB_MASK",
         p_plus_1_top = "P_PLUS_1_TOP",
+        p_plus_1_div2_top = "P_PLUS_1_DIV2_TOP",
+        p_plus_1_div2_top_hi = "P_PLUS_1_DIV2_TOP_HI",
         R = "R",
         R2 = "R2",
         inv3 = "INV3",

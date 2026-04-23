@@ -1,7 +1,15 @@
 #ifndef VERIF_H
 #define VERIF_H
 
+#include "fp_consts.h"
+#include "intrinsics_avx512.h"
 #include "sqi_verif_util.h"
+
+typedef struct public_key_2x2x2
+{
+    __m512i A[N4x2]; // the normalized A-coefficient of the Montgomery curve
+    uint8_t hint;
+} public_key_2x2x2_t;
 
 /**
  * @brief Verification
@@ -12,7 +20,7 @@
  * @param l size
  * @returns 1 if the signature verifies, 0 otherwise
  */
-bool protocols_verify(signature_t* sig, const public_key_t* pk, const unsigned char* m, size_t l);
+bool protocols_verify(signature_t* sig, const public_key_t* pk_unvec, const public_key_2x2x2_t* pk, const unsigned char* m, size_t l);
 
 // Decodes the input and calls protocols_verify
 bool verify(const unsigned char *m,

@@ -595,6 +595,236 @@ def fp_sqr_2x4(f, pp, v):
 
     f.end()
 
+# Assumes num_limbs >= 4  and that c is small
+def fp_div2_2x4(f, pp, v):
+    f.start("void fp_div2_2x4(__m512i* res, __m512i* src)")
+
+    f.array_to_single_vars(var_name="a", arr_name="src", count=pp.n24)
+    f.declare_single_vars(var_name="t", count=pp.n24)
+    f.line(f"const __m512i one = VSETALL(1);")
+
+    # We case depending on the position of the two topmost limbs
+    # (a0, a1, a2, a3)
+    if pp.n24 == 1 and pp.rem24 == 0:
+        fp_div2_2x4_n1_r0(f, pp, v)
+    # (a0, a2, a4, -)
+    # (a1, a3, -, -)
+    elif pp.n24 == 2 and pp.rem24 == 1:
+        fp_div2_2x4_n2_r1(f, pp, v)
+    # Both in lane 2, lo at vector pp.n24 - 2 and hi at vector pp.n24 - 1
+    # all vectors are of the form (a, b, c, -)
+    elif (pp.n24 == 3 and pp.rem24 == 1) or (pp.n24 == 2 and pp.rem24 == 2):
+        fp_div2_2x4_lo2_hi2(f, pp, v)
+    # lo in lane 2 at last vector, hi in lane 3 at first vector
+    elif (pp.n24 == 4 and pp.rem24 == 1) or (pp.n24 == 3 and pp.rem24 == 2) or (pp.n24 == 2 and pp.rem24 == 3):
+        fp_div2_2x4_lo2_hi3(f, pp, v)
+    # both in lane 3, last (4-rem24) % 4 vectors missing limb in lane 3
+    else:
+        fp_div2_2x4_lo3_hi3(f, pp, v)
+
+    f.single_vars_to_array(var_name="t", arr_name="res", count=pp.n24)
+    f.end()
+
+# (a0, a1, a2, a3)
+def fp_div2_2x4_n1_r0(f, pp, v):
+    add_top_only = (pp.e-1) // pp.limb_len == pp.num_limbs - 1
+    if add_top_only:
+        f.line(f"const __m512i cnst = VSET(0, 0, 0, {v.p_plus_1_div2_top}, 0, 0, 0, {v.p_plus_1_div2_top});")
+    else:
+        f.line(f"const __m512i cnst = VSET(0, 0, {v.p_plus_1_div2_top}, {v.p_plus_1_div2_top_hi}, 0, 0, {v.p_plus_1_div2_top}, {v.p_plus_1_div2_top_hi});")
+    f.line("__m512i odd_mask;")
+    f.line()
+
+    f.comment("odd_mask = all 1s if a is odd, else 0")
+    f.line("odd_mask = VPERM256(a0, 0x00); // (a[0], a[0], a[0], a[0])")
+    f.line(f"odd_mask = VSUB(VZERO(), VAND(odd_mask, one));")
+    f.line()
+    
+    f.comment("a >> 1")
+    f.line(f"t0 = VPERM256MASKZ(0x77, a0, 0x39); // (limb1, limb2, limb3, 0)")
+    f.line(f"t0 = VSL(VAND(t0, one), {pp.limb_len-1});")
+    f.line(f"t0 = VOR(t0, VSRL(a0, 1));")
+    f.line()
+
+    f.comment("Conditionally add (p+1)/2 = c * 2^(e-1)")
+    f.line(f"t0 = VADD(t0, VAND(cnst, odd_mask));")
+
+    #Carry propagation
+    if not add_top_only:
+        f.line(f"__m512i carry = VSRA(t0, {pp.limb_len});")
+        f.line(f"t0 = VANDMASK(t0, 0x44, t0, VSETALL({v.limb_mask}));")
+        f.line(f"carry = VPERM256MASKZ(0x88, carry, 0xaa);")
+        f.line(f"t0 = VADD(t0, carry);")
+    f.line()
+
+# (a0, a2, a4, -)
+# (a1, a3, -, -)
+def fp_div2_2x4_n2_r1(f, pp, v):
+    add_top_only = (pp.e-1) // pp.limb_len == pp.num_limbs - 1
+    if add_top_only:
+        f.line(f"const __m512i cnst = VSET(0, 0, {v.p_plus_1_div2_top}, 0, 0, 0, {v.p_plus_1_div2_top}, 0);")
+    else:
+        f.line(f"const __m512i cnst_lo = VSET(0, {v.p_plus_1_div2_top}, 0, 0, 0, {v.p_plus_1_div2_top}, 0, 0);")
+        f.line(f"const __m512i cnst_hi = VSET(0, 0, {v.p_plus_1_div2_top_hi}, 0, 0, 0, {v.p_plus_1_div2_top_hi}, 0);")
+    f.line("__m512i odd_mask;")
+    f.line()
+
+    f.comment("odd_mask = all 1s if a is odd, else 0")
+    f.line("odd_mask = VPERM256(a0, 0x00); // (a[0], a[0], a[0], a[0])")
+    f.line("odd_mask = VSUB(VZERO(), VAND(odd_mask, one));")
+    f.line()
+    
+    f.comment("a >> 1")
+    f.line("t0 = VSRL(a0, 1);")
+    # transfer top bit from a1 to a0 and a3 to a2
+    f.line(f"t0 = VADDMASK(t0, 0x33, t0, VSL(VAND(a1, one), {pp.limb_len-1}));")
+    f.line("t1 = VSRL(a1, 1);")
+    # transfer top bit from a2 to a1 and from a4 to a3
+    f.line(f"t1 = VADDMASK(t1, 0x33, t1, VPERM256(VSL(VAND(a0, one), {pp.limb_len-1}), 0x99));")
+    f.line()
+
+    f.comment("Conditionally add (p+1)/2 = c * 2^(e-1)")
+    if add_top_only:
+        f.line(f"t0 = VADD(t0, VAND(cnst, odd_mask));")
+    else:
+        f.line(f"t1 = VADD(t1, VAND(cnst_lo, odd_mask));")
+        f.line(f"t0 = VADD(t0, VAND(cnst_hi, odd_mask));")
+
+    #Carry propagation
+    if not add_top_only:
+        f.line(f"__m512i carry = VSRL(t1, {pp.limb_len});")
+        f.line(f"t1 = VANDMASK(t1, 0x22, t1, VSETALL({v.limb_mask}));")
+        f.line(f"carry = VPERM256MASKZ(0x44, carry, 0x55);")
+        f.line(f"t0 = VADD(t0, carry);")
+    f.line()
+
+# Both in lane 2, lo at vector pp.n24 - 2 and hi at vector pp.n24 - 1
+# all vectors are of the form (a, b, c, -)
+def fp_div2_2x4_lo2_hi2(f, pp, v):
+    add_top_only = (pp.e-1) // pp.limb_len == pp.num_limbs - 1
+    if add_top_only:
+        f.line(f"const __m512i cnst = VSET(0, 0, {v.p_plus_1_div2_top}, 0, 0, 0, {v.p_plus_1_div2_top}, 0);")
+    else:
+        f.line(f"const __m512i cnst_lo = VSET(0, 0, {v.p_plus_1_div2_top}, 0, 0, 0, {v.p_plus_1_div2_top}, 0);")
+        f.line(f"const __m512i cnst_hi = VSET(0, 0, {v.p_plus_1_div2_top_hi}, 0, 0, 0, {v.p_plus_1_div2_top_hi}, 0);")
+    f.line("__m512i odd_mask;")
+    f.line()
+
+    f.comment("odd_mask = all 1s if a is odd, else 0")
+    f.line("odd_mask = VPERM256(a0, 0x00); // (a[0], a[0], a[0], a[0])")
+    f.line("odd_mask = VSUB(VZERO(), VAND(odd_mask, one));")
+    f.line()
+    
+    f.comment("a >> 1")
+    for i in range(pp.n24-1):
+        f.line(f"t{i} = VSRL(a{i}, 1);")
+        f.line(f"t{i} = VADDMASK(t{i}, 0x77, t{i}, VSL(VAND(a{i+1}, one), {pp.limb_len-1}));")
+    # last vector
+    f.line(f"t{pp.n24-1} = VSRL(a{pp.n24-1}, 1);")
+    f.line(f"t{pp.n24-1} = VADDMASK(t{pp.n24-1}, 0x33, t{pp.n24-1}, VPERM256(VSL(VAND(a0, one), {pp.limb_len-1}), 0x99));")
+    f.line()
+
+    f.comment("Conditionally add (p+1)/2 = c * 2^(e-1)")
+    if add_top_only:
+        f.line(f"t{pp.n24-1} = VADD(t{pp.n24-1}, VAND(cnst, odd_mask));")
+    else:
+        f.line(f"t{pp.n24-2} = VADD(t{pp.n24-2}, VAND(cnst_lo, odd_mask));")
+        f.line(f"t{pp.n24-1} = VADD(t{pp.n24-1}, VAND(cnst_hi, odd_mask));")
+
+    #Carry propagation
+    if not add_top_only:
+        f.line(f"__m512i carry = VSRL(t{pp.n24-2}, {pp.limb_len});")
+        f.line(f"t{pp.n24-2} = VANDMASK(t{pp.n24-2}, 0x44, t{pp.n24-2}, VSETALL({v.limb_mask}));")
+        f.line(f"t{pp.n24-1} = VADD(t{pp.n24-1}, carry);")
+    f.line()
+
+# lo in lane 2 at last vector, hi in lane 3 at first vector
+def fp_div2_2x4_lo2_hi3(f, pp, v):
+    add_top_only = (pp.e-1) // pp.limb_len == pp.num_limbs - 1
+    if add_top_only:
+        f.line(f"const __m512i cnst = VSET(0, 0, 0, {v.p_plus_1_div2_top}, 0, 0, 0, {v.p_plus_1_div2_top});")
+    else:
+        f.line(f"const __m512i cnst_lo = VSET(0, 0, {v.p_plus_1_div2_top}, 0, 0, 0, {v.p_plus_1_div2_top}, 0);")
+        f.line(f"const __m512i cnst_hi = VSET(0, 0, 0, {v.p_plus_1_div2_top_hi}, 0, 0, 0, {v.p_plus_1_div2_top_hi});")
+    f.line("__m512i odd_mask;")
+    f.line()
+
+    f.comment("odd_mask = all 1s if a is odd, else 0")
+    f.line("odd_mask = VPERM256(a0, 0x00); // (a[0], a[0], a[0], a[0])")
+    f.line("odd_mask = VSUB(VZERO(), VAND(odd_mask, one));")
+    f.line()
+    
+    f.comment("a >> 1")
+    for i in range(pp.n24-1):
+        f.line(f"t{i} = VSRL(a{i}, 1);")
+        f.line(f"t{i} = VADDMASK(t{i}, 0x77, t{i}, VSL(VAND(a{i+1}, one), {pp.limb_len-1}));")
+    # last vector
+    f.line(f"t{pp.n24-1} = VSRL(a{pp.n24-1}, 1);")
+    f.line(f"t{pp.n24-1} = VADDMASK(t{pp.n24-1}, 0x77, t{pp.n24-1}, VPERM256(VSL(VAND(a0, one), {pp.limb_len-1}), 0x39));")
+    f.line()
+
+    f.comment("Conditionally add (p+1)/2 = c * 2^(e-1)")
+    if add_top_only:
+        f.line(f"t0 = VADD(t0, VAND(cnst, odd_mask));")
+    else:
+        f.line(f"t{pp.n24-1} = VADD(t{pp.n24-1}, VAND(cnst_lo, odd_mask));")
+        f.line(f"t0 = VADD(t0, VAND(cnst_hi, odd_mask));")
+
+    #Carry propagation
+    if not add_top_only:
+        f.line(f"__m512i carry = VSRL(t{pp.n24-1}, {pp.limb_len});")
+        f.line(f"t{pp.n24-1} = VANDMASK(t{pp.n24-1}, 0x44, t{pp.n24-1}, VSETALL({v.limb_mask}));")
+        f.line(f"carry = VPERM256MASKZ(0x88, carry, 0xaa);")
+        f.line(f"t0 = VADD(t0, carry);")
+    f.line()
+
+# both in lane 3, last (4-rem24) % 4 vectors missing limb in lane 3
+def fp_div2_2x4_lo3_hi3(f, pp, v):
+    add_top_only = (pp.e-1) // pp.limb_len == pp.num_limbs - 1
+    if add_top_only:
+        f.line(f"const __m512i cnst = VSET(0, 0, 0, {v.p_plus_1_div2_top}, 0, 0, 0, {v.p_plus_1_div2_top});")
+    else:
+        f.line(f"const __m512i cnst_lo = VSET(0, 0, 0, {v.p_plus_1_div2_top}, 0, 0, 0, {v.p_plus_1_div2_top});")
+        f.line(f"const __m512i cnst_hi = VSET(0, 0, 0, {v.p_plus_1_div2_top_hi}, 0, 0, 0, {v.p_plus_1_div2_top_hi});")
+    f.line("__m512i odd_mask;")
+    f.line()
+
+    f.comment("odd_mask = all 1s if a is odd, else 0")
+    f.line("odd_mask = VPERM256(a0, 0x00); // (a[0], a[0], a[0], a[0])")
+    f.line("odd_mask = VSUB(VZERO(), VAND(odd_mask, one));")
+    f.line()
+    
+    f.comment("a >> 1")
+    idx_top, _ = get_top_idx(pp)
+    # Stage 1: next vector has all 4 limbs
+    for i in range(idx_top):
+        f.line(f"t{i} = VSRL(a{i}, 1);")
+        f.line(f"t{i} = VADD(t{i}, VSL(VAND(a{i+1}, one), {pp.limb_len-1}));")
+    # Stage 2: The top vector is the last with a limb in lane 3
+    num_vec_with_lane3_zero = (4 - pp.rem24) % 4
+    for i in range(num_vec_with_lane3_zero):
+        j = i + idx_top
+        f.line(f"t{j} = VSRL(a{j}, 1);")
+        f.line(f"t{j} = VADDMASK(t{j}, 0x77, t{j}, VSL(VAND(a{j+1}, one), {pp.limb_len-1}));")
+    # Stage 3: The last vector
+    f.line(f"t{pp.n24-1} = VSRL(a{pp.n24-1}, 1);")
+    f.line(f"t{pp.n24-1} = VADDMASK(t{pp.n24-1}, 0x77, t{pp.n24-1}, VPERM256(VSL(VAND(a0, one), {pp.limb_len-1}), 0x39));")
+    f.line()
+
+    f.comment("Conditionally add (p+1)/2 = c * 2^(e-1)")
+    if add_top_only:
+        f.line(f"t{idx_top} = VADD(t{idx_top}, VAND(cnst, odd_mask));")
+    else:
+        f.line(f"t{idx_top-1} = VADD(t{idx_top-1}, VAND(cnst_lo, odd_mask));")
+        f.line(f"t{idx_top} = VADD(t{idx_top}, VAND(cnst_hi, odd_mask));")
+
+    #Carry propagation
+    if not add_top_only:
+        f.line(f"__m512i carry = VSRL(t{idx_top-1}, {pp.limb_len});")
+        f.line(f"t{idx_top-1} = VANDMASK(t{idx_top-1}, 0x88, t{idx_top-1}, VSETALL({v.limb_mask}));")
+        f.line(f"t{idx_top} = VADD(t{idx_top}, carry);")
+    f.line()
+
 def fp_div3_2x4(f, pp, v):
     f.start("void fp_div3_2x4(__m512i* res, __m512i* src)")
 
@@ -934,6 +1164,7 @@ def write_fp_2x4(f, pp, v, strat, chain):
     fp_tomont_2x4(f, pp, v)
     fp_frommont_2x4(f, pp, v)
 
+    fp_div2_2x4(f, pp, v)
     fp_div3_2x4(f, pp, v)
     fp_inv_2x4(f, pp, v)
     fp_sqrt_2x4(f, pp, v)

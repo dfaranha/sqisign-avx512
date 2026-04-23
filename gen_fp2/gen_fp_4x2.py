@@ -678,6 +678,68 @@ def fp_frommont_4x2(f, pp, v):
 
     f.end()
 
+def fp_div2_4x2(f, pp, v):
+    f.start("void fp_div2_4x2(__m512i* res, __m512i* src)")
+
+    f.array_to_single_vars(var_name="a", arr_name="src", count=pp.n42)
+    f.declare_single_vars(var_name="t", count=pp.n42)
+    f.line(f"const __m512i one = VSETALL(1);")
+    add_top_only = (pp.e-1) // pp.limb_len == pp.num_limbs - 1
+    edge_case = pp.n42 == 2 and pp.rem42 == 1
+    if add_top_only:
+        f.line(f"const __m512i cnst = VSET(0, {v.p_plus_1_div2_top}, 0, {v.p_plus_1_div2_top}, 0, {v.p_plus_1_div2_top}, 0, {v.p_plus_1_div2_top});")
+    else:
+        if edge_case:
+            f.line(f"const __m512i cnst_lo = VSET({v.p_plus_1_div2_top}, 0, {v.p_plus_1_div2_top}, 0, {v.p_plus_1_div2_top}, 0, {v.p_plus_1_div2_top}, 0);")
+        else:
+            f.line(f"const __m512i cnst_lo = VSET(0, {v.p_plus_1_div2_top}, 0, {v.p_plus_1_div2_top}, 0, {v.p_plus_1_div2_top}, 0, {v.p_plus_1_div2_top});")
+        f.line(f"const __m512i cnst_hi = VSET(0, {v.p_plus_1_div2_top_hi}, 0, {v.p_plus_1_div2_top_hi}, 0, {v.p_plus_1_div2_top_hi}, 0, {v.p_plus_1_div2_top_hi});")
+    f.line(f"__m512i odd_mask;")
+    f.line()
+
+    f.comment("odd_mask = all 1s if a is odd, else 0")
+    f.line("odd_mask = VSHUFFLE(a0, 0x44); // (a[0], a[0])")
+    f.line(f"odd_mask = VSUB(VZERO(), VAND(odd_mask, one));")
+    f.line()
+
+    f.comment("a >> 1")
+    for i in range(pp.n42 - 1 - pp.rem42):
+        # t[i] = src[i] >> 1 | src[i+1] << l-1
+        f.line(f"t{i} = VOR(VSRL(a{i}, 1), VSL(VAND(a{i+1}, one), {pp.limb_len-1}));")
+    if pp.rem42 == 1:
+        # Top limb at index pp.n42-2. The limb below it is garbage, so we don't compute a{i+1} << l-1 for it.
+        f.line(f"t{pp.n42-2} = VSRL(a{pp.n42-2}, 1);")
+        f.line(f"t{pp.n42-2} = VADDMASK(t{pp.n42-2}, 0x55, t{pp.n42-2}, VSL(VAND(a{pp.n42-1}, one), {pp.limb_len-1}));")
+    # Last vector:
+    # The even lane obtains src[i+1] << l-1 from the odd lane of src[0]
+    # The odd lane will not get any carry from src[i+1], regardless of rem42.
+    f.line(f"t{pp.n42-1} = VSRL(a{pp.n42-1}, 1);")
+    f.line(f"t{pp.n42-1} = VADDMASK(t{pp.n42-1}, 0x55, t{pp.n42-1}, VSL(VAND(VSHUFFLE(a0, 0xee), one), {pp.limb_len-1}));")
+    f.line()
+
+    # Assumes c is small
+    f.comment("Conditionally add (p+1)/2 = c * 2^(e-1)")    
+    if add_top_only:
+        f.line(f"t{pp.n42-pp.rem42-1} = VADD(t{pp.n42-pp.rem42-1}, VAND(cnst, odd_mask));")
+    else:
+        lo_idx = 1 if edge_case else pp.n42 - pp.rem42 - 2
+        hi_idx = pp.n42-pp.rem42-1
+        f.line(f"t{lo_idx} = VADD(t{lo_idx}, VAND(cnst_lo, odd_mask));")
+        f.line(f"t{hi_idx} = VADD(t{hi_idx}, VAND(cnst_hi, odd_mask));")
+
+        # Carry propagation
+        if edge_case:
+            f.line("__m512i carry = VSRL(t1, LIMB_LEN);")
+            f.line("carry = VSHUFFLEMASKZ(0xcccc, carry, 0x4e);")
+            f.line("t0 = VADDMASK(t0, 0xaa, t0, carry);")
+            f.line(f"t1 = VAND(t1, VSETALL({v.limb_mask}));")
+        else:
+            f.line(f"t{hi_idx} = VADDMASK(t{hi_idx}, 0xaa, t{hi_idx}, VSRL(t{lo_idx}, LIMB_LEN));")
+            f.line(f"t{lo_idx} = VAND(t{lo_idx}, VSETALL({v.limb_mask}));")
+
+    f.single_vars_to_array(var_name="t", arr_name="res", count=pp.n42)
+    f.end()
+
 def fp_div3_4x2(f, pp, v):
     f.start("void fp_div3_4x2(__m512i* res, __m512i* src)")
 
@@ -1017,6 +1079,7 @@ def write_fp_4x2(f, pp, v, strat, chain):
 
     fp_mul_4x2(f, pp, v)
     fp_sqr_4x2(f, pp, v)
+    fp_div2_4x2(f, pp, v)
     fp_div3_4x2(f, pp, v)
     fp_inv_4x2(f, pp, v)
     fp_sqrt_4x2(f, pp, v)

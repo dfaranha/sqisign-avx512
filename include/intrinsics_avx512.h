@@ -18,6 +18,7 @@
 #define VANDMASK(SRC, mask, A, B) _mm512_mask_and_epi64(SRC, mask, A, B) // If mask[i] = 1, DST[i] = A[i] AND B[i]. Else, DST[i] = SRC[i]
 #define VOR(A, B) _mm512_or_epi64(A, B) // DST = A OR B
 #define VXOR(A, B) _mm512_xor_epi64(A, B) // DST = A XOR B
+#define VSRL(A, n) _mm512_srli_epi64(A, n) // DST = A >> n (logical right shift)
 #define VSRA(A, n) _mm512_srai_epi64(A, n) // DST = A >> n (arithmetic right shift)
 #define VSRAMASKZ(mask, A, n) _mm512_maskz_srai_epi64(mask, A, n) // If mask[i] = 1, DST[i] = A[i] >> n, else DST[i] = 0
 #define VSL(A, n) _mm512_slli_epi64(A, n) // DST = AA << n

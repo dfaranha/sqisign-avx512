@@ -436,6 +436,24 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Division by 2
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_8x1x1(a);
+        fp2_copy_8x1x1(b, a);
+
+        fp2_div2_8x1x1(b, b);
+        fp2_add_8x1x1(c, b, b);
+
+        if (fp2_is_equal_8x1x1(a, c) != 0xff) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 2", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     // Division by 3
     for (int i = 0; i < iterations; i++) {
         rand_fp2_8x1x1(a);
@@ -911,6 +929,24 @@ bool test_fp2(int iterations)
         }
     }
     print_test_res("conjugation", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Division by 2
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_4x1x2(a);
+        fp2_copy_4x1x2(b, a);
+
+        fp2_div2_4x1x2(b, b);
+        fp2_add_4x1x2(c, b, b);
+
+        if (fp2_is_equal_4x1x2(a, c) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 2", passed);
     if (passed == 0) {
         return false;
     }
@@ -1393,6 +1429,24 @@ bool test_fp2(int iterations)
         }
     }
     print_test_res("conjugation", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Division by 2
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_4x2x1(a);
+        fp2_copy_4x2x1(b, a);
+
+        fp2_div2_4x2x1(b, b);
+        fp2_add_4x2x1(c, b, b);
+
+        if (fp2_is_equal_4x2x1(a, c) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 2", passed);
     if (passed == 0) {
         return false;
     }
@@ -1889,6 +1943,24 @@ bool test_fp2(int iterations)
         return false;
     }
 
+    // Division by 2
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_2x2x2(a);
+        fp2_copy_2x2x2(b, a);
+
+        fp2_div2_2x2x2(b, b);
+        fp2_add_2x2x2(c, b, b);
+
+        if (fp2_is_equal_2x2x2(a, c) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 2", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     // Division by 3
     for (int i = 0; i < iterations; i++) {
         rand_fp2_2x2x2(a);
@@ -2373,6 +2445,24 @@ bool test_fp2(int iterations)
         }
     }
     print_test_res("conjugation", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Division by 2
+    for (int i = 0; i < iterations; i++) {
+        rand_fp2_2x4x1(a);
+        fp2_copy_2x4x1(b, a);
+
+        fp2_div2_2x4x1(b, b);
+        fp2_add_2x4x1(c, b, b);
+
+        if (fp2_is_equal_2x4x1(a, c) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 2", passed);
     if (passed == 0) {
         return false;
     }

@@ -105,6 +105,12 @@ void fp2_conjugate_8x1x1(__m512i* res, __m512i* a)
     fp_neg_8x1(res + 8, a + 8);
 }
 
+void fp2_div2_8x1x1(__m512i* res, __m512i* src)
+{
+    fp_div2_8x1(res, src);
+    fp_div2_8x1(res + 8, src + 8);
+}
+
 void fp2_div3_8x1x1(__m512i* res, __m512i* src)
 {
     fp_div3_8x1(res, src);
@@ -278,6 +284,12 @@ void fp2_conjugate_4x1x2(__m512i* res, __m512i* a)
 {
     fp_copy_4x2(res, a);
     fp_neg_4x2(res + 4, a + 4);
+}
+
+void fp2_div2_4x1x2(__m512i* res, __m512i* src)
+{
+    fp_div2_4x2(res, src);
+    fp_div2_4x2(res + 4, src + 4);
 }
 
 void fp2_div3_4x1x2(__m512i* res, __m512i* src)
@@ -481,6 +493,11 @@ void fp2_conjugate_4x2x1(__m512i* res, __m512i* a)
     fp_mixaddsub_8x1(res, zero, a, 0x55);
 }
 
+void fp2_div2_4x2x1(__m512i* res, __m512i* src)
+{
+    fp_div2_8x1(res, src);
+}
+
 void fp2_div3_4x2x1(__m512i* res, __m512i* src)
 {
     fp_div3_8x1(res, src);
@@ -658,6 +675,11 @@ void fp2_conjugate_2x2x2(__m512i* res, __m512i* a)
     fp_setzero_4x2(zero);
     
     fp_mixaddsub_4x2(res, zero, a, 0x33);
+}
+
+void fp2_div2_2x2x2(__m512i* res, __m512i* src)
+{
+    fp_div2_4x2(res, src);
 }
 
 void fp2_div3_2x2x2(__m512i* res, __m512i* src)
@@ -838,6 +860,11 @@ void fp2_conjugate_2x4x1(__m512i* res, __m512i* a)
     fp_setzero_8x1(zero);
     
     fp_mixaddsub_8x1(res, zero, a, 0x33);
+}
+
+void fp2_div2_2x4x1(__m512i* res, __m512i* src)
+{
+    fp_div2_8x1(res, src);
 }
 
 void fp2_div3_2x4x1(__m512i* res, __m512i* src)

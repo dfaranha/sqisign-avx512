@@ -1,5 +1,5 @@
 from file_writer import (FileWriter, int_to_limbs)
-from params import (get_limb_mask, get_inv_params)
+from params import (get_limb_mask, get_inv_params, get_div2_consts)
 
 def write_fp_consts(f, pp, v):
     f.line(f"#define {v.limb_len} {pp.limb_len}")
@@ -19,12 +19,20 @@ def write_fp_consts(f, pp, v):
 
     p_plus_1_limbs = int_to_limbs(pp.p+1, pp.limb_len)
     f.line(f"#define {v.p_plus_1_top} 0x{p_plus_1_limbs[-1]:x}ULL")
+
+    lo, hi = get_div2_consts(pp.e, pp.c, pp.num_limbs, pp.limb_len)
+    if hi is None:
+        f.line(f"#define {v.p_plus_1_div2_top} 0x{lo:x}ULL")
+    else:
+        f.line(f"#define {v.p_plus_1_div2_top} 0x{lo:x}ULL")
+        f.line(f"#define {v.p_plus_1_div2_top_hi} 0x{hi:x}ULL")
     f.line()
     
     f.comment(f"Montgomery constant {v.R} = 2^({pp.num_limbs}*{pp.limb_len}) mod p")
     f.limb_array_1d(pp.R, pp.num_limbs, pp.limb_len, v.R, v.num_limbs)
     f.comment(f"{v.R2} = {v.R}^2 mod p")
     f.limb_array_1d(pp.R2, pp.num_limbs, pp.limb_len, v.R2, v.num_limbs)
+
     f.comment("3^-1 * R mod p")
     inv3 = (pow(3, -1, pp.p) * pp.R) % pp.p
     f.limb_array_1d(inv3, pp.num_limbs, pp.limb_len, v.inv3, v.num_limbs)

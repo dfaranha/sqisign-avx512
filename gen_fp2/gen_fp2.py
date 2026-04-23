@@ -183,6 +183,14 @@ def fp2_conjugate_8x1x1(f, pp, v):
 
     f.end()
 
+def fp2_div2_8x1x1(f, pp, v):
+    f.start("void fp2_div2_8x1x1(__m512i* res, __m512i* src)")
+
+    f.line("fp_div2_8x1(res, src);")
+    f.line(f"fp_div2_8x1(res + {pp.num_limbs}, src + {pp.num_limbs});")
+
+    f.end()
+
 def fp2_div3_8x1x1(f, pp, v):
     f.start("void fp2_div3_8x1x1(__m512i* res, __m512i* src)")
 
@@ -289,6 +297,7 @@ def fp2_8x1x1(f, pp, v, strat):
 
     fp2_muli_8x1x1(f, pp, v)
     fp2_conjugate_8x1x1(f, pp, v)
+    fp2_div2_8x1x1(f, pp, v)
     fp2_div3_8x1x1(f, pp, v)
     fp2_inv_8x1x1(f, pp, v)
     fp2_sqrt_8x1x1(f, pp, v)
@@ -455,6 +464,14 @@ def fp2_conjugate_4x1x2(f, pp, v):
 
     f.end()
 
+def fp2_div2_4x1x2(f, pp, v):
+    f.start("void fp2_div2_4x1x2(__m512i* res, __m512i* src)")
+
+    f.line("fp_div2_4x2(res, src);")
+    f.line(f"fp_div2_4x2(res + {pp.n42}, src + {pp.n42});")
+
+    f.end()
+
 def fp2_div3_4x1x2(f, pp, v):
     f.start("void fp2_div3_4x1x2(__m512i* res, __m512i* src)")
 
@@ -561,6 +578,7 @@ def fp2_4x1x2(f, pp, v, strat):
 
     fp2_muli_4x1x2(f, pp, v)
     fp2_conjugate_4x1x2(f, pp, v)
+    fp2_div2_4x1x2(f, pp, v)
     fp2_div3_4x1x2(f, pp, v)
     fp2_inv_4x1x2(f, pp, v)
     fp2_sqrt_4x1x2(f, pp, v)
@@ -791,6 +809,13 @@ def fp2_conjugate_4x2x1(f, pp, v):
 
     f.end()
 
+def fp2_div2_4x2x1(f, pp, v):
+    f.start("void fp2_div2_4x2x1(__m512i* res, __m512i* src)")
+
+    f.line("fp_div2_8x1(res, src);")
+
+    f.end()
+
 def fp2_div3_4x2x1(f, pp, v):
     f.start("void fp2_div3_4x2x1(__m512i* res, __m512i* src)")
 
@@ -906,6 +931,7 @@ def fp2_4x2x1(f, pp, v, strat):
 
     fp2_muli_4x2x1(f, pp, v)
     fp2_conjugate_4x2x1(f, pp, v)
+    fp2_div2_4x2x1(f, pp, v)
     fp2_div3_4x2x1(f, pp, v)
     fp2_inv_4x2x1(f, pp, v)
     fp2_sqrt_4x2x1(f, pp, v)
@@ -1115,6 +1141,13 @@ def fp2_conjugate_2x2x2(f, pp, v):
 
     f.end()
 
+def fp2_div2_2x2x2(f, pp, v):
+    f.start("void fp2_div2_2x2x2(__m512i* res, __m512i* src)")
+
+    f.line("fp_div2_4x2(res, src);")
+
+    f.end()
+
 def fp2_div3_2x2x2(f, pp, v):
     f.start("void fp2_div3_2x2x2(__m512i* res, __m512i* src)")
 
@@ -1228,6 +1261,7 @@ def fp2_2x2x2(f, pp, v, strat):
     
     fp2_muli_2x2x2(f, pp, v)
     fp2_conjugate_2x2x2(f, pp, v)
+    fp2_div2_2x2x2(f, pp, v)
     fp2_div3_2x2x2(f, pp, v)
     fp2_sqrt_2x2x2(f, pp, v)
     fp2_inv_2x2x2(f, pp, v)
@@ -1388,6 +1422,13 @@ def fp2_conjugate_2x4x1(f, pp, v):
 
     f.end()
 
+def fp2_div2_2x4x1(f, pp, v):
+    f.start("void fp2_div2_2x4x1(__m512i* res, __m512i* src)")
+
+    f.line("fp_div2_8x1(res, src);")
+
+    f.end()
+
 def fp2_div3_2x4x1(f, pp, v):
     f.start("void fp2_div3_2x4x1(__m512i* res, __m512i* src)")
 
@@ -1514,6 +1555,7 @@ def fp2_2x4x1(f, pp, v):
 
     fp2_muli_2x4x1(f, pp, v)
     fp2_conjugate_2x4x1(f, pp, v)
+    fp2_div2_2x4x1(f, pp, v)
     fp2_div3_2x4x1(f, pp, v)
     fp2_inv_2x4x1(f, pp, v)
     fp2_sqrt_2x4x1(f, pp, v)

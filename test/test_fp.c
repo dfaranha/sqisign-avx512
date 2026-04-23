@@ -405,6 +405,24 @@ bool test_fp(int iterations)
         return false;
     }
 
+    // Division by 2
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_8x1(a);
+        fp_copy_8x1(b, a);
+
+        fp_div2_8x1(b, b);
+        fp_add_8x1(c, b, b);
+
+        if (fp_is_equal_8x1(a, c) != 0xff) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 2", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     // Division by 3
     for (int i = 0; i < iterations; i++) {
         rand_fp_8x1(a);
@@ -828,6 +846,24 @@ bool test_fp(int iterations)
         return false;
     }
 
+    // Division by 2
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_4x2(a);
+        fp_copy_4x2(b, a);
+
+        fp_div2_4x2(b, b);
+        fp_add_4x2(c, b, b);
+
+        if (fp_is_equal_4x2(a, c) != 0xf) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 2", passed);
+    if (passed == 0) {
+        return false;
+    }
+
     // Division by 3
     for (int i = 0; i < iterations; i++) {
         rand_fp_4x2(a);
@@ -1217,6 +1253,24 @@ bool test_fp(int iterations)
         }
     }
     print_test_res("squaring", passed);
+    if (passed == 0) {
+        return false;
+    }
+
+    // Division by 2
+    for (int i = 0; i < iterations; i++) {
+        rand_fp_2x4(a);
+        fp_copy_2x4(b, a);
+
+        fp_div2_2x4(b, b);
+        fp_add_2x4(c, b, b);
+
+        if (fp_is_equal_2x4(a, c) != 0x3) {
+            passed = 0;
+            break;
+        }
+    }
+    print_test_res("division by 2", passed);
     if (passed == 0) {
         return false;
     }

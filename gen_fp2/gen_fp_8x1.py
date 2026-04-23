@@ -722,6 +722,56 @@ def fp_mul_8x1(f, pp, v):
 
     f.end()
 
+# Computing a/2 mod p:
+# First assume we reduce mod p.
+# If a is even, we compute a >> 1.
+# If a is odd, a >> 1 = (a-1)/2. In this case, we add (p+1)/2.
+# (a-1)/2 + (p+1)/2 = (a + p)/2 <= (p-2 + p)/2 = p-1 (using that p-1 is even)
+# If we reduce mod 2p:
+# (2p-1 + p)/2 = (3p-1)/2 < 4p/2 = 2p, 
+# so the same algorithm still works.
+def fp_div2_8x1(f, pp, v):
+    f.start("void fp_div2_8x1(__m512i* res, __m512i* src)")
+
+    f.array_to_single_vars(var_name="a", arr_name="src", count=pp.num_limbs)
+    f.declare_single_vars(var_name="t", count=pp.num_limbs)
+    f.line(f"const __m512i one = VSETALL(1);")
+    add_top_only = (pp.e-1) // pp.limb_len == pp.num_limbs - 1
+    if add_top_only:
+        f.line(f"const __m512i cnst = VSETALL({v.p_plus_1_div2_top});")
+    else:
+        f.line(f"const __m512i cnst_lo = VSETALL({v.p_plus_1_div2_top});")
+        f.line(f"const __m512i cnst_hi = VSETALL({v.p_plus_1_div2_top_hi});")
+
+    f.line(f"__m512i odd_mask;")
+    f.line()
+
+    f.comment("odd_mask = all 1s if a is odd, else 0")
+    f.line(f"odd_mask = VSUB(VZERO(), VAND(a0, one));")
+    f.line()
+
+    f.comment("a >> 1")
+    for i in range(pp.num_limbs - 1):
+        f.line(f"t{i} = VOR(VSRL(a{i}, 1), VSL(VAND(a{i+1}, one), {pp.limb_len - 1}));")
+    f.line(f"t{pp.num_limbs-1} = VSRL(a{pp.num_limbs-1}, 1);")
+    f.line()
+
+    # Assumes c is small
+    f.comment("Conditionally add (p+1)/2 = c * 2^(e-1)")    
+    if add_top_only:
+        f.line(f"t{pp.num_limbs-1} = VADD(t{pp.num_limbs-1}, VAND(cnst, odd_mask));")
+    else:
+        f.line(f"t{pp.num_limbs-2} = VADD(t{pp.num_limbs-2}, VAND(cnst_lo, odd_mask));")
+        f.line(f"t{pp.num_limbs-1} = VADD(t{pp.num_limbs-1}, VAND(cnst_hi, odd_mask));")
+
+        # Carry propagation
+        f.line(f"t{pp.num_limbs-1}= VADD(t{pp.num_limbs-1}, VSRL(t{pp.num_limbs-2}, {v.limb_len}));")
+        f.line(f"t{pp.num_limbs-2} = VAND(t{pp.num_limbs-2}, VSETALL({v.limb_mask}));")
+    f.line()
+
+    f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
+    f.end()
+
 def fp_div3_8x1(f, pp, v):
     f.start("void fp_div3_8x1(__m512i* res, __m512i* src)")
 
@@ -1067,6 +1117,7 @@ def write_fp_8x1(f, pp, v, strat, chain):
 
     fp_mul_8x1(f, pp, v)
     fp_sqr_8x1(f, pp, v)
+    fp_div2_8x1(f, pp, v)
     fp_div3_8x1(f, pp, v)
     fp_inv_8x1(f, pp, v)
     fp_sqrt_8x1(f, pp, v)

@@ -1034,6 +1034,35 @@ void fp_sqr_8x1(__m512i* res, __m512i* a)
     fp_mul_8x1(res, a, a);
 }
 
+void fp_div2_8x1(__m512i* res, __m512i* src)
+{
+    const __m512i a0 = src[0], a1 = src[1], a2 = src[2], a3 = src[3], a4 = src[4], a5 = src[5];
+    const __m512i a6 = src[6], a7 = src[7];
+    __m512i t0, t1, t2, t3, t4, t5, t6, t7;
+    const __m512i one = VSETALL(1);
+    const __m512i cnst = VSETALL(P_PLUS_1_DIV2_TOP);
+    __m512i odd_mask;
+    
+    // odd_mask = all 1s if a is odd, else 0
+    odd_mask = VSUB(VZERO(), VAND(a0, one));
+    
+    // a >> 1
+    t0 = VOR(VSRL(a0, 1), VSL(VAND(a1, one), 47));
+    t1 = VOR(VSRL(a1, 1), VSL(VAND(a2, one), 47));
+    t2 = VOR(VSRL(a2, 1), VSL(VAND(a3, one), 47));
+    t3 = VOR(VSRL(a3, 1), VSL(VAND(a4, one), 47));
+    t4 = VOR(VSRL(a4, 1), VSL(VAND(a5, one), 47));
+    t5 = VOR(VSRL(a5, 1), VSL(VAND(a6, one), 47));
+    t6 = VOR(VSRL(a6, 1), VSL(VAND(a7, one), 47));
+    t7 = VSRL(a7, 1);
+    
+    // Conditionally add (p+1)/2 = c * 2^(e-1)
+    t7 = VADD(t7, VAND(cnst, odd_mask));
+    
+    res[0] = t0; res[1] = t1; res[2] = t2; res[3] = t3; res[4] = t4; res[5] = t5;
+    res[6] = t6; res[7] = t7;
+}
+
 void fp_div3_8x1(__m512i* res, __m512i* src)
 {
     __m512i t[8];
@@ -2204,6 +2233,30 @@ void fp_sqr_4x2(__m512i* res, __m512i* a)
     fp_mul_4x2(res, a, a);
 }
 
+void fp_div2_4x2(__m512i* res, __m512i* src)
+{
+    const __m512i a0 = src[0], a1 = src[1], a2 = src[2], a3 = src[3];
+    __m512i t0, t1, t2, t3;
+    const __m512i one = VSETALL(1);
+    const __m512i cnst = VSET(0, P_PLUS_1_DIV2_TOP, 0, P_PLUS_1_DIV2_TOP, 0, P_PLUS_1_DIV2_TOP, 0, P_PLUS_1_DIV2_TOP);
+    __m512i odd_mask;
+    
+    // odd_mask = all 1s if a is odd, else 0
+    odd_mask = VSHUFFLE(a0, 0x44); // (a[0], a[0])
+    odd_mask = VSUB(VZERO(), VAND(odd_mask, one));
+    
+    // a >> 1
+    t0 = VOR(VSRL(a0, 1), VSL(VAND(a1, one), 47));
+    t1 = VOR(VSRL(a1, 1), VSL(VAND(a2, one), 47));
+    t2 = VOR(VSRL(a2, 1), VSL(VAND(a3, one), 47));
+    t3 = VSRL(a3, 1);
+    t3 = VADDMASK(t3, 0x55, t3, VSL(VAND(VSHUFFLE(a0, 0xee), one), 47));
+    
+    // Conditionally add (p+1)/2 = c * 2^(e-1)
+    t3 = VADD(t3, VAND(cnst, odd_mask));
+    res[0] = t0; res[1] = t1; res[2] = t2; res[3] = t3;
+}
+
 void fp_div3_4x2(__m512i* res, __m512i* src)
 {
     __m512i t[4];
@@ -3188,6 +3241,30 @@ void fp_frommont_2x4(__m512i* res, __m512i* a)
     fp_setzero_2x4(one);
     one[0] = VSET(1, 0, 0, 0, 1, 0, 0, 0);
     fp_mul_2x4(res, a, one);
+}
+
+void fp_div2_2x4(__m512i* res, __m512i* src)
+{
+    const __m512i a0 = src[0], a1 = src[1];
+    __m512i t0, t1;
+    const __m512i one = VSETALL(1);
+    const __m512i cnst = VSET(0, 0, 0, P_PLUS_1_DIV2_TOP, 0, 0, 0, P_PLUS_1_DIV2_TOP);
+    __m512i odd_mask;
+    
+    // odd_mask = all 1s if a is odd, else 0
+    odd_mask = VPERM256(a0, 0x00); // (a[0], a[0], a[0], a[0])
+    odd_mask = VSUB(VZERO(), VAND(odd_mask, one));
+    
+    // a >> 1
+    t0 = VSRL(a0, 1);
+    t0 = VADD(t0, VSL(VAND(a1, one), 47));
+    t1 = VSRL(a1, 1);
+    t1 = VADDMASK(t1, 0x77, t1, VPERM256(VSL(VAND(a0, one), 47), 0x39));
+    
+    // Conditionally add (p+1)/2 = c * 2^(e-1)
+    t1 = VADD(t1, VAND(cnst, odd_mask));
+    
+    res[0] = t0; res[1] = t1;
 }
 
 void fp_div3_2x4(__m512i* res, __m512i* src)

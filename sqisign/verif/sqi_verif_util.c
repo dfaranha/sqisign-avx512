@@ -6,8 +6,6 @@
 #include "tutil.h"
 #include <assert.h>
 
-typedef unsigned char byte_t;
-
 void
 public_key_init(public_key_t *pk)
 {

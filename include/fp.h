@@ -79,7 +79,12 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b);
 void fp_sqr_8x1(__m512i* res, __m512i* a);
 
 /**
- * res = a * 3^(-1) (mod p)
+ * res = a/2 (mod p)
+ */
+void fp_div2_8x1(__m512i* res, __m512i* src);
+
+/**
+ * res = a/3 (mod p)
  */
 void fp_div3_8x1(__m512i* res, __m512i* src);
 
@@ -220,6 +225,7 @@ void fp_tomont_4x2(__m512i* res, __m512i* a);
 void fp_frommont_4x2(__m512i* res, __m512i* a);
 
 void fp_div3_4x2(__m512i* res, __m512i* a);
+void fp_div2_4x2(__m512i* res, __m512i* src);
 void fp_inv_4x2(__m512i* res, __m512i* src);
 void fp_sqrt_4x2(__m512i* res, __m512i* src);
 void fp_exp3div4_4x2(__m512i* res, __m512i* a);
@@ -281,6 +287,7 @@ void fp_sqr_2x4(__m512i* res, __m512i* a);
 void fp_tomont_2x4(__m512i* res, __m512i* a);
 void fp_frommont_2x4(__m512i* res, __m512i* a);
 
+void fp_div2_2x4(__m512i* res, __m512i* a);
 void fp_div3_2x4(__m512i* res, __m512i* a);
 void fp_inv_2x4(__m512i* res, __m512i* a);
 void fp_sqrt_2x4(__m512i* res, __m512i* a);

@@ -15,6 +15,7 @@
 #define LAST_LIMB_MASK 0x7fffffffffffULL
 
 #define P_PLUS_1_TOP 0x410000000000ULL
+#define P_PLUS_1_DIV2_TOP 0x208000000000ULL
 
 // Montgomery constant R = 2^(8*48) mod p
 static const uint64_t R[NUM_LIMBS] =

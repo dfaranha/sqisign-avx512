@@ -6,6 +6,8 @@
 #include "sqi_fp2.h"
 #include "sqi_fp_constants_lvl3.h"
 
+typedef unsigned char byte_t;
+
 typedef digit_t scalar_t[NWORDS_ORDER];
 typedef scalar_t scalar_mtx_2x2_t[2][2];
 
