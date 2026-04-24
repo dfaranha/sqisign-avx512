@@ -2315,7 +2315,59 @@ bool ec_biscalar_mul_pair_normA_1x2x2x2(
     return succ1 && succ2;
 }
 
-void ec_normalize_curve_2x2x2x2(__m512i* res_A24_1, __m512i* res_A24_2, __m512i* res_A_1, __m512i* res_A_2, __m512i* A24_1, __m512i* A24_2)
+// Faster than SQI variant
+void ec_normalize_curve_2x2x2(__m512i* res_A24, __m512i* res_A, __m512i* A24)
+{
+    __m512i t0[N4x2], t1[N4x2], t2[N4x2];
+    const __m512i idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    const __m512i idx1 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+
+    // t0 = (A24^-1, C24^-1), wasted computation of A24^-1
+    fp2_inv_2x2x2(t0, A24);
+
+    // res_A24 = (A24 / C24, 1)
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(idx0, t0[i]);
+    }
+    fp2_mul_2x2x2(t2, t0, A24);
+
+    // A = 4*A24 - 2 = 2*(2*A24 - 1)
+    fp2_add_2x2x2(t1, t2, t2);
+    fp2_set_binary_2x2x2(t0, 0b11);
+    fp2_sub_2x2x2(t1, t1, t0);
+    fp2_add_2x2x2(t1, t1, t1);
+
+    for (int i = 0; i < N4x2; i++) {
+        res_A[i] = VBLENDPERM(idx1, t1[i], t0[i]);
+    }
+    fp2_copy_2x2x2(res_A24, t2);
+}
+
+// Slower than previous
+void ec_normalize_curve_SQI_2x2x2(__m512i* res_A24, __m512i* res_A, __m512i* A24)
+{
+    fp2_t unvec[2];
+    __m512i one[N4x2];
+    const __m512i idx = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+
+    fp2_2x2x2_to_unvectorized(unvec, A24);
+    fp2_inv(unvec+1);
+    fp2_mul(unvec, unvec, unvec+1);
+    fp2_set_one(unvec+1);
+    fp2_unvectorized_to_2x2x2(res_A24, unvec);
+
+    // A = 4*A24 - 2 = 2*(2*A24 - 1)
+    // faster to avoid another unvec -> 2x2x2
+    fp2_set_binary_2x2x2(one, 0b01);
+    fp2_add_2x2x2(res_A, res_A24, res_A24);
+    fp2_sub_2x2x2(res_A, res_A, one);
+    fp2_add_2x2x2(res_A, res_A, res_A);
+    for (int i = 0; i < N4x2; i++) {
+        res_A[i] = VBLENDPERM(idx, res_A[i], one[i]);
+    }
+}
+
+void ec_normalize_curve_pair_2x2x2(__m512i* res_A24_1, __m512i* res_A24_2, __m512i* res_A_1, __m512i* res_A_2, __m512i* A24_1, __m512i* A24_2)
 {
     __m512i t0[N4x2], t1[N4x2];
     const __m512i idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
@@ -2350,7 +2402,7 @@ void ec_normalize_curve_2x2x2x2(__m512i* res_A24_1, __m512i* res_A24_2, __m512i*
     }
 }
 
-void ec_normalize_A24_2x2x2x2(__m512i* res1, __m512i* res2, __m512i* A24_1, __m512i* A24_2)
+void ec_normalize_A24_pair_2x2x2(__m512i* res1, __m512i* res2, __m512i* A24_1, __m512i* A24_2)
 {
     __m512i A24[N4x2], C24[N4x2];
     const __m512i idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
@@ -2390,6 +2442,121 @@ void ec_normA24_to_normA_1x2x2x2(__m512i* res, __m512i* normA24)
     for (int i = 0; i < N4x2; i++) {
         res[i] = VBLENDPERM(idx, normA[i], normA24[i]);
     }
+}
+
+// A24 = (A + 2)/4
+void ec_normA_to_normA24_1x2x2x2(__m512i* res, __m512i* normA)
+{
+    __m512i two[N4x2], normA24[N4x2];
+    const __m512i idx = VSET(0, 1, 2, 3, 12, 13, 14, 15);
+
+    fp2_set_binary_2x2x2(two, 0b01);
+    fp2_add_2x2x2(two, two, two);
+
+    fp2_add_2x2x2(normA24, normA, two);
+    fp2_div2_2x2x2(normA24, normA24);
+    fp2_div2_2x2x2(normA24, normA24);
+
+    // Assuming normA is normalized, we exploit that it's second component is 1.
+    for (int i = 0; i < N4x2; i++) {
+        res[i] = VBLENDPERM(idx, normA24[i], normA[i]);
+    }
+}
+
+// Verifies the normalized Montgomery A-coefficient is valid for each curve (A^2-4 != 0, i.e. A != +- 2)
+bool ec_curve_verify_normA_pair_2x2x2(__m512i* normA1, __m512i* normA2)
+{
+    __m512i A1_A2[N4x2], two[N4x2];
+    const __m512i idx = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    for (int i = 0; i < N4x2; i++) {
+        A1_A2[i] = VBLENDPERM(idx, normA1[i], normA2[i]);
+    }
+    fp2_set_binary_2x2x2(two, 0b11);
+    fp2_add_2x2x2(two, two, two);
+    if (fp2_is_equal_2x2x2(A1_A2, two) != 0) {
+        return false;
+    }
+    fp2_neg_2x2x2(two, two);
+    return fp2_is_equal_2x2x2(A1_A2, two) == 0;
+}
+
+// j = (256 * (A^2 - 3C^2)^3) / (C^4 * (A^2 - 4C^2))
+void ec_j_inv_2x2x2(__m512i* res, __m512i* AC)
+{
+    __m512i t0[N4x2], t1[N4x2], t2[N4x2], t3[N4x2];
+    __m512i idx0, idx1;
+
+    fp2_sqr_2x2x2(t0, AC); // A^2, C^2
+
+    // t1 = (C^2, 1);
+    fp2_set_binary_2x2x2(t1, 0b01);
+    idx0 = VSET(4, 5, 6, 7, 8, 9, 10, 11);
+    for (int i = 0; i < N4x2; i++) {
+        t1[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+    }
+
+    // t2 = (2C^2, 2)
+    fp2_add_2x2x2(t2, t1, t1);
+
+    // t0 = (A^2, 2)
+    // t2 = (A^2 - 2C^2, 4)
+    idx0 = VSET(0, 1, 2, 3, 12, 13, 14, 15);
+    for(int i = 0; i < N4x2; i++) {
+        t0[i] = VBLENDPERM(idx0, t0[i], t2[i]);
+    }
+    fp2_mixaddsub_2x2x2(t2, t0, t2, 0xf0);
+
+    // t0 = (C^2, 4)
+    // t2 = (A^2 - 3C^2, 8)
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VBLENDPERM(idx0, t1[i], t2[i]);
+    }
+    fp2_mixaddsub_2x2x2(t2, t2, t0, 0xf0);
+
+    // t0 = (C^2, 8)
+    // t1 = (A^2 - 4C^2, 16)
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VBLENDPERM(idx0, t0[i], t2[i]);
+    }
+    fp2_mixaddsub_2x2x2(t1, t2, t0, 0xf0);
+
+    // t0 = (C^2, (A^2 - 3C^2))^2
+    idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VBLENDPERM(idx0, t0[i], t2[i]);
+    }
+    fp2_sqr_2x2x2(t0, t0);
+
+    // t2 = (16, A^2 - 3C^2)
+    // t3 = (16, (A^2 - 3C^2)^2)
+    idx0 = VSET(4, 5, 6, 7, 8, 9, 10, 11);
+    idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+    for (int i = 0; i < N4x2; i++) {
+        t2[i] = VBLENDPERM(idx0, t1[i], t2[i]);
+        t3[i] = VBLENDPERM(idx1, t1[i], t0[i]);
+    }
+    // t2 = (256, (A^2 - 3C^2)^3)
+    fp2_mul_2x2x2(t2, t2, t3);
+
+    // t0 = (256, C^4)
+    // t1 = ((A^2 - 3C^2)^3, A^2 - 4C^2)
+    idx0 = VSET(8, 9, 10, 11, 0, 1, 2, 3);
+    idx1 = VSET(12, 13, 14, 15, 0, 1, 2, 3);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VBLENDPERM(idx0, t0[i], t2[i]);
+        t1[i] = VBLENDPERM(idx1, t1[i], t2[i]);
+    }
+    // t0 = (256 * (A^2 - 3C^2)^3, C^4 * (A^2 - 4C^2)) = (nominator, denominator)
+    fp2_mul_2x2x2(t0, t0, t1);
+    
+    // t1 = (denominator^-1, denominator^-1)
+    // res = (j_inv, 1)
+    fp2_inv_2x2x2(t1, t0);
+    idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    for (int i = 0; i < N4x2; i++) {
+        t1[i] = VPERM512(idx0, t1[i]);
+    }
+    fp2_mul_2x2x2(res, t0, t1);
 }
 
 void ec_proj_diff_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA)

@@ -624,16 +624,22 @@ ec_j_inv(fp2_t *j_inv, const ec_curve_t *curve)
 
     fp2_sqr(&t1, &curve->C);
     fp2_sqr(j_inv, &curve->A);
-    fp2_add(&t0, &t1, &t1);
-    fp2_sub(&t0, j_inv, &t0);
-    fp2_sub(&t0, &t0, &t1);
-    fp2_sub(j_inv, &t0, &t1);
-    fp2_sqr(&t1, &t1);
+
+    fp2_add(&t0, &t1, &t1); // 2C^2
+    fp2_sub(&t0, j_inv, &t0); // A^2 - 2C^2
+    fp2_sub(&t0, &t0, &t1); // A^2 - 3C^2
+    fp2_sub(j_inv, &t0, &t1); // A^2 - 4C^2
+
+    fp2_sqr(&t1, &t1); // C^4
+    
+    fp2_add(&t0, &t0, &t0);
+    fp2_add(&t0, &t0, &t0);
+
     fp2_mul(j_inv, j_inv, &t1);
-    fp2_add(&t0, &t0, &t0);
-    fp2_add(&t0, &t0, &t0);
     fp2_sqr(&t1, &t0);
+
     fp2_mul(&t0, &t0, &t1);
+
     fp2_add(&t0, &t0, &t0);
     fp2_add(&t0, &t0, &t0);
     fp2_inv(j_inv);

@@ -13,28 +13,104 @@
 #include "sqi_test_extras.h"
 #include "utils.h"
 
-void public_key_from_bytes_2x2x2(public_key_2x2x2_t* pk, const byte_t* enc)
+#include "sqi_verif_util.h"
+#include "mp.h"
+#include "tutil.h"
+
+#define NBYTES_FP2 8*2*NWORDS64
+#define NBYTES_PK NBYTES_FP2 + 1
+
+static void decode_digits(digit_t *x, const byte_t *enc, size_t nbytes, size_t ndigits)
 {
-    uint64_t unvec_A[4*NWORDS64];
-    int num_bytes_fp2 = 8*2*NWORDS64;
+    assert(nbytes <= ndigits * sizeof(digit_t));
+    memcpy((byte_t *)x, enc, nbytes);
+    memset((byte_t *)x + nbytes, 0, ndigits * sizeof(digit_t) - nbytes);
+}
 
-    memcpy((byte_t *) unvec_A, enc, num_bytes_fp2);
-    enc += num_bytes_fp2;
+static void public_key_from_bytes_2x2x2(public_key_2x2x2_t* pk, const byte_t* enc)
+{
+    uint64_t A_unvec[4*NWORDS64];
 
-    memset(((byte_t *) unvec_A) + num_bytes_fp2, 0, num_bytes_fp2);
-    unvec_A[2*NWORDS64] = 1; // C = 1
-    fp_64_to_limbs_4x2(pk->A, unvec_A);
+    memcpy((byte_t *) A_unvec, enc, NBYTES_FP2);
+    enc += NBYTES_FP2;
+
+    memset((byte_t *) (A_unvec + 2*NWORDS64), 0, NBYTES_FP2);
+    A_unvec[2*NWORDS64] = 1; // C = 1
+    fp_64_to_limbs_4x2(pk->A, A_unvec);
+    fp_tomont_4x2(pk->A, pk->A);
+
+    ec_normA_to_normA24_1x2x2x2(pk->A24, pk->A);
 
     pk->hint = *enc;
 }
 
-// #include "bench.h"
-// #include <inttypes.h>
+static void public_key_to_bytes_2x2x2(byte_t *enc, public_key_2x2x2_t *pk)
+{
+    __m512i A[N4x2];
+    uint64_t A_unvec[4*NWORDS64];
+
+    fp2_frommont_2x2x2(A, pk->A);
+    fp_limbs_to_64_4x2(A_unvec, A);
+    memcpy(enc, (byte_t *) A_unvec, NBYTES_FP2);
+    enc += NBYTES_FP2;
+
+    *enc = pk->hint;
+}
+
+static void signature_from_bytes_2x2x2(signature_2x2x2_t* sig, const byte_t* enc)
+{
+    uint64_t A_unvec[4*NWORDS64];
+
+    memcpy((byte_t *) A_unvec, enc, NBYTES_FP2);
+    enc += NBYTES_FP2;
+
+    memset((byte_t *) (A_unvec + 2*NWORDS64), 0, NBYTES_FP2);
+    A_unvec[2*NWORDS64] = 1; // C = 1
+    fp_64_to_limbs_4x2(sig->A_aux, A_unvec);
+    fp_tomont_4x2(sig->A_aux, sig->A_aux);
+
+    ec_normA_to_normA24_1x2x2x2(sig->A24_aux, sig->A_aux);
+
+    sig->backtracking = *enc++;
+    sig->two_resp_length = *enc++;
+
+    size_t nbytes = (SQIsign_response_length + 9) / 8;
+    decode_digits(sig->mat_Bchall_can_to_B_chall[0][0], enc, nbytes, NWORDS_ORDER);
+    enc += nbytes;
+    decode_digits(sig->mat_Bchall_can_to_B_chall[0][1], enc, nbytes, NWORDS_ORDER);
+    enc += nbytes;
+    decode_digits(sig->mat_Bchall_can_to_B_chall[1][0], enc, nbytes, NWORDS_ORDER);
+    enc += nbytes;
+    decode_digits(sig->mat_Bchall_can_to_B_chall[1][1], enc, nbytes, NWORDS_ORDER);
+    enc += nbytes;
+
+    nbytes = SECURITY_BITS / 8;
+    decode_digits(sig->chall_coeff, enc, nbytes, NWORDS_ORDER);
+    enc += nbytes;
+
+    sig->hint_aux = *enc++;
+    sig->hint_chall = *enc++;
+}
+
+static void j_inv_to_bytes_2x2x2(byte_t *enc, __m512i* j_inv)
+{
+    __m512i j[N4x2];
+    uint64_t unvec[4*NWORDS64];
+
+    fp2_frommont_2x2x2(j, j_inv);
+    fp_limbs_to_64_4x2(unvec, j);
+    memcpy(enc, (byte_t *) unvec, NBYTES_FP2);
+}
+
+static void get_hash_bytes(byte_t *enc, public_key_2x2x2_t* pk, __m512i* j_com)
+{
+    public_key_to_bytes_2x2x2(enc, pk);
+    j_inv_to_bytes_2x2x2(enc + NBYTES_PK, j_com);
+}
 
 // Check that the basis change matrix elements are canonical
 // representatives modulo 2^(SQIsign_response_length + 2).
-static bool
-check_canonical_basis_change_matrix(const signature_t *sig)
+static bool check_canonical_basis_change_matrix(const signature_2x2x2_t *sig)
 {
     // This works as long as all values in sig->mat_Bchall_can_to_B_chall are
     // positive integers.
@@ -56,63 +132,32 @@ check_canonical_basis_change_matrix(const signature_t *sig)
     return ret;
 }
 
-// TODO: Change return type from int to bool
-
-
 // Compute the 2^n isogeny from the signature with kernel
 // P + [chall_coeff]Q and store the codomain in E_chall
-static int
-compute_challenge_verify(ec_curve_t *E_chall, const signature_t *sig, const ec_curve_t *Epk, const uint8_t hint_pk)
+static bool compute_challenge_verify(__m512i* res_A24_chall, __m512i* res_A_chall, const signature_2x2x2_t *sig, public_key_2x2x2_t* pk)
 {
-    ec_basis_t bas_Epk_unvec;
-    ec_basis_t dummy;
-    ec_point_t ker_unvec;
-    copy_curve(E_chall, Epk);
-
-    // Set domain and length of 2^n isogeny
+    __m512i ker[4], A24[4], A[4], bas_Epk[12];
+    // length of 2^n isogeny
     int len = TORSION_EVEN_POWER - sig->backtracking;
 
-    // TODO: Remove
-    // Computing normalized A24: 
-    // A = 4*A24 - 2  =>  A24 = (A + 2)/4
-    fp2_t tmp;
-    fp2_set_one(&tmp);
-    fp2_add(&tmp, &tmp, &tmp);
-    fp2_add(&tmp, &tmp, &E_chall->A);
-    fp2_half(&tmp, &tmp);
-    fp2_half(&E_chall->A24.x, &tmp);
-    fp2_set_one(&E_chall->A24.z);
-    E_chall->is_A24_computed_and_normalized = true;
-
-    // ============== VECTORIZED ================================================================================
-
-    __m512i ker[4], A24[4], A[4], bas_Epk[12];
-    // uint64_t start2 = cpucycles();
-    // for (int i = 0; i < 1000; i++) {
-    ec_point_unvec_to_1x2x2x2(A24, &E_chall->A24);
-    // We have already asserted that C = 1
-    ec_point_t AC = {E_chall-> A, E_chall -> C};
-    ec_point_unvec_to_1x2x2x2(A, &AC);
+    fp2_copy_2x2x2(A, pk->A);
+    fp2_copy_2x2x2(A24, pk->A24);
 
     // Compute basis for E_pk from hint
-    ec_curve_to_basis_from_hint_SQI_1x2x2x2(bas_Epk, A, hint_pk);
+    ec_curve_to_basis_from_hint_SQI_1x2x2x2(bas_Epk, A, pk->hint);
 
     if (!ec_ladder_3pt_normA_1x2x2x2(ker, A, bas_Epk, sig->chall_coeff)) {
-        return 0;
+        return false;
     }
     ec_double_iter_1x2x2x2(ker, ker, A24, sig->backtracking);
 
     if (!isog_chain_1d_1x2x2x2(A24, A24, ker, len, NULL, 0, false)) {
-        return 0;
+        return false;
     }
 
-    ec_point_1x2x2x2_to_unvec(&E_chall->A24, A24);
-    A24_to_AC(E_chall, &E_chall->A24);
-    E_chall->is_A24_computed_and_normalized = false;
+    ec_normalize_curve_2x2x2(res_A24_chall, res_A_chall, A24);
 
-    // ============== END ================================================================================
-
-    return 1;
+    return true;
 }
 
 // same as matrix_application_even_basis() in id2iso.c, with some modifications:
@@ -121,19 +166,9 @@ compute_challenge_verify(ec_curve_t *E_chall, const signature_t *sig, const ec_c
 //   assumed that the elements are already cannonical representatives modulo
 //   2^f; this is ensured by calling check_canonical_basis_change_matrix() at
 //   the beginning of protocols_verify().
-static int
-matrix_scalar_application_even_basis(ec_basis_t *bas, const ec_curve_t *E, scalar_mtx_2x2_t *mat, int f)
+static bool matrix_scalar_application_even_basis(__m512i* basis, __m512i* A24, __m512i* A, scalar_mtx_2x2_t *mat, int f)
 {
-
-    // ============== VECTORIZED ================================================================================
-    __m512i res1[4], res2[4], A24[4], A[4], basis_vec[12];
-    ec_point_t EA24, AC = {E->A, E->C};
-    copy_point(&EA24, &E->A24);
-    ec_point_unvec_to_1x2x2x2(A24, &EA24);
-    ec_point_unvec_to_1x2x2x2(A, &AC);
-    ec_point_unvec_to_1x2x2x2(basis_vec, &bas->P);
-    ec_point_unvec_to_1x2x2x2(basis_vec + 4, &bas->Q);
-    ec_point_unvec_to_1x2x2x2(basis_vec + 8, &bas->PmQ);
+    __m512i res_P[N4x2], res_Q[N4x2];
 
     scalar_t scalar0, scalar1;
     memset(scalar0, 0, NWORDS_ORDER * sizeof(digit_t));
@@ -142,10 +177,8 @@ matrix_scalar_application_even_basis(ec_basis_t *bas, const ec_curve_t *E, scala
     // For a matrix [[a, c], [b, d]] we compute:
     // first basis element R = [a]P + [b]Q
     // second basis element S = [c]P + [d]Q
-    if(!ec_biscalar_mul_pair_normA_1x2x2x2(res1, res2, mat, A, A24, basis_vec))
-        return 0;
-    ec_point_1x2x2x2_to_unvec(&bas->P, res1);
-    ec_point_1x2x2x2_to_unvec(&bas->Q, res2);
+    if(!ec_biscalar_mul_pair_normA_1x2x2x2(res_P, res_Q, mat, A, A24, basis)) // can't overwrite basis yet
+        return false;
 
     // Their difference R - S = [a - c]P + [b - d]Q
     mp_sub(scalar0, (*mat)[0][0], (*mat)[0][1], NWORDS_ORDER);
@@ -153,73 +186,45 @@ matrix_scalar_application_even_basis(ec_basis_t *bas, const ec_curve_t *E, scala
     mp_sub(scalar1, (*mat)[1][0], (*mat)[1][1], NWORDS_ORDER);
     mp_mod_2exp(scalar1, f, NWORDS_ORDER);
 
-    bool success = ec_biscalar_mul_normA_1x2x2x2(res1, scalar0, scalar1, A, A24, basis_vec);
-    ec_point_1x2x2x2_to_unvec(&bas->PmQ, res1);
-    return success ? 1 : 0;
-
-    // ============== END ================================================================================
+    bool success = ec_biscalar_mul_normA_1x2x2x2(basis + 2*N4x2, scalar0, scalar1, A, A24, basis);
+    fp2_copy_2x2x2(basis, res_P);
+    fp2_copy_2x2x2(basis + N4x2, res_Q);
+    return success;
 }
 
 // Compute the bases for the challenge and auxillary curve from
 // the canonical bases. Challenge basis is reconstructed from the
 // compressed scalars within the challenge.
-static int
-challenge_and_aux_basis_verify(ec_basis_t *B_chall_can_unvec,
-                               ec_basis_t *B_aux_can_unvec,
-                               ec_curve_t *E_chall,
-                               ec_curve_t *E_aux,
-                               signature_t *sig,
-                               const int pow_dim2_deg_resp)
+static bool challenge_and_aux_basis_verify(
+    __m512i* B_chall_can,
+    __m512i* B_aux_can,
+    __m512i* A24_chall,
+    __m512i* A_chall,
+    signature_2x2x2_t *sig,
+    const int pow_dim2_deg_resp
+)
 {
-    __m512i A24_chall[N4x2], A24_aux[N4x2], A_chall[N4x2], A_aux[N4x2], B_chall_can[3*N4x2], B_aux_can[3*N4x2];
-    AC_to_A24(&E_chall->A24, E_chall); // were not computed
-    AC_to_A24(&E_aux->A24, E_aux);
-    ec_point_unvec_to_1x2x2x2(A24_chall, &E_chall->A24);
-    ec_point_unvec_to_1x2x2x2(A24_aux, &E_aux->A24);
-
-    // ============== VECTORIZED ================================================================================
-
-    // We normalize E_chall to use normalized ladders
-    // and E_aux for faster basis doubling
-    ec_normalize_curve_2x2x2x2(A24_chall, A24_aux, A_chall, A_aux, A24_chall, A24_aux);
-
     // recovering the canonical basis as TORSION_EVEN_POWER for consistency with signing
-    ec_curve_to_basis_from_hint_2x2x2x2(B_chall_can, B_aux_can, A_chall, A_aux, sig->hint_chall, sig->hint_aux);
+    ec_curve_to_basis_from_hint_2x2x2x2(B_chall_can, B_aux_can, A_chall, sig->A_aux, sig->hint_chall, sig->hint_aux);
     
     int n_chall = TORSION_EVEN_POWER - pow_dim2_deg_resp - HD_extra_torsion - sig->two_resp_length;
     int n_aux = TORSION_EVEN_POWER - pow_dim2_deg_resp - HD_extra_torsion;
 
-    ec_double_basis_pair_1x2x2x2(B_aux_can, B_chall_can, B_aux_can, B_chall_can, A24_aux, A24_chall, n_aux, n_chall);
+    ec_double_basis_pair_1x2x2x2(B_aux_can, B_chall_can, B_aux_can, B_chall_can, sig->A24_aux, A24_chall, n_aux, n_chall);
 
 #ifndef NDEBUG
-    if (!test_basis_order_twof_1x2x2x2(B_chall_can, A24_chall, HD_extra_torsion + pow_dim2_deg_resp + sig->two_resp_length))
+    if (!test_basis_order_twof_1x2x2x2(B_chall_can, A24_chall, HD_extra_torsion + pow_dim2_deg_resp + sig->two_resp_length)) {
         printf("canonical basis has wrong order, expect something to fail\n");
+        return false;
+    }
 #endif
-
-    ec_point_1x2x2x2_to_unvec(&B_chall_can_unvec->P, B_chall_can);
-    ec_point_1x2x2x2_to_unvec(&B_chall_can_unvec->Q, B_chall_can+4);
-    ec_point_1x2x2x2_to_unvec(&B_chall_can_unvec->PmQ, B_chall_can+8);
-    ec_point_1x2x2x2_to_unvec(&B_aux_can_unvec->P, B_aux_can);
-    ec_point_1x2x2x2_to_unvec(&B_aux_can_unvec->Q, B_aux_can+4);
-    ec_point_1x2x2x2_to_unvec(&B_aux_can_unvec->PmQ, B_aux_can+8);
 
     // ============== END ================================================================================
 
-    ec_point_t AC;
-    ec_point_1x2x2x2_to_unvec(&AC, A_chall);
-    fp2_copy(&E_chall->A, &AC.x);
-    fp2_set_one(&E_chall->C);
-    ec_point_1x2x2x2_to_unvec(&AC, A_aux);
-    fp2_copy(&E_aux->A, &AC.x);
-    fp2_set_one(&E_aux->C);
-    ec_point_1x2x2x2_to_unvec(&E_chall->A24, A24_chall);
-    ec_point_1x2x2x2_to_unvec(&E_aux->A24, A24_aux);
-    E_chall->is_A24_computed_and_normalized = true;
-    E_aux->is_A24_computed_and_normalized = true;
-
     // applying the change matrix on the basis of E_chall
-    return matrix_scalar_application_even_basis(B_chall_can_unvec,
-                                                E_chall,
+    return matrix_scalar_application_even_basis(B_chall_can,
+                                                A24_chall,
+                                                A_chall,
                                                 &sig->mat_Bchall_can_to_B_chall,
                                                 pow_dim2_deg_resp + HD_extra_torsion + sig->two_resp_length);
 }
@@ -227,117 +232,129 @@ challenge_and_aux_basis_verify(ec_basis_t *B_chall_can_unvec,
 // When two_resp_length is non-zero, we must compute a small 2^n-isogeny
 // updating E_chall as the codomain as well as push the basis on E_chall
 // through this isogeny
-static int
-two_response_isogeny_verify(ec_curve_t *E_chall, ec_basis_t *B_chall_can, const signature_t *sig, int pow_dim2_deg_resp)
+static bool two_response_isogeny_verify(__m512i* A24_chall, __m512i* A_chall, __m512i* B_chall_can, const signature_2x2x2_t *sig, int pow_dim2_deg_resp)
 {
-    ec_point_t ker_unvec, points_unvec[3];
+    __m512i ker[N4x2];
 
     // choosing the right point for the small two_isogenies
     if (mp_is_even(sig->mat_Bchall_can_to_B_chall[0][0], NWORDS_ORDER) &&
         mp_is_even(sig->mat_Bchall_can_to_B_chall[1][0], NWORDS_ORDER)) {
-        copy_point(&ker_unvec, &B_chall_can->Q);
+        fp2_copy_2x2x2(ker, B_chall_can + N4x2); // ker = Q
     } else {
-        copy_point(&ker_unvec, &B_chall_can->P);
+        fp2_copy_2x2x2(ker, B_chall_can); // ker = P
     }
 
-    // ============== VECTORIZED ================================================================================
-    __m512i A24[4], ker[4], points[12];
-    ec_point_unvec_to_1x2x2x2(A24, &E_chall->A24);
-    ec_point_unvec_to_1x2x2x2(ker, &ker_unvec);
-    ec_point_unvec_to_1x2x2x2(points, &B_chall_can->P);
-    ec_point_unvec_to_1x2x2x2(points+4, &B_chall_can->Q);
-    ec_point_unvec_to_1x2x2x2(points+8, &B_chall_can->PmQ);
-
-    ec_double_iter_1x2x2x2(ker, ker, A24, pow_dim2_deg_resp + HD_extra_torsion);
+    ec_double_iter_1x2x2x2(ker, ker, A24_chall, pow_dim2_deg_resp + HD_extra_torsion);
 
 #ifndef NDEBUG
-    if (!test_point_order_twof_1x2x2x2(ker, A24, sig->two_resp_length))
+    if (!test_point_order_twof_1x2x2x2(ker, A24_chall, sig->two_resp_length)) {
         printf("kernel does not have order 2^(two_resp_length)\n");
+        return false;
+    }
 #endif
 
-    if (!isog_chain_1d_1x2x2x2(A24, A24, ker, sig->two_resp_length, points, 3, true)) {
-        return 0;
+    if (!isog_chain_1d_1x2x2x2(A24_chall, A24_chall, ker, sig->two_resp_length, B_chall_can, 3, true)) {
+        return false;
     }
 
 #ifndef NDEBUG
-    if (!test_point_order_twof_1x2x2x2(points, A24, HD_extra_torsion + pow_dim2_deg_resp))
+    if (!test_point_order_twof_1x2x2x2(B_chall_can, A24_chall, HD_extra_torsion + pow_dim2_deg_resp)) {
         printf("points[0] does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
-    if (!test_point_order_twof_1x2x2x2(points+4, A24, HD_extra_torsion + pow_dim2_deg_resp))
+        return false;
+    }
+    if (!test_point_order_twof_1x2x2x2(B_chall_can + N4x2, A24_chall, HD_extra_torsion + pow_dim2_deg_resp)) {
         printf("points[1] does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
-    if (!test_point_order_twof_1x2x2x2(points+8, A24, HD_extra_torsion + pow_dim2_deg_resp))
+        return false;
+    }
+    if (!test_point_order_twof_1x2x2x2(B_chall_can + 2*N4x2, A24_chall, HD_extra_torsion + pow_dim2_deg_resp)) {
         printf("points[2] does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
+        return false;
+    }
 #endif
 
-    ec_point_1x2x2x2_to_unvec(&E_chall->A24, A24);
-    A24_to_AC(E_chall, &E_chall->A24);
-    E_chall->is_A24_computed_and_normalized = false;
-    ec_point_1x2x2x2_to_unvec(points_unvec, points);
-    ec_point_1x2x2x2_to_unvec(points_unvec+1, points+4);
-    ec_point_1x2x2x2_to_unvec(points_unvec+2, points+8);
-    // ============== END ================================================================================
-
-    copy_point(&B_chall_can->P, &points_unvec[0]);
-    copy_point(&B_chall_can->Q, &points_unvec[1]);
-    copy_point(&B_chall_can->PmQ, &points_unvec[2]);
-    return 1;
+    // Need to normalize again
+    ec_normalize_curve_2x2x2(A24_chall, A_chall, A24_chall);
+    return true;
 }
 
 // The commitment curve can be recovered from the codomain of the 2D
 // isogeny built from the bases computed during verification.
-static int
-compute_commitment_curve_verify(ec_curve_t *E_com,
-                                ec_basis_t *B_chall_can_unvec,
-                                ec_basis_t *B_aux_can_unvec,
-                                ec_curve_t *E_chall,
-                                ec_curve_t *E_aux,
-                                int pow_dim2_deg_resp)
-
+static bool compute_commitment_curve_verify(
+    __m512i* A_com,
+    __m512i* B_chall_can,
+    __m512i* B_aux_can,
+    __m512i* A24_chall,
+    __m512i* A_chall,
+    signature_2x2x2_t* sig,
+    int pow_dim2_deg_resp
+)
 {
     // ============== VECTORIZED ================================================================================
 #ifndef NDEBUG
-    __m512i A24_chall[4], A24_aux[4], B_chall_can[12], B_aux_can[12];
-    ec_point_unvec_to_1x2x2x2(A24_chall, &E_chall->A24);
-    ec_point_unvec_to_1x2x2x2(A24_aux, &E_aux->A24);
-    ec_point_unvec_to_1x2x2x2(B_chall_can, &B_chall_can_unvec->P);
-    ec_point_unvec_to_1x2x2x2(B_chall_can + 4, &B_chall_can_unvec->Q);
-    ec_point_unvec_to_1x2x2x2(B_chall_can + 8, &B_chall_can_unvec->PmQ);
-    ec_point_unvec_to_1x2x2x2(B_aux_can, &B_aux_can_unvec->P);
-    ec_point_unvec_to_1x2x2x2(B_aux_can + 4, &B_aux_can_unvec->Q);
-    ec_point_unvec_to_1x2x2x2(B_aux_can + 8, &B_aux_can_unvec->PmQ);
-
 
     // Check all the points are the correct order
-    if (!test_basis_order_twof_1x2x2x2(B_chall_can, A24_chall, HD_extra_torsion + pow_dim2_deg_resp))
+    if (!test_basis_order_twof_1x2x2x2(B_chall_can, A24_chall, HD_extra_torsion + pow_dim2_deg_resp)) {
         printf("B_chall_can does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
+        return false;
+    }
 
-    if (!test_basis_order_twof_1x2x2x2(B_aux_can, A24_aux, HD_extra_torsion + pow_dim2_deg_resp))
+    if (!test_basis_order_twof_1x2x2x2(B_aux_can, sig->A24_aux, HD_extra_torsion + pow_dim2_deg_resp)) {
         printf("B_aux_can does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
+        return false;
+    }
 #endif
     // ============== END ================================================================================
+    ec_curve_t E_com;
+    ec_curve_t E_aux;
+    fp2_t u[2];
+    fp2_2x2x2_to_unvectorized(u, sig->A_aux);
+    fp2_copy(&E_aux.A, u);
+    fp2_set_one(&E_aux.C);
+    fp2_2x2x2_to_unvectorized(u, sig->A24_aux);
+    fp2_copy(&E_aux.A24.x, u);
+    fp2_set_one(&E_aux.A24.z);
+    E_aux.is_A24_computed_and_normalized = true;
+
+    ec_curve_t E_chall;
+    fp2_2x2x2_to_unvectorized(u, A_chall);
+    fp2_copy(&E_chall.A, u);
+    fp2_copy(&E_chall.C, u+1);
+    fp2_2x2x2_to_unvectorized(u, A24_chall);
+    fp2_copy(&E_chall.A24.x, u);
+    fp2_copy(&E_chall.A24.z, u+1);
+    E_chall.is_A24_computed_and_normalized = true;
+
+    ec_basis_t B_chall_can_unvec, B_aux_can_unvec;
+    ec_point_1x2x2x2_to_unvec(&B_chall_can_unvec.P, B_chall_can);
+    ec_point_1x2x2x2_to_unvec(&B_chall_can_unvec.Q, B_chall_can+4);
+    ec_point_1x2x2x2_to_unvec(&B_chall_can_unvec.PmQ, B_chall_can+8);
+    ec_point_1x2x2x2_to_unvec(&B_aux_can_unvec.P, B_aux_can);
+    ec_point_1x2x2x2_to_unvec(&B_aux_can_unvec.Q, B_aux_can+4);
+    ec_point_1x2x2x2_to_unvec(&B_aux_can_unvec.PmQ, B_aux_can+8);
 
     // now compute the dim2 isogeny from Echall x E_aux -> E_com x E_aux'
     // of kernel B_chall_can x B_aux_can
 
     // first we set-up the kernel
     theta_couple_curve_t EchallxEaux;
-    copy_curve(&EchallxEaux.E1, E_chall);
-    copy_curve(&EchallxEaux.E2, E_aux);
+    copy_curve(&EchallxEaux.E1, &E_chall);
+    copy_curve(&EchallxEaux.E2, &E_aux);
 
     theta_kernel_couple_points_t dim_two_ker;
-    copy_bases_to_kernel(&dim_two_ker, B_chall_can_unvec, B_aux_can_unvec);
+    copy_bases_to_kernel(&dim_two_ker, &B_chall_can_unvec, &B_aux_can_unvec);
 
     // computing the isogeny
-    int codomain_splits;
+    bool codomain_splits;
     
     // handling the special case where we don't need to perform any dim2 computation
     if (pow_dim2_deg_resp == 0) {
-        codomain_splits = 1;
-        copy_curve(E_com, &EchallxEaux.E1);
+        codomain_splits = true;
+        copy_curve(&E_com, &EchallxEaux.E1);
 
         // We still need to check that E_chall is supersingular
         // This assumes that HD_extra_torsion == 2
-        if (!ec_is_basis_four_torsion(B_chall_can_unvec, E_chall)) {
-            return 0;
+        if (!ec_is_basis_four_torsion(&B_chall_can_unvec, &E_chall)) {
+            return false;
         }
     } else {
         theta_couple_curve_t codomain;
@@ -350,14 +367,21 @@ compute_commitment_curve_verify(ec_curve_t *E_com,
 
         // computing the commitment curve
         // its always the first one because of our (2^n,2^n)-isogeny formulae
-        copy_curve(E_com, &codomain.E1);
+        copy_curve(&E_com, &codomain.E1);
     }
+
+    fp2_copy(u, &E_com.A);
+    fp2_copy(u+1, &E_com.C);
+    fp2_unvectorized_to_2x2x2(A_com, u);
+
     return codomain_splits;
 }
 
 // SQIsign verification
-bool protocols_verify(signature_t* sig, const public_key_t* pk_unvec, const public_key_2x2x2_t* pk, const unsigned char* m, size_t l)
+bool protocols_verify(signature_2x2x2_t* sig, public_key_2x2x2_t* pk, const unsigned char* m, size_t l)
 {
+    __m512i A24_chall[N4x2], A_chall[N4x2], B_chall_can[3*N4x2], B_aux_can[3*N4x2], A_com[N4x2], j_com[N4x2];
+
     if (!check_canonical_basis_change_matrix(sig))
         return false;
 
@@ -372,36 +396,23 @@ bool protocols_verify(signature_t* sig, const public_key_t* pk_unvec, const publ
     if (pow_dim2_deg_resp == 1)
         return false;
 
-    // checking that we are given A-coefficients and no precomputation
-    // if(fp2_is_one(&pk->curve.C) != 0xFFFFFFFF || pk->curve.is_A24_computed_and_normalized)
-    //     return false;
-
-    // ============= Converting input to vectorized format ============================
-    
-    // check the public curve is valid
-    if (!ec_curve_verify_A(&(pk_unvec->curve).A))
+    if (!ec_curve_verify_normA_pair_2x2x2(pk->A, sig->A_aux)) {
         return false;
-
-    // Set auxiliary curve from the A-coefficient within the signature
-    ec_curve_t E_aux;
-    if (!ec_curve_init_from_A(&E_aux, &sig->E_aux_A))
-        return false; // invalid curve
+    }
 
     // computation of the challenge
-    ec_curve_t E_chall;
-    if (!compute_challenge_verify(&E_chall, sig, &pk_unvec->curve, pk_unvec->hint_pk)) {
+    if (!compute_challenge_verify(A24_chall, A_chall, sig, pk)) {
         return false;
     }
 
     // Computation of the canonical bases for the challenge and aux curve
-    ec_basis_t B_chall_can, B_aux_can;
-    if (!challenge_and_aux_basis_verify(&B_chall_can, &B_aux_can, &E_chall, &E_aux, sig, pow_dim2_deg_resp)) {
+    if (!challenge_and_aux_basis_verify(B_chall_can, B_aux_can, A24_chall, A_chall, sig, pow_dim2_deg_resp)) {
         return false;
     }
 
     // When two_resp_length != 0 we need to compute a second, short 2^r-isogeny
     if (sig->two_resp_length > 0) {
-        if (!two_response_isogeny_verify(&E_chall, &B_chall_can, sig, pow_dim2_deg_resp)) {
+        if (!two_response_isogeny_verify(A24_chall, A_chall, B_chall_can, sig, pow_dim2_deg_resp)) {
             return false;
         }
     }
@@ -409,13 +420,17 @@ bool protocols_verify(signature_t* sig, const public_key_t* pk_unvec, const publ
     // We can recover the commitment curve with a 2D isogeny
     // The supplied signature did not compute an isogeny between eliptic products
     // and so definitely is an invalid signature.
-    ec_curve_t E_com;
-    if (!compute_commitment_curve_verify(&E_com, &B_chall_can, &B_aux_can, &E_chall, &E_aux, pow_dim2_deg_resp))
+    if (!compute_commitment_curve_verify(A_com, B_chall_can, B_aux_can, A24_chall, A_chall, sig, pow_dim2_deg_resp))
         return false;
+
+    // j_com = j(E_com)
+    ec_j_inv_2x2x2(j_com, A_com);
 
     // recomputing the challenge vector
     scalar_t chk_chall;
-    hash_to_challenge(&chk_chall, pk_unvec, &E_com, m, l);
+    byte_t hash_bytes[NBYTES_PK + NBYTES_FP2];
+    get_hash_bytes(hash_bytes, pk, j_com);
+    hash_to_challenge(&chk_chall, hash_bytes, m, l);
 
     // performing the final check
     return mp_compare(sig->chall_coeff, chk_chall, NWORDS_ORDER) == 0;
@@ -428,13 +443,11 @@ bool verify(const unsigned char *m,
     const unsigned char *pk
 )
 {
-    public_key_t pkt_unvec;
     public_key_2x2x2_t pkt;
-    signature_t sigt;
+    signature_2x2x2_t sigt;
 
-    public_key_from_bytes(&pkt_unvec, pk);
     public_key_from_bytes_2x2x2(&pkt, pk);
-    signature_from_bytes(&sigt, sig);
+    signature_from_bytes_2x2x2(&sigt, sig);
 
-    return protocols_verify(&sigt, &pkt_unvec, &pkt, m, mlen);
+    return protocols_verify(&sigt, &pkt, m, mlen);
 }

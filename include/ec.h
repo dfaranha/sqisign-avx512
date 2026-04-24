@@ -364,9 +364,16 @@ bool ec_biscalar_mul_pair_normA_1x2x2x2(
     __m512i* basis
 );
 
-void ec_normalize_A24_2x2x2x2(__m512i* res1, __m512i* res2, __m512i* A24_1, __m512i* A24_2);
+void ec_normalize_A24_pair_2x2x2(__m512i* res1, __m512i* res2, __m512i* A24_1, __m512i* A24_2);
 void ec_normA24_to_normA_1x2x2x2(__m512i* res, __m512i* normA24);
-void ec_normalize_curve_2x2x2x2(__m512i* res_A24_1, __m512i* res_A24_2, __m512i* res_A_1, __m512i* res_A_2, __m512i* A24_1, __m512i* A24_2);
+void ec_normA_to_normA24_1x2x2x2(__m512i* res, __m512i* normA);
+void ec_normalize_curve_2x2x2(__m512i* res_A24, __m512i* res_A, __m512i* A24);
+void ec_normalize_curve_SQI_2x2x2(__m512i* res_A24, __m512i* res_A, __m512i* A24);
+void ec_normalize_curve_pair_2x2x2(__m512i* res_A24_1, __m512i* res_A24_2, __m512i* res_A_1, __m512i* res_A_2, __m512i* A24_1, __m512i* A24_2);
+bool ec_curve_verify_normA_pair_2x2x2(__m512i* normA1, __m512i* normA2);
+
+// j = (256 * (A^2 - 3C^2)^3) / (C^4 * (A^2 - 4C^2))
+void ec_j_inv_2x2x2(__m512i* res, __m512i* AC);
 
 void ec_proj_diff_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA);
 void ec_proj_diff_SQI_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA);

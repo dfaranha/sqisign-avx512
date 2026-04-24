@@ -35,6 +35,8 @@ from params import (comp_params_and_strat, get_param_names)
 num_kat = 20
 gen_addchain = True # Requires addchain to be installed
 
+# TODO Check all cases for fp_div2_2x4
+
 #lvl1
 # e = 248
 # c = 5
