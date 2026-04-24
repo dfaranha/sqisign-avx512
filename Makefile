@@ -5,11 +5,11 @@ DEBUG = -g -fsanitize=address,undefined
 .PHONY: test bench
 
 test:
-	$(CC) $(FLAGS) common/*.c test/*.c sqisign/gf/*.c sqisign/ec/*.c sqisign/gluing/*.c sqisign/gf/*.S sqisign/test/*.c sqisign/verif/*.c sqisign/params/*.c sqisign/generic/*.c -o build/test -I include -I test -I sqisign/ec/include -I sqisign/gf/include -I sqisign/gf/test -I sqisign/gluing/include -I sqisign/test -I sqisign/verif -I sqisign/params -I sqisign/generic
+	$(CC) $(FLAGS) common/*.c test/*.c sqisign/gf/*.c sqisign/ec/*.c sqisign/gluing/*.c sqisign/gf/*.S sqisign/test/*.c sqisign/verif/*.c sqisign/params/*.c sqisign/generic/*.c shake_avx/SHA-3_256.c -o build/test -I include -I test -I sqisign/ec/include -I sqisign/gf/include -I sqisign/gf/test -I sqisign/gluing/include -I sqisign/test -I sqisign/verif -I sqisign/params -I sqisign/generic -I shake_avx
 	./build/test
 
 bench:
-	$(CC) $(FLAGS) -DNDEBUG common/*.c bench/*.c sqisign/gf/*.c sqisign/ec/*.c sqisign/gluing/*.c sqisign/gf/*.S sqisign/test/*.c sqisign/verif/*.c sqisign/params/*.c sqisign/generic/*.c -o build/bench -I include -I bench -I test -I sqisign/ec/include -I sqisign/gf/include -I sqisign/gf/test -I sqisign/gluing/include -I sqisign/test -I sqisign/verif -I sqisign/params -I sqisign/generic
+	$(CC) $(FLAGS) -DNDEBUG common/*.c bench/*.c sqisign/gf/*.c sqisign/ec/*.c sqisign/gluing/*.c sqisign/gf/*.S sqisign/test/*.c sqisign/verif/*.c sqisign/params/*.c sqisign/generic/*.c shake_avx/SHA-3_256.c -o build/bench -I include -I bench -I test -I sqisign/ec/include -I sqisign/gf/include -I sqisign/gf/test -I sqisign/gluing/include -I sqisign/test -I sqisign/verif -I sqisign/params -I sqisign/generic -I shake_avx
 	./build/bench
 
 sqifp:
