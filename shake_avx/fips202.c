@@ -17,8 +17,6 @@
 #include <string.h>
 
 #include "fips202.h"
-#include "keccak.h"
-#include "intrinsics_avx512.h"
 
 #define NROUNDS 24
 #define ROL(a, offset) (((a) << (offset)) ^ ((a) >> (64 - (offset))))

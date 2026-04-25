@@ -3,7 +3,8 @@
  * https://github.com/rbCabral/SHA-3
  */ 
 
-#include "keccak.h"
+#include "fips202.h"
+#include <stdio.h>
 
 /*#ifdef __INTEL_COMPILER
 #define ALIGN __declspec(align(32))

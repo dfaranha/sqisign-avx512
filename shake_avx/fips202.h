@@ -5,6 +5,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
+#include "intrinsics_avx512.h"
 
 #define SHAKE128_RATE 168
 #define SHAKE256_RATE 136
@@ -167,5 +169,124 @@ void sha3_512_inc_ctx_release(sha3_512incctx *state);
 
 /* One-stop SHA3-512 shop */
 void sha3_512(uint8_t *output, const uint8_t *input, size_t inlen);
+
+
+
+// Keccak function implemented in AVX512 by Roberto Camal:
+#define ALIGN __attribute__ ((aligned (32)))
+#define KECCAK256
+
+typedef unsigned long long uInt256[4];
+typedef unsigned long long uInt512[8];
+
+// we only use the inner keccak function
+void keccakF(__m512i* x, int rnd);
+
+// function for repeated hash in SQIsign calling keccakF
+// SHAKE256, single-block in / single-block out, fresh state.
+// Constraints: inlen ≤ 135, outlen ≤ 136.
+// inline void shake256_oneblock(uint8_t *out, size_t outlen, const uint8_t *in, size_t inlen) {
+//     uint64_t block[17] = {0};
+//     memcpy(block, in, inlen);
+//     ((uint8_t *)block)[inlen]    = 0x1F;
+//     ((uint8_t *)block)[136 - 1] |= 0x80;
+
+//     __m512i x[5];
+//     x[0] = VLOADMASKZ(0x1F, (const __m512i *)(block +  0));
+//     x[1] = VLOADMASKZ(0x1F, (const __m512i *)(block +  5));
+//     x[2] = VLOADMASKZ(0x1F, (const __m512i *)(block + 10));
+//     x[3] = VLOADMASKZ(0x03, (const __m512i *)(block + 15));
+//     x[4] = VZERO();
+
+//     keccakF(x, 24);
+
+//     uint64_t outbuf[17];
+//     VSTOREMASKZ((__m512i *)(outbuf +  0), 0x1F, x[0]);
+//     VSTOREMASKZ((__m512i *)(outbuf +  5), 0x1F, x[1]);
+//     VSTOREMASKZ((__m512i *)(outbuf + 10), 0x1F, x[2]);
+//     VSTOREMASKZ((__m512i *)(outbuf + 15), 0x03, x[3]);
+//     memcpy(out, outbuf, outlen);
+// }
+
+// specialized versions:
+// lvl1
+static inline void shake256_oneblock_32(uint8_t *out, const uint8_t *in) {
+    __m512i x[5];
+
+    // 32 bytes = 4 full qwords, all in x[0] lanes 0..3.
+    // Domain 0x1F at byte 32 = qword 4 = x[0] lane 4.
+    uint64_t msg[4];
+    memcpy(msg, in, 32);
+    x[0] = _mm512_set_epi64(0, 0, 0, 0x1F,
+                            msg[3], msg[2], msg[1], msg[0]);
+    x[1] = _mm512_setzero_si512();
+    x[2] = _mm512_setzero_si512();
+    x[3] = _mm512_set_epi64(0, 0, 0, 0, 0, 0, 0x8000000000000000ULL, 0);
+    x[4] = _mm512_setzero_si512();
+
+    keccakF(x, 24);
+
+    // Squeeze 32 bytes: x[0] lanes 0..3.
+    _mm512_mask_storeu_epi64((__m512i *)out, 0x0F, x[0]);
+}
+
+// lvl3
+inline void shake256_oneblock_48(uint8_t *out, const uint8_t *in) {
+    __m512i x[5];
+
+    // x[0]: load 5 qwords (40 bytes) of message.
+    x[0] = _mm512_maskz_loadu_epi64(0x1F, (const __m512i *)in);
+
+    // x[1] lane 0: last 8 bytes of message. lane 1: 0x1F domain byte. rest: 0.
+    uint64_t tail;
+    memcpy(&tail, in + 40, 8);
+    // Build x[1] as { tail, 0x1F, 0, 0, 0, 0, 0, 0 }.
+    // _mm512_set_epi64 takes args from highest lane to lowest.
+    x[1] = _mm512_set_epi64(0, 0, 0, 0, 0, 0, 0x000000000000001FULL, tail);
+
+    x[2] = _mm512_setzero_si512();
+
+    // x[3] lane 1: 0x8000000000000000. lane 0 and 2..4: 0.
+    x[3] = _mm512_set_epi64(0, 0, 0, 0, 0, 0, 0x8000000000000000ULL, 0);
+
+    x[4] = _mm512_setzero_si512();
+
+    keccakF(x, 24);
+
+    // Squeeze 48 bytes: 5 qwords from x[0] + 1 qword from x[1] lane 0.
+    _mm512_mask_storeu_epi64((__m512i *)out, 0x1F, x[0]);
+    uint64_t out_tail = _mm_cvtsi128_si64(_mm512_castsi512_si128(x[1]));
+    memcpy(out + 40, &out_tail, 8);
+}
+
+// lvl5
+static inline void shake256_oneblock_64(uint8_t *out, const uint8_t *in) {
+    __m512i x[5];
+
+    // 64 bytes = 8 full qwords. x[0] = qwords 0..4 (40 bytes), x[1] lanes 0..2 = qwords 5..7 (24 bytes).
+    // Domain 0x1F at byte 64 = qword 8 = x[1] lane 3.
+    x[0] = _mm512_maskz_loadu_epi64(0x1F, (const __m512i *)in);
+    uint64_t tail[3];
+    memcpy(tail, in + 40, 24);
+    x[1] = _mm512_set_epi64(0, 0, 0, 0, 0x1F,
+                            tail[2], tail[1], tail[0]);
+    x[2] = _mm512_setzero_si512();
+    x[3] = _mm512_set_epi64(0, 0, 0, 0, 0, 0, 0x8000000000000000ULL, 0);
+    x[4] = _mm512_setzero_si512();
+
+    keccakF(x, 24);
+
+    // Squeeze 64 bytes: x[0] lanes 0..4 + x[1] lanes 0..2.
+    _mm512_mask_storeu_epi64((__m512i *)out,        0x1F, x[0]);
+    _mm512_mask_storeu_epi64((__m512i *)(out + 40), 0x07, x[1]);
+}
+
+#if SECURITY_BITS == 128
+  #define shake256_oneblock shake256_oneblock_32
+#elif SECURITY_BITS == 192
+  #define shake256_oneblock shake256_oneblock_48
+#elif SECURITY_BITS == 256
+  #define shake256_oneblock shake256_oneblock_64
+#endif
 
 #endif

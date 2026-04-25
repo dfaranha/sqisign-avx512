@@ -5,7 +5,6 @@
 #include "mp.h"
 #include "tutil.h"
 
-
 // compute the challenge as the hash of the message and the commitment curve and public key
 void hash_to_challenge(
     scalar_t* scalar,
@@ -38,10 +37,7 @@ void hash_to_challenge(
         shake256_inc_squeeze((void *)(*scalar), hash_bytes, &ctx);
         (*scalar)[limbs - 1] &= mask;
         for (int i = 2; i < HASH_ITERATIONS; i++) {
-            shake256_inc_init(&ctx);
-            shake256_inc_absorb(&ctx, (void *)(*scalar), hash_bytes);
-            shake256_inc_finalize(&ctx);
-            shake256_inc_squeeze((void *)(*scalar), hash_bytes, &ctx);
+            shake256_oneblock((uint8_t *)(*scalar), (const uint8_t *)(*scalar));
             (*scalar)[limbs - 1] &= mask;
         }
         shake256_inc_init(&ctx);
