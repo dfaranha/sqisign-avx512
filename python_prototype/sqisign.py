@@ -9,8 +9,11 @@ from elliptic_arithmetic import (
     ladder_3pt_1x2x4x1,
     x_double_n_1x2x4x1,
     x_basis_double_n_1x2x4x1,
-    ladder_biscalar_1x2x4x1,
+    lift_basis_to_jacobian_2x4x1,
     ladder_double_biscalar_1x2x4x1,
+    ladder_biscalar_1x2x4x1,
+    mul_simple,
+    add_simple,
 )
 from limb_conversion import (
     basis_from_64_to_51_bit,
@@ -197,29 +200,82 @@ class SQIsign:
 
         return codomain, evaluated_basis
 
+    # @staticmethod
+    # def apply_change_of_basis(
+    #     A: AVX_2x4x1, A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], M: Matrix, order: ZZ
+    # ):
+    #     """
+    #     Evaluate a 2x2 matrix A on the vector of elliptic
+    #     curve points [P, Q] by acting with scalar multiplication
+    #     """
+    #     assert M.nrows() == M.ncols() == 2
+
+    #     # Extract out scalars
+    #     a00, a01, a10, a11 = M.list()
+
+    #     # Compute the new scaled basis
+    #     # xR = ladder_biscalar_1x2x4x1(A, basis, a00, a10)
+    #     # xS = ladder_biscalar_1x2x4x1(A, basis, a01, a11)
+    #     xR, xS = ladder_double_biscalar_1x2x4x1(A, A24, basis, a00, a10, a01, a11)
+
+    #     # For the difference point we must be careful the result
+    #     # is positive, so we work modulo the point order
+    #     diff_m = (a00 - a01) % order
+    #     diff_n = (a10 - a11) % order
+    #     xRS = ladder_biscalar_1x2x4x1(A, A24, basis, diff_m, diff_n)
+
+    #     return xR, xS, xRS
+
     @staticmethod
     def apply_change_of_basis(
         A: AVX_2x4x1, A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], M: Matrix, order: ZZ
     ):
         """
-        Evaluate a 2x2 matrix A on the vector of elliptic
-        curve points [P, Q] by acting with scalar multiplication
+        Evaluate a 2x2 matrix A on the vector of elliptic curve points [P, Q]
+        by acting with scalar multiplication.
         """
-        assert M.nrows() == M.ncols() == 2
-
         # Extract out scalars
         a00, a01, a10, a11 = M.list()
 
-        # Compute the new scaled basis
-        # xR = ladder_biscalar_1x2x4x1(A, basis, a00, a10)
-        # xS = ladder_biscalar_1x2x4x1(A, basis, a01, a11)
-        xR, xS = ladder_double_biscalar_1x2x4x1(A, A24, basis, a00, a10, a01, a11)
+        # Lift the basis to (X : Y : Z) points with Jacobian coordinates keeping
+        # the X, Y, Z values inside 2x4x1 blobs.
+        # TODO
+        # We could also normalise A24?
+        a, PQ_X, PQ_Y, PQ_Z = lift_basis_to_jacobian_2x4x1(A, basis)
 
-        # For the difference point we must be careful the result
-        # is positive, so we work modulo the point order
-        diff_m = (a00 - a01) % order
-        diff_n = (a10 - a11) % order
-        xRS = ladder_biscalar_1x2x4x1(A, A24, basis, diff_m, diff_n)
+        # TODO
+        # i think it could be faster to normalise PZ and QZ to one here to
+        # same some muls down the chain?
+
+        # TODO
+        # We can use 8-way arithmetic when we do xDBLADD on the main chain using
+        # pairs of points, so we do pairwise multiplications, one to compute
+        # [a00] * P and [a10] Q, then another to compute [a01] * P and [a11] Q.
+        # a00_P, a10_Q = mul_pair_2x4x1(PQ_X, PQ_Y, PQ_Z, a00, a10)
+        # a01_P, a11_Q = mul_pair_2x4x1(PQ_X, PQ_Y, PQ_Z, a01, a11)
+
+        a24, c24 = A24
+        assert (a24 / c24) == (a + 2) / 4
+        a00_P = mul_simple(a, a24, c24, PQ_X[0], PQ_Y[0], PQ_Z[0], a00)
+        a10_Q = mul_simple(a, a24, c24, PQ_X[1], PQ_Y[1], PQ_Z[1], a10)
+        a01_P = mul_simple(a, a24, c24, PQ_X[0], PQ_Y[0], PQ_Z[0], a01)
+        a11_Q = mul_simple(a, a24, c24, PQ_X[1], PQ_Y[1], PQ_Z[1], a11)
+
+        # We then perform three more additions to compute:
+        #
+        # R = [a00] * P + [a10] Q
+        # S = [a01] * P + [a11] Q
+        # RS = (R - S)
+        R = add_simple(a, a00_P, a10_Q)
+        S = add_simple(a, a01_P, a11_Q)
+        minus_S = (S[0], -S[1], S[2])
+        RS = add_simple(a, R, minus_S)
+
+        # Then finally we convert this to x-only
+        # xR, xS and xRS
+        xR = AVX_2x4x1(R[0], R[2] ** 2)
+        xS = AVX_2x4x1(S[0], S[2] ** 2)
+        xRS = AVX_2x4x1(RS[0], RS[2] ** 2)
 
         return xR, xS, xRS
 
@@ -309,7 +365,9 @@ class SQIsign:
         )
 
         # Apply the change of basis matrix
-        chl_basis = self.apply_change_of_basis(A_chl, A24_chl, chl_basis, M_chl, chl_order)
+        chl_basis = self.apply_change_of_basis(
+            A_chl, A24_chl, chl_basis, M_chl, chl_order
+        )
 
         # Compute the short 2^r_rsp isogeny and push through points
         if r_rsp > 0:
