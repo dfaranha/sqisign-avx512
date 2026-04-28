@@ -45,6 +45,9 @@ void two_isog_eval_1x2x2x2(__m512i* Q, __m512i* eval_data, __m512i* P);
 void four_isog_codom_1x2x2x2(__m512i* res_A24, __m512i* res_eval_data, __m512i* ker);
 void four_isog_eval_1x2x2x2(__m512i* Q, __m512i* eval_data, __m512i* P);
 
+// P contains two points in 4x2x1, and eval_data is duplicated in 4x2x1 
+void four_isog_eval_pair_4x2x1(__m512i* Q, __m512i* eval_data, __m512i* P);
+
 bool isog_chain_1d_1x2x2x2(
     __m512i* res_A24,
     __m512i *A24,
