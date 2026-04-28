@@ -2,7 +2,7 @@ from sage.all import ZZ, Matrix
 
 from hashlib import shake_256
 
-from avx_types import AVX_2x4x1
+from avx_types import AVX_2x4x1, AVX_4x2x1
 from elliptic_types import Curve, BasisX, PointJ
 from elliptic_arithmetic import (
     j_invariant,
@@ -10,7 +10,7 @@ from elliptic_arithmetic import (
     x_double_n_1x2x4x1,
     x_basis_double_n_1x2x4x1,
     ladder_biscalar_1x2x4x1,
-    mul_simple,
+    mul_pair,
     add_simple,
     lift_normalised_basis_to_jacobian,
 )
@@ -198,7 +198,6 @@ class SQIsign:
         a00, a01, a10, a11 = [x % order for x in M.list()]
 
         if a00 % 2 == 0 and a10 % 2 == 0:
-            # kernel = basis[1]
             kernel = ladder_biscalar_1x2x4x1(A, A24, basis, a01, a11)
         else:
             kernel = ladder_biscalar_1x2x4x1(A, A24, basis, a00, a10)
@@ -240,12 +239,13 @@ class SQIsign:
         # Extract out scalars
         a00, a01, a10, a11 = M.list()
         a, c = A
+        a24, c24 = A24
         assert c == 1
+        assert c24 == 1
         assert P_chl.Z == 1
 
-        PQ_X = AVX_2x4x1(P_chl.X, Q_chl.X)
-        PQ_Y = AVX_2x4x1(P_chl.Y, Q_chl.Y)
-        PQ_Z = AVX_2x4x1(P_chl.Z, Q_chl.Z)
+        # TODO: how should this data be best packed for C...
+        curve_params = AVX_2x4x1(a, a24)
 
         # TODO
         # i think it could be faster to normalise PZ and QZ to one here to
@@ -255,24 +255,16 @@ class SQIsign:
         # We can use 8-way arithmetic when we do xDBLADD on the main chain using
         # pairs of points, so we do pairwise multiplications, one to compute
         # [a00] * P and [a10] Q, then another to compute [a01] * P and [a11] Q.
-        # a00_P, a10_Q = mul_pair_2x4x1(PQ_X, PQ_Y, PQ_Z, a00, a10)
-        # a01_P, a11_Q = mul_pair_2x4x1(PQ_X, PQ_Y, PQ_Z, a01, a11)
-
-        a24, c24 = A24
-        a00_P = mul_simple(a, a24, c24, PQ_X[0], PQ_Y[0], PQ_Z[0], a00)
-        a10_Q = mul_simple(a, a24, c24, PQ_X[1], PQ_Y[1], PQ_Z[1], a10)
-        a01_P = mul_simple(a, a24, c24, PQ_X[0], PQ_Y[0], PQ_Z[0], a01)
-        a11_Q = mul_simple(a, a24, c24, PQ_X[1], PQ_Y[1], PQ_Z[1], a11)
+        a00_P, a01_P = mul_pair(curve_params, P_chl, a00, a01)
+        a10_Q, a11_Q = mul_pair(curve_params, Q_chl, a10, a11)
 
         # We then perform three more additions to compute:
         #
         # R = [a00] * P + [a10] Q
         # S = [a01] * P + [a11] Q
-        # RS = (R - S)
+        # TODO: this should be parallelized easily too for a tiny saving
         R = add_simple(a, a00_P, a10_Q)
         S = add_simple(a, a01_P, a11_Q)
-        minus_S = (S[0], -S[1], S[2])
-        RmS = add_simple(a, R, minus_S)
 
         return R, S
 

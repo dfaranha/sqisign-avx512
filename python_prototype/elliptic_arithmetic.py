@@ -229,6 +229,10 @@ def add_simple(A, P, Q):
     Given two Jacobian points P, Q with coordinates (X : Y : Z) and the Montgomery coefficient A
     computes R = P + Q with complete formulas
 
+    TODO:
+
+    This needs to be modified to be parallel for a pair of sums...
+
     Cost: 6S + 17M + 13a
     """
     # Unpack coordinates
@@ -762,6 +766,162 @@ def x_mul_normA_1x2x4x1(A: AVX_2x4x1, P: AVX_2x4x1, m: ZZ) -> PointX:
 
     x0, x1 = avx_421_to_241(X0_X1)
     return x0
+
+
+def mul_pair(A_A24: AVX_2x4x1, P: PointJ, m0: ZZ, m1: ZZ) -> tuple[PointJ]:
+    """
+    Computes [m0] P and [m1] P given two scalars m0, m1 and a Jacobian
+    point P = (X : Y : Z)
+    """
+
+    def swap_4x2x1(PQ: AVX_4x2x1) -> AVX_4x2x1:
+        return AVX_4x2x1(PQ[2], PQ[3], PQ[0], PQ[1])
+
+    def swap_8x1x1(PQDA: AVX_8x1x1) -> AVX_8x1x1:
+        return AVX_8x1x1(
+            PQDA[2], PQDA[3], PQDA[0], PQDA[1], PQDA[4], PQDA[5], PQDA[6], PQDA[7]
+        )
+
+    A, _ = A_A24
+    X, Y, Z = P
+    F = X.parent()
+
+    # Convert from Jacobian to x-only Montgomery
+    xP, zP = X, Z * Z
+
+    # Set up the ladder variables
+    X0, Z0 = F.one(), F.zero()
+    X1, Z1 = xP, zP
+
+    X2, Z2 = F.one(), F.zero()
+    X3, Z3 = xP, zP
+
+    # x-only Montgomery-ladder
+
+    # We don't know that len(m0) = len(m1) so we do the longer one on its own
+    # first... maybe there's a more elegant solution?
+    bin_m0 = bin(m0)[2:]
+    bin_m1 = bin(m1)[2:]
+    l_m0 = len(bin_m0)
+    l_m1 = len(bin_m1)
+
+    if l_m0 > l_m1:
+        top = l_m0 - l_m1
+        top_bits, bin_m0 = bin_m0[:top], bin_m0[top:]
+
+        P_Q = AVX_4x2x1(X0, Z0, X1, Z1)
+        PmQ_A = AVX_4x2x1(xP, zP, A, 0)
+
+        for i in range(top):
+            if top_bits[i] == "1":
+                P_Q = swap_4x2x1(P_Q)
+            P_Q = x_double_add_normA_1x2x4x1(P_Q, PmQ_A)
+            if top_bits[i] == "1":
+                P_Q = swap_4x2x1(P_Q)
+
+        X0, Z0, X1, Z1 = P_Q
+
+    elif l_m1 > l_m0:
+        top = l_m1 - l_m0
+        top_bits, bin_m1 = bin_m1[:top], bin_m1[top:]
+
+        P_Q = AVX_4x2x1(X2, Z2, X3, Z3)
+        PmQ_A = AVX_4x2x1(xP, zP, A, 0)
+
+        for i in range(top):
+            if top_bits[i] == "1":
+                P_Q = swap_4x2x1(P_Q)
+            P_Q = x_double_add_normA_1x2x4x1(P_Q, PmQ_A)
+            if top_bits[i] == "1":
+                P_Q = swap_4x2x1(P_Q)
+
+        X2, Z2, X3, Z3 = P_Q
+
+    assert len(bin_m0) == len(bin_m1)
+
+    P1_data = AVX_8x1x1(X0, Z0, X1, Z1, xP, zP, A, 0)
+    P2_data = AVX_8x1x1(X2, Z2, X3, Z3, xP, zP, A, 0)
+
+    for i, j in zip(bin_m0, bin_m1):
+        if i == "1":
+            P1_data = swap_8x1x1(P1_data)
+        if j == "1":
+            P2_data = swap_8x1x1(P2_data)
+
+        result = x_double_add_pair_normA_8x1x1(P1_data, P2_data)
+
+        P1_data = AVX_8x1x1(
+            result[0],
+            result[1],
+            result[2],
+            result[3],
+            P1_data[4],
+            P1_data[5],
+            P1_data[6],
+            P1_data[7],
+        )
+        P2_data = AVX_8x1x1(
+            result[4],
+            result[5],
+            result[6],
+            result[7],
+            P2_data[4],
+            P2_data[5],
+            P2_data[6],
+            P2_data[7],
+        )
+
+        if i == "1":
+            P1_data = swap_8x1x1(P1_data)
+        if j == "1":
+            P2_data = swap_8x1x1(P2_data)
+
+    X0, Z0, X1, Z1 = P1_data[0], P1_data[1], P1_data[2], P1_data[3]
+    X2, Z2, X3, Z3 = P2_data[0], P2_data[1], P2_data[2], P2_data[3]
+
+    # TODO: theres an easy 2-way parallel for the below, but maybe we can do better
+
+    # Use projective instead of Jacobian coordinates here
+    PX = X * Z
+    PY = Y
+    PZ = Z * zP
+
+    # Recover the y-coordinate in projective coordinates
+    t0 = (PX * X0) + (PZ * Z0)
+    t1 = PX * Z0
+    t2 = X0 * PZ
+    t3 = PZ * Z0
+    t4 = (A + A) * t3
+    u0 = (t0 * (t1 + t2 + t4)) - t4 * t3
+    v0 = (PY + PY) * t3 * Z1
+
+    s0 = (PX * X2) + (PZ * Z2)
+    s1 = PX * Z2
+    s2 = X2 * PZ
+    s3 = PZ * Z2
+    s4 = (A + A) * s3
+    u1 = (s0 * (s1 + s2 + s4)) - s4 * s3
+    v1 = (PY + PY) * s3 * Z3
+
+    # Projective points
+    RX = X0 * v0
+    RY = (u0 * Z1) - ((t1 - t2) ** 2 * X1)
+    RZ = Z0 * v0
+
+    SX = X2 * v1
+    SY = (u1 * Z3) - ((s1 - s2) ** 2 * X3)
+    SZ = Z2 * v1
+
+    # Recover the Jacobian coordinates
+    RX *= RZ
+    RY *= RZ**2
+    R = PointJ(RX, RY, RZ)
+
+    SX *= SZ
+    SY *= SZ**2
+    S = PointJ(SX, SY, SZ)
+
+    return R, S
 
 
 def ladder_3pt_1x2x4x1(A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], m: ZZ) -> PointX:
