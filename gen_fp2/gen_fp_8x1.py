@@ -34,7 +34,7 @@ def fp_duplicate_8x1(f, pp, v):
     f.end()
 
 def fp_is_equal_8x1(f, pp, v, strat):
-    f.start("int fp_is_equal_8x1(__m512i* a, __m512i* b)")
+    f.start("__mmask8 fp_is_equal_8x1(__m512i* a, __m512i* b)")
 
     if strat.mod_2p:
         f.line(f"__m512i norm_a[{v.num_limbs}], norm_b[{v.num_limbs}];")
@@ -55,7 +55,7 @@ def fp_is_equal_8x1(f, pp, v, strat):
     f.end()
 
 def fp_is_zero_8x1(f, pp, v, strat):
-    f.start("int fp_is_zero_8x1(__m512i* a)")
+    f.start("__mmask8 fp_is_zero_8x1(__m512i* a)")
 
     if strat.mod_2p:
         f.line(f"__m512i norm_a[{v.num_limbs}];")
@@ -487,8 +487,8 @@ def mp_add_p_sub_8x1(f, pp, v, strat):
     f.end()
 
 # Generalized to handle when the number of limbs is odd
-def mp_mul_8x1_karat(f, pp, v):
-    f.start("void mp_mul_8x1_karat(__m512i* res, __m512i* a, __m512i* b)")
+def mp_mul_8x1(f, pp, v):
+    f.start("void mp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
     limbs_prod = get_num_limbs_prod(pp)
     low_limbs = ceil(pp.num_limbs/2)
@@ -713,7 +713,7 @@ def fp_mul_8x1(f, pp, v):
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line()
 
-    f.line(f"mp_mul_8x1_karat(t, a, b);")
+    f.line(f"mp_mul_8x1(t, a, b);")
     f.line()
 
     carry_prop_8x1_swap(f, pp, v, limbs_prod, "t", "t", "limb_mask")
@@ -1112,7 +1112,7 @@ def write_fp_8x1(f, pp, v, strat, chain):
     mp_mixaddsubx2_8x1(f, pp, v, strat)
     mp_add_p_sub_8x1(f, pp, v, strat)
 
-    mp_mul_8x1_karat(f, pp, v)
+    mp_mul_8x1(f, pp, v)
     rdc_8x1(f, pp, v, strat)
 
     fp_mul_8x1(f, pp, v)

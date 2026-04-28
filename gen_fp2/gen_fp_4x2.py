@@ -44,7 +44,7 @@ def fp_duplicate_4x2(f, pp, v):
     f.end()
 
 def fp_is_equal_4x2(f, pp, v, strat):
-    f.start("int fp_is_equal_4x2(__m512i* a, __m512i* b)")
+    f.start("__mmask8 fp_is_equal_4x2(__m512i* a, __m512i* b)")
 
     if strat.mod_2p:
         f.line(f"__m512i norm_a[{v.n42}], norm_b[{v.n42}];")
@@ -85,7 +85,7 @@ def fp_is_equal_4x2(f, pp, v, strat):
     f.end()
 
 def fp_is_zero_4x2(f, pp, v, strat):
-    f.start("int fp_is_zero_4x2(__m512i* a)")
+    f.start("__mmask8 fp_is_zero_4x2(__m512i* a)")
 
     if strat.mod_2p:
         f.line(f"__m512i norm_a[{v.n42}];")

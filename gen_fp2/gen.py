@@ -3,6 +3,8 @@ from gen_addchain import run_addchain_exp3div4
 from gen_fp import write_fp_file
 from gen_fp2 import write_fp2_file
 from gen_fp_header import write_fp_header_file
+from gen_fp2_header import write_fp2_header_file
+from gen_fp_consts_header import write_fp_consts_header
 from gen_fp_kat import write_fp_kat_file
 from gen_fp2_kat import write_fp2_kat_file
 from params import (comp_params_and_strat, get_param_names)
@@ -101,7 +103,9 @@ include_dir = os.path.join(script_dir, "..", "include")
 common_dir = os.path.join(script_dir, "..", "common")
 test_dir = os.path.join(script_dir, "..", "test")
 
-write_fp_header_file(include_dir, pp, v)
+write_fp_consts_header(include_dir, pp, v)
+write_fp_header_file(include_dir, pp, v, strat)
+write_fp2_header_file(include_dir, pp, v, strat)
 write_fp_file(common_dir, pp, v, strat, chain)
 write_fp2_file(common_dir, pp, v, strat)
 write_fp_kat_file(test_dir, pp, v)

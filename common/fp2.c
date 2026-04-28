@@ -39,57 +39,6 @@ int fp2_is_zero_8x1x1(__m512i* a)
     return lo & hi;
 }
 
-void fp2_add_8x1x1(__m512i* res, __m512i* a, __m512i* b)
-{
-    fp_add_8x1(res, a, b);
-    fp_add_8x1(res+8, a+8, b+8);
-}
-
-void fp2_sub_8x1x1(__m512i* res, __m512i* a, __m512i* b)
-{
-    fp_sub_8x1(res, a, b);
-    fp_sub_8x1(res+8, a+8, b+8);
-}
-
-void fp2_neg_8x1x1(__m512i* res, __m512i* a)
-{
-    fp_neg_8x1(res, a);
-    fp_neg_8x1(res+8, a+8);
-}
-
-void fp2_mixaddsub_8x1x1(__m512i* res, __m512i* a, __m512i* b,
-    const __mmask8 add_mask_re, const __mmask8 add_mask_im)
-{
-    fp_mixaddsub_8x1(res, a, b, add_mask_re);
-    fp_mixaddsub_8x1(res+8, a+8, b+8, add_mask_im);
-}
-
-void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)
-{
-    __m512i tt1[16], tt2[16], tt3[16];
-    
-    mp_add_8x1(tt3, a, a + 8);
-    mp_add_8x1(tt3 + 8, b, b + 8);
-    mp_mul_8x1_karat(tt1, a, b);
-    mp_mul_8x1_karat(tt2, a + 8, b + 8);
-    mp_mul_8x1_karat(tt3, tt3, tt3 + 8);
-    mp_dblsubx2_8x1(tt3, tt1, tt2);
-    mp_subx2_8x1(tt1, tt2);
-    rdc_8x1(res + 8, tt3);
-    rdc_8x1(res, tt1);
-}
-
-void fp2_sqr_8x1x1(__m512i* res, __m512i* a)
-{
-    __m512i s1[8], s2[8], s3[8];
-    
-    mp_add_8x1(s1, a, a + 8);
-    mp_add_p_sub_8x1(s2, a, a + 8);
-    mp_add_8x1(s3, a, a);
-    fp_mul_8x1(res, s1, s2);
-    fp_mul_8x1(res + 8, s3, a + 8);
-}
-
 void fp2_muli_8x1x1(__m512i* res, __m512i* a)
 {
     __m512i t[8];
@@ -218,57 +167,6 @@ int fp2_is_zero_4x1x2(__m512i* a)
     int lo = fp_is_zero_4x2(a);
     int hi = fp_is_zero_4x2(a+4);
     return lo & hi;
-}
-
-void fp2_add_4x1x2(__m512i* res, __m512i* a, __m512i* b)
-{
-    fp_add_4x2(res, a, b);
-    fp_add_4x2(res+4, a+4, b+4);
-}
-
-void fp2_sub_4x1x2(__m512i* res, __m512i* a, __m512i* b)
-{
-    fp_sub_4x2(res, a, b);
-    fp_sub_4x2(res+4, a+4, b+4);
-}
-
-void fp2_neg_4x1x2(__m512i* res, __m512i* a)
-{
-    fp_neg_4x2(res, a);
-    fp_neg_4x2(res+4, a+4);
-}
-
-void fp2_mixaddsub_4x1x2(__m512i* res, __m512i* a, __m512i* b,
-    const __mmask8 add_mask_re, const __mmask8 add_mask_im)
-{
-    fp_mixaddsub_4x2(res, a, b, add_mask_re);
-    fp_mixaddsub_4x2(res+4, a+4, b+4, add_mask_im);
-}
-
-void fp2_mul_4x1x2(__m512i* res, __m512i* a, __m512i* b)
-{
-    __m512i t1[13], t2[13], t3[13];
-    
-    mp_add_4x2(t3, a, a + 4);
-    mp_add_4x2(t3 + 4, b, b + 4);
-    mp_mul_4x2(t1, a, b);
-    mp_mul_4x2(t2, a+4, b+4);
-    mp_mul_4x2(t3, t3, t3+4);
-    mp_dblsubx2_4x2(t3, t1, t2);
-    mp_subx2_4x2(t1, t2);
-    rdc_4x2(res+4, t3);
-    rdc_4x2(res, t1);
-}
-
-void fp2_sqr_4x1x2(__m512i* res, __m512i* a)
-{
-    __m512i s1[4], s2[4], s3[4];
-    
-    mp_add_4x2(s1, a, a + 4);
-    mp_add_p_sub_4x2(s2, a, a + 4);
-    mp_add_4x2(s3, a, a);
-    fp_mul_4x2(res + 4, s3, a + 4);
-    fp_mul_4x2(res, s1, s2);
 }
 
 void fp2_muli_4x1x2(__m512i* res, __m512i* a)
@@ -405,75 +303,6 @@ int fp2_is_zero_4x2x1(__m512i* a)
         | ((mask >> 3) & (mask >> 4) & 0x8);
 }
 
-void fp2_add_4x2x1(__m512i* res, __m512i* a, __m512i* b)
-{
-    fp_add_8x1(res, a, b);
-}
-
-void fp2_sub_4x2x1(__m512i* res, __m512i* a, __m512i* b)
-{
-    fp_sub_8x1(res, a, b);
-}
-
-void fp2_neg_4x2x1(__m512i* res, __m512i* a)
-{
-    fp_neg_8x1(res, a);
-}
-
-void fp2_mixaddsub_4x2x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)
-{
-    fp_mixaddsub_8x1(res, a, b, add_mask);
-}
-
-void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b)
-{
-    __m512i t0[16], t1[16];
-    for (int i = 0; i < 8; i++) {
-        t0[i] = VSHUFFLE(a[i], 0x44); // a0, a0
-        t1[i] = VSHUFFLE(a[i], 0xee); // a1, a1
-        t1[i + 8] = VSHUFFLE(b[i], 0x4e); // b0, b1
-    }
-    mp_mul_8x1_karat(t0, t0, b);
-    mp_mul_8x1_karat(t1, t1, t1 + 8);
-    mp_mixaddsubx2_8x1(t0, t0, t1, 0xaa);
-    rdc_8x1(res, t0);
-}
-
-void fp2_sqr_4x2x1(__m512i* res, __m512i* a)
-{
-    __m512i s1[8], s2[8], s3[8];
-    __mmask16 mask = 0b0011001100110011;
-    for (int i = 0; i < 8; i++) {
-        s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0
-        s2[i] = VSHUFFLEMASKZ(mask, a[i], 0x0e); // 0, a1
-        s3[i] = VSHUFFLE(a[i], 0x4e); // a0, a1
-    }
-    mp_add_8x1(s1, s1, s3);
-    mp_add_p_sub_8x1(s2, a, s2);
-    fp_mul_8x1(res, s1, s2);
-}
-
-// res1 = a1 * b1, res2 = a2 * b2
-void fp2_mulx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* b1, __m512i* a2, __m512i* b2)
-{
-    __m512i t0[16], t1[16];
-    
-    fp2_4x2x1_to_8x1x1(t0, a1, a2);
-    fp2_4x2x1_to_8x1x1(t1, b1, b2);
-    fp2_mul_8x1x1(t0, t0, t1);
-    fp2_8x1x1_to_4x2x1(res1, res2, t0);
-}
-
-// res1 = a1^2, res2 = a2^a
-void fp2_sqrx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* a2)
-{
-    __m512i t[16];
-    
-    fp2_4x2x1_to_8x1x1(t, a1, a2);
-    fp2_sqr_8x1x1(t, t);
-    fp2_8x1x1_to_4x2x1(res1, res2, t);
-}
-
 void fp2_muli_4x2x1(__m512i* res, __m512i* a)
 {
     __m512i t[8];
@@ -605,57 +434,6 @@ int fp2_is_zero_2x2x2(__m512i* a)
 {
     int mask = fp_is_zero_4x2(a);
     return (mask & (mask >> 1) & 0x1 ) | ((mask >> 1) & (mask >> 2) & 0x2);
-}
-
-void fp2_add_2x2x2(__m512i* res, __m512i* a, __m512i* b)
-{
-    fp_add_4x2(res, a, b);
-}
-
-void fp2_sub_2x2x2(__m512i* res, __m512i* a, __m512i* b)
-{
-    fp_sub_4x2(res, a, b);
-}
-
-void fp2_neg_2x2x2(__m512i* res, __m512i* a)
-{
-    fp_neg_4x2(res, a);
-}
-
-void fp2_mixaddsub_2x2x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)
-{
-    fp_mixaddsub_4x2(res, a, b, add_mask);
-}
-
-void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b)
-{
-    __m512i t0[13], t1[13];
-    
-    for (int i = 0; i < 4; i++) {
-        t0[i] = VPERM256(a[i], 0x44); // a0, a0
-        t1[i] = VPERM256(a[i], 0xee); // a1, a1
-        t1[i + 4] = VPERM256(b[i], 0x4e); // b0, b1
-    }
-    mp_mul_4x2(t0, t0, b);
-    mp_mul_4x2(t1, t1, t1+4);
-    mp_mixaddsubx2_4x2(t0, t0, t1, 0xcc);
-    rdc_4x2(res, t0);
-}
-
-void fp2_sqr_2x2x2(__m512i* res, __m512i* a)
-{
-    __m512i s1[4], s2[4];
-    
-    for (int i = 0; i < 4; i++) {
-        s1[i] = VPERM256(a[i], 0x44); // a0, a0
-        s2[i] = VPERM256(a[i], 0x4e); // a1, a0
-    }
-    mp_add_4x2(s1, s1, s2);
-    for (int i = 0; i < 4; i++) {
-        s2[i] = VPERM256MASKZ(0x33, a[i], 0x4e); // a1, 0
-    }
-    mp_add_p_sub_4x2(s2, a, s2); // a0 - a1, a1
-    fp_mul_4x2(res, s1, s2);
 }
 
 void fp2_muli_2x2x2(__m512i* res, __m512i* a)
@@ -791,56 +569,6 @@ int fp2_is_zero_2x4x1(__m512i* a)
     int mask = fp_is_zero_8x1(a);
     return (mask & (mask >> 2) & 0x1)
         | ((mask >> 3) & (mask >> 5) & 0x2);
-}
-
-void fp2_add_2x4x1(__m512i* res, __m512i* a, __m512i* b)
-{
-    fp_add_8x1(res, a, b);
-}
-
-void fp2_sub_2x4x1(__m512i* res, __m512i* a, __m512i* b)
-{
-    fp_sub_8x1(res, a, b);
-}
-
-void fp2_neg_2x4x1(__m512i* res, __m512i* a)
-{
-    fp_neg_8x1(res, a);
-}
-
-void fp2_mixaddsub_2x4x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)
-{
-    fp_mixaddsub_8x1(res, a, b, add_mask);
-}
-
-void fp2_mul_2x4x1(__m512i* res, __m512i* a, __m512i* b)
-{
-    __m512i s1[8], s2[8];
-    for (int i = 0; i < 8; i++) {
-        s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0, a1, a1
-        s2[i] = VPERM256(b[i], 0x28); // b0, b1, b1, b0
-    }
-    fp_mul_8x1(s1, s1, s2);
-    for (int i = 0; i < 8; i++) {
-        s2[i] = VPERM256MASKZ(0x55, s1[i], 0x32);
-        s1[i] = VPERM256MASKZ(0x55, s1[i], 0x10);
-    }
-    fp_mixaddsub_8x1(res, s1, s2, 0xcc);
-}
-
-void fp2_sqr_2x4x1(__m512i* res, __m512i* a)
-{
-    __m512i s1[8], s2[8];
-    for (int i = 0; i < 8; i++) {
-        s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0, a1, a1
-        s2[i] = VPERM256(a[i], 0x28); // a0, a1, a1, a0
-    }
-    fp_mul_8x1(s1, s1, s2);
-    for (int i = 0; i < 8; i++) {
-        s2[i] = VPERM256MASKZ(0x55, s1[i], 0x32);
-        s1[i] = VPERM256MASKZ(0x55, s1[i], 0x10);
-    }
-    fp_mixaddsub_8x1(res, s1, s2, 0xcc);
 }
 
 void fp2_muli_2x4x1(__m512i* res, __m512i* a)

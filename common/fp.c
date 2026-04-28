@@ -67,7 +67,7 @@ void fp_duplicate_8x1(__m512i* res, const uint64_t* a)
     res[7] = VSETALL(a[7]);
 }
 
-int fp_is_equal_8x1(__m512i* a, __m512i* b)
+__mmask8 fp_is_equal_8x1(__m512i* a, __m512i* b)
 {
     __m512i norm_a[NUM_LIMBS], norm_b[NUM_LIMBS];
     fp_normalize_8x1(norm_a, a);
@@ -85,7 +85,7 @@ int fp_is_equal_8x1(__m512i* a, __m512i* b)
     return acc;
 }
 
-int fp_is_zero_8x1(__m512i* a)
+__mmask8 fp_is_zero_8x1(__m512i* a)
 {
     __m512i norm_a[NUM_LIMBS];
     const __m512i zero = VZERO();
@@ -693,7 +693,7 @@ void mp_add_p_sub_8x1(__m512i* res, __m512i* a, __m512i* b)
     res[6] = t6; res[7] = t7;
 }
 
-void mp_mul_8x1_karat(__m512i* res, __m512i* a, __m512i* b)
+void mp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
 {
     const __m512i a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3], a4 = a[4], a5 = a[5];
     const __m512i a6 = a[6], a7 = a[7];
@@ -992,7 +992,7 @@ void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)
     __m512i t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15;
     const __m512i limb_mask = VSETALL(LIMB_MASK);
     
-    mp_mul_8x1_karat(t, a, b);
+    mp_mul_8x1(t, a, b);
     
     // Carry propagation
     t1 = VADD(t[1], VSRA(t[0], LIMB_LEN));
@@ -1450,7 +1450,7 @@ void fp_duplicate_4x2(__m512i* res, const uint64_t* a)
     res[3] = VSET(a[3], a[7], a[3], a[7], a[3], a[7], a[3], a[7]);
 }
 
-int fp_is_equal_4x2(__m512i* a, __m512i* b)
+__mmask8 fp_is_equal_4x2(__m512i* a, __m512i* b)
 {
     __m512i norm_a[N4x2], norm_b[N4x2];
     fp_normalize_4x2(norm_a, a);
@@ -1469,7 +1469,7 @@ int fp_is_equal_4x2(__m512i* a, __m512i* b)
         | ((acc >> 3) & (acc >> 4) & 0x8);
 }
 
-int fp_is_zero_4x2(__m512i* a)
+__mmask8 fp_is_zero_4x2(__m512i* a)
 {
     __m512i norm_a[N4x2];
     const __m512i zero = VZERO();
@@ -2525,7 +2525,7 @@ void fp_duplicate_2x4(__m512i* res, const uint64_t* a)
     res[1] = VSET(a[1], a[3], a[5], a[7], a[1], a[3], a[5], a[7]);
 }
 
-int fp_is_equal_2x4(__m512i* a, __m512i* b)
+__mmask8 fp_is_equal_2x4(__m512i* a, __m512i* b)
 {
     __m512i norm_a[2], norm_b[2];
     fp_normalize_2x4(norm_a, a);
@@ -2539,7 +2539,7 @@ int fp_is_equal_2x4(__m512i* a, __m512i* b)
         | ((acc >> 3) & (acc >> 4) & (acc >> 5) & (acc >> 6) & 0x2);
 }
 
-int fp_is_zero_2x4(__m512i* a)
+__mmask8 fp_is_zero_2x4(__m512i* a)
 {
     __m512i norm_a[2];
     const __m512i zero = VZERO();

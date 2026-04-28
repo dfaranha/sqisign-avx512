@@ -6,7 +6,7 @@ from gen_fp_4x2 import write_fp_4x2
 from gen_fp_2x4 import write_fp_2x4
 from gen_fp_conversions import write_fp_conversions
 from gen_fp_inv import write_fp_inv_functions
-
+    
 def write_fp_include(f):
     f.line("#include <stdio.h>")
     f.line("#include <immintrin.h>")

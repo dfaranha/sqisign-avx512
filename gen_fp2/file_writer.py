@@ -73,8 +73,28 @@ class FileWriter:
         tab = "    "
         self.file.write(f"{tab*self.indent_lvl}{str}\n")
 
-    def comment(self, str):
-        self.line("// " + str)
+    def comment(self, com):
+        if isinstance(com, list):
+            self.line("/*")
+            for l in com:
+                self.line(f" * {l}")
+            self.line(" */")
+        else:    
+            self.line("// " + com)
+
+    def fun_comment(self, expl, params=[], output=[]):
+        self.line("/**")
+        if isinstance(expl, list):
+            for l in expl:
+                self.line(f" * {l}")
+        else:
+            self.line(f" * {expl}")
+            
+        for (var, expl) in params:
+            self.line(f" * @param {var} {expl}")
+        for (var, expl) in output:
+            self.line(f" * @param {var} Output: {expl}")
+        self.line(" */")
 
     def banner(self, str):
         banner_len = 100
@@ -85,9 +105,10 @@ class FileWriter:
         self.line()
 
     # start a new block
-    def start(self, str=None):
+    def start(self, str=None, inline=False):
+        prefix = "static inline " if inline else ""
         if str is not None:
-            self.line(str)
+            self.line(prefix + str)
         self.line("{")
         self.indent()
 

@@ -422,6 +422,7 @@ void four_isog_eval_1x2x2x2(__m512i* Q, __m512i* eval_data, __m512i* P)
 
     fp2_mul_2x2x2(Q, t0, t1);
 }
+// #include "bench.h"
 
 // Purely in 1x2x2x2
 bool isog_chain_1d_1x2x2x2(
@@ -434,6 +435,9 @@ bool isog_chain_1d_1x2x2x2(
     const bool verify
 )
 {
+    uint64_t total = 0;
+    uint64_t total2 = 0;
+
     int space = 1;
     for (int i = 1; i < isog_len; i *= 2) {
         space++;
@@ -478,16 +482,50 @@ bool isog_chain_1d_1x2x2x2(
         }
 
         four_isog_codom_1x2x2x2(res_A24, eval_data, strat + 4*current);
-         
+        
+        // int counter = 0;
+        // uint64_t acc = 0;
+        // uint64_t acc2 = 0;
+        //printf("points to eval: %d\n", current + num_pts);
+        
         for (int i = 0; i < current; i++) {
+            // uint64_t start = cpucycles();
             four_isog_eval_1x2x2x2(strat + 4*i, eval_data, strat + 4*i);
+            // uint64_t end = cpucycles();
+            // acc += (end - start);
+            // counter++;
+            // if (counter == 4) {
+            //     counter = 0;
+            //     total += acc;
+            //     acc = 0;
+            //     acc2 = 0;
+            // } else if (counter < 2) {
+            //     acc2 += (end - start);
+            // }
             orders[i] -= 2;
         }
         for (int i = 0; i < num_pts; i++) {
+            // uint64_t start = cpucycles();
             four_isog_eval_1x2x2x2(pts + 4*i, eval_data, pts + 4*i);
+            // uint64_t end = cpucycles();
+            // acc += (end - start);
+            // counter++;
+            // if (counter == 4) {
+            //     counter = 0;
+            //     total += acc;
+            //     acc = 0;
+            //     acc2 = 0;
+            // } else if (counter < 2) {
+            //     acc2 += (end - start);
+            // }
         }
         current--;
+        // if (counter >= 2) {
+        //     total2 += acc2;
+        // }
     }
+    // printf("total eval 4 points: %lu\n", total);
+    // printf("total eval 2 point leftovers: %lu\n", total2);
     assert(isog_len % 2 ? !current : current == -1);
     if (isog_len % 2 == 1) { // last 2-isogeny
         if (verify) {
