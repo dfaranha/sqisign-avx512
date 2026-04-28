@@ -1,5 +1,5 @@
 from avx_types import AVX_4x2x1
-from elliptic_types import Curve, BasisX, PointX
+from elliptic_types import Curve, BasisX, PointX, PointJ
 
 from avx_arithmetic import avx_811_to_421, avx_421_to_811
 from elliptic_arithmetic import (
@@ -699,7 +699,7 @@ def theta_isogeny_chain_with_torsion_8x1x1(
 
 def theta_isogeny_chain_verification_8x1x1(
     domain: tuple[Curve],
-    kernel: tuple[BasisX, BasisX],
+    kernel: tuple[PointJ],
     length: int,
 ):
     """
@@ -707,12 +707,8 @@ def theta_isogeny_chain_verification_8x1x1(
     by SQIsign and returns only the codomain and uses a variable time
     superglue for the gluing isogeny
     """
-
-    # We normalise points and the curve parameters the below functions stay with
-    # 64 bit limbs to make use of the faster(?) sqrt we have available
-    E1, E2, B1, B2 = normalise_chain_input(domain, kernel)
-    P1, Q1 = lift_normalised_basis_to_jacobian(E1, B1)
-    P2, Q2 = lift_normalised_basis_to_jacobian(E2, B2)
+    E1, E2 = domain
+    P1, Q1, P2, Q2 = kernel
 
     # We are now in the position to convert from 64 to 51 bit limbs
     # For the curve we need to pack the Montgomery coefficient for

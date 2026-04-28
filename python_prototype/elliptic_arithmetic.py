@@ -221,7 +221,7 @@ def mul_simple(A, A24, C24, X, Y, Z, m):
     RX *= RZ
     RY *= RZ**2
 
-    return (RX, RY, RZ)
+    return PointJ(RX, RY, RZ)
 
 
 def add_simple(A, P, Q):
@@ -289,7 +289,7 @@ def add_simple(A, P, Q):
     ZR = dx * t0
 
     # Set the point R with Jacobian coordinates
-    R = (XR, YR, ZR)
+    R = PointJ(XR, YR, ZR)
 
     # Handle the cases where P or Q is zero
     # NOTE: for constant time impl, the swap here must be constant time
