@@ -92,12 +92,12 @@ void fp2_copy_8x1x1(__m512i* res, __m512i* a);
 /**
  * Returns 8-bit mask where the i-th bit is 1 iff the i-th Fp2 elements are equal.
  */
-int fp2_is_equal_8x1x1(__m512i* a, __m512i* b);
+__mmask8 fp2_is_equal_8x1x1(__m512i* a, __m512i* b);
 
 /**
  * Returns 8-bit mask where the i-th bit is 1 iff the i-th Fp2 element is zero.
  */
-int fp2_is_zero_8x1x1(__m512i* a);
+__mmask8 fp2_is_zero_8x1x1(__m512i* a);
 
 /**
  * Copies the i-th Fp2 element from a1 to res if the i-th bit of s is set, else it copies from a0.
@@ -247,12 +247,12 @@ void fp2_copy_4x1x2(__m512i* res, __m512i* a);
 /**
  * Returns 4-bit mask where the i-th bit is 1 iff the i-th Fp2 elements are equal.
  */
-int fp2_is_equal_4x1x2(__m512i* a, __m512i* b);
+__mmask8 fp2_is_equal_4x1x2(__m512i* a, __m512i* b);
 
 /**
  * Returns 4-bit mask where the i-th bit is 1 iff the i-th Fp2 element is zero.
  */
-int fp2_is_zero_4x1x2(__m512i* a);
+__mmask8 fp2_is_zero_4x1x2(__m512i* a);
 
 /**
  * Copies the i-th Fp2 element from a1 to res if the i-th bit of s is set, else it copies from a0.
@@ -402,12 +402,12 @@ void fp2_copy_4x2x1(__m512i* res, __m512i* a);
 /**
  * Returns 4-bit mask where the i-th bit is 1 iff the i-th Fp2 elements are equal.
  */
-int fp2_is_equal_4x2x1(__m512i* a, __m512i* b);
+__mmask8 fp2_is_equal_4x2x1(__m512i* a, __m512i* b);
 
 /**
  * Returns 4-bit mask where the i-th bit is 1 iff the i-th Fp2 element is zero.
  */
-int fp2_is_zero_4x2x1(__m512i* a);
+__mmask8 fp2_is_zero_4x2x1(__m512i* a);
 
 /**
  * Copies the i-th Fp2 element from a1 to res if the i-th bit of s is set, else it copies from a0.
@@ -453,7 +453,7 @@ static inline void fp2_mixaddsub_4x2x1(__m512i* res, __m512i* a, __m512i* b, con
 static inline void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t0[16], t1[16];
-    for (int i = 0; i < 8; i++) {
+    for (__mmask8 i = 0; i < 8; i++) {
         t0[i] = VSHUFFLE(a[i], 0x44); // a0, a0
         t1[i] = VSHUFFLE(a[i], 0xee); // a1, a1
         t1[i + 8] = VSHUFFLE(b[i], 0x4e); // b0, b1
@@ -471,7 +471,7 @@ static inline void fp2_sqr_4x2x1(__m512i* res, __m512i* a)
 {
     __m512i s1[8], s2[8], s3[8];
     __mmask16 mask = 0b0011001100110011;
-    for (int i = 0; i < 8; i++) {
+    for (__mmask8 i = 0; i < 8; i++) {
         s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0
         s2[i] = VSHUFFLEMASKZ(mask, a[i], 0x0e); // 0, a1
         s3[i] = VSHUFFLE(a[i], 0x4e); // a0, a1
@@ -578,12 +578,12 @@ void fp2_copy_2x2x2(__m512i* res, __m512i* a);
 /**
  * Returns 2-bit mask where the i-th bit is 1 iff the i-th Fp2 elements are equal.
  */
-int fp2_is_equal_2x2x2(__m512i* a, __m512i* b);
+__mmask8 fp2_is_equal_2x2x2(__m512i* a, __m512i* b);
 
 /**
  * Returns 2-bit mask where the i-th bit is 1 iff the i-th Fp2 element is zero.
  */
-int fp2_is_zero_2x2x2(__m512i* a);
+__mmask8 fp2_is_zero_2x2x2(__m512i* a);
 
 /**
  * Copies the i-th Fp2 element from a1 to res if the i-th bit of s is set, else it copies from a0.
@@ -630,7 +630,7 @@ static inline void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i t0[13], t1[13];
     
-    for (int i = 0; i < 4; i++) {
+    for (__mmask8 i = 0; i < 4; i++) {
         t0[i] = VPERM256(a[i], 0x44); // a0, a0
         t1[i] = VPERM256(a[i], 0xee); // a1, a1
         t1[i + 4] = VPERM256(b[i], 0x4e); // b0, b1
@@ -648,12 +648,12 @@ static inline void fp2_sqr_2x2x2(__m512i* res, __m512i* a)
 {
     __m512i s1[4], s2[4];
     
-    for (int i = 0; i < 4; i++) {
+    for (__mmask8 i = 0; i < 4; i++) {
         s1[i] = VPERM256(a[i], 0x44); // a0, a0
         s2[i] = VPERM256(a[i], 0x4e); // a1, a0
     }
     mp_add_4x2(s1, s1, s2);
-    for (int i = 0; i < 4; i++) {
+    for (__mmask8 i = 0; i < 4; i++) {
         s2[i] = VPERM256MASKZ(0x33, a[i], 0x4e); // a1, 0
     }
     mp_add_p_sub_4x2(s2, a, s2); // a0 - a1, a1
@@ -732,12 +732,12 @@ void fp2_copy_2x4x1(__m512i* res, __m512i* a);
 /**
  * Returns 2-bit mask where the i-th bit is 1 iff the i-th Fp2 elements are equal.
  */
-int fp2_is_equal_2x4x1(__m512i* a, __m512i* b);
+__mmask8 fp2_is_equal_2x4x1(__m512i* a, __m512i* b);
 
 /**
  * Returns 2-bit mask where the i-th bit is 1 iff the i-th Fp2 element is zero.
  */
-int fp2_is_zero_2x4x1(__m512i* a);
+__mmask8 fp2_is_zero_2x4x1(__m512i* a);
 
 /**
  * Copies the i-th Fp2 element from a1 to res if the i-th bit of s is set, else it copies from a0.
@@ -783,12 +783,12 @@ static inline void fp2_mixaddsub_2x4x1(__m512i* res, __m512i* a, __m512i* b, con
 static inline void fp2_mul_2x4x1(__m512i* res, __m512i* a, __m512i* b)
 {
     __m512i s1[8], s2[8];
-    for (int i = 0; i < 8; i++) {
+    for (__mmask8 i = 0; i < 8; i++) {
         s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0, a1, a1
         s2[i] = VPERM256(b[i], 0x28); // b0, b1, b1, b0
     }
     fp_mul_8x1(s1, s1, s2);
-    for (int i = 0; i < 8; i++) {
+    for (__mmask8 i = 0; i < 8; i++) {
         s2[i] = VPERM256MASKZ(0x55, s1[i], 0x32);
         s1[i] = VPERM256MASKZ(0x55, s1[i], 0x10);
     }
@@ -801,12 +801,12 @@ static inline void fp2_mul_2x4x1(__m512i* res, __m512i* a, __m512i* b)
 static inline void fp2_sqr_2x4x1(__m512i* res, __m512i* a)
 {
     __m512i s1[8], s2[8];
-    for (int i = 0; i < 8; i++) {
+    for (__mmask8 i = 0; i < 8; i++) {
         s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0, a1, a1
         s2[i] = VPERM256(a[i], 0x28); // a0, a1, a1, a0
     }
     fp_mul_8x1(s1, s1, s2);
-    for (int i = 0; i < 8; i++) {
+    for (__mmask8 i = 0; i < 8; i++) {
         s2[i] = VPERM256MASKZ(0x55, s1[i], 0x32);
         s1[i] = VPERM256MASKZ(0x55, s1[i], 0x10);
     }

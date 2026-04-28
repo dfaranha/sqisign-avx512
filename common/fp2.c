@@ -25,18 +25,24 @@ void fp2_copy_8x1x1(__m512i* res, __m512i* a)
     fp_copy_8x1(res+8, a+8);
 }
 
-int fp2_is_equal_8x1x1(__m512i* a, __m512i* b)
+__mmask8 fp2_is_equal_8x1x1(__m512i* a, __m512i* b)
 {
-    int lo = fp_is_equal_8x1(a, b);
-    int hi = fp_is_equal_8x1(a+8, b+8);
+    __mmask8 lo = fp_is_equal_8x1(a, b);
+    __mmask8 hi = fp_is_equal_8x1(a+8, b+8);
     return lo & hi;
 }
 
-int fp2_is_zero_8x1x1(__m512i* a)
+__mmask8 fp2_is_zero_8x1x1(__m512i* a)
 {
-    int lo = fp_is_zero_8x1(a);
-    int hi = fp_is_zero_8x1(a+8);
+    __mmask8 lo = fp_is_zero_8x1(a);
+    __mmask8 hi = fp_is_zero_8x1(a+8);
     return lo & hi;
+}
+
+void fp2_select_8x1x1(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)
+{
+    fp_select_8x1(res, a0, a1, s);
+    fp_select_8x1(res + 8, a0 + 8, a1 + 8, s);
 }
 
 void fp2_muli_8x1x1(__m512i* res, __m512i* a)
@@ -155,18 +161,24 @@ void fp2_copy_4x1x2(__m512i* res, __m512i* a)
     fp_copy_4x2(res+4, a+4);
 }
 
-int fp2_is_equal_4x1x2(__m512i* a, __m512i* b)
+__mmask8 fp2_is_equal_4x1x2(__m512i* a, __m512i* b)
 {
-    int lo = fp_is_equal_4x2(a, b);
-    int hi = fp_is_equal_4x2(a+4, b+4);
+    __mmask8 lo = fp_is_equal_4x2(a, b);
+    __mmask8 hi = fp_is_equal_4x2(a+4, b+4);
     return lo & hi;
 }
 
-int fp2_is_zero_4x1x2(__m512i* a)
+__mmask8 fp2_is_zero_4x1x2(__m512i* a)
 {
-    int lo = fp_is_zero_4x2(a);
-    int hi = fp_is_zero_4x2(a+4);
+    __mmask8 lo = fp_is_zero_4x2(a);
+    __mmask8 hi = fp_is_zero_4x2(a+4);
     return lo & hi;
+}
+
+void fp2_select_4x1x2(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)
+{
+    fp_select_4x2(res, a0, a1, s);
+    fp_select_4x2(res + 4, a0 + 4, a1 + 4, s);
 }
 
 void fp2_muli_4x1x2(__m512i* res, __m512i* a)
@@ -283,9 +295,9 @@ void fp2_copy_4x2x1(__m512i* res, __m512i* a)
     fp_copy_8x1(res, a);
 }
 
-int fp2_is_equal_4x2x1(__m512i* a, __m512i* b)
+__mmask8 fp2_is_equal_4x2x1(__m512i* a, __m512i* b)
 {
-    int mask = fp_is_equal_8x1(a, b);
+    __mmask8 mask = fp_is_equal_8x1(a, b);
     // a = b iff both halves are equal
     return (mask & (mask >> 1) & 0x1)
         | ((mask >> 1) & (mask >> 2) & 0x2)
@@ -293,14 +305,20 @@ int fp2_is_equal_4x2x1(__m512i* a, __m512i* b)
         | ((mask >> 3) & (mask >> 4) & 0x8);
 }
 
-int fp2_is_zero_4x2x1(__m512i* a)
+__mmask8 fp2_is_zero_4x2x1(__m512i* a)
 {
-    int mask = fp_is_zero_8x1(a);
+    __mmask8 mask = fp_is_zero_8x1(a);
     // a = 0 iff both halves are 0
     return (mask & (mask >> 1) & 0x1)
         | ((mask >> 1) & (mask >> 2) & 0x2)
         | ((mask >> 2) & (mask >> 3) & 0x4)
         | ((mask >> 3) & (mask >> 4) & 0x8);
+}
+
+void fp2_select_4x2x1(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)
+{
+    __mmask8 t = (s & 0x1) | ((s & 0x1) << 1) | ((s & 0x2) << 1) | ((s & 0x2) << 2) | ((s & 0x4) << 2) | ((s & 0x4) << 3) | ((s & 0x8) << 3) | ((s & 0x8) << 4);
+    fp_select_8x1(res, a0, a1, t);
 }
 
 void fp2_muli_4x2x1(__m512i* res, __m512i* a)
@@ -309,7 +327,7 @@ void fp2_muli_4x2x1(__m512i* res, __m512i* a)
     
     fp_setzero_8x1(t);
     fp_mixaddsub_8x1(t, t, a, 0x55);
-    for (int i = 0; i < 8; i++) {
+    for (__mmask8 i = 0; i < 8; i++) {
         res[i] = VSHUFFLE(t[i], 0x4e);
     }
 }
@@ -424,16 +442,22 @@ void fp2_copy_2x2x2(__m512i* res, __m512i* a)
     fp_copy_4x2(res, a);
 }
 
-int fp2_is_equal_2x2x2(__m512i* a, __m512i* b)
+__mmask8 fp2_is_equal_2x2x2(__m512i* a, __m512i* b)
 {
-    int mask = fp_is_equal_4x2(a, b);
+    __mmask8 mask = fp_is_equal_4x2(a, b);
     return (mask & (mask >> 1) & 0x1 ) | ((mask >> 1) & (mask >> 2) & 0x2); 
 }
 
-int fp2_is_zero_2x2x2(__m512i* a)
+__mmask8 fp2_is_zero_2x2x2(__m512i* a)
 {
-    int mask = fp_is_zero_4x2(a);
+    __mmask8 mask = fp_is_zero_4x2(a);
     return (mask & (mask >> 1) & 0x1 ) | ((mask >> 1) & (mask >> 2) & 0x2);
+}
+
+void fp2_select_2x2x2(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)
+{
+    __mmask8 t = (s & 0x1) | ((s & 0x1) << 1) | ((s & 0x2) << 1) | ((s & 0x2) << 2);
+    fp_select_4x2(res, a0, a1, t);
 }
 
 void fp2_muli_2x2x2(__m512i* res, __m512i* a)
@@ -442,7 +466,7 @@ void fp2_muli_2x2x2(__m512i* res, __m512i* a)
     
     fp_setzero_4x2(t);
     fp_mixaddsub_4x2(t, t, a, 0x33);
-    for (int i = 0; i < 4; i++) {
+    for (__mmask8 i = 0; i < 4; i++) {
         res[i] = VPERM256(t[i], 0x4e);
     }
 }
@@ -557,18 +581,24 @@ void fp2_copy_2x4x1(__m512i* res, __m512i* a)
     fp_copy_8x1(res, a);
 }
 
-int fp2_is_equal_2x4x1(__m512i* a, __m512i* b)
+__mmask8 fp2_is_equal_2x4x1(__m512i* a, __m512i* b)
 {
-    int mask = fp_is_equal_8x1(a, b);
+    __mmask8 mask = fp_is_equal_8x1(a, b);
     return (mask & (mask >> 2) & 0x1)
         | ((mask >> 3) & (mask >> 5) & 0x2);
 }
 
-int fp2_is_zero_2x4x1(__m512i* a)
+__mmask8 fp2_is_zero_2x4x1(__m512i* a)
 {
-    int mask = fp_is_zero_8x1(a);
+    __mmask8 mask = fp_is_zero_8x1(a);
     return (mask & (mask >> 2) & 0x1)
         | ((mask >> 3) & (mask >> 5) & 0x2);
+}
+
+void fp2_select_2x4x1(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)
+{
+    __mmask8 t = (s & 0x1) | ((s & 0x1) << 2) | ((s & 0x2) << 3) | ((s & 0x2) << 5);
+    fp_select_8x1(res, a0, a1, t);
 }
 
 void fp2_muli_2x4x1(__m512i* res, __m512i* a)
@@ -577,7 +607,7 @@ void fp2_muli_2x4x1(__m512i* res, __m512i* a)
     
     fp_setzero_8x1(t);
     fp_mixaddsub_8x1(t, t, a, 0x33);
-    for (int i = 0; i < 8; i++) {
+    for (__mmask8 i = 0; i < 8; i++) {
         res[i] = VPERM256(t[i], 0x4e);
     }
 }
@@ -676,7 +706,7 @@ void fp2_frommont_2x4x1(__m512i*res, __m512i* a)
 void rand_fp2_2x4x1(__m512i* res)
 {
     rand_fp_8x1(res);
-    for(int i = 0; i < 8; i++) {
+    for(__mmask8 i = 0; i < 8; i++) {
         res[i] = VBLEND(0x55, VZERO(), res[i]);
     }
 }
@@ -687,7 +717,7 @@ void rand_fp2_2x4x1(__m512i* res)
 
 void fp2_8x1x1_to_4x2x1(__m512i* res1, __m512i* res2, __m512i* src)
 {
-    for (int i = 0; i < 8; i++) {
+    for (__mmask8 i = 0; i < 8; i++) {
         __m512i re = src[i], im = src[i + 8];
         res1[i] = VUNPACKLO(re, im);
         res2[i] = VUNPACKHI(re, im);
@@ -697,7 +727,7 @@ void fp2_8x1x1_to_4x2x1(__m512i* res1, __m512i* res2, __m512i* src)
 // Only extracts first 4x2x1
 void fp2_8x1x1_to_first_4x2x1(__m512i* res, __m512i* src)
 {
-    for (int i = 0; i < 8; i++) {
+    for (__mmask8 i = 0; i < 8; i++) {
         res[i] = VUNPACKLO(src[i], src[i + 8]);
     }
 }
@@ -706,7 +736,7 @@ void fp2_4x2x1_to_8x1x1(__m512i* res, __m512i* src1, __m512i* src2)
 {
     __m512i idx_re = _mm512_set_epi64(14, 6, 12, 4, 10, 2, 8, 0);
     __m512i idx_im = _mm512_set_epi64(15, 7, 13, 5, 11, 3, 9, 1);
-    for (int i = 0; i < 8; i++) {
+    for (__mmask8 i = 0; i < 8; i++) {
         __m512i s1 = src1[i], s2 = src2[i];
         res[i] = VBLENDPERM(idx_re, s1, s2);
         res[i+8] = VBLENDPERM(idx_im, s1, s2);
@@ -717,7 +747,7 @@ void fp2_4x2x1_duplicate_to_8x1x1(__m512i* res, __m512i* src)
 {
     __m512i idx_re = _mm512_set_epi64(14, 6, 12, 4, 10, 2, 8, 0);
     __m512i idx_im = _mm512_set_epi64(15, 7, 13, 5, 11, 3, 9, 1);
-    for (int i = 0; i < 8; i++) {
+    for (__mmask8 i = 0; i < 8; i++) {
         __m512i s = src[i];
         res[i] = VBLENDPERM(idx_re, s, s);
         res[i+8] = VBLENDPERM(idx_im, s, s);
@@ -729,7 +759,7 @@ void fp2_4x2x1_to_2x2x2(__m512i* res1, __m512i* res2, __m512i* src)
     __m512i s, t;
     __m512i idx1 = VSET(0, 8, 1, 9, 2, 10, 3, 11);
     __m512i idx2 = VSET(4, 12, 5, 13, 6, 14, 7, 15);
-    for (int i = 0; i < 4; i++) {
+    for (__mmask8 i = 0; i < 4; i++) {
         s = src[i], t = src[i+4];
         res1[i] = VBLENDPERM(idx1, s, t);
         res2[i] = VBLENDPERM(idx2, s, t);
@@ -741,7 +771,7 @@ void fp2_2x2x2_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2)
     __m512i s, t;
     __m512i idx1 = VSET(0, 2, 4, 6, 8, 10, 12, 14);
     __m512i idx2 = VSET(1, 3, 5, 7, 9, 11, 13, 15);
-    for (int i = 0; i < 4; i++) {
+    for (__mmask8 i = 0; i < 4; i++) {
         s = src1[i], t = src2[i];
         res[i] = VBLENDPERM(idx1, s, t);
         res[i+4] = VBLENDPERM(idx2, s, t);
@@ -753,7 +783,7 @@ void fp2_4x2x1_to_2x4x1(__m512i* res1, __m512i* res2, __m512i* src)
 {
     __m512i idx1 = VSET(0, 0, 1, 1, 2, 2, 3, 3);
     __m512i idx2 = VSET(4, 4, 5, 5, 6, 6, 7, 7);
-    for (int i = 0; i < 8; i++) {
+    for (__mmask8 i = 0; i < 8; i++) {
         __m512i t = src[i];
         res1[i] = VPERM512MASKZ(0x55, t, idx1);
         res2[i] = VPERM512MASKZ(0x55, t, idx2);
@@ -763,7 +793,7 @@ void fp2_4x2x1_to_2x4x1(__m512i* res1, __m512i* res2, __m512i* src)
 void fp2_2x4x1_to_4x2x1(__m512i* res, __m512i* src1, __m512i* src2)
 {
     __m512i idx = VSET(0, 2, 4, 6, 8, 10, 12, 14);
-    for (int i = 0; i < 8; i++) {
+    for (__mmask8 i = 0; i < 8; i++) {
         res[i] = VBLENDPERM(idx, src1[i], src2[i]);
     }
 }
@@ -772,7 +802,7 @@ void fp2_2x2x2_to_2x4x1(__m512i* res, __m512i* src)
 {
     __m512i idx1 = VSET(0, 0, 2, 2, 4, 4, 6, 6);
     __m512i idx2 = VSET(1, 1, 3, 3, 5, 5, 7, 7);
-    for (int i = 0; i < 4; i++) {
+    for (__mmask8 i = 0; i < 4; i++) {
         __m512i t = src[i];
         res[i] = VPERM512MASKZ(0x55, t, idx1);
         res[i+4] = VPERM512MASKZ(0x55, t, idx2);
@@ -782,7 +812,7 @@ void fp2_2x2x2_to_2x4x1(__m512i* res, __m512i* src)
 void fp2_2x4x1_to_2x2x2(__m512i* res, __m512i* src)
 {
     __m512i idx = VSET(0, 8, 2, 10, 4, 12, 6, 14);
-    for (int i = 0; i < 4; i++) {
+    for (__mmask8 i = 0; i < 4; i++) {
         res[i] = VBLENDPERM(idx, src[i], src[i+4]);
     }
 }

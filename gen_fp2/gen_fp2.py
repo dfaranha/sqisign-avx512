@@ -33,20 +33,28 @@ def fp2_copy_8x1x1(f, pp, v):
     f.end()
 
 def fp2_is_equal_8x1x1(f, pp, v):
-    f.start("int fp2_is_equal_8x1x1(__m512i* a, __m512i* b)")
+    f.start("__mmask8 fp2_is_equal_8x1x1(__m512i* a, __m512i* b)")
 
-    f.line("int lo = fp_is_equal_8x1(a, b);")
-    f.line(f"int hi = fp_is_equal_8x1(a+{pp.num_limbs}, b+{pp.num_limbs});")
+    f.line("__mmask8 lo = fp_is_equal_8x1(a, b);")
+    f.line(f"__mmask8 hi = fp_is_equal_8x1(a+{pp.num_limbs}, b+{pp.num_limbs});")
     f.line("return lo & hi;")
 
     f.end()
 
 def fp2_is_zero_8x1x1(f, pp, v):
-    f.start("int fp2_is_zero_8x1x1(__m512i* a)")
+    f.start("__mmask8 fp2_is_zero_8x1x1(__m512i* a)")
 
-    f.line("int lo = fp_is_zero_8x1(a);")
-    f.line(f"int hi = fp_is_zero_8x1(a+{pp.num_limbs});")
+    f.line("__mmask8 lo = fp_is_zero_8x1(a);")
+    f.line(f"__mmask8 hi = fp_is_zero_8x1(a+{pp.num_limbs});")
     f.line(f"return lo & hi;")
+
+    f.end()
+
+def fp2_select_8x1x1(f, pp, v):
+    f.start("void fp2_select_8x1x1(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)")
+
+    f.line("fp_select_8x1(res, a0, a1, s);")
+    f.line(f"fp_select_8x1(res + {pp.num_limbs}, a0 + {pp.num_limbs}, a1 + {pp.num_limbs}, s);")
 
     f.end()
 
@@ -287,6 +295,7 @@ def fp2_8x1x1(f, pp, v, strat):
     fp2_copy_8x1x1(f, pp, v)
     fp2_is_equal_8x1x1(f, pp, v)
     fp2_is_zero_8x1x1(f, pp, v)
+    fp2_select_8x1x1(f, pp, v)
 
     fp2_muli_8x1x1(f, pp, v)
     fp2_conjugate_8x1x1(f, pp, v)
@@ -325,20 +334,28 @@ def fp2_copy_4x1x2(f, pp, v):
     f.end()
 
 def fp2_is_equal_4x1x2(f, pp, v):
-    f.start("int fp2_is_equal_4x1x2(__m512i* a, __m512i* b)")
+    f.start("__mmask8 fp2_is_equal_4x1x2(__m512i* a, __m512i* b)")
 
-    f.line("int lo = fp_is_equal_4x2(a, b);")
-    f.line(f"int hi = fp_is_equal_4x2(a+{pp.n42}, b+{pp.n42});")
+    f.line("__mmask8 lo = fp_is_equal_4x2(a, b);")
+    f.line(f"__mmask8 hi = fp_is_equal_4x2(a+{pp.n42}, b+{pp.n42});")
     f.line("return lo & hi;")
 
     f.end()
 
 def fp2_is_zero_4x1x2(f, pp, v):
-    f.start("int fp2_is_zero_4x1x2(__m512i* a)")
+    f.start("__mmask8 fp2_is_zero_4x1x2(__m512i* a)")
 
-    f.line("int lo = fp_is_zero_4x2(a);")
-    f.line(f"int hi = fp_is_zero_4x2(a+{pp.n42});")
+    f.line("__mmask8 lo = fp_is_zero_4x2(a);")
+    f.line(f"__mmask8 hi = fp_is_zero_4x2(a+{pp.n42});")
     f.line(f"return lo & hi;")
+
+    f.end()
+
+def fp2_select_4x1x2(f, pp, v):
+    f.start("void fp2_select_4x1x2(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)")
+
+    f.line("fp_select_4x2(res, a0, a1, s);")
+    f.line(f"fp_select_4x2(res + {pp.n42}, a0 + {pp.n42}, a1 + {pp.n42}, s);")
 
     f.end()
 
@@ -561,6 +578,7 @@ def fp2_4x1x2(f, pp, v, strat):
     fp2_copy_4x1x2(f, pp, v)
     fp2_is_equal_4x1x2(f, pp, v)
     fp2_is_zero_4x1x2(f, pp, v)
+    fp2_select_4x1x2(f, pp, v)
 
     fp2_muli_4x1x2(f, pp, v)
     fp2_conjugate_4x1x2(f, pp, v)
@@ -598,9 +616,9 @@ def fp2_copy_4x2x1(f, pp, v):
     f.end()
 
 def fp2_is_equal_4x2x1(f, pp, v):
-    f.start("int fp2_is_equal_4x2x1(__m512i* a, __m512i* b)")
+    f.start("__mmask8 fp2_is_equal_4x2x1(__m512i* a, __m512i* b)")
 
-    f.line(f"int mask = fp_is_equal_8x1(a, b);")
+    f.line(f"__mmask8 mask = fp_is_equal_8x1(a, b);")
     f.comment("a = b iff both halves are equal")  
     f.line("return (mask & (mask >> 1) & 0x1)")
     f.indent()
@@ -612,9 +630,9 @@ def fp2_is_equal_4x2x1(f, pp, v):
     f.end()
 
 def fp2_is_zero_4x2x1(f, pp, v):
-    f.start("int fp2_is_zero_4x2x1(__m512i* a)")
+    f.start("__mmask8 fp2_is_zero_4x2x1(__m512i* a)")
 
-    f.line(f"int mask = fp_is_zero_8x1(a);")
+    f.line(f"__mmask8 mask = fp_is_zero_8x1(a);")
     f.comment("a = 0 iff both halves are 0")  
     f.line("return (mask & (mask >> 1) & 0x1)")
     f.indent()
@@ -622,6 +640,14 @@ def fp2_is_zero_4x2x1(f, pp, v):
     f.line("| ((mask >> 2) & (mask >> 3) & 0x4)")
     f.line("| ((mask >> 3) & (mask >> 4) & 0x8);")
     f.unindent()
+
+    f.end()
+
+def fp2_select_4x2x1(f, pp, v):
+    f.start("void fp2_select_4x2x1(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)")
+
+    f.line("__mmask8 t = (s & 0x1) | ((s & 0x1) << 1) | ((s & 0x2) << 1) | ((s & 0x2) << 2) | ((s & 0x4) << 2) | ((s & 0x4) << 3) | ((s & 0x8) << 3) | ((s & 0x8) << 4);")
+    f.line("fp_select_8x1(res, a0, a1, t);")
 
     f.end()
 
@@ -662,7 +688,7 @@ def fp2_mul_4x2x1(f, pp, v, strat, inline=False):
 
 def fp2_mul_4x2x1_standard(f, pp, v):
     f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}], s3[{pp.num_limbs}];")
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
 
     f.line("s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0")
@@ -678,7 +704,7 @@ def fp2_mul_4x2x1_standard(f, pp, v):
 
 def fp2_mul_4x2x1_lazy(f, pp, v):
     f.line(f"__m512i t0[{2*pp.num_limbs}], t1[{2*pp.num_limbs}];")
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
 
     f.line("t0[i] = VSHUFFLE(a[i], 0x44); // a0, a0")
@@ -706,7 +732,7 @@ def fp2_sqr_4x2x1(f, pp, v, strat, inline=False):
 def fp2_sqr_4x2x1_standard(f, pp, v):
     f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}], s3[{pp.num_limbs}];")
     f.line("__mmask16 mask = 0b0011001100110011;")
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
 
     f.line("s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0")
@@ -723,7 +749,7 @@ def fp2_sqr_4x2x1_standard(f, pp, v):
 def fp2_sqr_4x2x1_lazy(f, pp, v, strat):
     f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}], s3[{pp.num_limbs}];")
     f.line("__mmask16 mask = 0b0011001100110011;")
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
 
     f.line("s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0")
@@ -774,7 +800,7 @@ def fp2_muli_4x2x1(f, pp, v):
     f.line("fp_setzero_8x1(t);")
     f.line("fp_mixaddsub_8x1(t, t, a, 0x55);")
 
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
     f.line(f"res[i] = VSHUFFLE(t[i], 0x4e);")
     f.unindent()
@@ -903,6 +929,7 @@ def fp2_4x2x1(f, pp, v, strat):
     fp2_copy_4x2x1(f, pp, v)
     fp2_is_equal_4x2x1(f, pp, v)
     fp2_is_zero_4x2x1(f, pp, v)
+    fp2_select_4x2x1(f, pp, v)
 
     fp2_muli_4x2x1(f, pp, v)
     fp2_conjugate_4x2x1(f, pp, v)
@@ -940,18 +967,26 @@ def fp2_copy_2x2x2(f, pp, v):
     f.end()
 
 def fp2_is_equal_2x2x2(f, pp, v):
-    f.start("int fp2_is_equal_2x2x2(__m512i* a, __m512i* b)")
+    f.start("__mmask8 fp2_is_equal_2x2x2(__m512i* a, __m512i* b)")
 
-    f.line("int mask = fp_is_equal_4x2(a, b);")
+    f.line("__mmask8 mask = fp_is_equal_4x2(a, b);")
     f.line("return (mask & (mask >> 1) & 0x1 ) | ((mask >> 1) & (mask >> 2) & 0x2); ")
 
     f.end()
 
 def fp2_is_zero_2x2x2(f, pp, v):
-    f.start("int fp2_is_zero_2x2x2(__m512i* a)")
+    f.start("__mmask8 fp2_is_zero_2x2x2(__m512i* a)")
 
-    f.line("int mask = fp_is_zero_4x2(a);")
+    f.line("__mmask8 mask = fp_is_zero_4x2(a);")
     f.line("return (mask & (mask >> 1) & 0x1 ) | ((mask >> 1) & (mask >> 2) & 0x2);")
+
+    f.end()
+
+def fp2_select_2x2x2(f, pp, v):
+    f.start("void fp2_select_2x2x2(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)")
+
+    f.line("__mmask8 t = (s & 0x1) | ((s & 0x1) << 1) | ((s & 0x2) << 1) | ((s & 0x2) << 2);")
+    f.line("fp_select_4x2(res, a0, a1, t);")
 
     f.end()
 
@@ -994,7 +1029,7 @@ def fp2_mul_2x2x2_standard(f, pp, v):
     f.line(f"__m512i s1[{pp.n42}], s2[{pp.n42}], s3[{pp.n42}];")
     f.line()
 
-    f.line(f"for (int i = 0; i < {pp.n42}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.n42}; i++) {{")
     f.indent()
 
     f.line("s1[i] = VPERM256(a[i], 0x44); // a0, a0")
@@ -1013,7 +1048,7 @@ def fp2_mul_2x2x2_lazy(f, pp, v):
     f.line(f"__m512i t0[{lenx2}], t1[{lenx2}];")
     f.line()
 
-    f.line(f"for (int i = 0; i < {pp.n42}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.n42}; i++) {{")
     f.indent()
 
     f.line("t0[i] = VPERM256(a[i], 0x44); // a0, a0")
@@ -1039,7 +1074,7 @@ def fp2_sqr_2x2x2_standard(f, pp, v):
     f.line(f"__m512i s1[{pp.n42}], s2[{pp.n42}];")
     f.line()
 
-    f.line(f"for (int i = 0; i < {pp.n42}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.n42}; i++) {{")
     f.indent()
 
     f.line("s1[i] = VPERM256(a[i], 0x44); // a0, a0")
@@ -1050,7 +1085,7 @@ def fp2_sqr_2x2x2_standard(f, pp, v):
 
     f.line("fp_add_4x2(s1, s1, s2);")
 
-    f.line(f"for (int i = 0; i < {pp.n42}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.n42}; i++) {{")
     f.indent()
 
     f.line("s2[i] = VPERM256MASKZ(0x33, a[i], 0x4e); // a1, 0")
@@ -1064,7 +1099,7 @@ def fp2_sqr_2x2x2_lazy(f, pp, v, strat):
     f.line(f"__m512i s1[{pp.n42}], s2[{pp.n42}];")
     f.line()
 
-    f.line(f"for (int i = 0; i < {pp.n42}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.n42}; i++) {{")
     f.indent()
 
     f.line("s1[i] = VPERM256(a[i], 0x44); // a0, a0")
@@ -1075,7 +1110,7 @@ def fp2_sqr_2x2x2_lazy(f, pp, v, strat):
 
     f.line("mp_add_4x2(s1, s1, s2);")
 
-    f.line(f"for (int i = 0; i < {pp.n42}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.n42}; i++) {{")
     f.indent()
 
     f.line("s2[i] = VPERM256MASKZ(0x33, a[i], 0x4e); // a1, 0")
@@ -1097,7 +1132,7 @@ def fp2_muli_2x2x2(f, pp, v):
     f.line("fp_setzero_4x2(t);")
     f.line("fp_mixaddsub_4x2(t, t, a, 0x33);")
 
-    f.line(f"for (int i = 0; i < {pp.n42}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.n42}; i++) {{")
     f.indent()
     f.line(f"res[i] = VPERM256(t[i], 0x4e);")
     f.unindent()
@@ -1226,6 +1261,7 @@ def fp2_2x2x2(f, pp, v, strat):
     fp2_copy_2x2x2(f, pp, v)
     fp2_is_equal_2x2x2(f, pp, v)
     fp2_is_zero_2x2x2(f, pp, v)
+    fp2_select_2x2x2(f, pp, v)
     
     fp2_muli_2x2x2(f, pp, v)
     fp2_conjugate_2x2x2(f, pp, v)
@@ -1263,9 +1299,9 @@ def fp2_copy_2x4x1(f, pp, v):
     f.end()
 
 def fp2_is_equal_2x4x1(f, pp, v):
-    f.start("int fp2_is_equal_2x4x1(__m512i* a, __m512i* b)")
+    f.start("__mmask8 fp2_is_equal_2x4x1(__m512i* a, __m512i* b)")
 
-    f.line("int mask = fp_is_equal_8x1(a, b);")
+    f.line("__mmask8 mask = fp_is_equal_8x1(a, b);")
     f.line("return (mask & (mask >> 2) & 0x1)")
     f.indent()
     f.line("| ((mask >> 3) & (mask >> 5) & 0x2);")
@@ -1274,13 +1310,21 @@ def fp2_is_equal_2x4x1(f, pp, v):
     f.end()
 
 def fp2_is_zero_2x4x1(f, pp, v):
-    f.start("int fp2_is_zero_2x4x1(__m512i* a)")
+    f.start("__mmask8 fp2_is_zero_2x4x1(__m512i* a)")
 
-    f.line("int mask = fp_is_zero_8x1(a);")
+    f.line("__mmask8 mask = fp_is_zero_8x1(a);")
     f.line("return (mask & (mask >> 2) & 0x1)")
     f.indent()
     f.line("| ((mask >> 3) & (mask >> 5) & 0x2);")
     f.unindent()
+
+    f.end()
+
+def fp2_select_2x4x1(f, pp, v):
+    f.start("void fp2_select_2x4x1(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s)")
+
+    f.line("__mmask8 t = (s & 0x1) | ((s & 0x1) << 2) | ((s & 0x2) << 3) | ((s & 0x2) << 5);")
+    f.line("fp_select_8x1(res, a0, a1, t);")
 
     f.end()
 
@@ -1316,7 +1360,7 @@ def fp2_mul_2x4x1(f, pp, v, inline=False):
     f.start("void fp2_mul_2x4x1(__m512i* res, __m512i* a, __m512i* b)", inline=inline)
 
     f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}];")
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
 
     f.line("s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0, a1, a1")
@@ -1325,7 +1369,7 @@ def fp2_mul_2x4x1(f, pp, v, inline=False):
     f.unindent()
     f.line("}")
     f.line("fp_mul_8x1(s1, s1, s2);")
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
 
     f.line("s2[i] = VPERM256MASKZ(0x55, s1[i], 0x32);")
@@ -1341,7 +1385,7 @@ def fp2_sqr_2x4x1(f, pp, v, inline=False):
     f.start("void fp2_sqr_2x4x1(__m512i* res, __m512i* a)", inline=inline)
 
     f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}];")
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
 
     f.line("s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0, a1, a1")
@@ -1350,7 +1394,7 @@ def fp2_sqr_2x4x1(f, pp, v, inline=False):
     f.unindent()
     f.line("}")
     f.line("fp_mul_8x1(s1, s1, s2);")
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
 
     f.line("s2[i] = VPERM256MASKZ(0x55, s1[i], 0x32);")
@@ -1371,7 +1415,7 @@ def fp2_muli_2x4x1(f, pp, v):
     f.line("fp_setzero_8x1(t);")
     f.line("fp_mixaddsub_8x1(t, t, a, 0x33);")
 
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
     f.line(f"res[i] = VPERM256(t[i], 0x4e);")
     f.unindent()
@@ -1497,7 +1541,7 @@ def fp2_rand_2x4x1(f, pp, v):
     f.start("void rand_fp2_2x4x1(__m512i* res)")
 
     f.line("rand_fp_8x1(res);")
-    f.line(f"for(int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for(__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
     f.line("res[i] = VBLEND(0x55, VZERO(), res[i]);")
     f.unindent()
@@ -1513,6 +1557,7 @@ def fp2_2x4x1(f, pp, v):
     fp2_copy_2x4x1(f, pp, v)
     fp2_is_equal_2x4x1(f, pp, v)
     fp2_is_zero_2x4x1(f, pp, v)
+    fp2_select_2x4x1(f, pp, v)
 
     fp2_muli_2x4x1(f, pp, v)
     fp2_conjugate_2x4x1(f, pp, v)
@@ -1530,7 +1575,7 @@ def fp2_2x4x1(f, pp, v):
 def fp2_8x1x1_to_4x2x1(f, pp, v, inline=False):
     f.start("void fp2_8x1x1_to_4x2x1(__m512i* res1, __m512i* res2, __m512i* src)", inline=inline)
 
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
 
     f.line(f"__m512i re = src[i], im = src[i + {pp.num_limbs}];")
@@ -1546,7 +1591,7 @@ def fp2_8x1x1_to_first_4x2x1(f, pp, v):
     f.comment("Only extracts first 4x2x1")
     f.start("void fp2_8x1x1_to_first_4x2x1(__m512i* res, __m512i* src)")
 
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
 
     f.line(f"res[i] = VUNPACKLO(src[i], src[i + {pp.num_limbs}]);")
@@ -1562,7 +1607,7 @@ def fp2_4x2x1_to_8x1x1(f, pp, v, inline=False):
     f.line("__m512i idx_re = _mm512_set_epi64(14, 6, 12, 4, 10, 2, 8, 0);")
     f.line("__m512i idx_im = _mm512_set_epi64(15, 7, 13, 5, 11, 3, 9, 1);")
 
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
 
     f.line(f"__m512i s1 = src1[i], s2 = src2[i];")
@@ -1580,7 +1625,7 @@ def fp2_4x2x1_duplicate_to_8x1x1(f, pp, v):
     f.line("__m512i idx_re = _mm512_set_epi64(14, 6, 12, 4, 10, 2, 8, 0);")
     f.line("__m512i idx_im = _mm512_set_epi64(15, 7, 13, 5, 11, 3, 9, 1);")
 
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
 
     f.line("__m512i s = src[i];")
@@ -1599,7 +1644,7 @@ def fp2_4x2x1_to_2x2x2(f, pp, v):
     f.line("__m512i idx1 = VSET(0, 8, 1, 9, 2, 10, 3, 11);")
     f.line("__m512i idx2 = VSET(4, 12, 5, 13, 6, 14, 7, 15);")
 
-    f.line(f"for (int i = 0; i < {pp.n42 - pp.rem42}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.n42 - pp.rem42}; i++) {{")
     f.indent()
 
     f.line(f"s = src[i], t = src[i+{pp.n42}];")
@@ -1623,7 +1668,7 @@ def fp2_2x2x2_to_4x2x1(f, pp, v):
     f.line("__m512i idx1 = VSET(0, 2, 4, 6, 8, 10, 12, 14);")
     f.line("__m512i idx2 = VSET(1, 3, 5, 7, 9, 11, 13, 15);")
 
-    f.line(f"for (int i = 0; i < {pp.n42 - pp.rem42}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.n42 - pp.rem42}; i++) {{")
     f.indent()
 
     f.line("s = src1[i], t = src2[i];")
@@ -1645,7 +1690,7 @@ def fp2_4x2x1_to_2x4x1(f, pp, v):
     f.line("__m512i idx1 = VSET(0, 0, 1, 1, 2, 2, 3, 3);")
     f.line("__m512i idx2 = VSET(4, 4, 5, 5, 6, 6, 7, 7);")
 
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
 
     f.line("__m512i t = src[i];")
@@ -1662,7 +1707,7 @@ def fp2_2x4x1_to_4x2x1(f, pp, v):
 
     f.line("__m512i idx = VSET(0, 2, 4, 6, 8, 10, 12, 14);")
 
-    f.line(f"for (int i = 0; i < {pp.num_limbs}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.num_limbs}; i++) {{")
     f.indent()
 
     f.line("res[i] = VBLENDPERM(idx, src1[i], src2[i]);")
@@ -1678,7 +1723,7 @@ def fp2_2x2x2_to_2x4x1(f, pp, v):
     f.line("__m512i idx1 = VSET(0, 0, 2, 2, 4, 4, 6, 6);")
     f.line("__m512i idx2 = VSET(1, 1, 3, 3, 5, 5, 7, 7);")
     
-    f.line(f"for (int i = 0; i < {pp.n42-pp.rem42}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.n42-pp.rem42}; i++) {{")
     f.indent()
 
     f.line("__m512i t = src[i];")
@@ -1698,7 +1743,7 @@ def fp2_2x4x1_to_2x2x2(f, pp, v):
 
     f.line("__m512i idx = VSET(0, 8, 2, 10, 4, 12, 6, 14);")
 
-    f.line(f"for (int i = 0; i < {pp.n42-pp.rem42}; i++) {{")
+    f.line(f"for (__mmask8 i = 0; i < {pp.n42-pp.rem42}; i++) {{")
     f.indent()
 
     f.line(f"res[i] = VBLENDPERM(idx, src[i], src[i+{pp.n42}]);")

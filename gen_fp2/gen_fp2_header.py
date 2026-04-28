@@ -9,10 +9,6 @@ from gen_fp2 import (
     fp2_mulx2_4x2x1, fp2_sqrx2_4x2x1
 )
 
-# TODO: 
-#   fp2_select
-#   mixaddsub
-
 def write_fp2_header_file(dir, pp, v, strat):
     path = f"{dir}/fp2.h"
     f = FileWriter(path)
@@ -141,11 +137,11 @@ def write_fp2_header_file(dir, pp, v, strat):
         f.line()
 
         f.fun_comment(f"Returns {fmt[0]}-bit mask where the i-th bit is 1 iff the i-th Fp2 elements are equal.")
-        f.line(f"int fp2_is_equal_{fmt}(__m512i* a, __m512i* b);")
+        f.line(f"__mmask8 fp2_is_equal_{fmt}(__m512i* a, __m512i* b);")
         f.line()
 
         f.fun_comment(f"Returns {fmt[0]}-bit mask where the i-th bit is 1 iff the i-th Fp2 element is zero.")
-        f.line(f"int fp2_is_zero_{fmt}(__m512i* a);")
+        f.line(f"__mmask8 fp2_is_zero_{fmt}(__m512i* a);")
         f.line()
 
         f.fun_comment(f"Copies the i-th Fp2 element from a1 to res if the i-th bit of s is set, else it copies from a0.")
