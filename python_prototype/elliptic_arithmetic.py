@@ -887,38 +887,69 @@ def mul_pair(A_A24: AVX_2x4x1, P: PointJ, m0: ZZ, m1: ZZ) -> tuple[PointJ]:
     PZ = Z * zP
 
     # Recover the y-coordinate in projective coordinates
-    t0 = (PX * X0) + (PZ * Z0)
+    tt = PX * X0
+    t0 = PZ * Z0
     t1 = PX * Z0
     t2 = X0 * PZ
     t3 = PZ * Z0
-    t4 = (A + A) * t3
-    u0 = (t0 * (t1 + t2 + t4)) - t4 * t3
-    v0 = (PY + PY) * t3 * Z1
+    t0 = t0 + tt
+    t4 = A + A
+    t4 = t4 * t3
+    t5 = t1 + t2
+    t5 = t5 + t4
+    t5 = t5 * t0
+    t6 = t4 * t3
+    u0 = t5 - t6
+    v0 = PY + PY
+    v0 = v0 * t3
+    v0 = v0 * Z1
 
-    s0 = (PX * X2) + (PZ * Z2)
+    ss = PX * X2
+    s0 = PZ * Z2
     s1 = PX * Z2
     s2 = X2 * PZ
     s3 = PZ * Z2
-    s4 = (A + A) * s3
-    u1 = (s0 * (s1 + s2 + s4)) - s4 * s3
-    v1 = (PY + PY) * s3 * Z3
+    s0 = s0 + ss
+    s4 = A + A
+    s4 = s4 * s3
+    s5 = s1 + s2
+    s5 = s5 + s4
+    s5 = s5 * s0
+    s6 = s4 * s3
+    u1 = s5 - s6
+    v1 = PY + PY
+    v1 = v1 * s3
+    v1 = v1 * Z3
 
     # Projective points
+    # TODO: i think we can save a mul or two here because of the Jacobian
+    # conversion...
+
     RX = X0 * v0
-    RY = (u0 * Z1) - ((t1 - t2) ** 2 * X1)
+    t0 = t1 - t2
+    t0 = t0**2
+    t0 = t0 * X1
+    RY = u0 * Z1
+    RY = RY - t0
     RZ = Z0 * v0
 
     SX = X2 * v1
-    SY = (u1 * Z3) - ((s1 - s2) ** 2 * X3)
+    s0 = s1 - s2
+    s0 = s0**2
+    s0 = s0 * X3
+    SY = u1 * Z3
+    SY = SY - s0
     SZ = Z2 * v1
 
     # Recover the Jacobian coordinates
+    t0 = RZ**2
+    s0 = SZ**2
     RX *= RZ
-    RY *= RZ**2
-    R = PointJ(RX, RY, RZ)
-
+    RY *= t0
     SX *= SZ
-    SY *= SZ**2
+    SY *= s0
+
+    R = PointJ(RX, RY, RZ)
     S = PointJ(SX, SY, SZ)
 
     return R, S
