@@ -333,6 +333,60 @@ void two_isog_eval_1x2x2x2(__m512i* Q, __m512i* eval_data, __m512i* P)
     fp2_mul_2x2x2(Q, P, t1);
 }
 
+void two_isog_eval_pair_4x2x1(__m512i* Q, __m512i* eval_data_pair, __m512i* P)
+{
+    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], idx0, idx1;
+    __mmask8 mask;
+    
+    // t0 = (Px - Pz, Px + Pz)
+    idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    mask = 0xcc;
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VPERM512(idx0, P[i]);
+        t1[i] = VPERM512(idx1, P[i]);
+    }
+    fp2_mixaddsub_4x2x1(t0, t0, t1, mask);
+
+    fp2_mul_4x2x1(t1, t0, eval_data_pair);
+
+    mask = 0x33;
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VPERM512(idx0, t1[i]);
+        t1[i] = VPERM512(idx1, t1[i]);
+    }
+    fp2_mixaddsub_4x2x1(t1, t0, t1, mask);
+
+    fp2_mul_4x2x1(Q, P, t1);
+}
+
+void two_isog_eval_quad_8x1x1(__m512i* Q, __m512i* eval_data_quad, __m512i* P)
+{
+    __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], idx0, idx1;
+    __mmask8 mask;
+    
+    // t0 = (Px - Pz, Px + Pz)
+    idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    mask = 0xcc;
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t0[i] = VPERM512(idx0, P[i]);
+        t1[i] = VPERM512(idx1, P[i]);
+    }
+    fp2_mixaddsub_8x1x1(t0, t0, t1, mask, mask);
+
+    fp2_mul_8x1x1(t1, t0, eval_data_quad);
+
+    mask = 0x33;
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t0[i] = VPERM512(idx0, t1[i]);
+        t1[i] = VPERM512(idx1, t1[i]);
+    }
+    fp2_mixaddsub_8x1x1(t1, t0, t1, mask, mask);
+
+    fp2_mul_8x1x1(Q, P, t1);
+}
+
 void four_isog_codom_1x2x2x2(__m512i* res_A24, __m512i* res_eval_data, __m512i* ker)
 {
     __m512i t0[4], t1[4], idx0, idx1;
@@ -610,8 +664,9 @@ bool isog_chain_1d_1x2x2x2(
         fp2_4x2x1_to_8x1x1(eval_data_quad, eval_data_pair, eval_data_pair);
         fp2_4x2x1_to_8x1x1(eval_data_quad + 2*NUM_LIMBS, eval_data_pair + NUM_LIMBS, eval_data_pair + NUM_LIMBS);
 
-        // Eval strat points
+        // Eval strat points (up to current-1, as orders[current] == 2)
         // We need some of these as 2x2x2 next iteration, so for simplicity we convert back and forth each time
+        // Attempts at saving some conversions only gave marginal savings.
         int nquad = current / 4;
         int rem = current % 4;
         for (int i = 0; i < nquad; i++) {
@@ -656,20 +711,6 @@ bool isog_chain_1d_1x2x2x2(
         }
         current--;
     }
-    for (int i = 0; i < num_pts_quad; i++) {
-        fp2_8x1x1_to_4x2x1(t, t+NUM_LIMBS, pts_coupled + i*2*NUM_LIMBS);
-        fp2_4x2x1_to_2x2x2(pts + (4*i)*N4x2, pts + (4*i+1)*N4x2, t);
-        fp2_4x2x1_to_2x2x2(pts + (4*i+2)*N4x2, pts + (4*i+3)*N4x2, t + NUM_LIMBS);
-    }
-    if (num_pts_rem == 3) {
-        fp2_8x1x1_to_4x2x1(t, t+NUM_LIMBS, pts_coupled + num_pts_quad*2*NUM_LIMBS);
-        fp2_4x2x1_to_2x2x2(pts + (4*num_pts_quad)*N4x2, pts + (4*num_pts_quad+1)*N4x2, t);
-        fp2_4x2x1_to_2x2x2(pts + (4*num_pts_quad+2)*N4x2, t, t + NUM_LIMBS);
-    } else if (num_pts_rem == 2) {
-        fp2_4x2x1_to_2x2x2(pts + (4*num_pts_quad)*N4x2, pts + (4*num_pts_quad+1)*N4x2, pts_coupled + num_pts_quad*2*NUM_LIMBS);
-    } else if (num_pts_rem == 1) {
-        fp2_copy_2x2x2(pts + (4*num_pts_quad)*N4x2, pts_coupled + num_pts_quad*2*NUM_LIMBS);
-    }
 
     assert(isog_len % 2 ? !current : current == -1);
     if (isog_len % 2 == 1) { // last 2-isogeny
@@ -684,9 +725,35 @@ bool isog_chain_1d_1x2x2x2(
         }
 
         two_isog_codom_1x2x2x2(res_A24, eval_data, strat);
-        for (int i = 0; i < num_pts; i++) {
-            two_isog_eval_1x2x2x2(pts + i*N4x2, eval_data, pts + i*N4x2);
+        fp2_2x2x2_to_4x2x1(eval_data_pair, eval_data, eval_data);
+        fp2_4x2x1_to_8x1x1(eval_data_quad, eval_data_pair, eval_data_pair);
+
+        for (int i = 0; i < num_pts_quad + num_pts_trip; i++) {
+            int j = i*2*NUM_LIMBS;
+            two_isog_eval_quad_8x1x1(pts_coupled + j, eval_data_quad, pts_coupled + j);
         }
+        int j = num_pts_quad*2*NUM_LIMBS;
+        if (num_pts_rem == 2) {
+            two_isog_eval_pair_4x2x1(pts_coupled + j, eval_data_pair, pts_coupled + j);
+        } else if (num_pts_rem == 1) {
+            two_isog_eval_1x2x2x2(pts_coupled + j, eval_data, pts_coupled + j);
+        }
+    }
+
+    // Convert pts back
+    for (int i = 0; i < num_pts_quad; i++) {
+        fp2_8x1x1_to_4x2x1(t, t+NUM_LIMBS, pts_coupled + i*2*NUM_LIMBS);
+        fp2_4x2x1_to_2x2x2(pts + (4*i)*N4x2, pts + (4*i+1)*N4x2, t);
+        fp2_4x2x1_to_2x2x2(pts + (4*i+2)*N4x2, pts + (4*i+3)*N4x2, t + NUM_LIMBS);
+    }
+    if (num_pts_rem == 3) {
+        fp2_8x1x1_to_4x2x1(t, t+NUM_LIMBS, pts_coupled + num_pts_quad*2*NUM_LIMBS);
+        fp2_4x2x1_to_2x2x2(pts + (4*num_pts_quad)*N4x2, pts + (4*num_pts_quad+1)*N4x2, t);
+        fp2_4x2x1_to_2x2x2(pts + (4*num_pts_quad+2)*N4x2, t, t + NUM_LIMBS);
+    } else if (num_pts_rem == 2) {
+        fp2_4x2x1_to_2x2x2(pts + (4*num_pts_quad)*N4x2, pts + (4*num_pts_quad+1)*N4x2, pts_coupled + num_pts_quad*2*NUM_LIMBS);
+    } else if (num_pts_rem == 1) {
+        fp2_copy_2x2x2(pts + (4*num_pts_quad)*N4x2, pts_coupled + num_pts_quad*2*NUM_LIMBS);
     }
 
     return true;
