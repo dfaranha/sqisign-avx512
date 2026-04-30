@@ -15,6 +15,7 @@
 //                 Helper functions for isogeny chains    
 // ====================================================================
 
+// TODO: Merge with vectorized verif impl, or remove and make interface assume normalized?
 void theta_normalize_chain_input(
     theta_couple_curve_t* E12, theta_kernel_couple_points_t* ker
 )
@@ -323,7 +324,7 @@ bool theta_isogeny_chain_pair(
     fp2_t unvec1[4];
 
     // Normalise E1, E2 as well as T1.P1 and T1.P2
-    theta_normalize_chain_input(E12, ker);   
+    // theta_normalize_chain_input(E12, ker);   
 
     // lift the basis
     theta_couple_jac_point_t xyT1, xyT2;

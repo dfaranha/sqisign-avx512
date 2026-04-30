@@ -232,7 +232,7 @@ static bool challenge_and_aux_basis_verify(
 // When two_resp_length is non-zero, we must compute a small 2^n-isogeny
 // updating E_chall as the codomain as well as push the basis on E_chall
 // through this isogeny
-static bool two_response_isogeny_verify(__m512i* A24_chall, __m512i* A_chall, __m512i* B_chall_can, const signature_2x2x2_t *sig, int pow_dim2_deg_resp)
+static bool two_response_isogeny_verify(__m512i* A24_chall, __m512i* B_chall_can, const signature_2x2x2_t *sig, int pow_dim2_deg_resp)
 {
     __m512i ker[N4x2];
 
@@ -271,10 +271,43 @@ static bool two_response_isogeny_verify(__m512i* A24_chall, __m512i* A_chall, __
         return false;
     }
 #endif
-
-    // Need to normalize again
-    ec_normalize_curve_2x2x2(A24_chall, A_chall, A24_chall);
     return true;
+}
+
+// Normalize E_chall, B_chall.P and B_aux.P
+// E_aux is already normalized
+static void normalize_2d_input(__m512i* A_chall, __m512i* A24_chall, __m512i* B_chall, __m512i* B_aux) {
+    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], idx0, idx1;
+    fp2_2x2x2_to_4x2x1(t0, A24_chall, A24_chall); // (A24, C24, A24, C24)
+    fp2_2x2x2_to_4x2x1(t1, B_chall, B_aux); // (P_chall.x, P_chall.z, P_aux.x, P_aux.z)
+
+    // t0 = (A24, P_chall.x, P_aux.x, -)
+    // t1 = (C24, P_chall.z, P_aux.z, -)
+    idx0 = VSET(0, 1, 8, 9, 12, 13, 0, 0);
+    idx1 = VSET(2, 3, 10, 11, 14, 15, 0, 0);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        __m512i s0 = t0[i], s1 = t1[i];
+        t0[i] = VBLENDPERM(idx0, s0, s1);
+        t1[i] = VBLENDPERM(idx1, s0, s1);
+    }
+
+    fp2_inv_4x2x1(t1, t1);
+    fp2_mul_4x2x1(t0, t0, t1);
+
+    // t0 = (A24, 1, -, -)
+    // t1 = (P_chall.x, 1, P_aux.x, 1)
+    fp2_set_binary_4x2x1(t1, 0b1111);
+    idx0 = VSET(0, 1, 8, 9, 0, 0, 0, 0);
+    idx1 = VSET(2, 3, 8, 9, 4, 5, 8, 9);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        __m512i s0 = t0[i], s1 = t1[i];
+        t0[i] = VBLENDPERM(idx0, s0, s1);
+        t1[i] = VBLENDPERM(idx1, s0, s1);
+    }
+
+    fp2_4x2x1_to_2x2x2(A24_chall, t0, t0);
+    fp2_4x2x1_to_2x2x2(B_chall, B_aux, t1);
+    ec_normA24_to_normA_1x2x2x2(A_chall, A24_chall);
 }
 
 // The commitment curve can be recovered from the codomain of the 2D
@@ -284,12 +317,14 @@ static bool compute_commitment_curve_verify(
     __m512i* B_chall_can,
     __m512i* B_aux_can,
     __m512i* A24_chall,
-    __m512i* A_chall,
     signature_2x2x2_t* sig,
     int pow_dim2_deg_resp
 )
 {
     // ============== VECTORIZED ================================================================================
+    __m512i A_chall[N4x2];
+    normalize_2d_input(A_chall, A24_chall, B_chall_can, B_aux_can);
+
 #ifndef NDEBUG
 
     // Check all the points are the correct order
@@ -412,7 +447,7 @@ bool protocols_verify(signature_2x2x2_t* sig, public_key_2x2x2_t* pk, const unsi
 
     // When two_resp_length != 0 we need to compute a second, short 2^r-isogeny
     if (sig->two_resp_length > 0) {
-        if (!two_response_isogeny_verify(A24_chall, A_chall, B_chall_can, sig, pow_dim2_deg_resp)) {
+        if (!two_response_isogeny_verify(A24_chall, B_chall_can, sig, pow_dim2_deg_resp)) {
             return false;
         }
     }
@@ -420,7 +455,7 @@ bool protocols_verify(signature_2x2x2_t* sig, public_key_2x2x2_t* pk, const unsi
     // We can recover the commitment curve with a 2D isogeny
     // The supplied signature did not compute an isogeny between eliptic products
     // and so definitely is an invalid signature.
-    if (!compute_commitment_curve_verify(A_com, B_chall_can, B_aux_can, A24_chall, A_chall, sig, pow_dim2_deg_resp))
+    if (!compute_commitment_curve_verify(A_com, B_chall_can, B_aux_can, A24_chall, sig, pow_dim2_deg_resp))
         return false;
 
     // j_com = j(E_com)
