@@ -384,6 +384,25 @@ void ec_curve_to_basis_from_hint_1x2x2x2(__m512i* res_basis, __m512i* normA, con
 void ec_curve_to_basis_from_hint_SQI_1x2x2x2(__m512i* res_basis, __m512i* normA, const uint8_t hint);
 void ec_curve_to_basis_from_hint_2x2x2x2(__m512i* res_basis1, __m512i* res_basis2, __m512i* normA1, __m512i* normA2, const uint8_t hint1, const uint8_t hint2);
 
+// Recover y-coordinate of a normalized x point on the Montgomery curve y^2 = x^3 + Ax^2 + x
+// Returns (x, y, 1, -) in 4x2x1
+// Note: There is essentially no parallelization, second slot unused. We only use the pair version
+bool ec_recover_y_2x2x2(__m512i* res, __m512i* normX, __m512i* normA, const bool verify);
+// Lifts a basis x(P), x(Q), x(P-Q) assuming the curve's A coefficient and x(P) are normalized.
+// Outputs res_P = (xP, yP, 1) and res_Q = (xQ, yQ, zQ) in Jacobia coordinates.
+bool lift_basis_normalized_2x2x2(__m512i* res_P, __m512i* res_Q, __m512i* basis, __m512i* normA, const bool verify);
+
+// Takes as input a normalized x-only point x1 on the curve with normalized A-coefficient A1, and x2 on A2.
+// It returns the y coordinate of each point, as (y_1, y_2) in 2x2x2.
+bool ec_recover_y_pair_2x2x2(__m512i* res, __m512i* normX1, __m512i* normX2, __m512i* normA1, __m512i* normA2, const bool verify);
+// Lifts a pair of bases x(P), x(Q), x(P-Q) assuming the curve's A coefficient and x(P) are normalized.
+// Outputs each basis P, Q in Jacobian coordinates, as res_x = (P1.X, Q1.X, P2.X, Q2.X) etc.
+bool lift_basis_pair_normalized_2x2x2(
+    __m512i* res_x, __m512i* res_y, __m512i* res_z,
+    __m512i* basis1, __m512i* basis2, __m512i* normA1, __m512i* normA2, 
+    const bool verify
+);
+
 // Debugging functions
 bool test_point_order_twof_1x2x2x2(__m512i* P, __m512i* A24, unsigned int f);
 bool test_basis_order_twof_1x2x2x2(__m512i* B, __m512i* A24, unsigned int f);

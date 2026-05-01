@@ -2,6 +2,7 @@
 
 #include "ec.h"
 #include "fp.h"
+#include "fp_consts.h"
 #include "fp_unvec_lvl3.h"
 #include "fp2.h"
 #include "theta.h"
@@ -321,8 +322,6 @@ bool theta_isogeny_chain_pair(
     splitting_matrix_t isom_matrix, rand_matrix;
     __m512i c1[16], c2[16], p1[8], p2[8], k1[8], k2[8];
 
-    fp2_t unvec1[4];
-
     // Normalise E1, E2 as well as T1.P1 and T1.P2
     // theta_normalize_chain_input(E12, ker);   
 
@@ -331,29 +330,43 @@ bool theta_isogeny_chain_pair(
     ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
     ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
 
-    success &= lift_basis_normalized(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
-    success &= lift_basis_normalized(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
-    // printf("lift %d\n", success);
-    // We are now in the position to convert from 64 to 51 bit limbs
-    // For the curve we need to pack the Montgomery coefficient for
-    // arithmetic.
-    // A_12 = AVX_4x2x1(E1.A, E1.A, E2.A, E2.A)
-    unvec1[0] = E12->E1.A; unvec1[1] = E12->E1.A; unvec1[2] = E12->E2.A; unvec1[3] = E12->E2.A;
-    fp2_unvectorized_to_4x2x1(A_12, unvec1);
-    // A24_12 = AVX_4x2x1(E1.A24, E1.A24, E2.A24, E2.A24)
-    unvec1[0] = E12->E1.A24.x; unvec1[1] = E12->E1.A24.x; unvec1[2] = E12->E2.A24.x; unvec1[3] = E12->E2.A24.x;
-    fp2_unvectorized_to_4x2x1(A24_12, unvec1);
+    __m512i basis1[3*N4x2], basis2[3*N4x2], normA1[N4x2], normA2[N4x2], normA24_1[N4x2], normA24_2[N4x2];
+    __m512i t0[N4x2], t1[N4x2];
+    ec_point_t AC;
+    ec_point_unvec_to_1x2x2x2(basis1, &bas1.P);
+    ec_point_unvec_to_1x2x2x2(basis1 + N4x2, &bas1.Q);
+    ec_point_unvec_to_1x2x2x2(basis1 + 2*N4x2, &bas1.PmQ);
+    ec_point_unvec_to_1x2x2x2(basis2, &bas2.P);
+    ec_point_unvec_to_1x2x2x2(basis2 + N4x2, &bas2.Q);
+    ec_point_unvec_to_1x2x2x2(basis2 + 2*N4x2, &bas2.PmQ);
+
+    fp2_copy(&AC.x, &E12->E1.A);
+    fp2_set_one(&AC.z);
+    ec_point_unvec_to_1x2x2x2(normA1, &AC);
+    fp2_copy(&AC.x, &E12->E2.A);
+    fp2_set_one(&AC.z);
+    ec_point_unvec_to_1x2x2x2(normA2, &AC);
+    ec_point_unvec_to_1x2x2x2(normA24_1, &E12->E1.A24);
+    ec_point_unvec_to_1x2x2x2(normA24_2, &E12->E2.A24);
 
     // For the Jacobian points, we pack the coordinates into three blobs
-    // ker_X = AVX_4x2x1(P1.X, Q1.X, P2.X, Q2.X)
-    unvec1[0] = xyT1.P1.x; unvec1[1] = xyT2.P1.x; unvec1[2] = xyT1.P2.x; unvec1[3] = xyT2.P2.x;
-    fp2_unvectorized_to_4x2x1(ker_x, unvec1);
-    // ker_Y = AVX_4x2x1(P1.Y, Q1.Y, P2.Y, Q2.Y)
-    unvec1[0] = xyT1.P1.y; unvec1[1] = xyT2.P1.y; unvec1[2] = xyT1.P2.y; unvec1[3] = xyT2.P2.y;
-    fp2_unvectorized_to_4x2x1(ker_y, unvec1);
-    // ker_Z = AVX_4x2x1(P1.Z, Q1.Z, P2.Z, Q2.Z)
-    unvec1[0] = xyT1.P1.z; unvec1[1] = xyT2.P1.z; unvec1[2] = xyT1.P2.z; unvec1[3] = xyT2.P2.z;
-    fp2_unvectorized_to_4x2x1(ker_z, unvec1);
+    // ker_X = AVX_4x2x1(P1.X, Q1.X, P2.X, Q2.X), etc.
+    success &= lift_basis_pair_normalized_2x2x2(ker_x, ker_y, ker_z, basis1, basis2, normA1, normA2, verify);
+    
+    // Packing curve coefficients
+    // A_12 = AVX_4x2x1(E1.A, E1.A, E2.A, E2.A)
+    idx = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(idx, normA1[i]);
+        t1[i] = VPERM512(idx, normA2[i]);
+    }
+    fp2_2x2x2_to_4x2x1(A_12, t0, t1);
+    // A24_12 = AVX_4x2x1(E1.A24, E1.A24, E2.A24, E2.A24)
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(idx, normA24_1[i]);
+        t1[i] = VPERM512(idx, normA24_2[i]);
+    }
+    fp2_2x2x2_to_4x2x1(A24_12, t0, t1);
 
     // Setting up the strategy
     int space = 1;
@@ -377,7 +390,6 @@ bool theta_isogeny_chain_pair(
         strat_points_x + (8*current), strat_points_z + (8*current),
         verify
     );
-    // printf("gluing_codom %d\n", success);
 
     // Package the point we use for translation
     // T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
@@ -409,7 +421,6 @@ bool theta_isogeny_chain_pair(
         eval_pts_theta, pts, OA_dual_inv, 
         matrix01, matrix23, num_pts, verify
     );
-    // printf("gluing eval %d\n", success);
 
     // Step Two: Compute the rest of the chain
     int step = 0;
@@ -444,7 +455,6 @@ bool theta_isogeny_chain_pair(
             OA, OA_dual_inv, strat_theta_pair + (16*current), 
             h1, h2, codom_verify
         );
-        // printf("%d-th codomain %d\n", step, success);
 
         // Push the kernel through the images
         // we have current number of pairs, so 2*current number of points
@@ -472,7 +482,7 @@ bool theta_isogeny_chain_pair(
 
     success &= splitting_theta_to_product(res_E34, OA, verify);
     success &= splitting_theta_point_to_mont_list_pair(res_pts, eval_pts_theta, OA, num_pts, verify);
-    // printf("splitting %d\n", success);
+
     return success;
 }
 

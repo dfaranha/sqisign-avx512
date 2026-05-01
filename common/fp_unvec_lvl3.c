@@ -127,7 +127,7 @@ void fp2_unvectorized_to_4x2x1(__m512i* res, fp2_t* src)
     }
 
     fp_64_to_limbs_8x1(res, coeffs);
-    fp2_tomont_8x1x1(res, res);
+    fp2_tomont_4x2x1(res, res);
 }
 
 void fp2_4x2x1_to_unvectorized(fp2_t* res, __m512i* src)

@@ -33,30 +33,41 @@ uint32_t lift_basis_normalized(jac_point_t *P, jac_point_t *Q, ec_basis_t *B, ec
     uint32_t ret = ec_recover_y(&P->y, &P->x, E, verify);
 
     // Algorithm of Okeya-Sakurai to recover y.Q in the montgomery model
-    fp2_t v1, v2, v3, v4;
+    fp2_t v1, v2, v3, v4, v5;
     fp2_mul(&v1, &P->x, &Q->z);
+    fp2_mul(&v4, &P->x, &Q->x);
+
     fp2_add(&v2, &Q->x, &v1);
     fp2_sub(&v3, &Q->x, &v1);
-    fp2_sqr(&v3, &v3);
-    fp2_mul(&v3, &v3, &B->PmQ.x);
+
     fp2_add(&v1, &E->A, &E->A);
-    fp2_mul(&v1, &v1, &Q->z);
-    fp2_add(&v2, &v2, &v1);
-    fp2_mul(&v4, &P->x, &Q->x);
     fp2_add(&v4, &v4, &Q->z);
+
+    fp2_mul(&v5, &v3, &B->PmQ.x);
+    fp2_mul(&v1, &v1, &Q->z);
+
+    fp2_add(&v2, &v2, &v1);
+
     fp2_mul(&v2, &v2, &v4);
     fp2_mul(&v1, &v1, &Q->z);
+
     fp2_sub(&v2, &v2, &v1);
-    fp2_mul(&v2, &v2, &B->PmQ.z);
-    fp2_sub(&Q->y, &v3, &v2);
     fp2_add(&v1, &P->y, &P->y);
+
     fp2_mul(&v1, &v1, &Q->z);
+    fp2_mul(&v2, &v2, &B->PmQ.z);
+
     fp2_mul(&v1, &v1, &B->PmQ.z);
+    fp2_mul(&v3, &v5, &v3);
+
+    fp2_sub(&Q->y, &v3, &v2);
+
     fp2_mul(&Q->x, &Q->x, &v1);
     fp2_mul(&Q->z, &Q->z, &v1);
 
     // Transforming to a jacobian coordinate
     fp2_sqr(&v1, &Q->z);
+    
     fp2_mul(&Q->y, &Q->y, &v1);
     fp2_mul(&Q->x, &Q->x, &Q->z);
     return ret;

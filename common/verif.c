@@ -446,6 +446,7 @@ bool protocols_verify(signature_2x2x2_t* sig, public_key_2x2x2_t* pk, const unsi
     }
 
     // When two_resp_length != 0 we need to compute a second, short 2^r-isogeny
+    // After this, A24_chall is no longer normalized
     if (sig->two_resp_length > 0) {
         if (!two_response_isogeny_verify(A24_chall, B_chall_can, sig, pow_dim2_deg_resp)) {
             return false;

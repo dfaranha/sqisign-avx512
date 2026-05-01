@@ -3009,6 +3009,526 @@ void ec_curve_to_basis_from_hint_2x2x2x2(__m512i* res_basis1, __m512i* res_basis
     fp2_4x2x1_to_2x2x2(res_basis1 + N4x2, res_basis2 + N4x2, Q);
 }
 
+// Recover y-coordinate of a normalized x point on the Montgomery curve y^2 = x^3 + Ax^2 + x
+// Returns (x, y, 1, -) in 4x2x1.
+// Note: There is essentially no parallelization, second slot unused. We only use the pair version
+bool ec_recover_y_2x2x2(__m512i* res, __m512i* normX, __m512i* normA, const bool verify)
+{ 
+    __m512i t0[N4x2], t1[N4x2], idx;
+    bool is_square = true;
+
+    
+    fp2_add_2x2x2(t0, normX, normA); // x + A
+    fp2_sqr_2x2x2(t1, normX); // x^2
+    fp2_mul_2x2x2(t0, t0, t1); // x^3 + Ax^2
+    fp2_add_2x2x2(t1, t0, normX); // x^2 + Ax + x
+
+    fp2_sqrt_2x2x2(res, t1);
+
+    if (verify) {
+        fp2_sqr_2x2x2(t0, res);
+        is_square = (fp2_is_equal_2x2x2(t0, t1) & 0x1) == 0x1;
+    }
+
+    // t0 = (x, y), t1 = (1, 0)
+    idx = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VBLENDPERM(idx, normX[i], res[i]);
+    }
+    fp2_set_binary_2x2x2(t1, 0b01);
+
+    // res = (x, y, z, 0)
+    fp2_2x2x2_to_4x2x1(res, t0, t1);
+
+    return is_square;
+}
+
+// Lifts a basis x(P), x(Q), x(P-Q) assuming the curve's A coefficient and x(P) are normalized.
+// Outputs res_P = (xP, yP, 1) and res_Q = (xQ, yQ, zQ) in Jacobian coordinates.
+bool lift_basis_normalized_2x2x2(__m512i* res_P, __m512i* res_Q, __m512i* basis, __m512i* normA, const bool verify)
+{
+    __m512i P_2x2x2[2*N4x2], t0[N4x2], t1[N4x2], t2[N4x2], t3[N4x2];
+    __m512i idx0, idx1;
+
+    bool is_sqr = ec_recover_y_2x2x2(res_P, basis, normA, verify);
+    fp2_4x2x1_to_2x2x2(P_2x2x2, P_2x2x2 + N4x2, res_P); // (x,y), (z, 1)
+
+    // Algorithm of Okeya-Sakurai to recover y.Q in the Montgomery model
+
+    // fp2_mul(&v1, &P->x, &Q->z);
+    // fp2_mul(&v4, &P->x, &Q->x);
+
+    // t0 = (P.x * Q.x, P.x * Q.z)
+    idx0 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(idx0, P_2x2x2[i]);
+    }
+    fp2_mul_2x2x2(t0, t0, basis + N4x2);
+
+    // Current:
+    // t0 = (v4, v1)
+
+    // fp2_add(&v2, &Q->x, &v1);
+    // fp2_sub(&v3, &Q->x, &v1);
+
+    // t1 = (Q.x, Q.x)
+    // t2 = (t0[1], t0[1])
+    idx0 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    idx1 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    for (int i = 0; i < N4x2; i++) {
+        t1[i] = VPERM512(idx0, basis[i + N4x2]);
+        t2[i] = VPERM512(idx1, t0[i]);
+    }
+    // t1 = (Q.x + t0[0], Q.x - t0[0])
+    fp2_mixaddsub_2x2x2(t1, t1, t2, 0xf);
+
+    // Current:
+    // t0 = (v4, v1)
+    // t1 = (v2, v3)
+
+    // fp2_add(&v1, &E->A, &E->A);
+    // fp2_add(&v4, &v4, &Q->z);
+
+    // t0 = (t0[0], A)
+    // t2 = (Q.z, A)
+    idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    idx1 = VSET(4, 5, 6, 7, 8, 9, 10, 11);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VBLENDPERM(idx0, t0[i], normA[i]);
+        t2[i] = VBLENDPERM(idx1, basis[i+N4x2], normA[i]);
+    }
+    // t0 = (t0[0] + Q.z, 2*A)
+    fp2_add_2x2x2(t0, t0, t2);
+
+    // Current:
+    // t0 = (v4, v1)
+    // t1 = (v2, v3)
+
+    //fp2_mul(&v5, &v3, &B->PmQ.x);
+    //fp2_mul(&v1, &v1, &Q->z);
+
+    // t2 = (t1[1], t0[1])
+    // t3 = (PmQ.x, Q.z)
+    idx0 = VSET(12, 13, 14, 15, 4, 5, 6, 7);
+    idx1 = VSET(8, 9, 10, 11, 4, 5, 6, 7);
+    for (int i = 0; i < N4x2; i++) {
+        t2[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        t3[i] = VBLENDPERM(idx1, basis[i + N4x2], basis[i + 2*N4x2]);
+    }
+    fp2_mul_2x2x2(t2, t2, t3);
+
+    // Current:
+    // t0 = (v4, -)
+    // t1 = (v2, v3)
+    // t2 = (v5, v1)
+
+    // fp2_add(&v2, &v2, &v1);
+    
+    // t1[0] += t2[1]
+    idx0 = VSET(4, 5, 6, 7, 0, 0, 0, 0);
+    for (int i = 0; i < N4x2; i++) {
+        t3[i] = VPERM512MASKZ(0xf, t2[i], idx0); // (t2[1], 0)
+    }
+    fp2_add_2x2x2(t1, t1, t3);
+
+    // Current:
+    // t0 = (v4, -)
+    // t1 = (v2, v3)
+    // t2 = (v5, v1)
+
+    // fp2_mul(&v2, &v2, &v4);
+    // fp2_mul(&v1, &v1, &Q->z);
+
+    // t0[1] = Q.z
+    // t3 = (t1[0], t2[1])
+    idx0 = VSET(0, 1, 2, 3, 12, 13, 14, 15);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VBLENDPERM(idx0, t0[i], basis[i + N4x2]);
+        t3[i] = VBLENDPERM(idx0, t1[i], t2[i]);
+    }
+    fp2_mul_2x2x2(t0, t0, t3);
+
+    // Current:
+    // t0 = (v2, v1)
+    // t1 = (-, v3)
+    // t2 = (v5, -)
+    
+    // fp2_sub(&v2, &v2, &v1);
+    // fp2_add(&v1, &P->y, &P->y);
+
+    // t3 = (t0[1], P.y)
+    // t0 = (t0[0], P.y)
+    idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+    for (int i = 0; i < N4x2; i++) {
+        t3[i] = VBLENDPERM(idx1, t0[i], P_2x2x2[i]);
+        t0[i] = VBLENDPERM(idx0, t0[i], P_2x2x2[i]);
+    }
+    fp2_mixaddsub_2x2x2(t0, t0, t3, 0xf0);
+
+    // Current:
+    // t0 = (v2, v1)
+    // t1 = (-, v3)
+    // t2 = (v5, -)
+
+    // fp2_mul(&v1, &v1, &Q->z);
+    // fp2_mul(&v2, &v2, &B->PmQ.z);
+
+    // t3 = (PmQ.z, Q.z)
+    for (int i = 0; i < N4x2; i++) {
+        t3[i] = VBLENDPERM(idx1, basis[i + 2*N4x2], basis[i + N4x2]);
+    }
+    fp2_mul_2x2x2(t0, t0, t3);
+
+    // Current:
+    // t0 = (v2, v1)
+    // t1 = (-, v3)
+    // t2 = (v5, -)
+
+    // fp2_mul(&v1, &v1, &B->PmQ.z);
+    // fp2_mul(&v3, &v5, &v3);
+
+    // t1 = (t1[1], PmQ.z)
+    // t2 = (t2[0], t0[1])
+    idx0 = VSET(8, 9, 10, 11, 4, 5, 6, 7);
+    for (int i = 0; i < N4x2; i++) {
+        t1[i] = VBLENDPERM(idx1, t1[i], basis[i + 2*N4x2]);
+        t2[i] = VBLENDPERM(idx0, t0[i], t2[i]);
+    }
+    fp2_mul_2x2x2(t1, t1, t2);
+
+    // Current:
+    // t0 = (v2, -)
+    // t1 = (v3, v1)
+    // t2 = (-, -)
+
+    // fp2_sub(&Q->y, &v3, &v2);
+    
+    // t0 = (res_yQ, -)
+    fp2_sub_2x2x2(t0, t1, t0);
+
+    // Current:
+    // t0 = (res_yQ, -)
+    // t1 = (v3, v1)
+    // t2 = (-, -)
+    
+    // fp2_mul(&Q->x, &Q->x, &v1);
+    // fp2_mul(&Q->z, &Q->z, &v1);
+
+    // t1 = (res_xQ, res_zQ)
+    idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    for (int i = 0; i < N4x2; i++) {
+        t1[i] = VPERM512(idx0, t1[i]);
+    }
+    fp2_mul_2x2x2(t1, t1, basis + N4x2);
+
+    // Current:
+    // t0 = (res_yQ, -)
+    // t1 = (res_xQ, res_zQ)
+    // t2 = (-, -)
+
+    // Transforming to a jacobian coordinate
+    //fp2_sqr(&v1, &Q->z);
+
+    // t2 = (-, res_zQ^2)
+    fp2_copy_2x2x2(t2, t1);
+    fp2_sqr_2x2x2(t2, t2);
+
+    // Current:
+    // t0 = (res_yQ, -)
+    // t1 = (res_xQ, res_zQ)
+    // t2 = (-, res_zQ^2)
+
+    // fp2_mul(&Q->x, &Q->x, &Q->z);
+    // fp2_mul(&Q->y, &Q->y, &v1);
+
+    // t0 = (res_xQ, res_yQ)
+    // t1 = (res_zQ, res_zQ^2)
+    idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VBLENDPERM(idx0, t1[i], t0[i]);
+        t1[i] = VBLENDPERM(idx1, t1[i], t2[i]);
+    }
+    fp2_mul_2x2x2(t0, t0, t1);
+
+    // Convert to 4x2x1
+    fp2_2x2x2_to_4x2x1(res_Q, t0, t1);
+
+    return is_sqr;
+}
+
+// Takes as input a normalized x-only point x1 on the curve with normalized A-coefficient A1, and x2 on A2.
+// It returns the y coordinate of each point, as (y_1, y_2) in 2x2x2.
+bool ec_recover_y_pair_2x2x2(__m512i* res, __m512i* normX1, __m512i* normX2, __m512i* normA1, __m512i* normA2, const bool verify)
+{ 
+    __m512i t0[N4x2], t1[N4x2], X1_X2[N4x2], idx;
+    bool is_square = true;
+
+    // X1_X2 = (X1, X2), t0 = (A1, A2)
+    idx = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    for (int i = 0; i < N4x2; i++) {
+        X1_X2[i] = VBLENDPERM(idx, normX1[i], normX2[i]);
+        t0[i] = VBLENDPERM(idx, normA1[i], normA2[i]);
+    }
+
+    fp2_add_2x2x2(t0, t0, X1_X2); // x + A
+    fp2_sqr_2x2x2(t1, X1_X2); // x^2
+    fp2_mul_2x2x2(t0, t0, t1); // x^3 + Ax^2
+    fp2_add_2x2x2(t1, t0, X1_X2); // x^2 + Ax + x
+
+    fp2_sqrt_2x2x2(res, t1);
+
+    if (verify) {
+        fp2_sqr_2x2x2(t0, res);
+        is_square = (fp2_is_equal_2x2x2(t0, t1) & 0x3) == 0x3;
+    }
+
+    return is_square;
+}
+
+// Lifts a pair of bases x(P), x(Q), x(P-Q) assuming the curve's A coefficient and x(P) are normalized.
+// Outputs each basis P, Q in Jacobian coordinates, as res_x = (P1.X, Q1.X, P2.X, Q2.X) etc.
+bool lift_basis_pair_normalized_2x2x2(
+    __m512i* res_x, __m512i* res_y, __m512i* res_z,
+    __m512i* basis1, __m512i* basis2, __m512i* normA1, __m512i* normA2, 
+    const bool verify
+)
+{
+    __m512i yP_2x2x2[N4x2], xP_yP[NUM_LIMBS], xQ_zQ[NUM_LIMBS], xPmQ_zPmQ[NUM_LIMBS], A1_A2[NUM_LIMBS];
+    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], t2[NUM_LIMBS], t3[2*N4x2];
+    __m512i idx0, idx1;
+
+    bool is_sqr = ec_recover_y_pair_2x2x2(yP_2x2x2, basis1, basis2, normA1, normA2, verify);
+
+    // Algorithm of Okeya-Sakurai to recover y.Q in the Montgomery model
+    
+    // Preparing values in 4x2x1
+    idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    for (int i = 0; i < N4x2; i++) {
+        xP_yP[i] = VBLENDPERM(idx0, basis1[i], basis2[i]); // (P1.x, P2.x)
+    }
+    fp2_2x2x2_to_4x2x1(xP_yP, xP_yP, yP_2x2x2); // (P1.x, P2.x, P1.y, P2.y)
+    fp2_2x2x2_to_4x2x1(xQ_zQ, basis1 + N4x2, basis2 + N4x2); // (Q1.x, Q1.z, Q2.x, Q2.z)
+    fp2_2x2x2_to_4x2x1(xPmQ_zPmQ, basis1 + 2*N4x2, basis2 + 2*N4x2); // (PmQ1.x, PmQ1.z, PmQ2.x, PmQ2.z)
+    fp2_2x2x2_to_4x2x1(A1_A2, normA1, normA2); // (A1, 1, A2, 1)
+
+    // fp2_mul(&v1, &P->x, &Q->z);
+    // fp2_mul(&v4, &P->x, &Q->x);
+
+    // t0 = (P.x * Q.x, P.x * Q.z)
+    idx0 = VSET(0, 1, 0, 1, 2, 3, 2, 3);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VPERM512(idx0, xP_yP[i]);
+    }
+    fp2_mul_4x2x1(t0, t0, xQ_zQ);
+
+    // Current:
+    // t0 = (v4, v1)
+
+    // fp2_add(&v2, &Q->x, &v1);
+    // fp2_sub(&v3, &Q->x, &v1);
+
+    // t1 = (Q.x, Q.x)
+    // t2 = (t0[1], t0[1])
+    idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VPERM512(idx0, xQ_zQ[i]);
+        t2[i] = VPERM512(idx1, t0[i]);
+    }
+    // t1 = (Q.x + t0[0], Q.x - t0[0])
+    fp2_mixaddsub_4x2x1(t1, t1, t2, 0x33);
+
+    // Current:
+    // t0 = (v4, v1)
+    // t1 = (v2, v3)
+
+    // fp2_add(&v1, &E->A, &E->A);
+    // fp2_add(&v4, &v4, &Q->z);
+
+    // t0 = (t0[0], A)
+    // t2 = (Q.z, A)
+    idx0 = VSET(0, 1, 8, 9, 4, 5, 12, 13);
+    idx1 = VSET(2, 3, 8, 9, 6, 7, 12, 13);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VBLENDPERM(idx0, t0[i], A1_A2[i]);
+        t2[i] = VBLENDPERM(idx1, xQ_zQ[i], A1_A2[i]);
+    }
+    // t0 = (t0[0] + Q.z, 2*A)
+    fp2_add_4x2x1(t0, t0, t2);
+
+    // Current:
+    // t0 = (v4, v1)
+    // t1 = (v2, v3)
+
+    //fp2_mul(&v5, &v3, &B->PmQ.x);
+    //fp2_mul(&v1, &v1, &Q->z);
+
+    // t2 = (t1[1], t0[1])
+    // t3 = (PmQ.x, Q.z)
+    idx0 = VSET(10, 11, 2, 3, 14, 15, 6, 7);
+    idx1 = VSET(8, 9, 2, 3, 12, 13, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t2[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        t3[i] = VBLENDPERM(idx1, xQ_zQ[i], xPmQ_zPmQ[i]);
+    }
+    fp2_mul_4x2x1(t2, t2, t3);
+
+    // Current:
+    // t0 = (v4, -)
+    // t1 = (v2, v3)
+    // t2 = (v5, v1)
+
+    // fp2_add(&v2, &v2, &v1);
+    
+    // t1[0] += t2[1] 
+    idx0 = VSET(2, 3, 0, 0, 6, 7, 0, 0);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t3[i] = VPERM512MASKZ(0x33, t2[i], idx0); // (t2[1], 0)
+    }
+    fp2_add_4x2x1(t1, t1, t3);
+
+    // Current:
+    // t0 = (v4, -)
+    // t1 = (v2, v3)
+    // t2 = (v5, v1)
+
+    // fp2_mul(&v2, &v2, &v4);
+    // fp2_mul(&v1, &v1, &Q->z);
+
+    // t0[1] = Q.z
+    // t3 = (t1[0], t2[1])
+    idx0 = VSET(0, 1, 10, 11, 4, 5, 14, 15);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VBLENDPERM(idx0, t0[i], xQ_zQ[i]);
+        t3[i] = VBLENDPERM(idx0, t1[i], t2[i]);
+    }
+    fp2_mul_4x2x1(t0, t0, t3);
+
+    // Current:
+    // t0 = (v2, v1)
+    // t1 = (-, v3)
+    // t2 = (v5, -)
+    
+    // fp2_sub(&v2, &v2, &v1);
+    // fp2_add(&v1, &P->y, &P->y);
+
+    // t3 = (t0[1], P.y)
+    // t0 = (t0[0], P.y)
+    idx1 = VSET(2, 3, 12, 13, 6, 7, 14, 15);
+    idx0 = VSET(0, 1, 12, 13, 4, 5, 14, 15);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t3[i] = VBLENDPERM(idx1, t0[i], xP_yP[i]);
+        t0[i] = VBLENDPERM(idx0, t0[i], xP_yP[i]);
+    }
+    fp2_mixaddsub_4x2x1(t0, t0, t3, 0xcc);
+
+    // Current:
+    // t0 = (v2, v1)
+    // t1 = (-, v3)
+    // t2 = (v5, -)
+
+    // fp2_mul(&v1, &v1, &Q->z);
+    // fp2_mul(&v2, &v2, &B->PmQ.z);
+
+    // t3 = (PmQ.z, Q.z)
+    idx0 = VSET(10, 11, 2, 3, 14, 15, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t3[i] = VBLENDPERM(idx0, xQ_zQ[i], xPmQ_zPmQ[i]);
+    }
+    fp2_mul_4x2x1(t0, t0, t3);
+
+    // Current:
+    // t0 = (v2, v1)
+    // t1 = (-, v3)
+    // t2 = (v5, -)
+
+    // fp2_mul(&v1, &v1, &B->PmQ.z);
+    // fp2_mul(&v3, &v5, &v3);
+
+    // t1 = (t1[1], PmQ.z)
+    // t2 = (t2[0], t0[1])
+    idx0 = VSET(2, 3, 10, 11, 6, 7, 14, 15);
+    idx1 = VSET(8, 9, 2, 3, 12, 13, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VBLENDPERM(idx0, t1[i], xPmQ_zPmQ[i]);
+        t2[i] = VBLENDPERM(idx1, t0[i], t2[i]);
+    }
+    fp2_mul_4x2x1(t1, t1, t2);
+
+    // Current:
+    // t0 = (v2, -)
+    // t1 = (v3, v1)
+    // t2 = (-, -)
+
+    // fp2_sub(&Q->y, &v3, &v2);
+    
+    // t0 = (res_yQ, -)
+    fp2_sub_4x2x1(t0, t1, t0);
+
+    // Current:
+    // t0 = (res_yQ, -)
+    // t1 = (v3, v1)
+    // t2 = (-, -)
+    
+    // fp2_mul(&Q->x, &Q->x, &v1);
+    // fp2_mul(&Q->z, &Q->z, &v1);
+
+    // t1 = (res_xQ, res_zQ)
+    idx0 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VPERM512(idx0, t1[i]);
+    }
+    fp2_mul_4x2x1(t1, t1, xQ_zQ);
+
+    // Current:
+    // t0 = (res_yQ, -)
+    // t1 = (res_xQ, res_zQ)
+    // t2 = (-, -)
+
+    // Transforming to a jacobian coordinate
+    //fp2_sqr(&v1, &Q->z);
+
+    // t2 = (-, res_zQ^2)
+    // In the pair version, we transform to 2x2x2 and square both
+    idx0 = VSET(2, 3, 6, 7, 2, 3, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t2[i] = VPERM512(idx0, t1[i]);
+    }
+    fp2_4x2x1_to_2x2x2(t3, t3 + N4x2, t2);
+    fp2_sqr_2x2x2(t3 + N4x2, t3 + N4x2);
+    fp2_2x2x2_to_4x2x1(t2, t3, t3 + N4x2); // (res_zQ1, res_zQ2, res_zQ1^2, res_zQ2^2)
+
+    // Current:
+    // t0 = (res_yQ, -)
+    // t1 = (res_xQ, res_zQ)
+    // t2 = (res_zQ1, res_zQ2, res_zQ1^2, res_zQ2^2)
+
+    // fp2_mul(&Q->x, &Q->x, &Q->z);
+    // fp2_mul(&Q->y, &Q->y, &v1);
+
+    // t0 = (res_xQ1, res_xQ2, res_yQ1, res_yQ2)
+    idx0 = VSET(0, 1, 4, 5, 8, 9, 12, 13);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VBLENDPERM(idx0, t1[i], t0[i]);
+    }
+    fp2_mul_4x2x1(t0, t0, t2);
+
+    // Rearrange to output format
+    // res_y = (P1.x, res_xQ1, P2.x, res_xQ2)
+    idx0 = VSET(0, 1, 8, 9, 2, 3, 10, 11);
+    // res_y = (P1.y, res_yQ1, P2.y, res_yQ2)
+    idx1 = VSET(4, 5, 12, 13, 6, 7, 14, 15);
+    // res_z = (1, res_zQ1, 1, res_zQ2)
+    fp2_set_binary_4x2x1(t3, 0b1111);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        res_x[i] = VBLENDPERM(idx0, xP_yP[i], t0[i]);
+        res_y[i] = VBLENDPERM(idx1, xP_yP[i], t0[i]);
+        res_z[i] = VBLENDPERM(idx0, t3[i], t2[i]);
+    }
+
+    return is_sqr;
+}
+
 // Debugging functions
 
 bool test_point_order_twof_1x2x2x2(__m512i* P, __m512i* A24, unsigned int f)
