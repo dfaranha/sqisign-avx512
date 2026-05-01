@@ -109,19 +109,31 @@ void gluing_eval_pair(
     __m512i* J_prime, __m512i* matrix01, __m512i* matrix23
 );
 
-/**
- * Here we convert from 64-bit to 51-bit limbs
- */
+// P1_P2 is (X1, Z1, X2, Z2) in 4x2x1
 void gluing_eval_product_to_theta(
     __m512i* res,
-    ec_point_t* P1, ec_point_t* P2, __m512i* matrix01, __m512i* matrix23
+    __m512i* P1_P2, __m512i* matrix01, __m512i* matrix23
 );
 
 /**
  * Here we convert from 64-bit to 51-bit limbs
- * TODO: Not sure if the order of the theta coords are correct!!!
  */
+void gluing_eval_product_to_theta_unvec(
+    __m512i* res,
+    ec_point_t* P1, ec_point_t* P2, __m512i* matrix01, __m512i* matrix23
+);
+
+// P1_P2 and Q1_Q2 are pairs of points in 4x2x1 as (X1, Z1, X2, Z2)
 void gluing_eval_product_to_theta_pair(
+    __m512i* res,
+    __m512i* P1_P2, __m512i* Q1_Q2, 
+    __m512i* matrix01, __m512i* matrix23
+);
+
+/**
+ * Here we convert from 64-bit to 51-bit limbs
+ */
+void gluing_eval_product_to_theta_pair_unvec(
     __m512i* res,
     ec_point_t* P1, ec_point_t* P2, ec_point_t* Q1, ec_point_t* Q2, 
     __m512i* matrix01, __m512i* matrix23

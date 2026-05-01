@@ -36,6 +36,24 @@ bool theta_isogeny_chain_single(
     const bool verify
 );
 
+/** FILL OUT NOW
+ */
+bool theta_isogeny_chain_pair_vec(
+    __m512i* res_A_34, 
+    __m512i* res_pts_34,
+    __m512i* ker_basis1,
+    __m512i* ker_basis2,
+    __m512i* normA_1,
+    __m512i* normA_2, 
+    __m512i* normA24_1,
+    __m512i* normA24_2,
+    theta_couple_point_t* pts, 
+    const int n, 
+    const int num_pts, 
+    const bool randomize,
+    const bool verify
+);
+
 bool theta_isogeny_chain_pair(
     theta_couple_curve_t* res_E34, 
     theta_couple_point_t* res_pts, 

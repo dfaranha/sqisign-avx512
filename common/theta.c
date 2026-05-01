@@ -295,17 +295,21 @@ bool theta_isogeny_chain_single(
         splitting_apply_isomorphism_list_single(eval_pts_theta, &rand_matrix, num_pts);
     }
 
-    success &= splitting_theta_to_product(res_E34, OA, verify);
+    success &= splitting_theta_to_product_unvec(res_E34, OA, verify);
     success &= splitting_theta_point_to_mont_list_single(res_pts, eval_pts_theta, OA, num_pts, verify);
 
     return success;
 }
 
-bool theta_isogeny_chain_pair(
-    theta_couple_curve_t* res_E34, 
-    theta_couple_point_t* res_pts, 
-    theta_couple_curve_t* E12, 
-    theta_kernel_couple_points_t* ker,
+bool theta_isogeny_chain_pair_vec(
+    __m512i* res_A_34, 
+    __m512i* res_pts_34,
+    __m512i* ker_basis1,
+    __m512i* ker_basis2,
+    __m512i* normA_1,
+    __m512i* normA_2, 
+    __m512i* normA24_1,
+    __m512i* normA24_2,
     theta_couple_point_t* pts, 
     const int n, 
     const int num_pts, 
@@ -313,52 +317,25 @@ bool theta_isogeny_chain_pair(
     const bool verify
 )
 {
-    __m512i A_12[8], A24_12[8], ker_x[8], ker_y[8], ker_z[8], OA[8], OA_dual_inv[16];
-    __m512i J[8], matrix01[16], matrix23[16], T8_x[8], T8_y[8], T8_z[8], gluing_eval_res[16];
-    __m512i eval_pts_theta[8*num_pts], idx;
-
-    // TODO: Copied from middle. Which variables can be merged?
-    bool h1, h2, success = true;
+    __m512i A_12[NUM_LIMBS], A24_12[NUM_LIMBS], ker_x[NUM_LIMBS], ker_y[NUM_LIMBS], ker_z[NUM_LIMBS], OA[NUM_LIMBS], OA_dual_inv[2*NUM_LIMBS];
+    __m512i J[NUM_LIMBS], matrix01[2*NUM_LIMBS], matrix23[2*NUM_LIMBS], T8_x[NUM_LIMBS], T8_y[NUM_LIMBS], T8_z[NUM_LIMBS], gluing_eval_res[2*NUM_LIMBS];
+    __m512i eval_pts_theta[num_pts * NUM_LIMBS];
+    __m512i t0[N4x2], t1[N4x2], idx;
+    __m512i c1[2*NUM_LIMBS], c2[2*NUM_LIMBS], p1[NUM_LIMBS], p2[NUM_LIMBS], k1[NUM_LIMBS], k2[NUM_LIMBS];
     splitting_matrix_t isom_matrix, rand_matrix;
-    __m512i c1[16], c2[16], p1[8], p2[8], k1[8], k2[8];
+    bool h1, h2, success = true;
 
-    // Normalise E1, E2 as well as T1.P1 and T1.P2
-    // theta_normalize_chain_input(E12, ker);   
-
-    // lift the basis
-    theta_couple_jac_point_t xyT1, xyT2;
-    ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
-    ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
-
-    __m512i basis1[3*N4x2], basis2[3*N4x2], normA1[N4x2], normA2[N4x2], normA24_1[N4x2], normA24_2[N4x2];
-    __m512i t0[N4x2], t1[N4x2];
-    ec_point_t AC;
-    ec_point_unvec_to_1x2x2x2(basis1, &bas1.P);
-    ec_point_unvec_to_1x2x2x2(basis1 + N4x2, &bas1.Q);
-    ec_point_unvec_to_1x2x2x2(basis1 + 2*N4x2, &bas1.PmQ);
-    ec_point_unvec_to_1x2x2x2(basis2, &bas2.P);
-    ec_point_unvec_to_1x2x2x2(basis2 + N4x2, &bas2.Q);
-    ec_point_unvec_to_1x2x2x2(basis2 + 2*N4x2, &bas2.PmQ);
-
-    fp2_copy(&AC.x, &E12->E1.A);
-    fp2_set_one(&AC.z);
-    ec_point_unvec_to_1x2x2x2(normA1, &AC);
-    fp2_copy(&AC.x, &E12->E2.A);
-    fp2_set_one(&AC.z);
-    ec_point_unvec_to_1x2x2x2(normA2, &AC);
-    ec_point_unvec_to_1x2x2x2(normA24_1, &E12->E1.A24);
-    ec_point_unvec_to_1x2x2x2(normA24_2, &E12->E2.A24);
-
-    // For the Jacobian points, we pack the coordinates into three blobs
+    // Lift each basis x(P), x(Q), x(P-Q) to P, Q in Jacobian coordinates.
+    // We pack the coordinates into three blobs
     // ker_X = AVX_4x2x1(P1.X, Q1.X, P2.X, Q2.X), etc.
-    success &= lift_basis_pair_normalized_2x2x2(ker_x, ker_y, ker_z, basis1, basis2, normA1, normA2, verify);
+    success &= lift_basis_pair_normalized_2x2x2(ker_x, ker_y, ker_z, ker_basis1, ker_basis2, normA_1, normA_2, verify);
     
     // Packing curve coefficients
     // A_12 = AVX_4x2x1(E1.A, E1.A, E2.A, E2.A)
     idx = VSET(0, 1, 2, 3, 0, 1, 2, 3);
     for (int i = 0; i < N4x2; i++) {
-        t0[i] = VPERM512(idx, normA1[i]);
-        t1[i] = VPERM512(idx, normA2[i]);
+        t0[i] = VPERM512(idx, normA_1[i]);
+        t1[i] = VPERM512(idx, normA_2[i]);
     }
     fp2_2x2x2_to_4x2x1(A_12, t0, t1);
     // A24_12 = AVX_4x2x1(E1.A24, E1.A24, E2.A24, E2.A24)
@@ -480,10 +457,69 @@ bool theta_isogeny_chain_pair(
         splitting_apply_isomorphism_list_pair(eval_pts_theta, &rand_matrix, num_pts);
     }
 
-    success &= splitting_theta_to_product(res_E34, OA, verify);
-    success &= splitting_theta_point_to_mont_list_pair(res_pts, eval_pts_theta, OA, num_pts, verify);
+    success &= splitting_theta_to_product(res_A_34, OA, verify);
+    success &= splitting_theta_point_to_mont_list_pair(res_pts_34, eval_pts_theta, OA, num_pts, verify);
 
     return success;
+}
+
+bool theta_isogeny_chain_pair(
+    theta_couple_curve_t* res_E34, 
+    theta_couple_point_t* res_pts, 
+    theta_couple_curve_t* E12, 
+    theta_kernel_couple_points_t* ker,
+    theta_couple_point_t* pts, 
+    const int n, 
+    const int num_pts, 
+    const bool randomize,
+    const bool verify
+)
+{
+    fp2_t unvec[4];
+    __m512i basis1[3*N4x2], basis2[3*N4x2], normA_1[N4x2], normA_2[N4x2], normA24_1[N4x2], normA24_2[N4x2];
+    __m512i A_34[NUM_LIMBS], eval_pts_mont[num_pts * NUM_LIMBS];
+    
+    ec_point_t AC;
+    ec_point_unvec_to_1x2x2x2(basis1, &ker->T1.P1);
+    ec_point_unvec_to_1x2x2x2(basis1 + N4x2, &ker->T2.P1);
+    ec_point_unvec_to_1x2x2x2(basis1 + 2*N4x2, &ker->T1m2.P1);
+    ec_point_unvec_to_1x2x2x2(basis2, &ker->T1.P2);
+    ec_point_unvec_to_1x2x2x2(basis2 + N4x2, &ker->T2.P2);
+    ec_point_unvec_to_1x2x2x2(basis2 + 2*N4x2, &ker->T1m2.P2);
+
+    fp2_copy(&AC.x, &E12->E1.A);
+    fp2_set_one(&AC.z);
+    ec_point_unvec_to_1x2x2x2(normA_1, &AC);
+    fp2_copy(&AC.x, &E12->E2.A);
+    fp2_set_one(&AC.z);
+    ec_point_unvec_to_1x2x2x2(normA_2, &AC);
+    ec_point_unvec_to_1x2x2x2(normA24_1, &E12->E1.A24);
+    ec_point_unvec_to_1x2x2x2(normA24_2, &E12->E2.A24);
+
+    bool ret = theta_isogeny_chain_pair_vec(
+        A_34, eval_pts_mont, 
+        basis1, basis2, normA_1, normA_2, normA24_1, normA24_2,
+        pts, 
+        n, num_pts, randomize, verify
+    );
+
+    fp2_4x2x1_to_unvectorized(unvec, A_34);
+    ec_curve_init(&res_E34->E1);
+    ec_curve_init(&res_E34->E2);
+    res_E34->E1.A = unvec[0];
+    res_E34->E1.C = unvec[1];
+    res_E34->E2.A = unvec[2];
+    res_E34->E2.C = unvec[3];
+
+    for (int i = 0; i < num_pts; i++) {
+        fp2_4x2x1_to_unvectorized(unvec, eval_pts_mont + i*NUM_LIMBS);
+        fp2_copy(&(res_pts+i)->P1.x, unvec);
+        fp2_copy(&(res_pts+i)->P1.z, unvec+1);
+        fp2_copy(&(res_pts+i)->P2.x, unvec+2);
+        fp2_copy(&(res_pts+i)->P2.z, unvec+3);
+    }
+
+    return ret;
 }
 
 bool theta_isogeny_chain_ver(
@@ -692,7 +728,7 @@ bool theta_isogeny_chain_no_torsion_single(
         splitting_apply_isomorphism_list_single(eval_pts_theta, &rand_matrix, num_pts);
     }
 
-    success &= splitting_theta_to_product(res_E34, OA, verify);
+    success &= splitting_theta_to_product_unvec(res_E34, OA, verify);
     success &= splitting_theta_point_to_mont_list_single(res_pts, eval_pts_theta, OA, num_pts, verify);
 
     return success;
@@ -878,8 +914,8 @@ bool theta_isogeny_chain_no_torsion_pair(
         splitting_apply_isomorphism_list_pair(eval_pts_theta, &rand_matrix, num_pts);
     }
 
-    success &= splitting_theta_to_product(res_E34, OA, verify);
-    success &= splitting_theta_point_to_mont_list_pair(res_pts, eval_pts_theta, OA, num_pts, verify);
+    success &= splitting_theta_to_product_unvec(res_E34, OA, verify);
+    success &= splitting_theta_point_to_mont_list_pair_unvec(res_pts, eval_pts_theta, OA, num_pts, verify);
 
     return success;
 }

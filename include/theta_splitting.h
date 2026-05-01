@@ -160,20 +160,33 @@ void splitting_apply_isomorphism_pair(__m512i* res, __m512i* point, const splitt
 
 void splitting_apply_isomorphism_list_pair(__m512i* pts, const splitting_matrix_t* matrix, const int num_pts);
 
-bool splitting_theta_to_product(theta_couple_curve_t* res, __m512i* null, const bool verify);
+// Ouputs (A3, C3, A4, C4) in 4x2x1
+bool splitting_theta_to_product(__m512i* res, __m512i* null, const bool verify);
+bool splitting_theta_to_product_unvec(theta_couple_curve_t* res, __m512i* null, const bool verify);
 
 bool splitting_theta_point_to_mont_single(
+    __m512i* res, __m512i* theta_point, __m512i* null, const bool verify
+);
+bool splitting_theta_point_to_mont_single_unvec(
     theta_couple_point_t* mont_pair, __m512i* theta_point, __m512i* null, const bool verify
 );
 bool splitting_theta_point_to_mont_list_single(
     theta_couple_point_t* mont_pts, __m512i* theta_pts, 
     __m512i* null, const int num_pts, const bool verify
 );
+// Outputs (X3, X3', Z3, Z3', X4, X4', Z4, Z4'), where (X3, Z3) and (X3', Z3') are on E3, etc.
 bool splitting_theta_point_to_mont_pair(
+    __m512i* mont_pair1, __m512i* mont_pair2, __m512i* theta_pair, __m512i* null, const bool verify
+);
+bool splitting_theta_point_to_mont_pair_unvec(
     theta_couple_point_t* mont_pair1, theta_couple_point_t* mont_pair2, 
     __m512i* theta_pair, __m512i* null, const bool verify
 );
 bool splitting_theta_point_to_mont_list_pair(
+    __m512i* mont_pts, __m512i* theta_pts, 
+    __m512i* null, const int num_pts, const bool verify
+);
+bool splitting_theta_point_to_mont_list_pair_unvec(
     theta_couple_point_t* mont_pts, __m512i* theta_pts, 
     __m512i* null, const int num_pts, const bool verify
 );

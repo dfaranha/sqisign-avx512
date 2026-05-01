@@ -1,4 +1,5 @@
 #include "ec.h"
+#include "fp_consts.h"
 #include "fp_unvec_lvl3.h"
 #include "fp2.h"
 #include "theta_gluing.h"
@@ -658,50 +659,91 @@ void gluing_eval_pair(
     // Final Hadamard
     theta_had_pair(res, res);
 }
-
-// Done (TODO delete this comment)
+// P1_P2 is (X1, Z1, X2, Z2) in 4x2x1
 void gluing_eval_product_to_theta(
     __m512i* res,
-    ec_point_t* P1, ec_point_t* P2, __m512i* matrix01, __m512i* matrix23
+    __m512i* P1_P2, __m512i* matrix01, __m512i* matrix23
 )
 {
-    __m512i t0[8];
-    fp2_t unvec0[4], unvec1[4];
+    __m512i t0[NUM_LIMBS], idx0, idx1;
 
-    // P = AVX_4x2x1(X1, X1, Z1, Z1)
-    unvec0[0] = P1->x; unvec0[1] = P1->x; unvec0[2] = P1->z; unvec0[3] = P1->z;
-    // T0 = AVX_4x2x1(X2, Z2, X2, Z2)
-    unvec1[0] = P2->x; unvec1[1] = P2->z; unvec1[2] = P2->x; unvec1[3] = P2->z;
-    fp2_unvectorized_to_4x2x1(res, unvec0);
-    fp2_unvectorized_to_4x2x1(t0, unvec1);
+    // res = (X1, X1, Z1, Z1)
+    // t0 = (X2, Z2, X2, Z2)
+    idx0 = VSET(0, 1, 0, 1, 2, 3, 2, 3);
+    idx1 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        res[i] = VPERM512(idx0, P1_P2[i]);
+        t0[i] = VPERM512(idx1, P1_P2[i]);
+    }
 
     fp2_mul_4x2x1(res, res, t0);
     gluing_apply_matrix(res, matrix01, matrix23, res);
 }
 
-// Done (TODO delete this comment)
+void gluing_eval_product_to_theta_unvec(
+    __m512i* res,
+    ec_point_t* P1, ec_point_t* P2, __m512i* matrix01, __m512i* matrix23
+)
+{
+    fp2_t unvec[4];
+    __m512i t[NUM_LIMBS];
+    unvec[0] = P1->x; unvec[1] = P1->z; unvec[2] = P2->x; unvec[3] = P2->z;
+    fp2_unvectorized_to_4x2x1(t, unvec);
+
+    gluing_eval_product_to_theta(res, t, matrix01, matrix23);
+}
+
+// P1_P2 and Q1_Q2 are pairs of points in 4x2x1 as (X1, Z1, X2, Z2)
 void gluing_eval_product_to_theta_pair(
     __m512i* res,
-    ec_point_t* P1, ec_point_t* P2, ec_point_t* Q1, ec_point_t* Q2, 
+    __m512i* P1_P2, __m512i* Q1_Q2, 
     __m512i* matrix01, __m512i* matrix23
 )
 {
-    __m512i t0[16];
-    fp2_t unvec0[8], unvec1[8];
-    // PQ = AVX_8x1x1(X1, X3, X1, X3, Z1, Z3, Z1, Z3)
-    unvec0[0] = P1->x; unvec0[1] = Q1->x; unvec0[2] = P1->x; unvec0[3] = Q1->x;
-    unvec0[4] = P1->z; unvec0[5] = Q1->z; unvec0[6] = P1->z; unvec0[7] = Q1->z;
-    // T0 = AVX_8x1x1(X2, X4, Z2, Z4, X2, X4, Z2, Z4)
-    unvec1[0] = P2->x; unvec1[1] = Q2->x; unvec1[2] = P2->z; unvec1[3] = Q2->z;
-    unvec1[4] = P2->x; unvec1[5] = Q2->x; unvec1[6] = P2->z; unvec1[7] = Q2->z;
-    fp2_unvectorized_to_8x1x1(res, unvec0);
-    fp2_unvectorized_to_8x1x1(t0, unvec1);  
+    __m512i t0[2*NUM_LIMBS], idx0, idx1, idx2, idx3;
+
+    // res = (X1, X3, X1, X3, Z1, Z3, Z1, Z3)
+    // t0 = (X2, X4, Z2, Z4, X2, X4, Z2, Z4)
+    idx0 = VSET(0, 8, 0, 8, 2, 10, 2, 10);
+    idx1 = VSET(1, 9, 1, 9, 3, 11, 3, 11);
+    idx2 = VSET(4, 12, 6, 14, 4, 12, 6, 14);
+    idx3 = VSET(5, 13, 7, 15, 5, 13, 7, 15);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        res[i] = VBLENDPERM(idx0, P1_P2[i], Q1_Q2[i]);
+        res[i + NUM_LIMBS] = VBLENDPERM(idx1, P1_P2[i], Q1_Q2[i]);
+        t0[i] = VBLENDPERM(idx2, P1_P2[i], Q1_Q2[i]);
+        t0[i + NUM_LIMBS] = VBLENDPERM(idx3, P1_P2[i], Q1_Q2[i]);
+    }
     
     fp2_mul_8x1x1(res, res, t0);
     gluing_apply_matrix_pair(res, matrix01, matrix23, res);
 }
 
-// Done (TODO delete this comment)
+
+void gluing_eval_product_to_theta_pair_unvec(
+    __m512i* res,
+    ec_point_t* P1, ec_point_t* P2, ec_point_t* Q1, ec_point_t* Q2, 
+    __m512i* matrix01, __m512i* matrix23
+)
+{
+    fp2_t unvec[4];
+    __m512i P1_P2[NUM_LIMBS], Q1_Q2[NUM_LIMBS];
+
+    unvec[0] = P1->x; 
+    unvec[1] = P1->z; 
+    unvec[2] = P2->x; 
+    unvec[3] = P2->z; 
+    fp2_unvectorized_to_4x2x1(P1_P2, unvec);
+
+    unvec[0] = Q1->x;
+    unvec[1] = Q1->z;
+    unvec[2] = Q2->x;
+    unvec[3] = Q2->z;
+    fp2_unvectorized_to_4x2x1(Q1_Q2, unvec);
+
+    gluing_eval_product_to_theta_pair(res, P1_P2, Q1_Q2, matrix01, matrix23);
+}
+
 bool gluing_eval_special(
     __m512i* res,
     theta_couple_point_t* P12, __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23, const bool verify
@@ -713,7 +755,7 @@ bool gluing_eval_special(
             return false;
         }
     }
-    gluing_eval_product_to_theta(res, &P12->P1, &P12->P2, matrix01, matrix23);
+    gluing_eval_product_to_theta_unvec(res, &P12->P1, &P12->P2, matrix01, matrix23);
     fp2_sqr_4x2x1(res, res);
     theta_had_single(res, res);
 
@@ -727,7 +769,6 @@ bool gluing_eval_special(
     return true;
 }
 
-// Done (TODO delete this comment)
 bool gluing_eval_special_pair(
     __m512i* res,
     theta_couple_point_t* P12, theta_couple_point_t* Q12,
@@ -743,7 +784,7 @@ bool gluing_eval_special_pair(
             return false;
         }
     }
-    gluing_eval_product_to_theta_pair(
+    gluing_eval_product_to_theta_pair_unvec(
         res, &P12->P1, &P12->P2, &Q12->P1, &Q12->P2, matrix01, matrix23
     );
     fp2_sqr_8x1x1(res, res);
@@ -759,7 +800,6 @@ bool gluing_eval_special_pair(
     return true;
 }
 
-// Done (TODO delete this comment)
 bool gluing_eval_special_list_pair(
     __m512i* res_pts, theta_couple_point_t* pts, __m512i* inv, 
     __m512i* matrix01, __m512i* matrix23, const int num_pts, const bool verify
