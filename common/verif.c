@@ -321,9 +321,8 @@ static bool compute_commitment_curve_verify(
     int pow_dim2_deg_resp
 )
 {
-    // ============== VECTORIZED ================================================================================
-    __m512i A_chall[N4x2];
-    normalize_2d_input(A_chall, A24_chall, B_chall_can, B_aux_can);
+    __m512i A_chall[N4x2], A_34[NUM_LIMBS];
+    bool codomain_splits;
 
 #ifndef NDEBUG
 
@@ -338,76 +337,27 @@ static bool compute_commitment_curve_verify(
         return false;
     }
 #endif
-    // ============== END ================================================================================
-    ec_curve_t E_com;
-    ec_curve_t E_aux;
-    fp2_t u[2];
-    fp2_2x2x2_to_unvectorized(u, sig->A_aux);
-    fp2_copy(&E_aux.A, u);
-    fp2_set_one(&E_aux.C);
-    fp2_2x2x2_to_unvectorized(u, sig->A24_aux);
-    fp2_copy(&E_aux.A24.x, u);
-    fp2_set_one(&E_aux.A24.z);
-    E_aux.is_A24_computed_and_normalized = true;
 
-    ec_curve_t E_chall;
-    fp2_2x2x2_to_unvectorized(u, A_chall);
-    fp2_copy(&E_chall.A, u);
-    fp2_copy(&E_chall.C, u+1);
-    fp2_2x2x2_to_unvectorized(u, A24_chall);
-    fp2_copy(&E_chall.A24.x, u);
-    fp2_copy(&E_chall.A24.z, u+1);
-    E_chall.is_A24_computed_and_normalized = true;
-
-    ec_basis_t B_chall_can_unvec, B_aux_can_unvec;
-    ec_point_1x2x2x2_to_unvec(&B_chall_can_unvec.P, B_chall_can);
-    ec_point_1x2x2x2_to_unvec(&B_chall_can_unvec.Q, B_chall_can+4);
-    ec_point_1x2x2x2_to_unvec(&B_chall_can_unvec.PmQ, B_chall_can+8);
-    ec_point_1x2x2x2_to_unvec(&B_aux_can_unvec.P, B_aux_can);
-    ec_point_1x2x2x2_to_unvec(&B_aux_can_unvec.Q, B_aux_can+4);
-    ec_point_1x2x2x2_to_unvec(&B_aux_can_unvec.PmQ, B_aux_can+8);
-
-    // now compute the dim2 isogeny from Echall x E_aux -> E_com x E_aux'
-    // of kernel B_chall_can x B_aux_can
-
-    // first we set-up the kernel
-    theta_couple_curve_t EchallxEaux;
-    copy_curve(&EchallxEaux.E1, &E_chall);
-    copy_curve(&EchallxEaux.E2, &E_aux);
-
-    theta_kernel_couple_points_t dim_two_ker;
-    copy_bases_to_kernel(&dim_two_ker, &B_chall_can_unvec, &B_aux_can_unvec);
-
-    // computing the isogeny
-    bool codomain_splits;
+    normalize_2d_input(A_chall, A24_chall, B_chall_can, B_aux_can);
     
     // handling the special case where we don't need to perform any dim2 computation
     if (pow_dim2_deg_resp == 0) {
         codomain_splits = true;
-        copy_curve(&E_com, &EchallxEaux.E1);
 
         // We still need to check that E_chall is supersingular
         // This assumes that HD_extra_torsion == 2
-        if (!ec_is_basis_four_torsion(&B_chall_can_unvec, &E_chall)) {
+        if (!test_basis_order_twof_1x2x2x2(B_chall_can, A24_chall, 2)) { // not 4 torsion
             return false;
         }
     } else {
-        theta_couple_curve_t codomain;
-        ec_curve_init(&codomain.E1);
-        ec_curve_init(&codomain.E2);
-
-        codomain_splits = theta_isogeny_chain_ver(
-            &codomain, &EchallxEaux, &dim_two_ker, pow_dim2_deg_resp
+        codomain_splits = theta_isogeny_chain_pair_vec_verif(
+            A_34, B_chall_can, B_aux_can, A_chall, sig->A_aux, A24_chall, sig->A24_aux,
+            pow_dim2_deg_resp
         );
-
         // computing the commitment curve
         // its always the first one because of our (2^n,2^n)-isogeny formulae
-        copy_curve(&E_com, &codomain.E1);
+        fp2_4x2x1_to_2x2x2(A_com, A_34, A_34);
     }
-
-    fp2_copy(u, &E_com.A);
-    fp2_copy(u+1, &E_com.C);
-    fp2_unvectorized_to_2x2x2(A_com, u);
 
     return codomain_splits;
 }

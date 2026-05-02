@@ -746,16 +746,17 @@ void gluing_eval_product_to_theta_pair_unvec(
 
 bool gluing_eval_special(
     __m512i* res,
-    theta_couple_point_t* P12, __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23, const bool verify
+    __m512i* P1_P2, __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23, const bool verify
 )
 {
     // Check that the points are of the form (P1, 0) or (0, P2)
     if (verify) {
-        if (!fp2_is_zero(&P12->P1.z) && !fp2_is_zero(&P12->P2.z)) {
+        __mmask8 nzmask = ~fp2_is_zero_4x2x1(P1_P2);
+        if (nzmask & 0xa != 0xa) { // P1.z != 0 and P2.z != 0
             return false;
         }
     }
-    gluing_eval_product_to_theta_unvec(res, &P12->P1, &P12->P2, matrix01, matrix23);
+    gluing_eval_product_to_theta(res, P1_P2, matrix01, matrix23);
     fp2_sqr_4x2x1(res, res);
     theta_had_single(res, res);
 
@@ -769,24 +770,37 @@ bool gluing_eval_special(
     return true;
 }
 
+bool gluing_eval_special_unvec(
+    __m512i* res,
+    theta_couple_point_t* P12, __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23, const bool verify
+)
+{
+    fp2_t unvec[4];
+    __m512i t[NUM_LIMBS];
+    unvec[0] = P12->P1.x; unvec[1] = P12->P1.z; unvec[2] = P12->P2.x; unvec[3] = P12->P2.z;
+    fp2_unvectorized_to_4x2x1(t, unvec);
+
+    return gluing_eval_special(res, t, OA_inv, matrix01, matrix23, verify);
+}
+
 bool gluing_eval_special_pair(
     __m512i* res,
-    theta_couple_point_t* P12, theta_couple_point_t* Q12,
+    __m512i* P1_P2, __m512i* Q1_Q2,
     __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23, const bool verify
 )
 {
     // check that pair of points are of the form (P1, 0) or (0, P2)
     if (verify) {
-        if (!fp2_is_zero(&P12->P1.z) && !fp2_is_zero(&P12->P2.z)) {
+        __mmask8 nzmask = ~fp2_is_zero_4x2x1(P1_P2);
+        if (nzmask & 0xa != 0xa) { // P1.z != 0 and P2.z != 0
             return false;
         }
-        if (!fp2_is_zero(&Q12->P1.z) && !fp2_is_zero(&Q12->P2.z)) {
+        nzmask = ~fp2_is_zero_4x2x1(Q1_Q2);
+        if (nzmask & 0xa != 0xa) { // Q1.z != 0 and Q2.z != 0
             return false;
         }
     }
-    gluing_eval_product_to_theta_pair_unvec(
-        res, &P12->P1, &P12->P2, &Q12->P1, &Q12->P2, matrix01, matrix23
-    );
+    gluing_eval_product_to_theta_pair(res, P1_P2, Q1_Q2, matrix01, matrix23);
     fp2_sqr_8x1x1(res, res);
     theta_had_pair(res, res);
 
@@ -800,8 +814,32 @@ bool gluing_eval_special_pair(
     return true;
 }
 
+bool gluing_eval_special_pair_unvec(
+    __m512i* res,
+    theta_couple_point_t* P12, theta_couple_point_t* Q12,
+    __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23, const bool verify
+)
+{
+    fp2_t unvec[4];
+    __m512i P1_P2[NUM_LIMBS], Q1_Q2[NUM_LIMBS];
+
+    unvec[0] = P12->P1.x; 
+    unvec[1] = P12->P1.z; 
+    unvec[2] = P12->P2.x; 
+    unvec[3] = P12->P2.z; 
+    fp2_unvectorized_to_4x2x1(P1_P2, unvec);
+
+    unvec[0] = Q12->P1.x;
+    unvec[1] = Q12->P1.z;
+    unvec[2] = Q12->P2.x;
+    unvec[3] = Q12->P2.z;
+    fp2_unvectorized_to_4x2x1(Q1_Q2, unvec);
+
+    gluing_eval_special_pair(res, P1_P2, Q1_Q2, OA_inv, matrix01, matrix23, verify);
+}
+
 bool gluing_eval_special_list_pair(
-    __m512i* res_pts, theta_couple_point_t* pts, __m512i* inv, 
+    __m512i* res_pts, __m512i* pts, __m512i* inv, 
     __m512i* matrix01, __m512i* matrix23, const int num_pts, const bool verify
 )
 {
@@ -811,12 +849,36 @@ bool gluing_eval_special_list_pair(
 
     for (int i = 0; i < num_pair_pts; i++) {
         success &= gluing_eval_special_pair(
-            res_pts + (16*i), pts + (2*i), pts + (2*i+1), 
+            res_pts + i*(2*NUM_LIMBS), pts + (2*i)*NUM_LIMBS, pts + (2*i+1)*NUM_LIMBS, 
             inv, matrix01, matrix23, verify
         );
     }
     if (num_pts_is_odd) {
         success &= gluing_eval_special(
+            res_pts + (num_pts-1)*NUM_LIMBS, pts + (num_pts-1)*NUM_LIMBS,
+            inv, matrix01, matrix23, verify
+        );
+    }
+    return success;
+}
+
+bool gluing_eval_special_list_pair_unvec(
+    __m512i* res_pts, theta_couple_point_t* pts, __m512i* inv, 
+    __m512i* matrix01, __m512i* matrix23, const int num_pts, const bool verify
+)
+{
+    bool success = true;
+    bool num_pts_is_odd = num_pts & 0x1;
+    int num_pair_pts = num_pts / 2;
+
+    for (int i = 0; i < num_pair_pts; i++) {
+        success &= gluing_eval_special_pair_unvec(
+            res_pts + (16*i), pts + (2*i), pts + (2*i+1), 
+            inv, matrix01, matrix23, verify
+        );
+    }
+    if (num_pts_is_odd) {
+        success &= gluing_eval_special_unvec(
             res_pts + 8*(num_pts-1), pts + (num_pts-1),
             inv, matrix01, matrix23, verify
         );

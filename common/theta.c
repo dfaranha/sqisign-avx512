@@ -227,7 +227,7 @@ bool theta_isogeny_chain_single(
 
     // Push other points through gluing isogeny
     for (int i = 0; i < num_pts; i++) {
-        success &= gluing_eval_special(
+        success &= gluing_eval_special_unvec(
             eval_pts_theta + (8*i),
             pts + i, OA_dual_inv, matrix01, matrix23, verify
         );
@@ -310,7 +310,7 @@ bool theta_isogeny_chain_pair_vec(
     __m512i* normA_2, 
     __m512i* normA24_1,
     __m512i* normA24_2,
-    theta_couple_point_t* pts, 
+    __m512i* pts, 
     const int n, 
     const int num_pts, 
     const bool randomize,
@@ -463,6 +463,27 @@ bool theta_isogeny_chain_pair_vec(
     return success;
 }
 
+bool theta_isogeny_chain_pair_vec_verif(
+    __m512i* res_A_34, 
+    __m512i* ker_basis1,
+    __m512i* ker_basis2,
+    __m512i* normA_1,
+    __m512i* normA_2, 
+    __m512i* normA24_1,
+    __m512i* normA24_2,
+    const int n
+)
+{
+    __m512i* pts = NULL;
+    int num_pts = 0;
+    bool randomize = false, verify = true;
+    return theta_isogeny_chain_pair_vec(
+        res_A_34, pts,
+        ker_basis1, ker_basis2, normA_1, normA_2, normA24_1, normA24_2, pts,
+        n, num_pts, randomize, verify
+    );
+}
+
 bool theta_isogeny_chain_pair(
     theta_couple_curve_t* res_E34, 
     theta_couple_point_t* res_pts, 
@@ -496,10 +517,17 @@ bool theta_isogeny_chain_pair(
     ec_point_unvec_to_1x2x2x2(normA24_1, &E12->E1.A24);
     ec_point_unvec_to_1x2x2x2(normA24_2, &E12->E2.A24);
 
+    for (int i = 0; i < num_pts; i++) {
+        fp2_copy(unvec, &(pts + i)->P1.x);
+        fp2_copy(unvec+1, &(pts + i)->P1.z);
+        fp2_copy(unvec+2, &(pts + i)->P2.x);
+        fp2_copy(unvec+3, &(pts + i)->P2.z);
+        fp2_unvectorized_to_4x2x1(eval_pts_mont + i*NUM_LIMBS, unvec);
+    }
+
     bool ret = theta_isogeny_chain_pair_vec(
         A_34, eval_pts_mont, 
-        basis1, basis2, normA_1, normA_2, normA24_1, normA24_2,
-        pts, 
+        basis1, basis2, normA_1, normA_2, normA24_1, normA24_2, eval_pts_mont, 
         n, num_pts, randomize, verify
     );
 
@@ -650,7 +678,7 @@ bool theta_isogeny_chain_no_torsion_single(
 
     // Push other points through gluing isogeny
     for (int i = 0; i < num_pts; i++) {
-        success &= gluing_eval_special(
+        success &= gluing_eval_special_unvec(
             eval_pts_theta + (8*i),
             pts + i, OA_dual_inv, matrix01, matrix23, verify
         );
@@ -838,7 +866,7 @@ bool theta_isogeny_chain_no_torsion_pair(
     }
     current--;
 
-    success &= gluing_eval_special_list_pair(
+    success &= gluing_eval_special_list_pair_unvec(
         eval_pts_theta, pts, OA_dual_inv, 
         matrix01, matrix23, num_pts, verify
     );

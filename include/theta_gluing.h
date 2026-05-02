@@ -139,26 +139,41 @@ void gluing_eval_product_to_theta_pair_unvec(
     __m512i* matrix01, __m512i* matrix23
 );
 
+// P1_P2 = (X1, Z1, X2, Z2) in 4x2x1
+bool gluing_eval_special(
+    __m512i* res,
+    __m512i* P1_P2, __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23, const bool verify
+);
 /**
  * Evaluation of couple points of the form (P1, 0) or (0, P2)
  * which are the only forms needed for SQIsign.
  */
-bool gluing_eval_special(
+bool gluing_eval_special_unvec(
     __m512i* res,
     theta_couple_point_t* P12, __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23, const bool verify
 );
 
+// P1_P2 and Q1_Q2 are pairs of points in 4x2x1 as (X1, Z1, X2, Z2)
+bool gluing_eval_special_pair(
+    __m512i* res,
+    __m512i* P1_P2, __m512i* Q1_Q2,
+    __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23, const bool verify
+);
 /**
  * Evaluation of couple points of the form (P1, 0) or (0, P2)
  * which are the only forms needed for SQIsign.
  */
-bool gluing_eval_special_pair(
+bool gluing_eval_special_pair_unvec(
     __m512i* res,
     theta_couple_point_t* P12, theta_couple_point_t* Q12,
     __m512i* OA_inv, __m512i* matrix01, __m512i* matrix23, const bool verify
 );
 
 bool gluing_eval_special_list_pair(
+    __m512i* res_pts, __m512i* pts, __m512i* inv, 
+    __m512i* matrix01, __m512i* matrix23, const int num_pts, const bool verify
+);
+bool gluing_eval_special_list_pair_unvec(
     __m512i* res_pts, theta_couple_point_t* pts, __m512i* inv, 
     __m512i* matrix01, __m512i* matrix23, const int num_pts, const bool verify
 );
