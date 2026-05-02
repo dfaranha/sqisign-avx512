@@ -2,6 +2,7 @@
 #include "bench.h"
 #include "fp.h"
 #include "fp2.h"
+#include "fp_consts.h"
 #include "ec.h"
 #include "theta.h"
 #include "theta_gluing.h"
@@ -15,7 +16,8 @@ void bench_theta(int iterations)
 {
     uint64_t cycles[N_RUNS];
     uint64_t start, end, tmp;
-    __m512i a[16], b[16], c[16], d[16], e[16], f[16];
+    __m512i a[2*NUM_LIMBS], b[2*NUM_LIMBS], c[2*NUM_LIMBS];
+    __m512i d[2*NUM_LIMBS], e[2*NUM_LIMBS], f[2*NUM_LIMBS];
     rand_fp2_8x1x1(a);
     rand_fp2_8x1x1(b);
     rand_fp2_8x1x1(c);
@@ -180,6 +182,7 @@ void bench_theta(int iterations)
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("eval (h1, h2 = 0, 1)", cycles[(N_RUNS/2) -1], tmp);
 
+    // TODO: We need Python script to generate KATs
     int length = 188;
     theta_couple_curve_t E12, E34;
     theta_kernel_couple_points_t ker_extra;

@@ -1,3 +1,6 @@
+#ifndef _FP_UNVEC_H
+#define _FP_UNVEC_H
+
 #include <stdint.h>
 #include "intrinsics_avx512.h"
 #include "sqi_fp_lvl3.h"
@@ -20,3 +23,5 @@ void fp2_unvectorized_to_2x2x2(__m512i* res, fp2_t* src);
 void fp2_2x2x2_to_unvectorized(fp2_t* res, __m512i* src);
 void fp2_unvectorized_to_2x4x1(__m512i* res, fp2_t* src);
 void fp2_2x4x1_to_unvectorized(fp2_t* res, __m512i* src);
+
+#endif

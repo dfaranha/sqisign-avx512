@@ -2,6 +2,7 @@
 #include "isog-1d.h"
 #include "utils.h"
 #include "bench.h"
+#include "fp_consts.h"
 #include "fp2.h"
 
 #define N_RUNS 10
@@ -10,7 +11,7 @@ void bench_1d_isog(int iterations)
 {
     uint64_t cycles[N_RUNS];
     uint64_t start, end, tmp;
-    __m512i A24[8], a[8], b[8], c[8], d[8], eval_data[16];
+    __m512i A24[NUM_LIMBS], a[NUM_LIMBS], b[NUM_LIMBS], c[NUM_LIMBS], d[NUM_LIMBS], eval_data[2*NUM_LIMBS];
 
     printf("1d isog 2x2x2 benchmarks:\n");
 

@@ -5,7 +5,7 @@
 
 bool test_fp(int iterations);
 bool test_fp2(int iterations);
-bool test_fp_unvec_lvl3(int iterations);
+bool test_fp_unvec(int iterations);
 bool test_ec(int iterations);
 bool test_theta_KAT(int iterations);
 bool test_theta_gluing(int iterations);

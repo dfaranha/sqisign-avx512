@@ -2,14 +2,14 @@
 
 #include "fp.h"
 #include "fp_consts.h"
-#include "fp_unvec_lvl3.h"
+#include "fp_unvec.h"
 #include "fp2.h"
 #include "fp2_kat.h"
 #include "test.h"
 #include "utils.h"
 #include "sqi_test_extras.h"
 
-bool test_fp_unvec_lvl3(int iterations)
+bool test_fp_unvec(int iterations)
 {
     __m512i a[2*NUM_LIMBS], b[2*NUM_LIMBS], c[2*NUM_LIMBS], d[2*NUM_LIMBS], e[2*NUM_LIMBS], f[2*NUM_LIMBS], t;
     fp_t unvec1[8], unvec2[8];

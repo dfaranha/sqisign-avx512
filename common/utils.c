@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "utils.h"
-#include "fp_unvec_lvl3.h"
+#include "fp_unvec.h"
 #include "fp2.h"
 #include "sqi_test_extras.h"
 

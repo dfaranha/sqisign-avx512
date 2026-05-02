@@ -3,16 +3,15 @@
 
 #include "fp.h"
 #include "fp2.h"
+#include "fp_consts.h"
 #include "test.h"
 #include "theta_splitting.h"
 #include "utils.h"
 
-#include "sqi_fp2.h"
-#include "sqi_ec.h"
-
 bool test_theta_gluing(int iterations)
 {
-    __m512i a[16], b[16], c[16], d[16], e[16], f[16], g[16];
+    __m512i a[2*NUM_LIMBS], b[2*NUM_LIMBS], c[2*NUM_LIMBS], d[2*NUM_LIMBS], e[2*NUM_LIMBS];
+    __m512i f[2*NUM_LIMBS], g[2*NUM_LIMBS];
     int passed = 1;
 
 
