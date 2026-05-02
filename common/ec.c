@@ -2514,7 +2514,7 @@ void ec_j_inv_2x2x2(__m512i* res, __m512i* AC)
 void ec_proj_diff_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA)
 {
     // Need t0 and t1 to be able to store two 2x2x2 elements.
-    __m512i t0[2*N4x2], t1[2*N4x2], t2[NUM_LIMBS];
+    __m512i t0[2*N4x2], t1[2*N4x2], t2[2*N4x2];
     __m512i idx0, idx1;
 
     // TODO: Suboptimal, we do one extra permutation for t1, 
@@ -2554,37 +2554,37 @@ void ec_proj_diff_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* nor
     fp2_mul_4x2x1(t1, t1, t2);
 
     // Convert to 2x2x2
-    fp2_4x2x1_to_2x2x2(t0, t0 + N4x2, t0);
-    fp2_4x2x1_to_2x2x2(t1, t1 + N4x2, t1);
+    fp2_4x2x1_to_2x2x2(t2, t2 + N4x2, t0);
+    fp2_4x2x1_to_2x2x2(t0, t0 + N4x2, t1);
 
-    // Conjugate t0[1] (we don't need the other entries anymore)
-    fp2_conjugate_2x2x2(t0, t0);
+    // Conjugate t2[1] (we don't need the other entries anymore)
+    fp2_conjugate_2x2x2(t2, t2);
 
-    // t0 = (A * t1[1], t0[1]^2)
+    // t2 = (A * t0[1], t2[1]^2)
     idx0 = VSET(8, 9, 10, 11, 4, 5, 6, 7);
     idx1 = VSET(12, 13, 14, 15, 4, 5, 6, 7);
     for (int i = 0; i < N4x2; i++) {
-        t2[i] = VBLENDPERM(idx0, t0[i], normA[i]);
-        t0[i] = VBLENDPERM(idx1, t0[i], t1[i]);
+        t1[i] = VBLENDPERM(idx0, t2[i], normA[i]);
+        t2[i] = VBLENDPERM(idx1, t2[i], t1[i]);
     }
-    fp2_mul_2x2x2(t0, t0, t2);
+    fp2_mul_2x2x2(t2, t2, t1);
     
-    // t0 = (t10, lam)
-    // t1 = (t8, t9), (b_xx, b_zz)
+    // t2 = (t10, lam)
+    // t0 = (t8, t9), (b_xx, b_zz)
 
     // Annoying add
-    // t1[0] = t1[0] + 2*t0[0]
-    fp2_add_2x2x2(t1, t1, t0);
-    fp2_add_2x2x2(t1, t1, t0);
+    // t0[0] = t0[0] + 2*t2[0]
+    fp2_add_2x2x2(t0, t0, t2);
+    fp2_add_2x2x2(t0, t0, t2);
 
     // TODO: This is suboptimal extra shuffle for code to be independent of NUM_LIMBS % 2
-    // t0 = (t0[1], t0[1], t0[1], t0[1])
+    // t2 = (t2[1], t2[1], t2[1], t2[1])
     idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
     for (int i = 0; i < N4x2; i++) {
-        t0[i] = VPERM512(idx0, t0[i]);
+        t2[i] = VPERM512(idx0, t2[i]);
     }
-    fp2_2x2x2_to_4x2x1(t0, t0, t0);
-    fp2_2x2x2_to_4x2x1(t1, t1, t1 + N4x2);
+    fp2_2x2x2_to_4x2x1(t1, t0, t0 + N4x2);
+    fp2_2x2x2_to_4x2x1(t0, t2, t2);
 
     // At this point we have
     // t0 = (lam, -, lam, lam)
@@ -2600,23 +2600,23 @@ void ec_proj_diff_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* nor
         t0[i] = VPERM512(idx0, t0[i]);
     }
 
-    // t0 = (b_xz^2, b_xx * b_zz), (b_xz, b_zz)
-    fp2_4x2x1_to_2x2x2(t0, t0 + N4x2, t0);
-    fp2_mul_2x2x2(t0, t0, t0 + N4x2);
+    // t2 = (b_xz^2, b_xx * b_zz), (b_xz, b_zz)
+    fp2_4x2x1_to_2x2x2(t2, t2 + N4x2, t0);
+    fp2_mul_2x2x2(t2, t2, t2 + N4x2);
 
-    // t0[0] = (t0[0] - t0[1], 0)
+    // t2[0] = (t2[0] - t2[1], 0)
     idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
     for (int i = 0; i < N4x2; i++) {
-        t1[i] = VPERM512(idx0, t0[i]);
+        t1[i] = VPERM512(idx0, t2[i]);
     }
-    fp2_sub_2x2x2(t0, t0, t1);
+    fp2_sub_2x2x2(t2, t2, t1);
 
     // TODO: One wasted sqrt
-    // t0 = (delta, 0), (b_xz, b_zz)
-    fp2_sqrt_2x2x2(t0, t0);
+    // t2 = (delta, 0), (b_xz, b_zz)
+    fp2_sqrt_2x2x2(t2, t2);
 
     // res_PmQ = (delta + b_xz, b_zz)
-    fp2_add_2x2x2(res_PmQ, t0, t0 + N4x2);
+    fp2_add_2x2x2(res_PmQ, t2, t2 + N4x2);
 }
 
 // Calls unvectorized sqrt instead of doing a wasteful 2x2x2
@@ -2624,7 +2624,7 @@ void ec_proj_diff_SQI_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i*
 {
     // Need t0 and t1 to be able to store two 2x2x2 elements.
     fp2_t delta[2];
-    __m512i t0[2*N4x2], t1[2*N4x2], t2[NUM_LIMBS];
+    __m512i t0[2*N4x2], t1[2*N4x2], t2[2*N4x2];
     __m512i idx0, idx1;
 
     // TODO: Suboptimal, we do one extra permutation for t1, 
@@ -2664,37 +2664,37 @@ void ec_proj_diff_SQI_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i*
     fp2_mul_4x2x1(t1, t1, t2);
 
     // Convert to 2x2x2
-    fp2_4x2x1_to_2x2x2(t0, t0 + N4x2, t0);
-    fp2_4x2x1_to_2x2x2(t1, t1 + N4x2, t1);
+    fp2_4x2x1_to_2x2x2(t2, t2 + N4x2, t0);
+    fp2_4x2x1_to_2x2x2(t0, t0 + N4x2, t1);
 
-    // Conjugate t0[1] (we don't need the other entries anymore)
-    fp2_conjugate_2x2x2(t0, t0);
+    // Conjugate t2[1] (we don't need the other entries anymore)
+    fp2_conjugate_2x2x2(t2, t2);
 
-    // t0 = (A * t1[1], t0[1]^2)
+    // t2 = (A * t0[1], t2[1]^2)
     idx0 = VSET(8, 9, 10, 11, 4, 5, 6, 7);
     idx1 = VSET(12, 13, 14, 15, 4, 5, 6, 7);
     for (int i = 0; i < N4x2; i++) {
-        t2[i] = VBLENDPERM(idx0, t0[i], normA[i]);
-        t0[i] = VBLENDPERM(idx1, t0[i], t1[i]);
+        t1[i] = VBLENDPERM(idx0, t2[i], normA[i]);
+        t2[i] = VBLENDPERM(idx1, t2[i], t0[i]);
     }
-    fp2_mul_2x2x2(t0, t0, t2);
+    fp2_mul_2x2x2(t2, t2, t1);
     
-    // t0 = (t10, lam)
-    // t1 = (t8, t9), (b_xx, b_zz)
+    // t2 = (t10, lam)
+    // t0 = (t8, t9), (b_xx, b_zz)
 
     // Annoying add
-    // t1[0] = t1[0] + 2*t0[0]
-    fp2_add_2x2x2(t1, t1, t0);
-    fp2_add_2x2x2(t1, t1, t0);
+    // t0[0] = t0[0] + 2*t2[0]
+    fp2_add_2x2x2(t0, t0, t2);
+    fp2_add_2x2x2(t0, t0, t2);
 
     // TODO: This is suboptimal extra shuffle for code to be independent of NUM_LIMBS % 2
-    // t0 = (t0[1], t0[1], t0[1], t0[1])
+    // t2 = (t2[1], t2[1], t2[1], t2[1])
     idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
     for (int i = 0; i < N4x2; i++) {
-        t0[i] = VPERM512(idx0, t0[i]);
+        t2[i] = VPERM512(idx0, t2[i]);
     }
-    fp2_2x2x2_to_4x2x1(t0, t0, t0);
-    fp2_2x2x2_to_4x2x1(t1, t1, t1 + N4x2);
+    fp2_2x2x2_to_4x2x1(t1, t0, t0 + N4x2);
+    fp2_2x2x2_to_4x2x1(t0, t2, t2);
 
     // At this point we have
     // t0 = (lam, -, lam, lam)
@@ -2710,24 +2710,24 @@ void ec_proj_diff_SQI_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i*
         t0[i] = VPERM512(idx0, t0[i]);
     }
 
-    // t0 = (b_xz^2, b_xx * b_zz), (b_xz, b_zz)
-    fp2_4x2x1_to_2x2x2(t0, t0 + N4x2, t0);
-    fp2_mul_2x2x2(t0, t0, t0 + N4x2);
+    // t2 = (b_xz^2, b_xx * b_zz), (b_xz, b_zz)
+    fp2_4x2x1_to_2x2x2(t2, t2 + N4x2, t0);
+    fp2_mul_2x2x2(t2, t2, t2 + N4x2);
 
-    // t0[0] = (t0[0] - t0[1], 0)
+    // t2[0] = (t2[0] - t2[1], 0)
     idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
     for (int i = 0; i < N4x2; i++) {
-        t1[i] = VPERM512(idx0, t0[i]);
+        t1[i] = VPERM512(idx0, t2[i]);
     }
-    fp2_sub_2x2x2(t0, t0, t1);
+    fp2_sub_2x2x2(t2, t2, t1);
 
-    // t0 = (delta, 0), (b_xz, b_zz)
-    fp2_2x2x2_to_unvectorized(delta, t0);
+    // t2 = (delta, 0), (b_xz, b_zz)
+    fp2_2x2x2_to_unvectorized(delta, t2);
     fp2_sqrt(delta);
-    fp2_unvectorized_to_2x2x2(t0, delta);
+    fp2_unvectorized_to_2x2x2(t2, delta);
 
     // res_PmQ = (delta + b_xz, b_zz)
-    fp2_add_2x2x2(res_PmQ, t0, t0 + N4x2);
+    fp2_add_2x2x2(res_PmQ, t2, t2 + N4x2);
 }
 
 // P, Q and normA are pairs of points in 4x2x1
