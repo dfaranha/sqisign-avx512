@@ -331,7 +331,7 @@ void ec_double_basis_pair_1x2x4x1(
     assert(n1 >= n2);
 
     // pair first components and second components in a 2x4x1
-    // TODO: Define a gadget for this (observe same pattern for 2x2x2 except +4 instead of +8)
+    // TODO: Define a gadget for this (observe same pattern for 2x2x2 except +N4x2 instead of +NUM_LIMBS)
     idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
     idx1 = VSET(4, 5, 6, 7, 12, 13, 14, 15);
     for (int i = 0; i < NUM_LIMBS; i++) {
@@ -375,11 +375,11 @@ void ec_double_basis_pair_1x2x4x1(
     mask = 0x55;
     for (int i = 0; i < NUM_LIMBS; i++) {
         res_B1[i] = VBLENDPERMMASKZ(mask, x[i], z[i], idx0);
-        res_B1[i+NUM_LIMBS] = VBLENDPERMMASKZ(mask, x[i], z[i], idx1);
-        res_B1[i+16] = VBLENDPERMMASKZ(mask, x[i], z[i], idx2);
+        res_B1[i + NUM_LIMBS] = VBLENDPERMMASKZ(mask, x[i], z[i], idx1);
+        res_B1[i + 2*NUM_LIMBS] = VBLENDPERMMASKZ(mask, x[i], z[i], idx2);
         res_B2[i] = VBLENDPERMMASKZ(mask, x[i+NUM_LIMBS], z[i+NUM_LIMBS], idx0);
-        res_B2[i+NUM_LIMBS] = VBLENDPERMMASKZ(mask, x[i+NUM_LIMBS], z[i+NUM_LIMBS], idx1);
-        res_B2[i+16] = VBLENDPERMMASKZ(mask, x[i+NUM_LIMBS], z[i+NUM_LIMBS], idx2);
+        res_B2[i + NUM_LIMBS] = VBLENDPERMMASKZ(mask, x[i+NUM_LIMBS], z[i+NUM_LIMBS], idx1);
+        res_B2[i + 2*NUM_LIMBS] = VBLENDPERMMASKZ(mask, x[i+NUM_LIMBS], z[i+NUM_LIMBS], idx2);
     }
 }
 
