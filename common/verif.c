@@ -272,42 +272,6 @@ static bool two_response_isogeny_verify(__m512i* A24_chall, __m512i* B_chall_can
     return true;
 }
 
-// Normalize E_chall, B_chall.P and B_aux.P
-// E_aux is already normalized
-static void normalize_2d_input(__m512i* A_chall, __m512i* A24_chall, __m512i* B_chall, __m512i* B_aux) {
-    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], idx0, idx1;
-    fp2_2x2x2_to_4x2x1(t0, A24_chall, A24_chall); // (A24, C24, A24, C24)
-    fp2_2x2x2_to_4x2x1(t1, B_chall, B_aux); // (P_chall.x, P_chall.z, P_aux.x, P_aux.z)
-
-    // t0 = (A24, P_chall.x, P_aux.x, -)
-    // t1 = (C24, P_chall.z, P_aux.z, -)
-    idx0 = VSET(0, 1, 8, 9, 12, 13, 0, 0);
-    idx1 = VSET(2, 3, 10, 11, 14, 15, 0, 0);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        __m512i s0 = t0[i], s1 = t1[i];
-        t0[i] = VBLENDPERM(idx0, s0, s1);
-        t1[i] = VBLENDPERM(idx1, s0, s1);
-    }
-
-    fp2_inv_4x2x1(t1, t1);
-    fp2_mul_4x2x1(t0, t0, t1);
-
-    // t0 = (A24, 1, -, -)
-    // t1 = (P_chall.x, 1, P_aux.x, 1)
-    fp2_set_binary_4x2x1(t1, 0b1111);
-    idx0 = VSET(0, 1, 8, 9, 0, 0, 0, 0);
-    idx1 = VSET(2, 3, 8, 9, 4, 5, 8, 9);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        __m512i s0 = t0[i], s1 = t1[i];
-        t0[i] = VBLENDPERM(idx0, s0, s1);
-        t1[i] = VBLENDPERM(idx1, s0, s1);
-    }
-
-    fp2_4x2x1_to_2x2x2(A24_chall, t0, t0);
-    fp2_4x2x1_to_2x2x2(B_chall, B_aux, t1);
-    ec_normA24_to_normA_1x2x2x2(A_chall, A24_chall);
-}
-
 // The commitment curve can be recovered from the codomain of the 2D
 // isogeny built from the bases computed during verification.
 static bool compute_commitment_curve_verify(
@@ -335,8 +299,9 @@ static bool compute_commitment_curve_verify(
         return false;
     }
 #endif
-
-    normalize_2d_input(A_chall, A24_chall, B_chall_can, B_aux_can);
+    // slightly redundant, A24_aux is already normalized
+    theta_normalize_chain_input(A24_chall, sig->A24_aux, B_chall_can, B_aux_can);
+    ec_normA24_to_normA_1x2x2x2(A_chall, A24_chall);
     
     // handling the special case where we don't need to perform any dim2 computation
     if (pow_dim2_deg_resp == 0) {

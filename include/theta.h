@@ -11,9 +11,11 @@
 // ====================================================================
 
 // Normalizes in place
-void theta_normalize_chain_input(
+void theta_normalize_chain_input_unvec(
     theta_couple_curve_t* E12, theta_kernel_couple_points_t* ker
 );
+void theta_normalize_chain_input(__m512i* A24_1, __m512i* A24_2, __m512i* ker_basis1, __m512i* ker_basis2);
+
 
 int theta_compute_product_doubles(
     __m512i* A_12, __m512i* strat_points_x, __m512i* strat_points_y, __m512i* strat_points_z,
@@ -23,18 +25,6 @@ int theta_compute_product_doubles(
 // ====================================================================
 //  Isogeny chains where we have the 2^(n+2) torsion   
 // ====================================================================
-
-bool theta_isogeny_chain_single(
-    theta_couple_curve_t* res_E34, 
-    theta_couple_point_t* res_pts, 
-    theta_couple_curve_t* E12, 
-    theta_kernel_couple_points_t* ker,
-    theta_couple_point_t* pts, 
-    const int n, 
-    const int num_pts, 
-    const bool randomize,
-    const bool verify
-);
 
 /**
  * Computes the (2^n,2^n) isogeny E1 x E2 -> E3 x E4 defined by the kernel, and evaluates pts through it.
@@ -113,18 +103,6 @@ bool theta_isogeny_chain_ver(
 // ====================================================================
 //  Isogeny chains where we have the 2^n torsion only (requires sqrts)   
 // ====================================================================
-
-bool theta_isogeny_chain_no_torsion_single(
-    theta_couple_curve_t* res_E34, 
-    theta_couple_point_t* res_pts, 
-    theta_couple_curve_t* E12, 
-    theta_kernel_couple_points_t* ker,
-    theta_couple_point_t* pts, 
-    const int n, 
-    const int num_pts, 
-    const bool randomize,
-    const bool verify
-);
 
 bool theta_isogeny_chain_no_torsion_pair(
     theta_couple_curve_t* res_E34, 
