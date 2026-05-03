@@ -98,7 +98,7 @@ int theta_compute_product_doubles(
     uint16_t* orders, int space
 )
 {
-    __m512i A12_over_3[8], strat_points_t[8*space];
+    __m512i A12_over_3[NUM_LIMBS], strat_points_t[space * NUM_LIMBS];
     // When we start doubling, only the first element is defined. We convert this
     // from the Montgomery to the Weierstrass model
 
@@ -125,10 +125,10 @@ int theta_compute_product_doubles(
         else { n = orders[k - 1] - 1; }
             
         ec_double_ws_iter_4x4x2x1(
-            strat_points_x + (8*k), strat_points_y + (8*k), 
-            strat_points_z + (8*k), strat_points_t + (8*k),
-            strat_points_x + (8*(k-1)), strat_points_y + (8*(k-1)),
-            strat_points_z + (8*(k-1)), strat_points_t + (8*(k-1)),
+            strat_points_x + k*NUM_LIMBS, strat_points_y + k*NUM_LIMBS, 
+            strat_points_z + k*NUM_LIMBS, strat_points_t + k*NUM_LIMBS,
+            strat_points_x + (k-1)*NUM_LIMBS, strat_points_y + (k-1)*NUM_LIMBS,
+            strat_points_z + (k-1)*NUM_LIMBS, strat_points_t + (k-1)*NUM_LIMBS,
             n
         );
         orders[k] = orders[k - 1] - n;
@@ -139,8 +139,8 @@ int theta_compute_product_doubles(
     for (int i = 0; i <= k; i++)
     {
         ec_ws_to_jac_4x4x2x1(
-            strat_points_x + (8*i), strat_points_y + (8*i), strat_points_z + (8*i),
-            strat_points_x + (8*i), strat_points_y + (8*i), strat_points_z + (8*i),
+            strat_points_x + i*NUM_LIMBS, strat_points_y + i*NUM_LIMBS, strat_points_z + i*NUM_LIMBS,
+            strat_points_x + i*NUM_LIMBS, strat_points_y + i*NUM_LIMBS, strat_points_z + i*NUM_LIMBS,
             A12_over_3
         );
     }
@@ -152,7 +152,7 @@ int theta_compute_product_doubles(
 //  Isogeny chains where we have the 2^(n+2) torsion    
 // ====================================================================
 
-bool theta_isogeny_chain_pair_vec(
+bool theta_isogeny_chain_vec(
     __m512i* res_A_34, 
     __m512i* res_pts_34,
     __m512i* ker_basis1,
@@ -202,7 +202,7 @@ bool theta_isogeny_chain_pair_vec(
         ++space;
 
     uint16_t orders[space];
-    __m512i strat_points_x[8*space], strat_points_y[8*space], strat_points_z[8*space];
+    __m512i strat_points_x[space*NUM_LIMBS], strat_points_y[space*NUM_LIMBS], strat_points_z[space*NUM_LIMBS];
     // TODO: ker_x, ker_y, ker_z never used again, remove copies.
     orders[0] = n;
     fp2_copy_4x2x1(strat_points_x, ker_x);
@@ -215,7 +215,7 @@ bool theta_isogeny_chain_pair_vec(
 
     success &= gluing_codomain(
         OA, OA_dual_inv, J, matrix01, matrix23, A24_12, 
-        strat_points_x + (8*current), strat_points_z + (8*current),
+        strat_points_x + current*NUM_LIMBS, strat_points_z + current*NUM_LIMBS,
         verify
     );
 
@@ -224,8 +224,8 @@ bool theta_isogeny_chain_pair_vec(
     // T8_Y = AVX_4x2x1(Y_8[0], Y_8[0], Y_8[2], Y_8[2])
     // T8_Z = AVX_4x2x1(Z_8[0], Z_8[0], Z_8[2], Z_8[2])
     idx = VSET(0, 1, 0, 1, 4, 5, 4, 5);
-    for (int i = 0; i <  8; i++) {
-        int j = 8*current + i;
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        int j = current*NUM_LIMBS + i;
         T8_x[i] = VPERM512(idx, strat_points_x[j]);
         T8_y[i] = VPERM512(idx, strat_points_y[j]);
         T8_z[i] = VPERM512(idx, strat_points_z[j]);
@@ -234,11 +234,11 @@ bool theta_isogeny_chain_pair_vec(
     // Push kernel though the gluing isogeny
     // 4 Jacobian points for the kernel become 2 theta points
     // TODO: Is current = space-1 here? And even if it is not, is it better to use 8*space?
-    __m512i strat_theta_pair[16*space];
+    __m512i strat_theta_pair[space * 2*NUM_LIMBS];
     for (int i = 0; i < current; i++) {
         gluing_eval_pair(
-            strat_theta_pair + 16*i, //8x1x1
-            A_12, strat_points_x + (8*i), strat_points_y + (8*i), strat_points_z + (8*i),
+            strat_theta_pair + i*2*NUM_LIMBS, //8x1x1
+            A_12, strat_points_x + i*NUM_LIMBS, strat_points_y + i*NUM_LIMBS, strat_points_z + i*NUM_LIMBS,
             T8_x, T8_y, T8_z, J, matrix01, matrix23
         );
         orders[i]--;
@@ -262,8 +262,8 @@ bool theta_isogeny_chain_pair_vec(
 
             int num_dbls = orders[current-1] / 2;
             theta_double_iter_pair(
-                strat_theta_pair + (16*current), 
-                strat_theta_pair + (16*(current-1)), 
+                strat_theta_pair + current * 2*NUM_LIMBS, 
+                strat_theta_pair + (current-1) * 2*NUM_LIMBS, 
                 c1, c2, num_dbls
             );
             orders[current] = orders[current-1] - num_dbls;
@@ -280,7 +280,7 @@ bool theta_isogeny_chain_pair_vec(
         
         // Compute the codomain of the kernel
         success &= theta_codomain_pair(
-            OA, OA_dual_inv, strat_theta_pair + (16*current), 
+            OA, OA_dual_inv, strat_theta_pair + current * 2*NUM_LIMBS, 
             h1, h2, codom_verify
         );
 
@@ -314,7 +314,7 @@ bool theta_isogeny_chain_pair_vec(
     return success;
 }
 
-bool theta_isogeny_chain_pair_vec_verif(
+bool theta_isogeny_chain_vec_verif(
     __m512i* res_A_34, 
     __m512i* ker_basis1,
     __m512i* ker_basis2,
@@ -328,14 +328,14 @@ bool theta_isogeny_chain_pair_vec_verif(
     __m512i* pts = NULL;
     int num_pts = 0;
     bool randomize = false, verify = true;
-    return theta_isogeny_chain_pair_vec(
+    return theta_isogeny_chain_vec(
         res_A_34, pts,
         ker_basis1, ker_basis2, normA_1, normA_2, normA24_1, normA24_2, pts,
         n, num_pts, randomize, verify
     );
 }
 
-bool theta_isogeny_chain_pair(
+bool theta_isogeny_chain(
     theta_couple_curve_t* res_E34, 
     theta_couple_point_t* res_pts, 
     theta_couple_curve_t* E12, 
@@ -376,7 +376,7 @@ bool theta_isogeny_chain_pair(
         fp2_unvectorized_to_4x2x1(eval_pts_mont + i*NUM_LIMBS, unvec);
     }
 
-    bool ret = theta_isogeny_chain_pair_vec(
+    bool ret = theta_isogeny_chain_vec(
         A_34, eval_pts_mont, 
         basis1, basis2, normA_1, normA_2, normA24_1, normA24_2, eval_pts_mont, 
         n, num_pts, randomize, verify
@@ -401,7 +401,7 @@ bool theta_isogeny_chain_pair(
     return ret;
 }
 
-bool theta_isogeny_chain_ver(
+bool theta_isogeny_chain_verif(
     theta_couple_curve_t* res_E34, 
     theta_couple_curve_t* E12, 
     theta_kernel_couple_points_t* ker,
@@ -411,7 +411,7 @@ bool theta_isogeny_chain_ver(
     theta_couple_point_t pts[0], res_pts[0];
     int num_pts = 0;
     bool randomize = false, verify = true;
-    return theta_isogeny_chain_pair(
+    return theta_isogeny_chain(
         res_E34, res_pts, E12, ker, pts, n, num_pts, randomize, verify
     );
 }
@@ -420,60 +420,49 @@ bool theta_isogeny_chain_ver(
 //  Isogeny chains where we have the 2^n torsion only (requires sqrts)   
 // ====================================================================
 
-bool theta_isogeny_chain_no_torsion_pair(
-    theta_couple_curve_t* res_E34, 
-    theta_couple_point_t* res_pts, 
-    theta_couple_curve_t* E12, 
-    theta_kernel_couple_points_t* ker,
-    theta_couple_point_t* pts, 
+bool theta_isogeny_chain_no_torsion_vec(
+    __m512i* res_A_34, 
+    __m512i* res_pts_34,
+    __m512i* ker_basis1,
+    __m512i* ker_basis2,
+    __m512i* normA_1,
+    __m512i* normA_2, 
+    __m512i* normA24_1,
+    __m512i* normA24_2,
+    __m512i* pts, 
     const int n, 
     const int num_pts, 
     const bool randomize,
     const bool verify
 )
 {
-    __m512i A_12[8], A24_12[8], ker_x[8], ker_y[8], ker_z[8], OA[8], OA_dual_inv[16];
-    __m512i J[8], matrix01[16], matrix23[16], T8_x[8], T8_y[8], T8_z[8], gluing_eval_res[16];
-    __m512i eval_pts_theta[8*num_pts], idx;
-
-    // TODO: Copied from middle. Which variables can be merged?
-    bool h1, h2, success = true;
+    __m512i A_12[NUM_LIMBS], A24_12[NUM_LIMBS], ker_x[NUM_LIMBS], ker_y[NUM_LIMBS], ker_z[NUM_LIMBS], OA[NUM_LIMBS], OA_dual_inv[2*NUM_LIMBS];
+    __m512i J[NUM_LIMBS], matrix01[2*NUM_LIMBS], matrix23[2*NUM_LIMBS], T8_x[NUM_LIMBS], T8_y[NUM_LIMBS], T8_z[NUM_LIMBS], gluing_eval_res[2*NUM_LIMBS];
+    __m512i eval_pts_theta[num_pts * NUM_LIMBS];
+    __m512i t0[N4x2], t1[N4x2], idx;
+    __m512i c1[2*NUM_LIMBS], c2[2*NUM_LIMBS], p1[NUM_LIMBS], p2[NUM_LIMBS], k1[NUM_LIMBS], k2[NUM_LIMBS];
     splitting_matrix_t isom_matrix, rand_matrix;
-    __m512i c1[16], c2[16], p1[8], p2[8], k1[8], k2[8];
+    bool h1, h2, success = true;
 
-    fp2_t unvec1[4];
-
-    // Normalise E1, E2 as well as T1.P1 and T1.P2
-    theta_normalize_chain_input_unvec(E12, ker);   
-
-    // lift the basis
-    theta_couple_jac_point_t xyT1, xyT2;
-    ec_basis_t bas1 = { .P = ker->T1.P1, .Q = ker->T2.P1, .PmQ = ker->T1m2.P1 };
-    ec_basis_t bas2 = { .P = ker->T1.P2, .Q = ker->T2.P2, .PmQ = ker->T1m2.P2 };
-
-    success &= lift_basis_normalized(&xyT1.P1, &xyT2.P1, &bas1, &E12->E1, verify);
-    success &= lift_basis_normalized(&xyT1.P2, &xyT2.P2, &bas2, &E12->E2, verify);
-
-    // We are now in the position to convert from 64 to 51 bit limbs
-    // For the curve we need to pack the Montgomery coefficient for
-    // arithmetic.
+    // Lift each basis x(P), x(Q), x(P-Q) to P, Q in Jacobian coordinates.
+    // We pack the coordinates into three blobs
+    // ker_X = AVX_4x2x1(P1.X, Q1.X, P2.X, Q2.X), etc.
+    success &= lift_basis_pair_normalized_2x2x2(ker_x, ker_y, ker_z, ker_basis1, ker_basis2, normA_1, normA_2, verify);
+    
+    // Packing curve coefficients
     // A_12 = AVX_4x2x1(E1.A, E1.A, E2.A, E2.A)
-    unvec1[0] = E12->E1.A; unvec1[1] = E12->E1.A; unvec1[2] = E12->E2.A; unvec1[3] = E12->E2.A;
-    fp2_unvectorized_to_4x2x1(A_12, unvec1);
+    idx = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(idx, normA_1[i]);
+        t1[i] = VPERM512(idx, normA_2[i]);
+    }
+    fp2_2x2x2_to_4x2x1(A_12, t0, t1);
     // A24_12 = AVX_4x2x1(E1.A24, E1.A24, E2.A24, E2.A24)
-    unvec1[0] = E12->E1.A24.x; unvec1[1] = E12->E1.A24.x; unvec1[2] = E12->E2.A24.x; unvec1[3] = E12->E2.A24.x;
-    fp2_unvectorized_to_4x2x1(A24_12, unvec1);
-
-    // For the Jacobian points, we pack the coordinates into three blobs
-    // ker_X = AVX_4x2x1(P1.X, Q1.X, P2.X, Q2.X)
-    unvec1[0] = xyT1.P1.x; unvec1[1] = xyT2.P1.x; unvec1[2] = xyT1.P2.x; unvec1[3] = xyT2.P2.x;
-    fp2_unvectorized_to_4x2x1(ker_x, unvec1);
-    // ker_Y = AVX_4x2x1(P1.Y, Q1.Y, P2.Y, Q2.Y)
-    unvec1[0] = xyT1.P1.y; unvec1[1] = xyT2.P1.y; unvec1[2] = xyT1.P2.y; unvec1[3] = xyT2.P2.y;
-    fp2_unvectorized_to_4x2x1(ker_y, unvec1);
-    // ker_Z = AVX_4x2x1(P1.Z, Q1.Z, P2.Z, Q2.Z)
-    unvec1[0] = xyT1.P1.z; unvec1[1] = xyT2.P1.z; unvec1[2] = xyT1.P2.z; unvec1[3] = xyT2.P2.z;
-    fp2_unvectorized_to_4x2x1(ker_z, unvec1);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(idx, normA24_1[i]);
+        t1[i] = VPERM512(idx, normA24_2[i]);
+    }
+    fp2_2x2x2_to_4x2x1(A24_12, t0, t1);
 
     // Setting up the strategy
     int space = 1;
@@ -481,7 +470,7 @@ bool theta_isogeny_chain_no_torsion_pair(
         ++space;
 
     uint16_t orders[space];
-    __m512i strat_points_x[8*space], strat_points_y[8*space], strat_points_z[8*space];
+    __m512i strat_points_x[space*NUM_LIMBS], strat_points_y[space*NUM_LIMBS], strat_points_z[space*NUM_LIMBS];
     // TODO: ker_x, ker_y, ker_z never used again, remove copies.
     orders[0] = n-2;
     fp2_copy_4x2x1(strat_points_x, ker_x);
@@ -494,7 +483,7 @@ bool theta_isogeny_chain_no_torsion_pair(
 
     success &= gluing_codomain(
         OA, OA_dual_inv, J, matrix01, matrix23, A24_12, 
-        strat_points_x + (8*current), strat_points_z + (8*current),
+        strat_points_x + current*NUM_LIMBS, strat_points_z + current*NUM_LIMBS,
         verify
     );
 
@@ -503,8 +492,8 @@ bool theta_isogeny_chain_no_torsion_pair(
     // T8_Y = AVX_4x2x1(Y_8[0], Y_8[0], Y_8[2], Y_8[2])
     // T8_Z = AVX_4x2x1(Z_8[0], Z_8[0], Z_8[2], Z_8[2])
     idx = VSET(0, 1, 0, 1, 4, 5, 4, 5);
-    for (int i = 0; i <  8; i++) {
-        int j = 8*current + i;
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        int j = current*NUM_LIMBS + i;
         T8_x[i] = VPERM512(idx, strat_points_x[j]);
         T8_y[i] = VPERM512(idx, strat_points_y[j]);
         T8_z[i] = VPERM512(idx, strat_points_z[j]);
@@ -513,18 +502,18 @@ bool theta_isogeny_chain_no_torsion_pair(
     // Push kernel though the gluing isogeny
     // 4 Jacobian points for the kernel become 2 theta points
     // TODO: Is current = space-1 here? And even if it is not, is it better to use 8*space?
-    __m512i strat_theta_pair[16*space];
+    __m512i strat_theta_pair[space * 2*NUM_LIMBS];
     for (int i = 0; i < current; i++) {
         gluing_eval_pair(
-            strat_theta_pair + 16*i, //8x1x1
-            A_12, strat_points_x + (8*i), strat_points_y + (8*i), strat_points_z + (8*i),
+            strat_theta_pair + i*2*NUM_LIMBS, //8x1x1
+            A_12, strat_points_x + i*NUM_LIMBS, strat_points_y + i*NUM_LIMBS, strat_points_z + i*NUM_LIMBS,
             T8_x, T8_y, T8_z, J, matrix01, matrix23
         );
         orders[i]--;
     }
     current--;
 
-    success &= gluing_eval_special_list_pair_unvec(
+    success &= gluing_eval_special_list_pair(
         eval_pts_theta, pts, OA_dual_inv, 
         matrix01, matrix23, num_pts, verify
     );
@@ -541,8 +530,8 @@ bool theta_isogeny_chain_no_torsion_pair(
 
             int num_dbls = orders[current-1] / 2;
             theta_double_iter_pair(
-                strat_theta_pair + (16*current), 
-                strat_theta_pair + (16*(current-1)), 
+                strat_theta_pair + current*(2*NUM_LIMBS), 
+                strat_theta_pair + (current-1)*(2*NUM_LIMBS), 
                 c1, c2, num_dbls
             );
             orders[current] = orders[current-1] - num_dbls;
@@ -550,7 +539,7 @@ bool theta_isogeny_chain_no_torsion_pair(
 
         // Compute the codomain of the kernel
         success &= theta_codomain_pair(
-            OA, OA_dual_inv, strat_theta_pair + (16*current), 
+            OA, OA_dual_inv, strat_theta_pair + current*(2*NUM_LIMBS), 
             h1, h2, verify
         );
 
@@ -573,13 +562,12 @@ bool theta_isogeny_chain_no_torsion_pair(
     // two codomains.
     
     //TODO: We can save 30 cycles by using theta_eval_pair_old here, as we only need OA_inv in 4x2x1.
-    fp2_8x1x1_to_4x2x1(strat_theta_pair, strat_theta_pair + 8, strat_theta_pair);
+    fp2_8x1x1_to_4x2x1(strat_theta_pair, strat_theta_pair + NUM_LIMBS, strat_theta_pair);
     if (n > 3) {
         fp2_8x1x1_to_first_4x2x1(OA_dual_inv, OA_dual_inv);
         theta_eval_single(strat_theta_pair, strat_theta_pair, OA_dual_inv, h1, h2);
     }
 
-    
     h1 = false; h2 = false;
     theta_codomain_with_four_torsion(OA_dual_inv, OA, strat_theta_pair, h1, h2);
     // In order to use pair eval
@@ -604,8 +592,74 @@ bool theta_isogeny_chain_no_torsion_pair(
         splitting_apply_isomorphism_list_pair(eval_pts_theta, &rand_matrix, num_pts);
     }
 
-    success &= splitting_theta_to_product_unvec(res_E34, OA, verify);
-    success &= splitting_theta_point_to_mont_list_pair_unvec(res_pts, eval_pts_theta, OA, num_pts, verify);
+    success &= splitting_theta_to_product(res_A_34, OA, verify);
+    success &= splitting_theta_point_to_mont_list_pair(res_pts_34, eval_pts_theta, OA, num_pts, verify);
 
     return success;
+}
+
+bool theta_isogeny_chain_no_torsion(
+    theta_couple_curve_t* res_E34, 
+    theta_couple_point_t* res_pts, 
+    theta_couple_curve_t* E12, 
+    theta_kernel_couple_points_t* ker,
+    theta_couple_point_t* pts, 
+    const int n, 
+    const int num_pts, 
+    const bool randomize,
+    const bool verify
+)
+{
+    fp2_t unvec[4];
+    __m512i basis1[3*N4x2], basis2[3*N4x2], normA_1[N4x2], normA_2[N4x2], normA24_1[N4x2], normA24_2[N4x2];
+    __m512i A_34[NUM_LIMBS], eval_pts_mont[num_pts * NUM_LIMBS];
+    
+    ec_point_t AC;
+    ec_point_unvec_to_1x2x2x2(basis1, &ker->T1.P1);
+    ec_point_unvec_to_1x2x2x2(basis1 + N4x2, &ker->T2.P1);
+    ec_point_unvec_to_1x2x2x2(basis1 + 2*N4x2, &ker->T1m2.P1);
+    ec_point_unvec_to_1x2x2x2(basis2, &ker->T1.P2);
+    ec_point_unvec_to_1x2x2x2(basis2 + N4x2, &ker->T2.P2);
+    ec_point_unvec_to_1x2x2x2(basis2 + 2*N4x2, &ker->T1m2.P2);
+
+    fp2_copy(&AC.x, &E12->E1.A);
+    fp2_set_one(&AC.z);
+    ec_point_unvec_to_1x2x2x2(normA_1, &AC);
+    fp2_copy(&AC.x, &E12->E2.A);
+    fp2_set_one(&AC.z);
+    ec_point_unvec_to_1x2x2x2(normA_2, &AC);
+    ec_point_unvec_to_1x2x2x2(normA24_1, &E12->E1.A24);
+    ec_point_unvec_to_1x2x2x2(normA24_2, &E12->E2.A24);
+
+    for (int i = 0; i < num_pts; i++) {
+        fp2_copy(unvec, &(pts + i)->P1.x);
+        fp2_copy(unvec+1, &(pts + i)->P1.z);
+        fp2_copy(unvec+2, &(pts + i)->P2.x);
+        fp2_copy(unvec+3, &(pts + i)->P2.z);
+        fp2_unvectorized_to_4x2x1(eval_pts_mont + i*NUM_LIMBS, unvec);
+    }
+
+    bool ret = theta_isogeny_chain_no_torsion_vec(
+        A_34, eval_pts_mont, 
+        basis1, basis2, normA_1, normA_2, normA24_1, normA24_2, eval_pts_mont, 
+        n, num_pts, randomize, verify
+    );
+
+    fp2_4x2x1_to_unvectorized(unvec, A_34);
+    ec_curve_init(&res_E34->E1);
+    ec_curve_init(&res_E34->E2);
+    res_E34->E1.A = unvec[0];
+    res_E34->E1.C = unvec[1];
+    res_E34->E2.A = unvec[2];
+    res_E34->E2.C = unvec[3];
+
+    for (int i = 0; i < num_pts; i++) {
+        fp2_4x2x1_to_unvectorized(unvec, eval_pts_mont + i*NUM_LIMBS);
+        fp2_copy(&(res_pts+i)->P1.x, unvec);
+        fp2_copy(&(res_pts+i)->P1.z, unvec+1);
+        fp2_copy(&(res_pts+i)->P2.x, unvec+2);
+        fp2_copy(&(res_pts+i)->P2.z, unvec+3);
+    }
+
+    return ret;
 }

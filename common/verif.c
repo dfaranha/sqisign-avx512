@@ -313,7 +313,7 @@ static bool compute_commitment_curve_verify(
             return false;
         }
     } else {
-        codomain_splits = theta_isogeny_chain_pair_vec_verif(
+        codomain_splits = theta_isogeny_chain_vec_verif(
             A_34, B_chall_can, B_aux_can, A_chall, sig->A_aux, A24_chall, sig->A24_aux,
             pow_dim2_deg_resp
         );

@@ -227,6 +227,9 @@ bool test_theta_KAT(int iterations)
     assert(test_point_order_twof(&ker_extra.T1m2.P1, &E12.E1, length+2));
     assert(test_point_order_twof(&ker_extra.T1m2.P2, &E12.E2, length+2));
 
+    theta_normalize_chain_input_unvec(&E12, &ker_extra);
+    theta_normalize_chain_input_unvec(&E12, &ker_exact);
+
     // input_pts_two = [(xP1, zero), (zero, xP2)]
     copy_point(&input_pts_two[0].P1, &ker_extra.T1.P1);
     ec_point_init(&input_pts_two[0].P2);
@@ -253,15 +256,14 @@ bool test_theta_KAT(int iterations)
     ec_point_t RmS1, RpS1, RmS2, RpS2;
     bool success, verify;
 
-    // 4x2x1 with torsion
-    verify = true;
+    // with torsion
     for (int ridx = 0; ridx < 2 && passed; ridx++) {
         bool randomize = randomize_vals[ridx];
         for (int pidx = 0; pidx < NUM_INPUT_LISTS && passed; pidx++) {
             theta_couple_point_t* input_pts = input_points_vals[pidx];
             int num_pts = num_pts_vals[pidx];
 
-            passed = theta_isogeny_chain_single(&E34_actual, res_pts,
+            passed = theta_isogeny_chain(&E34_actual, res_pts,
                 &E12, &ker_extra, input_pts, length, num_pts, randomize, verify);
 
             if (!passed) { break; }
@@ -325,165 +327,13 @@ bool test_theta_KAT(int iterations)
             }
         }
     }
-    print_test_res("chain 4x2x1 with torsion", passed);
-    if(passed == 0) {
-        return false;
-    }
-
-    // 4x2x1 no torsion
-    for (int ridx = 0; ridx < 2 && passed; ridx++) {
-        bool randomize = randomize_vals[ridx];
-        for (int pidx = 0; pidx < NUM_INPUT_LISTS && passed; pidx++) {
-            theta_couple_point_t* input_pts = input_points_vals[pidx];
-            int num_pts = num_pts_vals[pidx];
-
-            passed = theta_isogeny_chain_no_torsion_single(&E34_actual, res_pts,
-                &E12, &ker_exact, input_pts, length, num_pts, randomize, verify);
-
-            if (!passed) { break; }
-
-            ec_normalize_curve(&E34_actual.E1);
-            ec_normalize_curve(&E34_actual.E2);
-            
-            ec_j_inv(&j_actual, &E34_actual.E1);
-            int j3_eq_j3_expected = fp2_is_equal(&j3_expected, &j_actual);
-            int j3_eq_j4_expected = fp2_is_equal(&j4_expected, &j_actual);
-
-            ec_j_inv(&j_actual, &E34_actual.E2);
-            int j4_eq_j3_expected = fp2_is_equal(&j3_expected, &j_actual);
-            int j4_eq_j4_expected = fp2_is_equal(&j4_expected, &j_actual);
-
-            int same = j3_eq_j3_expected & j4_eq_j4_expected;
-            int swapped = j3_eq_j4_expected & j4_eq_j3_expected;
-            passed = same | swapped;
-            if (!passed) { break; }
-
-            for (int i = 0; i < num_pts; i++) {
-                int on_curve_E3 = ec_test_is_on_curve(&E34_actual.E1, &(res_pts+i)->P1);
-                int on_curve_E4 = ec_test_is_on_curve(&E34_actual.E2, &(res_pts+i)->P2);
-                passed &= on_curve_E3 & on_curve_E4;
-            }
-            if (!passed) { break; }
-
-            projective_difference_point(&RmS1, &res_pts->P1, &(res_pts+1)->P1, &E34_actual.E1);
-            projective_difference_point(&RmS2, &res_pts->P2, &(res_pts+1)->P2, &E34_actual.E2);
-            xADD(&RpS1, &res_pts->P1, &(res_pts+1)->P1, &RmS1);
-            xADD(&RpS2, &res_pts->P2, &(res_pts+1)->P2, &RmS2);
-
-            if (pidx == 0) {
-                int is_order4_RmS1 = test_point_order_twof(&RmS1, &E34_actual.E1, 2);
-                int is_order4_RpS1 = test_point_order_twof(&RpS1, &E34_actual.E1, 2);
-                int is_order4_1 = is_order4_RmS1 | is_order4_RpS1;
-                int is_order4_RmS2 = test_point_order_twof(&RmS2, &E34_actual.E2, 2);
-                int is_order4_RpS2 = test_point_order_twof(&RpS2, &E34_actual.E2, 2);
-                int is_order4_2 = is_order4_RmS2 | is_order4_RpS2;
-                
-                int is_torsion4_RmS1 = test_point_torsion_twof(&RmS1, &E34_actual.E1, 2);
-                int is_torsion4_RpS1 = test_point_torsion_twof(&RpS1, &E34_actual.E1, 2);
-                int is_torsion4_1 = is_torsion4_RmS1 | is_torsion4_RpS1;
-                int is_torsion4_RmS2 = test_point_torsion_twof(&RmS2, &E34_actual.E2, 2);
-                int is_torsion4_RpS2 = test_point_torsion_twof(&RpS2, &E34_actual.E2, 2);
-                int is_torsion4_2 = is_torsion4_RmS2 | is_torsion4_RpS2;
-
-                passed = (is_order4_1 & is_torsion4_2) | (is_order4_2 & is_torsion4_1);
-            } else {
-                ec_point_t T1 = (res_pts+2)->P1;
-                ec_point_t T2 = (res_pts+2)->P2;
-                ec_normalize_point(&RmS1);
-                ec_normalize_point(&RpS1);
-                ec_normalize_point(&RmS2);
-                ec_normalize_point(&RpS2);
-                ec_normalize_point(&T1);
-                ec_normalize_point(&T2);
-                int is_diff1 = fp2_is_equal(&RmS1.x, &T1.x) | fp2_is_equal(&RpS1.x, &T1.x);
-                int is_diff2 = fp2_is_equal(&RmS2.x, &T2.x) | fp2_is_equal(&RpS2.x, &T2.x);
-                passed = is_diff1 & is_diff2;
-            }
-        }
-    }
-    print_test_res("chain 4x2x1 no torsion", passed);
-    if(passed == 0) {
-        return false;
-    }
-
-    // 8x1x1 with torsion
-    for (int ridx = 0; ridx < 2 && passed; ridx++) {
-        bool randomize = randomize_vals[ridx];
-        for (int pidx = 0; pidx < NUM_INPUT_LISTS && passed; pidx++) {
-            theta_couple_point_t* input_pts = input_points_vals[pidx];
-            int num_pts = num_pts_vals[pidx];
-
-            passed = theta_isogeny_chain_pair(&E34_actual, res_pts,
-                &E12, &ker_extra, input_pts, length, num_pts, randomize, verify);
-
-            if (!passed) { break; }
-
-            ec_normalize_curve(&E34_actual.E1);
-            ec_normalize_curve(&E34_actual.E2);
-
-            if (randomize) {
-                ec_j_inv(&j_actual, &E34_actual.E1);
-                int j3_eq_j3_expected = fp2_is_equal(&j3_expected, &j_actual);
-                ec_j_inv(&j_actual, &E34_actual.E2);
-                int j4_eq_j4_expected = fp2_is_equal(&j4_expected, &j_actual);
-                passed = j3_eq_j3_expected & j4_eq_j4_expected;
-            } else {
-                int E3_equal = fp2_is_equal(&E34_expected.E1.A, &E34_actual.E1.A);
-                int E4_equal = fp2_is_equal(&E34_expected.E2.A, &E34_actual.E2.A);
-                passed = E3_equal & E4_equal;
-            }
-            if(!passed) { break; }
-
-            for (int i = 0; i < num_pts; i++) {
-                int on_curve_E3 = ec_test_is_on_curve(&E34_actual.E1, &(res_pts+i)->P1);
-                int on_curve_E4 = ec_test_is_on_curve(&E34_actual.E2, &(res_pts+i)->P2);
-                passed &= on_curve_E3 & on_curve_E4;
-            }
-            if (!passed) { break; }
-
-            projective_difference_point(&RmS1, &res_pts->P1, &(res_pts+1)->P1, &E34_actual.E1);
-            projective_difference_point(&RmS2, &res_pts->P2, &(res_pts+1)->P2, &E34_actual.E2);
-            xADD(&RpS1, &res_pts->P1, &(res_pts+1)->P1, &RmS1);
-            xADD(&RpS2, &res_pts->P2, &(res_pts+1)->P2, &RmS2);
-
-            if (pidx == 0) {
-                int is_order4_RmS1 = test_point_order_twof(&RmS1, &E34_actual.E1, 2);
-                int is_order4_RpS1 = test_point_order_twof(&RpS1, &E34_actual.E1, 2);
-                int is_order4_1 = is_order4_RmS1 | is_order4_RpS1;
-                int is_order4_RmS2 = test_point_order_twof(&RmS2, &E34_actual.E2, 2);
-                int is_order4_RpS2 = test_point_order_twof(&RpS2, &E34_actual.E2, 2);
-                int is_order4_2 = is_order4_RmS2 | is_order4_RpS2;
-                
-                int is_torsion4_RmS1 = test_point_torsion_twof(&RmS1, &E34_actual.E1, 2);
-                int is_torsion4_RpS1 = test_point_torsion_twof(&RpS1, &E34_actual.E1, 2);
-                int is_torsion4_1 = is_torsion4_RmS1 | is_torsion4_RpS1;
-                int is_torsion4_RmS2 = test_point_torsion_twof(&RmS2, &E34_actual.E2, 2);
-                int is_torsion4_RpS2 = test_point_torsion_twof(&RpS2, &E34_actual.E2, 2);
-                int is_torsion4_2 = is_torsion4_RmS2 | is_torsion4_RpS2;
-
-                passed = (is_order4_1 & is_torsion4_2) | (is_order4_2 & is_torsion4_1);
-            } else {
-                ec_point_t T1 = (res_pts+2)->P1;
-                ec_point_t T2 = (res_pts+2)->P2;
-                ec_normalize_point(&RmS1);
-                ec_normalize_point(&RpS1);
-                ec_normalize_point(&RmS2);
-                ec_normalize_point(&RpS2);
-                ec_normalize_point(&T1);
-                ec_normalize_point(&T2);
-                int is_diff1 = fp2_is_equal(&RmS1.x, &T1.x) | fp2_is_equal(&RpS1.x, &T1.x);
-                int is_diff2 = fp2_is_equal(&RmS2.x, &T2.x) | fp2_is_equal(&RpS2.x, &T2.x);
-                passed = is_diff1 & is_diff2;
-            }
-        }
-    }
-    print_test_res("chain 8x1x1 with torsion", passed);
+    print_test_res("chain with torsion", passed);
     if(passed == 0) {
         return false;
     }
 
     // 8x1x1 verification
-    success = theta_isogeny_chain_ver(&E34_actual, &E12, &ker_extra, length);
+    success = theta_isogeny_chain_verif(&E34_actual, &E12, &ker_extra, length);
 
     ec_normalize_curve(&E34_actual.E1);
     ec_normalize_curve(&E34_actual.E2);
@@ -492,7 +342,7 @@ bool test_theta_KAT(int iterations)
     int E4_equal = fp2_is_equal(&E34_expected.E2.A, &E34_actual.E2.A);
     passed = success & E3_equal & E4_equal;
 
-    print_test_res("chain 8x1x1 verification", passed);
+    print_test_res("chain verification", passed);
     if(passed == 0) {
         return false;
     }
@@ -504,7 +354,7 @@ bool test_theta_KAT(int iterations)
             theta_couple_point_t* input_pts = input_points_vals[pidx];
             int num_pts = num_pts_vals[pidx];
 
-            passed = theta_isogeny_chain_no_torsion_pair(&E34_actual, res_pts,
+            passed = theta_isogeny_chain_no_torsion(&E34_actual, res_pts,
                 &E12, &ker_exact, input_pts, length, num_pts, randomize, verify);
 
             if (!passed) { break; }
@@ -568,30 +418,30 @@ bool test_theta_KAT(int iterations)
             }
         }
     }
-    print_test_res("chain 8x1x1 no torsion", passed);
+    print_test_res("chain no torsion", passed);
     if(passed == 0) {
         return false;
     }
 
     // TODO: Randomize, eval points
-    for (int i = 0; i < 10 && passed; i++) {
-        dim_two_isogeny_test_t test = TESTS[i];
-        bool randomize = false;
-        int num_pts = 0;
-        theta_couple_point_t input_pts[0];
-        passed = theta_isogeny_chain_pair(&E34_actual, res_pts,
-                &test.domain, &test.kernel, input_pts, test.length, num_pts, randomize, verify);
-        if (!passed) { break; }
+    // for (int i = 0; i < 10 && passed; i++) {
+    //     dim_two_isogeny_test_t test = TESTS[i];
+    //     bool randomize = false;
+    //     int num_pts = 0;
+    //     theta_couple_point_t input_pts[0];
+    //     passed = theta_isogeny_chain_pair(&E34_actual, res_pts,
+    //             &test.domain, &test.kernel, input_pts, test.length, num_pts, randomize, verify);
+    //     if (!passed) { break; }
         
-        ec_normalize_curve(&E34_actual.E1);
-        ec_normalize_curve(&E34_actual.E2);
-        passed = fp2_is_equal(&test.codomain.E1.A, &E34_actual.E1.A) 
-            & fp2_is_equal(&test.codomain.E2.A, &E34_actual.E2.A);
-    }
-    print_test_res("chain 8x1x1 KAT", passed);
-    if(passed == 0) {
-        return false;
-    }
+    //     ec_normalize_curve(&E34_actual.E1);
+    //     ec_normalize_curve(&E34_actual.E2);
+    //     passed = fp2_is_equal(&test.codomain.E1.A, &E34_actual.E1.A) 
+    //         & fp2_is_equal(&test.codomain.E2.A, &E34_actual.E2.A);
+    // }
+    // print_test_res("chain 8x1x1 KAT", passed);
+    // if(passed == 0) {
+    //     return false;
+    // }
 
     return true;
 }

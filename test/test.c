@@ -54,8 +54,8 @@ int main()
     // passed = test_theta_splitting(n_tests);
     // if (!passed) { return 0; }
 
-    // passed = test_theta_KAT(n_tests);
-    // if (!passed) { return 0; }
+    passed = test_theta_KAT(n_tests);
+    if (!passed) { return 0; }
 
     passed = test_verification_kat();
     if (!passed) { return 0; }
