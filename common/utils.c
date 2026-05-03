@@ -2,6 +2,7 @@
 #include <string.h>
 #include "utils.h"
 #include "fp_unvec.h"
+#include "fp_consts.h"
 #include "fp2.h"
 #include "sqi_test_extras.h"
 
@@ -79,7 +80,7 @@ void print_512i_array(__m512i* a, int n, char* name) {
 void print_fp_8x1_index(__m512i* a, int index)
 {
     uint64_t vals[8];
-    for(int i = 0; i < 8; i++) {
+    for(int i = 0; i < NUM_LIMBS; i++) {
         memcpy(vals, &a[i], sizeof(vals));
         printf("%d: %lx   ", i, vals[index]);
     }
@@ -89,28 +90,29 @@ void print_fp_8x1_index(__m512i* a, int index)
 void print_fp_4x2_index(__m512i* a, int index)
 {
     uint64_t vals[8];
-    for(int i = 0; i < 4; i++) {
+    for(int i = 0; i < N4x2; i++) {
         memcpy(vals, &a[i], sizeof(vals));
         printf("%d: %lx   ", i, vals[2*index]);
     }
-    for(int i = 0; i < 4; i++) {
+    int rem4x2 = NUM_LIMBS % 2;
+    for(int i = 0; i < N4x2-rem4x2; i++) {
         memcpy(vals, &a[i], sizeof(vals));
-        printf("%d: %lx   ", i+4, vals[2*index+1]);
+        printf("%d: %lx   ", i+N4x2, vals[2*index+1]);
     }
     printf("\n");
 }
 
-void print_fp_2x4_index(__m512i* a, int index)
-{
-    uint64_t v0[8], v1[8];
-    memcpy(v0, &a[0], sizeof(v0));
-    memcpy(v1, &a[1], sizeof(v1));
-    for(int i = 0; i < 4; i++) {
-        printf("%d: %lx   ", 2*i, v0[4*index + i]);
-        printf("%d: %lx   ", 2*i+1, v1[4*index + i]);
-    }
-    printf("\n");
-}
+// void print_fp_2x4_index(__m512i* a, int index)
+// {
+//     uint64_t v0[8], v1[8];
+//     memcpy(v0, &a[0], sizeof(v0));
+//     memcpy(v1, &a[1], sizeof(v1));
+//     for(int i = 0; i < 4; i++) {
+//         printf("%d: %lx   ", 2*i, v0[4*index + i]);
+//         printf("%d: %lx   ", 2*i+1, v1[4*index + i]);
+//     }
+//     printf("\n");
+// }
 
 void print_fp2_2x2x2(__m512i* a)
 {

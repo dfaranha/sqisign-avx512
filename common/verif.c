@@ -136,7 +136,7 @@ static bool check_canonical_basis_change_matrix(const signature_2x2x2_t *sig)
 // P + [chall_coeff]Q and store the codomain in E_chall
 static bool compute_challenge_verify(__m512i* res_A24_chall, __m512i* res_A_chall, const signature_2x2x2_t *sig, public_key_2x2x2_t* pk)
 {
-    __m512i ker[4], A24[4], A[4], bas_Epk[12];
+    __m512i ker[N4x2], A24[N4x2], A[N4x2], bas_Epk[3*N4x2];
     // length of 2^n isogeny
     int len = TORSION_EVEN_POWER - sig->backtracking;
 

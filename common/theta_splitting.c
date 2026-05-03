@@ -12,7 +12,8 @@
 
 int splitting_get_index(__m512i* null)
 {
-    __m512i tmp1[8], tmp2[8], tmp3[8], tmp4[8], idx1, idx2, idx3, idx4;
+    __m512i tmp1[NUM_LIMBS], tmp2[NUM_LIMBS], tmp3[NUM_LIMBS], tmp4[NUM_LIMBS];
+    __m512i idx1, idx2, idx3, idx4;
     __mmask8 add_mask;
     int is_zero, index = 0, num_found = 0, t;
 
@@ -23,7 +24,7 @@ int splitting_get_index(__m512i* null)
     idx2 = VSET(2, 3, 2, 3, 2, 3, 2, 3);
     idx3 = VSET(4, 5, 4, 5, 4, 5, 4, 5);
     idx4 = VSET(6, 7, 6, 7, 6, 7, 6, 7);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         tmp2[i] = VPERM512(idx2, tmp1[i]);
         tmp3[i] = VPERM512(idx3, tmp1[i]);
         tmp4[i] = VPERM512(idx4, tmp1[i]);
@@ -52,7 +53,7 @@ int splitting_get_index(__m512i* null)
     // === (0, 1), (0, 2), (2, 1), (1, 2) === 
     idx1 = VSET(0, 1, 0, 1, 2, 3, 4, 5);
     idx2 = VSET(2, 3, 4, 5, 6, 7, 6, 7);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         tmp1[i] = VPERM512(idx1, null[i]);
         tmp2[i] = VPERM512(idx2, null[i]);
     }
@@ -60,7 +61,7 @@ int splitting_get_index(__m512i* null)
     
     idx1 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
     idx2 = VSET(6, 7, 4, 5, 6, 7, 5, 5);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         tmp2[i] = VPERM512(idx2, tmp1[i]);
         tmp1[i] = VPERM512(idx1, tmp1[i]);
     }
@@ -141,13 +142,13 @@ void splitting_duplicate_pair_in_array(__m512i* res, __m512i* point, const int i
 
 void splitting_mul_matrix_column_single(__m512i* res, __m512i* dup, const splitting_matrix_t* matrix, const int index)
 {
-    __m512i tmp[8];
+    __m512i tmp[NUM_LIMBS];
     
     // Negate re when matrix entry is -1 or -i. Negate im when -1 or i.
     __mmask8 negate_mask = matrix->is_negative[index] ^ (0xaa & matrix->is_imaginary[index]);
     fp2_neg_4x2x1(tmp, dup);
     
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         res[i] = VBLEND(negate_mask, dup[i], tmp[i]);
 
         // conditional swap of re and im if multiplying by imaginary
@@ -166,15 +167,15 @@ void splitting_mul_matrix_column_single(__m512i* res, __m512i* dup, const splitt
 // then do coordinate-wise mult with vec(a_1).
 void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, const splitting_matrix_t* matrix)
 {
-    __m512i vec[8], point_copy[8], indices;
+    __m512i vec[NUM_LIMBS], point_copy[NUM_LIMBS], indices;
     __mmask8 negate_mask;
     fp2_copy_4x2x1(point_copy, point); // in case res = point
 
-    splitting_duplicate_pair_in_array(res, point_copy, 0, 8);
+    splitting_duplicate_pair_in_array(res, point_copy, 0, NUM_LIMBS);
     splitting_mul_matrix_column_single(res, res, matrix, 0);
 
     for (int j = 1; j < 4; j++) {
-        splitting_duplicate_pair_in_array(vec, point_copy, j, 8);
+        splitting_duplicate_pair_in_array(vec, point_copy, j, NUM_LIMBS);
         splitting_mul_matrix_column_single(vec, vec, matrix, j);
         fp2_add_4x2x1(res, res, vec);
     }
@@ -183,7 +184,7 @@ void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, const spli
 void splitting_apply_isomorphism_list_single(__m512i* pts, const splitting_matrix_t* matrix, const int num_pts)
 {
     for (int i = 0; i < num_pts; i++) {
-        splitting_apply_isomorphism_single(pts + 8*i, pts + 8*i, matrix);
+        splitting_apply_isomorphism_single(pts + i*NUM_LIMBS, pts + i*NUM_LIMBS, matrix);
     }
 }
 
@@ -192,13 +193,13 @@ void splitting_apply_isomorphism_list_single(__m512i* pts, const splitting_matri
 // res = (a_(1, i) * x, a_(1, i) * x', ...)
 void splitting_mul_matrix_column_pair(__m512i* res, __m512i* dup, const splitting_matrix_t* matrix, const int index)
 {
-    __m512i tmp[8];
+    __m512i tmp[NUM_LIMBS];
     __mmask8 negate_mask;
     
     // Negate re when matrix entry is -1 or -i.
     negate_mask = matrix->is_negative[index];
     fp_neg_8x1(tmp, dup);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         res[i] = VBLEND(negate_mask, dup[i], tmp[i]);
 
         // conditionally set to 0
@@ -207,17 +208,17 @@ void splitting_mul_matrix_column_pair(__m512i* res, __m512i* dup, const splittin
 
     // Negate im when -1 or i.
     negate_mask = matrix->is_negative[index] ^ matrix->is_imaginary[index];
-    fp_neg_8x1(tmp, dup+8);
-    for (int i = 0; i < 8; i++) {
-        res[i+8] = VBLEND(negate_mask, dup[i+8], tmp[i]);
+    fp_neg_8x1(tmp, dup + NUM_LIMBS);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        res[i + NUM_LIMBS] = VBLEND(negate_mask, dup[i + NUM_LIMBS], tmp[i]);
 
         // conditionally set to 0
-        res[i+8] = VBLEND(matrix->is_zero[index], res[i+8], VZERO());
+        res[i + NUM_LIMBS] = VBLEND(matrix->is_zero[index], res[i + NUM_LIMBS], VZERO());
 
         // conditionally swap re and im if multiplying by imaginary
         tmp[i] = res[i];
-        res[i] = VBLEND(matrix->is_imaginary[index], res[i], res[i+8]);
-        res[i+8] = VBLEND(matrix->is_imaginary[index], res[i+8], tmp[i]);
+        res[i] = VBLEND(matrix->is_imaginary[index], res[i], res[i + NUM_LIMBS]);
+        res[i + NUM_LIMBS] = VBLEND(matrix->is_imaginary[index], res[i + NUM_LIMBS], tmp[i]);
     }
 }
 
@@ -226,15 +227,15 @@ void splitting_mul_matrix_column_pair(__m512i* res, __m512i* dup, const splittin
 // To multply x and x' by the first column of A, we create a vector (x, x', x, x', x, x', x, x')
 void splitting_apply_isomorphism_pair(__m512i* res, __m512i* points, const splitting_matrix_t* matrix)
 {
-    __m512i vec[16], points_copy[16], indices;
+    __m512i vec[2*NUM_LIMBS], points_copy[2*NUM_LIMBS], indices;
     __mmask8 negate_mask;
     fp2_copy_8x1x1(points_copy, points); // in case res = point
 
-    splitting_duplicate_pair_in_array(res, points_copy, 0, 16);
+    splitting_duplicate_pair_in_array(res, points_copy, 0, 2*NUM_LIMBS);
     splitting_mul_matrix_column_pair(res, res, matrix, 0);
 
     for (int j = 1; j < 4; j++) {
-        splitting_duplicate_pair_in_array(vec, points_copy, j, 16);
+        splitting_duplicate_pair_in_array(vec, points_copy, j, 2*NUM_LIMBS);
         splitting_mul_matrix_column_pair(vec, vec, matrix, j);
         fp2_add_8x1x1(res, res, vec);
     }
@@ -246,11 +247,11 @@ void splitting_apply_isomorphism_list_pair(__m512i* pts, const splitting_matrix_
     int num_pair_pts = num_pts / 2;
 
     for (int i = 0; i < num_pair_pts; i++) {
-        splitting_apply_isomorphism_pair(pts + 16*i, pts + 16*i, matrix);
+        splitting_apply_isomorphism_pair(pts + i*(2*NUM_LIMBS), pts + i*(2*NUM_LIMBS), matrix);
     }
     if (num_pts_is_odd) {
         splitting_apply_isomorphism_single(
-            pts+8*(num_pts-1), pts+8*(num_pts-1), matrix
+            pts + (num_pts-1)*NUM_LIMBS, pts + (num_pts-1)*NUM_LIMBS, matrix
         );
     }
 }
@@ -442,14 +443,14 @@ bool splitting_theta_point_to_mont_pair(
 
         idx0 = VSET(0, 8, 1, 9, 2, 10, 3, 11);
         idx1 = VSET(6, 14, 7, 15, 4, 12, 5, 13);
-        for (int i = 0; i < 8; i++) {
-            t0[i] = VBLENDPERM(idx0, theta_pair[i], theta_pair[i+8]);
-            t1[i] = VBLENDPERM(idx1, theta_pair[i], theta_pair[i+8]);
+        for (int i = 0; i < NUM_LIMBS; i++) {
+            t0[i] = VBLENDPERM(idx0, theta_pair[i], theta_pair[i + NUM_LIMBS]);
+            t1[i] = VBLENDPERM(idx1, theta_pair[i], theta_pair[i + NUM_LIMBS]);
         }
         fp2_mul_4x2x1(t0, t0, t1);
         idx0 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
         idx1 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < NUM_LIMBS; i++) {
             t1[i] = VPERM512(idx1, t0[i]);
             t0[i] = VPERM512(idx0, t0[i]);
         }
@@ -541,7 +542,7 @@ bool splitting_theta_point_to_mont_list_single(
 {
     bool success = true;
     for (int i = 0; i < num_pts; i++) {
-        success &= splitting_theta_point_to_mont_single_unvec(mont_pts + i, theta_pts + 8*i, null, verify);
+        success &= splitting_theta_point_to_mont_single_unvec(mont_pts + i, theta_pts + i*NUM_LIMBS, null, verify);
     }
     return success;
 }
@@ -579,12 +580,12 @@ bool splitting_theta_point_to_mont_list_pair_unvec(
 
     for (int i = 0; i < num_pair_pts; i++) {
         success &= splitting_theta_point_to_mont_pair_unvec(
-            mont_pts + 2*i, mont_pts + 2*i+1, theta_pts + 16*i, null, verify
+            mont_pts + 2*i, mont_pts + 2*i+1, theta_pts + i*(2*NUM_LIMBS), null, verify
         );
     }
     if (num_pts_is_odd) {
         success &= splitting_theta_point_to_mont_single_unvec(
-            mont_pts + (num_pts-1), theta_pts+8*(num_pts-1), null, verify
+            mont_pts + (num_pts-1), theta_pts + (num_pts-1)*NUM_LIMBS, null, verify
         );
     }
     return success;
