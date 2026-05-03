@@ -16,7 +16,7 @@ void gluing_compute_matrix_4x2x1(
     __m512i* x_4, __m512i* z_4, __m512i* u, __m512i* w, __m512i* det
 )
 {
-    __m512i z_sqr[8], a[8], b[8], c[8], d[8];
+    __m512i z_sqr[NUM_LIMBS], a[NUM_LIMBS], b[NUM_LIMBS], c[NUM_LIMBS], d[NUM_LIMBS];
     
     // TODO: Worth it to use fp2_4x2x1_duplicate_to_8x1x1?
     fp2_mulx2_4x2x1(c, pi, u, z_4, det, z_4);
@@ -30,11 +30,11 @@ void gluing_compute_matrix_4x2x1(
     fp2_neg_4x2x1(b, b);
 
     // Compute transpose:
-    __m512i idx_lo = _mm512_set_epi64(13, 12, 5, 4, 9, 8, 1, 0);    
-    __m512i idx_hi = _mm512_set_epi64(15, 14, 7, 6, 11, 10, 3, 2);
+    __m512i idx_lo = VSET(0, 1, 8, 9, 4, 5, 12, 13);    
+    __m512i idx_hi = VSET(2, 3, 10, 11, 6, 7, 14, 15);
     __m512i ab_lo, ab_hi, cd_lo, cd_hi;
 
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         // Step 1: 
         // lo: (a0, b0, a2, b2)
         // hi: (a1, b1, a3, b3)
@@ -61,7 +61,7 @@ void gluing_action_by_translation_4x2x1(
     __m512i* A24, __m512i* x_4, __m512i* z_4
 )
 {
-    __m512i u[8], w[8], t0[8], t1[8];
+    __m512i u[NUM_LIMBS], w[NUM_LIMBS], t0[NUM_LIMBS], t1[NUM_LIMBS];
 
     ec_double_4x4x2x1(u, w, A24, x_4, z_4);
     fp2_mulx2_4x2x1(t0, t1, w, x_4, u, z_4);
@@ -91,10 +91,10 @@ void gluing_change_of_basis_4x2x1(
     is four copies of the same element. This happens for 6 of the 9 total calls for
     avx_pairwise_mul.
     */
-    __m512i g1[8], h1[8], g2[8], h2[8], pi[8];
-    __m512i s0[8], s1[8], s2[8], s3[8], s4[8];
-    __m512i s5[8], s6[8], s7[8], s8[8], s9[8];
-    __m512i t0[8], t1[8], t2[8], idx0, idx1, idx2, idx3;
+    __m512i g1[NUM_LIMBS], h1[NUM_LIMBS], g2[NUM_LIMBS], h2[NUM_LIMBS], pi[NUM_LIMBS];
+    __m512i s0[NUM_LIMBS], s1[NUM_LIMBS], s2[NUM_LIMBS], s3[NUM_LIMBS], s4[NUM_LIMBS];
+    __m512i s5[NUM_LIMBS], s6[NUM_LIMBS], s7[NUM_LIMBS], s8[NUM_LIMBS], s9[NUM_LIMBS];
+    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], t2[NUM_LIMBS], idx0, idx1, idx2, idx3;
     __mmask8 mask;
 
     gluing_action_by_translation_4x2x1(g1, g2, h1, h2, pi, A24, x_4, z_4);
@@ -105,7 +105,7 @@ void gluing_change_of_basis_4x2x1(
     // S0 = avx_421_mul(T0, T1)
     idx0 = VSET(0, 1, 4, 5, 0, 1, 2, 3);
     idx1 = VSET(2, 3, 6, 7, 4, 5, 6, 7);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         s0[i] = VPERM512(idx0, pi[i]);
         t0[i] = VPERM512(idx1, pi[i]);
     }
@@ -118,7 +118,7 @@ void gluing_change_of_basis_4x2x1(
     idx0 = VSET(0, 0, 1, 1, 8, 8, 9, 9);
     idx1 = VSET(6, 6, 7, 7, 10, 10, 11, 11);
     mask = 0x55;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         s1[i] = VBLENDPERMMASKZ(mask, pi[i], s0[i], idx0);
         t0[i] = VBLENDPERMMASKZ(mask, pi[i], s0[i], idx1);
     }
@@ -135,7 +135,7 @@ void gluing_change_of_basis_4x2x1(
     idx1 = VSET(0, 1, 0, 1, 8, 9, 8, 9);
     idx2 = VSET(2, 3, 6, 7, 10, 11, 14, 15);
     idx3 = VSET(4, 5, 4, 5, 12, 13, 12, 13);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         s2[i] = VBLENDPERM(idx0, g1[i], g2[i]);
         t0[i] = VBLENDPERM(idx1, h1[i], h2[i]);
         t1[i] = VBLENDPERM(idx2, g1[i], g2[i]);
@@ -152,7 +152,7 @@ void gluing_change_of_basis_4x2x1(
     idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
     idx1 = VSET(2, 3, 2, 3, 0, 1, 0, 1);
     idx2 = VSET(0, 1, 4, 5, 0, 1, 4, 5);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         s3[i] = VPERM512(idx0, g1[i]);
         t0[i] = VPERM512(idx1, s0[i]);
         t1[i] = VPERM512(idx2, g2[i]);
@@ -168,7 +168,7 @@ void gluing_change_of_basis_4x2x1(
     idx0 = VSET(0, 1, 4, 5, 0, 1, 4, 5);
     idx1 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
     idx2 = VSET(6, 7, 6, 7, 6, 7, 6, 7);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         s5[i] = VPERM512(idx0, h2[i]);
         t0[i] = VPERM512(idx1, h1[i]);
         t1[i] = VPERM512(idx2, s0[i]);
@@ -180,7 +180,7 @@ void gluing_change_of_basis_4x2x1(
     // T1 = avx_421_mul(T1, T0)
     // S4 = avx_421_add(S4, T1)
     idx0 = VSET(4, 5, 4, 5, 4, 5, 4, 5);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         t0[i] = VPERM512(idx0, s0[i]);
     }
     fp2_mul_4x2x1(t1, t1, t0);
@@ -191,7 +191,7 @@ void gluing_change_of_basis_4x2x1(
     // S4 = avx_421_add(S4, T0)
     idx0 = VSET(4, 6, 4, 6, 4, 6, 4, 6); // Since s1 is in 2x4x1.
     mask = 0x3;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         t0[i] = VPERM512MASKZ(mask, s1[i], idx0);
     }
     fp2_add_4x2x1(s4, s4, t0);
@@ -204,7 +204,7 @@ void gluing_change_of_basis_4x2x1(
     // S4 = avx_421_add(S4, T4)
     idx1 = VSET(0, 1, 0, 1, 2, 3, 2, 3);
     idx2 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         t0[i] = VPERM512(idx0, s1[i]);
         t1[i] = VPERM512(idx1, s2[i]);
         t2[i] = VPERM512(idx2, s2[i]);
@@ -221,7 +221,7 @@ void gluing_change_of_basis_4x2x1(
     idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
     idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
     idx2 = VSET(2, 3, 6, 7, 2, 3, 6, 7);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         s6[i] = VPERM512(idx0, s4[i]);
         t0[i] = VPERM512(idx1, s4[i]);
         t1[i] = VPERM512(idx2, h2[i]);
@@ -238,7 +238,7 @@ void gluing_change_of_basis_4x2x1(
     idx0 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
     idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
     idx2 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         s7[i] = VPERM512(idx0, s4[i]);
         s8[i] = VPERM512(idx1, g1[i]);
         t0[i] = VPERM512(idx2, s4[i]);
@@ -251,7 +251,7 @@ void gluing_change_of_basis_4x2x1(
     // T0 = AVX_4x2x1(S6[2], S6[3], S6[2], S6[3])
     // S9, T1 = avx_421_pair_mul(S9, S3, S8, T0)
     // S9 = avx_421_add(S9, T1)
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         s9[i] = VPERM512(idx0, s6[i]);
         t0[i] = VPERM512(idx2, s6[i]);
     }
@@ -262,7 +262,7 @@ void gluing_change_of_basis_4x2x1(
     // T0 = AVX_4x2x1(S1[0], S1[0], S1[0], S1[0])
     // S4 = avx_421_mul(S4, T0)
     idx0 = VSET(0, 2, 0, 2, 0, 2, 0, 2); //s1 is in 2x4x1
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         t0[i] = VPERM512(idx0, s1[i]);
     }
     fp2_mul_4x2x1(s4, s4, t0);
@@ -272,7 +272,7 @@ void gluing_change_of_basis_4x2x1(
     // S6, S7 = avx_421_pair_mul(S6, T0, S7, T1)
     idx0 = VSET(0, 1, 0, 1, 0, 1, 0, 1);
     idx1 = VSET(6, 7, 6, 7, 6, 7, 6, 7);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         t0[i] = VPERM512(idx0, pi[i]);
         t1[i] = VPERM512(idx1, pi[i]);
     }
@@ -289,7 +289,7 @@ void gluing_change_of_basis_4x2x1(
 // Done (TODO delete this comment) from 9122 to 108 cycles.
 void gluing_internal_sum(__m512i* res_P, __m512i* P0P1, __m512i* P2P3)
 {
-    __m512i t0[16], t1[16], idx0, idx1;
+    __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], idx0, idx1;
 
     // Pa0, Pa1, Pb0, Pb1, Pc0, Pc1, Pd0, Pd1 = P0P1
     // Pa2, Pa3, Pb2, Pb3, Pc2, Pc3, Pd2, Pd3 = P2P3
@@ -297,7 +297,7 @@ void gluing_internal_sum(__m512i* res_P, __m512i* P0P1, __m512i* P2P3)
     // Pa0 + Pb0, Pc0 + Pd0, Pa1 + Pb1, Pc1 + Pd1, ... :
     idx0 = VSET(0, 4, 1, 5, 8, 12, 9, 13);
     idx1 = VSET(2, 6, 3, 7, 10, 14, 11, 15);
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
         t0[i] = VBLENDPERM(idx0, P0P1[i], P2P3[i]);
         t1[i] = VBLENDPERM(idx1, P0P1[i], P2P3[i]);
     }
@@ -314,7 +314,7 @@ void gluing_internal_sum_pair(
     __m512i* P0Q1, __m512i* Q0P1, __m512i* P2Q3, __m512i* Q2P3
 )
 {
-    __m512i t0[16], t1[16], t2[16], t3[16], idx0, idx1;
+    __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS], t3[2*NUM_LIMBS], idx0, idx1;
     
     // Pa0, Qa1, Pb0, Qb1, Pc0, Qc1, Pd0, Qd1 = P0Q1
     // Qa0, Pa1, Qb0, Pb1, Qc0, Pc1, Qd0, Pd1 = Q0P1
@@ -325,7 +325,7 @@ void gluing_internal_sum_pair(
     // t2 = Pa2 + Pb2, Pc2 + Pd2, ...
     idx0 = VSET(0, 4, 8, 12, 9, 13, 1, 5);
     idx1 = VSET(2, 6, 10, 14, 11, 15, 3, 7);
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
         t0[i] = VBLENDPERM(idx0, P0Q1[i], Q0P1[i]);
         t1[i] = VBLENDPERM(idx1, P0Q1[i], Q0P1[i]);
         t2[i] = VBLENDPERM(idx0, P2Q3[i], Q2P3[i]);
@@ -337,20 +337,19 @@ void gluing_internal_sum_pair(
     // Pa0 + Pb0 + Pc0 + Pd0, Qa0 + Qb0 + Qc0 + Qd0, ...
     idx0 = VSET(0, 2, 4, 6, 8, 10, 12, 14);
     idx1 = VSET(1, 3, 5, 7, 9, 11, 13, 15);
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
         t1[i] = VBLENDPERM(idx0, t0[i], t2[i]);
         t3[i] = VBLENDPERM(idx1, t0[i], t2[i]);
     }
     fp2_add_8x1x1(res_PQ, t1, t3);    
 }
 
-// Done (TODO delete this comment)
 void gluing_apply_matrix(
     __m512i* res_P, 
     __m512i* matrix01, __m512i* matrix23, __m512i* P
 )
 {
-    __m512i P0P1[16], P2P3[16];
+    __m512i P0P1[2*NUM_LIMBS], P2P3[2*NUM_LIMBS];
 
     fp2_4x2x1_duplicate_to_8x1x1(P2P3, P);
     fp2_mul_8x1x1(P0P1, matrix01, P2P3);
@@ -359,16 +358,15 @@ void gluing_apply_matrix(
     gluing_internal_sum(res_P, P0P1, P2P3);
 }
 
-// Done (TODO delete this comment)
 void gluing_apply_matrix_pair(
     __m512i* res_PQ, 
     __m512i* matrix01, __m512i* matrix23, __m512i* PQ
 )
 {
-    __m512i QP[16], P0Q1[16], Q0P1[16], P2Q3[16], Q2P3[16];
+    __m512i QP[2*NUM_LIMBS], P0Q1[2*NUM_LIMBS], Q0P1[2*NUM_LIMBS], P2Q3[2*NUM_LIMBS], Q2P3[2*NUM_LIMBS];
 
     // Swap P || Q to Q || P
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
         QP[i] = VSHUFFLE(PQ[i], 0x4e);
     }
 
@@ -387,13 +385,12 @@ void gluing_apply_matrix_pair(
     gluing_internal_sum_pair(res_PQ, P0Q1, Q0P1, P2Q3, Q2P3);
 }
 
-// Done (TODO delete this comment)
 void gluing_product_to_theta_pair(
     __m512i* res_P12,
     __m512i* x, __m512i* z, __m512i* matrix1, __m512i* matrix2
 )
 {
-    __m512i t0[16], t1[16], idx0_re, idx0_im, idx1_re, idx1_im;
+    __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], idx0_re, idx0_im, idx1_re, idx1_im;
 
     // t0 = AVX_8x1x1(X1, X2, X1, X2, Z1, Z2, Z1, Z2)
     // t1 = AVX_8x1x1(X3, X4, Z3, Z4, X3, X4, Z3, Z4)
@@ -402,11 +399,11 @@ void gluing_product_to_theta_pair(
     idx1_re = VSET(4, 6, 12, 14, 4, 6, 12, 14);
     idx1_im = VSET(5, 7, 13, 15, 5, 7, 13, 15);
 
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         t0[i] = VBLENDPERM(idx0_re, x[i], z[i]);
-        t0[i+8] = VBLENDPERM(idx0_im, x[i], z[i]);
+        t0[i + NUM_LIMBS] = VBLENDPERM(idx0_im, x[i], z[i]);
         t1[i] = VBLENDPERM(idx1_re, x[i], z[i]);
-        t1[i+8] = VBLENDPERM(idx1_im, x[i], z[i]);
+        t1[i + NUM_LIMBS] = VBLENDPERM(idx1_im, x[i], z[i]);
     }
 
     fp2_mul_8x1x1(res_P12, t0, t1);
@@ -419,8 +416,8 @@ bool gluing_codomain(
     __m512i* A24_12, __m512i* x_8, __m512i* z_8, const bool verify
 )
 {
-    __m512i x_8_[8], z_8_[8], x_4[8], z_4[8], P12[16];
-    __m512i t0[8], t1[8], t2[8], t3[8], idx0, idx1, idx2;
+    __m512i x_8_[NUM_LIMBS], z_8_[NUM_LIMBS], x_4[NUM_LIMBS], z_4[NUM_LIMBS], P12[2*NUM_LIMBS];
+    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], t2[NUM_LIMBS], t3[NUM_LIMBS], idx0, idx1, idx2;
     __mmask8 mask;
 
     // X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)
@@ -482,9 +479,9 @@ bool gluing_codomain(
     idx0 = VSET(2, 2, 10, 10, 0, 0, 8, 8); // (Y1, X1)
     idx1 = VSET(1, 1, 9, 9, 5, 5, 13, 13); // (X2, Z2)
     mask = 0x55;
-    for (int i = 0; i < 8; i++) {
-        t0[i] = VBLENDPERMMASKZ(mask, P12[i], P12[i+8], idx0);
-        t1[i] = VBLENDPERMMASKZ(mask, P12[i], P12[i+8], idx1);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VBLENDPERMMASKZ(mask, P12[i], P12[i + NUM_LIMBS], idx0);
+        t1[i] = VBLENDPERMMASKZ(mask, P12[i], P12[i + NUM_LIMBS], idx1);
         
     }
     fp2_mul_2x4x1(t2, t0, t1); // t2 = (B, C)
@@ -495,10 +492,10 @@ bool gluing_codomain(
     idx0 = VSET(4, 6, 0, 2, 12, 14, 8, 10); // (X1, Y1, C, B)
     idx1 = VSET(0, 2, 4, 6, 10, 10, 12, 12); // (X2, Z2, re(Y1), re(Z1))
     idx2 = VSET(0, 1, 2, 3, 4, 10, 6, 12); // (X2, Z2, Y1, Z1)
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         t3[i] = VBLENDPERM(idx0, t0[i], t2[i]);
         t0[i] = VBLENDPERM(idx1, t1[i], P12[i]);
-        t0[i] = VBLENDPERM(idx2, t0[i], P12[i+8]);
+        t0[i] = VBLENDPERM(idx2, t0[i], P12[i + NUM_LIMBS]);
     }
     fp2_mul_4x2x1(t0, t0, t3); // t0 = (A, A_inv, x, y)
 
@@ -507,13 +504,13 @@ bool gluing_codomain(
         //    raise ValueError("input kernel is not isotropic")
         idx0 = VSET(2, 10, 1, 9, 5, 13, 0, 0); // (Y1, X2, Z2, -)
         idx1 = VSET(12, 14, 2, 3, 8, 10, 0, 0); // (C, A_inv, B, -)
-        for (int i = 0; i < 8; i++) {
-            t1[i] = VBLENDPERM(idx0, P12[i], P12[i+8]);
+        for (int i = 0; i < NUM_LIMBS; i++) {
+            t1[i] = VBLENDPERM(idx0, P12[i], P12[i + NUM_LIMBS]);
             t3[i] = VBLENDPERM(idx1, t0[i], t2[i]);
         }
         fp2_mul_4x2x1(t1, t1, t3); // ( Y1 * C, X2 * A_inv, Z2 * B, -)
         idx0 = VSET(4, 5, 12, 13, 0, 0, 0, 0); // (Z2 * B, x, -, -)
-        for(int i = 0; i < 8; i++) {
+        for(int i = 0; i < NUM_LIMBS; i++) {
             t3[i] = VBLENDPERM(idx0, t0[i], t1[i]);
         }
         int eqmask = fp2_is_equal_4x2x1(t1, t3);
@@ -529,7 +526,7 @@ bool gluing_codomain(
     mask = 0x3f;
     // J_prime = AVX_4x2x1(y, y, x, x)
     idx2 = VSET(6, 7, 6, 7, 4, 5, 4, 5);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         res_OA[i] = VBLENDPERMMASKZ(mask, t0[i], t2[i], idx0);
         res_OA_dual_inv[i] = VBLENDPERMMASKZ(mask, t0[i], t2[i], idx1);
         res_J_prime[i] = VPERM512(idx2, t0[i]);
@@ -547,7 +544,7 @@ void gluing_eval_pair(
     __m512i* J_prime, __m512i* matrix01, __m512i* matrix23
 )
 {
-    __m512i u[8], v[8], w[8], t0[16], t1[16], t2[16];
+    __m512i u[NUM_LIMBS], v[NUM_LIMBS], w[NUM_LIMBS], t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
     __m512i idx0_re, idx0_im, idx1_re, idx1_im;
     __mmask8 mask;
 
@@ -576,11 +573,11 @@ void gluing_eval_pair(
     idx0_im = VSET(1, 3, 1, 3, 9, 11, 9, 11);
     idx1_re = VSET(4, 6, 12, 14, 4, 6, 12, 14); // (u2, u4, w2, w4, u2, u4, w2, w4)
     idx1_im = VSET(5, 7, 13, 15, 5, 7, 13, 15);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         t0[i] = VBLENDPERM(idx0_re, u[i], w[i]);
-        t0[i+8] = VBLENDPERM(idx0_im, u[i], w[i]);
+        t0[i + NUM_LIMBS] = VBLENDPERM(idx0_im, u[i], w[i]);
         t1[i] = VBLENDPERM(idx1_re, u[i], w[i]);
-        t1[i+8] = VBLENDPERM(idx1_im, u[i], w[i]);
+        t1[i + NUM_LIMBS] = VBLENDPERM(idx1_im, u[i], w[i]);
     }
     fp2_mul_8x1x1(t0, t0, t1);
 
@@ -589,11 +586,11 @@ void gluing_eval_pair(
     idx0_im = VSET(1, 3, 5, 7, 1, 3, 5, 7);
     idx1_re = VSET(4, 6, 0, 2, 12, 14, 8, 10); // (u2, u4, u1, u3, w2, w4, w1, w3)
     idx1_im = VSET(5, 7, 1, 3, 13, 15, 9, 11);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         t1[i] = VPERM512(idx0_re, v[i]);
-        t1[i+8] = VPERM512(idx0_im, v[i]);
+        t1[i + NUM_LIMBS] = VPERM512(idx0_im, v[i]);
         t2[i] = VBLENDPERM(idx1_re, u[i], w[i]);
-        t2[i+8] = VBLENDPERM(idx1_im, u[i], w[i]);
+        t2[i + NUM_LIMBS] = VBLENDPERM(idx1_im, u[i], w[i]);
     }
     fp2_mul_8x1x1(t1, t1, t2);
 
@@ -601,31 +598,31 @@ void gluing_eval_pair(
     idx0_re = VSET(0, 0, 1, 1, 2, 2, 3, 3);
     idx1_re = VSET(4, 4, 5, 5, 6, 6, 7, 7);
     mask = 0x55;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         t2[i] = VPERM512MASKZ(mask, v[i], idx0_re);
-        t2[i+8] = VPERM512MASKZ(mask, v[i], idx1_re);
+        t2[i + NUM_LIMBS] = VPERM512MASKZ(mask, v[i], idx1_re);
     }
-    fp2_mul_2x4x1(t2, t2, t2+8);
+    fp2_mul_2x4x1(t2, t2, t2 + NUM_LIMBS);
 
     //t2[8:15] = (u1u2, u3u4, v1u2, v3u4)
     idx0_re = VSET(0, 0, 1, 1, 8, 8, 9, 9); // (u1u2, u3u4, v1u2, v3u4)
     idx0_im = VSET(0, 8, 2, 9, 4, 5, 6, 7); // for im of u1u2 & u3u4
     idx1_im = VSET(0, 1, 2, 3, 4, 8, 6, 9); // for im of v1u2 & v3u4
-    for (int i = 0; i < 8; i++) {
-        t2[i+8] = VBLENDPERM(idx0_re, t0[i], t1[i]);
-        t2[i+8] = VBLENDPERM(idx0_im, t2[i+8], t0[i+8]);
-        t2[i+8] = VBLENDPERM(idx1_im, t2[i+8], t1[i+8]);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t2[i + NUM_LIMBS] = VBLENDPERM(idx0_re, t0[i], t1[i]);
+        t2[i + NUM_LIMBS] = VBLENDPERM(idx0_im, t2[i + NUM_LIMBS], t0[i + NUM_LIMBS]);
+        t2[i + NUM_LIMBS] = VBLENDPERM(idx1_im, t2[i + NUM_LIMBS], t1[i + NUM_LIMBS]);
     }
     // t2[0:7] = (v1v2, v3v4, u1v2, u3v4)
     idx0_re = VSET(0, 2, 4, 6, 10, 10, 11, 11); // (v1v2, v3v4, re(u1v2), re(u3v4))
     idx0_im = VSET(0, 1, 2, 3, 4, 10, 6, 11); // (v1v2, v3v4, u1v2, u3v4)
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         t2[i] = VBLENDPERM(idx0_re, t2[i], t1[i]);
-        t2[i] = VBLENDPERM(idx0_im, t2[i], t1[i+8]);
+        t2[i] = VBLENDPERM(idx0_im, t2[i], t1[i + NUM_LIMBS]);
     }
 
     // t2[0:7] = (u1u2+v1v2, u3u4+v3v4, v1u2+u1v2, v3u4+u3v4)
-    fp2_add_4x2x1(t2, t2, t2+8);
+    fp2_add_4x2x1(t2, t2, t2 + NUM_LIMBS);
 
     // U12 = (u1u2+v1v2, u3u4+v3v4, u1w2, u3w4, w1u2, w3u4, w1w2, w3w4)
     // V12 = (v1u2+u1v2, v3u4+u3v4, v1w2, v3w4, w1v2, w3v4, 0, 0)
@@ -634,11 +631,11 @@ void gluing_eval_pair(
     idx1_re = VSET(12, 14, 4, 5, 6, 7, 0, 0);
     idx1_im = VSET(13, 15, 4, 5, 6, 7, 0, 0);
     mask = 0x3f;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         t0[i] = VBLENDPERM(idx0_re, t0[i], t2[i]);
-        t0[i+8] = VBLENDPERM(idx0_im, t0[i+8], t2[i]);
+        t0[i + NUM_LIMBS] = VBLENDPERM(idx0_im, t0[i + NUM_LIMBS], t2[i]);
         t1[i] = VBLENDPERMMASKZ(mask, t1[i], t2[i], idx1_re);
-        t1[i+8] = VBLENDPERMMASKZ(mask, t1[i+8], t2[i], idx1_im);
+        t1[i + NUM_LIMBS] = VBLENDPERMMASKZ(mask, t1[i + NUM_LIMBS], t2[i], idx1_im);
     }
 
     // Apply the isomorphism by N on U1, U2, V1, V2
@@ -659,6 +656,7 @@ void gluing_eval_pair(
     // Final Hadamard
     theta_had_pair(res, res);
 }
+
 // P1_P2 is (X1, Z1, X2, Z2) in 4x2x1
 void gluing_eval_product_to_theta(
     __m512i* res,
@@ -835,7 +833,7 @@ bool gluing_eval_special_pair_unvec(
     unvec[3] = Q12->P2.z;
     fp2_unvectorized_to_4x2x1(Q1_Q2, unvec);
 
-    gluing_eval_special_pair(res, P1_P2, Q1_Q2, OA_inv, matrix01, matrix23, verify);
+    return gluing_eval_special_pair(res, P1_P2, Q1_Q2, OA_inv, matrix01, matrix23, verify);
 }
 
 bool gluing_eval_special_list_pair(
@@ -873,13 +871,13 @@ bool gluing_eval_special_list_pair_unvec(
 
     for (int i = 0; i < num_pair_pts; i++) {
         success &= gluing_eval_special_pair_unvec(
-            res_pts + (16*i), pts + (2*i), pts + (2*i+1), 
+            res_pts + i*(2*NUM_LIMBS), pts + (2*i), pts + (2*i+1), 
             inv, matrix01, matrix23, verify
         );
     }
     if (num_pts_is_odd) {
         success &= gluing_eval_special_unvec(
-            res_pts + 8*(num_pts-1), pts + (num_pts-1),
+            res_pts + (num_pts-1)*NUM_LIMBS, pts + (num_pts-1),
             inv, matrix01, matrix23, verify
         );
     }

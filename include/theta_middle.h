@@ -116,13 +116,11 @@ void theta_precomp_pair(__m512i* c1, __m512i* c2, __m512i* null);
  * Double the pair of theta points in a, using the precomputed constants c1 and c2.
  */
 void theta_double_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2);
-void theta_double_pair_old(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2);
 
 /**
  * Double the pair of theta points n times, using the precomputed constants c1 and c2.
  */
 void theta_double_iter_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2, const int n);
-void theta_double_iter_pair_old(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2, const int n);
 
 bool check_isotropic_pair(__m512i* PQ, __m512i* inv);
 
@@ -135,7 +133,6 @@ bool check_isotropic_pair(__m512i* PQ, __m512i* inv);
  * @param h2 Flag for applying Hadamard to the result at the end.
  */
 bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool h1, const bool h2, const bool verify);
-void theta_codomain_pair_old(__m512i* res, __m512i* res_inv, __m512i* k, const bool h1, const bool h2);
 
 /**
  * Evaluate a pair of theta points through a (2,2)-isogeny given the precomputed constants.
@@ -145,9 +142,7 @@ void theta_codomain_pair_old(__m512i* res, __m512i* res_inv, __m512i* k, const b
  * @param h2 Flag for applying Hadamard to the result at the end.
  */
 void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, const bool h1, const bool h2);
-void theta_eval_pair_old(__m512i* res, __m512i* a, __m512i* inv, const bool h1, const bool h2);
 
 void theta_eval_list_pair(__m512i* pts, __m512i* inv, const bool h1, const bool h2, const int num_pts);
-void theta_eval_list_pair_old(__m512i* pts, __m512i* inv, const bool h1, const bool h2, const int num_pts);
 
 #endif
