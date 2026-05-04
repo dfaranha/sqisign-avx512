@@ -1,4 +1,4 @@
-#include "sqi_e0_basis_lvl3.h"
+#include "sqi_e0_basis.h"
 
 const fp2_t BASIS_E0_PX = {
 //#elif RADIX == 64

@@ -4,7 +4,7 @@
 #include "intrinsics_avx512.h"
 
 #include "sqi_ec.h"
-#include "sqi_fp_constants_lvl3.h"
+#include "sqi_fp_constants.h"
 
 // TODO replace digit_t with scalar_t where appropriate
 

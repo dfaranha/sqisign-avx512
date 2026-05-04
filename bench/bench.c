@@ -34,12 +34,6 @@ void print_bench_res(char * title, uint64_t cycles, uint64_t tmp)
     printf("   %s runs in %s %" PRIu64 " cycles, (ignore: %lu)\n", title, dots, cycles, tmp);
 }
 
-#include "sqi_verif_util.h"
-#include "verif.h"
-#include "tutil.h"
-#include "sqi_encoded_sizes_lvl3.h"
-#include "sqi_ec_params_lvl3.h"
-
 int main()
 {
     // === TODO: Improve how randomness is generated ===

@@ -1,7 +1,7 @@
 #ifndef SQI_FP2_H
 #define SQI_FP2_H
 
-#include "sqi_fp_lvl3.h"
+#include "sqi_fp.h"
 
 // ============================ fp2x.h =========================
 

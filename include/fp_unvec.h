@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include "intrinsics_avx512.h"
-#include "sqi_fp_lvl3.h"
+#include "sqi_fp.h"
 #include "sqi_fp2.h"
 
 void fp_8x1_to_unvectorized(fp_t* res, __m512i* src);

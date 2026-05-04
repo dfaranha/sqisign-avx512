@@ -1,8 +1,8 @@
 #include "verif.h"
 #include "mp.h"
 #include "sqi_hd.h"
-#include "sqi_encoded_sizes_lvl3.h"
-#include "sqi_ec_params_lvl3.h"
+#include "sqi_encoded_sizes.h"
+#include "sqi_ec_params.h"
 #include <assert.h>
 #include "fp_unvec.h"
 #include "fp_consts.h"

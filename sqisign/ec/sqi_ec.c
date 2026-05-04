@@ -1,7 +1,7 @@
 #include "sqi_ec.h"
 #include "mp.h"
-#include "sqi_fp_constants_lvl3.h"
-#include "sqi_ec_params_lvl3.h"
+#include "sqi_fp_constants.h"
+#include "sqi_ec_params.h"
 
 void ec_point_init(ec_point_t *P)
 { // Initialize point as identity element (1:0)

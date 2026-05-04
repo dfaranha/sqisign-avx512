@@ -1,6 +1,6 @@
 #include "sqi_fp2.h"
-#include "sqi_encoded_sizes_lvl3.h"
-#include "sqi_fp_constants_lvl3.h"
+#include "sqi_encoded_sizes.h"
+#include "sqi_fp_constants.h"
 #include <inttypes.h>
 
 /* Arithmetic modulo X^2 + 1 */

@@ -2,9 +2,9 @@
 #define SQI_VERIF_H
 
 #include "sqi_ec.h"
-#include "sqi_fp_lvl3.h"
+#include "sqi_fp.h"
 #include "sqi_fp2.h"
-#include "sqi_fp_constants_lvl3.h"
+#include "sqi_fp_constants.h"
 #include "verif.h"
 
 void hash_to_challenge(

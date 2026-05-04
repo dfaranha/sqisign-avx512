@@ -1,6 +1,6 @@
 #include "sqi_verif_util.h"
-#include "sqi_encoded_sizes_lvl3.h"
-#include "sqi_ec_params_lvl3.h"
+#include "sqi_encoded_sizes.h"
+#include "sqi_ec_params.h"
 #include "fips202.h"
 #include "mp.h"
 #include "tutil.h"

@@ -1,6 +1,6 @@
 #include <assert.h>
-#include "sqi_fp_lvl3.h"
-#include "sqi_fp_constants_lvl3.h"
+#include "sqi_fp.h"
+#include "sqi_fp_constants.h"
 
 const digit_t p[NWORDS_FIELD] = { 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff,
                                   0xffffffffffffffff, 0xffffffffffffffff, 0x40ffffffffffffff };

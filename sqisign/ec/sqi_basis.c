@@ -1,6 +1,6 @@
 #include "sqi_ec.h"
-#include "sqi_ec_params_lvl3.h"
-#include "sqi_e0_basis_lvl3.h"
+#include "sqi_ec_params.h"
+#include "sqi_e0_basis.h"
 
 #include "ec.h"
 

@@ -3,8 +3,8 @@
 
 #include "utils.h"
 
-#include "sqi_encoded_sizes_lvl3.h"
-#include "sqi_fp_constants_lvl3.h"
+#include "sqi_encoded_sizes.h"
+#include "sqi_fp_constants.h"
 #include "sqi_test_extras.h"
 
 int cmp_u64(const void *v1, const void *v2)
