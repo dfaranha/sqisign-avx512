@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <assert.h>
 
 #include "ec.h"
 #include "fp_consts.h"

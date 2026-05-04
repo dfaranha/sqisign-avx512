@@ -1,3 +1,6 @@
+#include <assert.h>
+#include <stdio.h>
+
 #include "ec.h"
 #include "fp_consts.h"
 #include "fp_unvec.h"

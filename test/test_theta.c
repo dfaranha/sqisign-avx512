@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <assert.h>
 
 #include "fp.h"
 #include "fp2.h"

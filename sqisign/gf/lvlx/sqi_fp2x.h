@@ -1,9 +1,5 @@
-#ifndef SQI_FP2_H
-#define SQI_FP2_H
-
-#include "sqi_fp.h"
-
-// ============================ fp2x.h =========================
+#ifndef SQI_FP2X_H
+#define SQI_FP2X_H
 
 // Structure for representing elements in GF(p^2)
 typedef struct fp2_t
@@ -175,43 +171,5 @@ uint32_t fp2_sqrt_verify(fp2_t *a);
 void fp2_batched_inv(fp2_t *x, int len);
 void fp2_pow_vartime(fp2_t *out, const fp2_t *x, const uint64_t *exp, const int size);
 void fp2_print(const char *name, const fp2_t *a);
-
-// =================== fp2.h for lvl3 =====================================================
-
-extern void fp2_sq_c0(fp2_t *out, const fp2_t *in);
-extern void fp2_sq_c1(fp_t *out, const fp2_t *in);
-
-extern void fp2_mul_c0(fp_t *out, const fp2_t *in0, const fp2_t *in1);
-extern void fp2_mul_c1(fp_t *out, const fp2_t *in0, const fp2_t *in1);
-
-static inline void
-fp2_mul(fp2_t *x, const fp2_t *y, const fp2_t *z)
-{
-    fp_t t;
-
-    fp2_mul_c0(&t, y, z);     // c0 = a0*b0 - a1*b1
-    fp2_mul_c1(&x->im, y, z); // c1 = a0*b1 + a1*b0
-    x->re.arr[0] = t.arr[0];
-    x->re.arr[1] = t.arr[1];
-    x->re.arr[2] = t.arr[2];
-    x->re.arr[3] = t.arr[3];
-    x->re.arr[4] = t.arr[4];
-    x->re.arr[5] = t.arr[5];
-}
-
-static inline void
-fp2_sqr(fp2_t *x, const fp2_t *y)
-{
-    fp2_t t;
-
-    fp2_sq_c0(&t, y);     // c0 = (a0+a1)(a0-a1)
-    fp2_sq_c1(&x->im, y); // c1 = 2a0*a1
-    x->re.arr[0] = t.re.arr[0];
-    x->re.arr[1] = t.re.arr[1];
-    x->re.arr[2] = t.re.arr[2];
-    x->re.arr[3] = t.re.arr[3];
-    x->re.arr[4] = t.re.arr[4];
-    x->re.arr[5] = t.re.arr[5];
-}
 
 #endif

@@ -33,6 +33,7 @@ bool test_fp_unvec(int iterations)
             if (fp_is_equal(unvec1+j, unvec2+j) == 0) { passed = 0; }
         }
         if (passed == 0) {
+            printf("unvec -> 8x1 -> unvec != identity\n");
             break;
         }
 
@@ -40,6 +41,7 @@ bool test_fp_unvec(int iterations)
         fp_unvectorized_to_8x1(d, unvec2);
         if (fp_is_equal_8x1(a, d) != 0xff) {
             passed = 0;
+            printf("8x1 -> unvec -> 8x1 != identity\n");
             break;
         }
         
@@ -57,6 +59,7 @@ bool test_fp_unvec(int iterations)
 
         if (fp_is_equal_8x1(c, d) != 0xff) {
             passed = 0;
+            printf("Conversion does not commute with mul\n");
             break;
         }
 
@@ -77,6 +80,7 @@ bool test_fp_unvec(int iterations)
         for (int j = 0; j < 8; j++) {
             if (fp_is_equal(unvec1+j, unvec2+j) == 0) {
                 passed = 0;
+                printf("Conversion does not commute with mul\n");
                 break;
             }
         }
@@ -128,6 +132,7 @@ bool test_fp_unvec(int iterations)
 
         if (fp_is_equal_4x2(c, d) != 0xf) {
             passed = 0;
+            printf("Conversion does not commute with mul\n");
             break;
         }
 
@@ -148,6 +153,7 @@ bool test_fp_unvec(int iterations)
         for (int j = 0; j < 4; j++) {
             if (fp_is_equal(unvec1+j, unvec2+j) == 0) {
                 passed = 0;
+                printf("Conversion does not commute with mul\n");
                 break;
             }
         }

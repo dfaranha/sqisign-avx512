@@ -69,7 +69,7 @@ void fp_copy_8x1(__m512i* res, __m512i* a);
 
 /**
  * Sets each Fp element in res to a.
- * @param a The 48-bit limbs of an Fp element stored in a uint64_t array
+ * @param a The 51-bit limbs of an Fp element stored in a uint64_t array
  * @param res Output: 8 copies of a stored in 8x1.
  */
 void fp_duplicate_8x1(__m512i* res, const uint64_t* a);
@@ -203,7 +203,7 @@ void rdc_8x1(__m512i* res, __m512i* a);
 void rand_fp_8x1(__m512i* res);
 
 /**
- * Converts from Fp 8x1 with 48-bit limbs to an array of 8*NWORDS64 64-bit words.
+ * Converts from Fp 8x1 with 51-bit limbs to an array of 8*NWORDS64 64-bit words.
  * The first NWORDS64 words encode the first Fp element, and so on.
  * The function does not change the Montgomery representation.
  */
@@ -251,7 +251,7 @@ void fp_copy_4x2(__m512i* res, __m512i* a);
 
 /**
  * Sets each Fp element in res to a.
- * @param a The 48-bit limbs of an Fp element stored in a uint64_t array
+ * @param a The 51-bit limbs of an Fp element stored in a uint64_t array
  * @param res Output: 4 copies of a stored in 4x2.
  */
 void fp_duplicate_4x2(__m512i* res, const uint64_t* a);
@@ -385,7 +385,7 @@ void rdc_4x2(__m512i* res, __m512i* a);
 void rand_fp_4x2(__m512i* res);
 
 /**
- * Converts from Fp 4x2 with 48-bit limbs to an array of 4*NWORDS64 64-bit words.
+ * Converts from Fp 4x2 with 51-bit limbs to an array of 4*NWORDS64 64-bit words.
  * The first NWORDS64 words encode the first Fp element, and so on.
  * The function does not change the Montgomery representation.
  */
@@ -422,7 +422,7 @@ void fp_copy_2x4(__m512i* res, __m512i* a);
 
 /**
  * Sets each Fp element in res to a.
- * @param a The 48-bit limbs of an Fp element stored in a uint64_t array
+ * @param a The 51-bit limbs of an Fp element stored in a uint64_t array
  * @param res Output: 2 copies of a stored in 2x4.
  */
 void fp_duplicate_2x4(__m512i* res, const uint64_t* a);
@@ -529,7 +529,7 @@ void rdc_2x4(__m512i* res, __m512i* a);
 void rand_fp_2x4(__m512i* res);
 
 /**
- * Converts from Fp 2x4 with 48-bit limbs to an array of 2*NWORDS64 64-bit words.
+ * Converts from Fp 2x4 with 51-bit limbs to an array of 2*NWORDS64 64-bit words.
  * The first NWORDS64 words encode the first Fp element, and so on.
  * The function does not change the Montgomery representation.
  */

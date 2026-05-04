@@ -1,21 +1,22 @@
-#include "bench.h"
-#include "verif.h"
-
 #include <stdio.h>
-
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
+#include "bench.h"
+#include "verif.h"
+#include "sqi_encoded_sizes.h"
+
 // TODO Duplicate code from test_verif
 // TODO Hardcoded num KATs
 
-// lvl 3 constants
-#define CRYPTO_SECRETKEYBYTES 529
-#define CRYPTO_PUBLICKEYBYTES 97
-#define CRYPTO_BYTES 224
-#define SIGNATURE_BYTES CRYPTO_BYTES
-#define CRYPTO_ALGNAME "SQIsign_lvl3"
+#if SECURITY_BITS == 128
+  #define CRYPTO_ALGNAME "SQIsign_lvl1"
+#elif SECURITY_BITS == 192
+  #define CRYPTO_ALGNAME "SQIsign_lvl3"
+#elif SECURITY_BITS == 256
+  #define CRYPTO_ALGNAME "SQIsign_lvl5"
+#endif
 
 #define MAX_MARKER_LEN         50
 
@@ -32,7 +33,7 @@ static int      ReadHex(FILE *infile, unsigned char *A, int Length, char *str);
 
 void bench_verif(int iterations) {
 
-    unsigned char       pk_rsp[CRYPTO_PUBLICKEYBYTES];
+    unsigned char       pk_rsp[PUBLICKEY_BYTES];
     unsigned char       *m, *m1, *sm_rsp;
     unsigned long long  mlen, smlen, mlen1;
     int                 count;
@@ -46,7 +47,7 @@ void bench_verif(int iterations) {
     uint64_t            cycles[N_RUNS];
     uint64_t            start, end, tmp, i=0;
 
-    sprintf(fn_rsp, "assets/PQCsignKAT_%d_%s.rsp", CRYPTO_SECRETKEYBYTES, CRYPTO_ALGNAME);
+    sprintf(fn_rsp, "assets/PQCsignKAT_%d_%s.rsp", SECRETKEY_BYTES, CRYPTO_ALGNAME);
     if ( (fp_rsp = fopen(fn_rsp, "r")) == NULL ) {
         printf("Couldn't open <%s> for read\n", fn_rsp);
         return;
@@ -72,9 +73,9 @@ void bench_verif(int iterations) {
             return;
         }
 
-        sm_rsp = (unsigned char *)calloc(mlen + CRYPTO_BYTES, sizeof(unsigned char));
+        sm_rsp = (unsigned char *)calloc(mlen + SIGNATURE_BYTES, sizeof(unsigned char));
 
-        if ( !ReadHex(fp_rsp, pk_rsp, CRYPTO_PUBLICKEYBYTES, "pk = ") ) {
+        if ( !ReadHex(fp_rsp, pk_rsp, PUBLICKEY_BYTES, "pk = ") ) {
             printf("ERROR: unable to read 'pk' from <%s>\n", fn_rsp);
             return;
         }
@@ -91,13 +92,13 @@ void bench_verif(int iterations) {
             return;
         }
 
-        // Extract m and sig from sm: sm = [sig (CRYPTO_BYTES) | m (mlen)]
+        // Extract m and sig from sm: sm = [sig (SIGNATURE_BYTES) | m (mlen)]
         unsigned char *sig = sm_rsp;
         m = sm_rsp + SIGNATURE_BYTES;
 
         start = cpucycles();
         for (int j = 0; j < iterations; j++) {
-            tmp += verify(m, mlen, sm_rsp, CRYPTO_BYTES, pk_rsp);
+            tmp += verify(m, mlen, sm_rsp, SIGNATURE_BYTES, pk_rsp);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;

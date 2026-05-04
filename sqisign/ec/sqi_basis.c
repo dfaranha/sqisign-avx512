@@ -1,3 +1,6 @@
+#include <assert.h>
+#include <stdio.h>
+
 #include "sqi_ec.h"
 #include "sqi_ec_params.h"
 #include "sqi_e0_basis.h"

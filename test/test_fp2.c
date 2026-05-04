@@ -17,7 +17,7 @@ bool test_fp2(int iterations)
 
     int passed = 1;
 
-    printf("Fp2 lvl3 8x1x1 tests:\n");
+    printf("Fp2 8x1x1 tests:\n");
 
     // Equality test
     for(int i = 0; i < iterations; i++){
@@ -524,7 +524,7 @@ bool test_fp2(int iterations)
         return false;
     }
 
-    printf("Fp2 lvl3 4x1x2 tests:\n");
+    printf("Fp2 4x1x2 tests:\n");
     fp2_setzero_4x1x2(vR);
     fp_duplicate_4x2(vR, R);
 
@@ -1020,7 +1020,7 @@ bool test_fp2(int iterations)
         return false;
     }
 
-    printf("Fp2 lvl3 4x2x1 tests:\n");
+    printf("Fp2 4x2x1 tests:\n");
     fp2_setzero_4x2x1(vR);
     for(int i = 0; i < NUM_LIMBS; i++) {
         vR[i] = VSET(R[i], 0, R[i], 0, R[i], 0, R[i], 0);
@@ -1520,7 +1520,7 @@ bool test_fp2(int iterations)
         return false;
     }
 
-    printf("Fp2 lvl3 2x2x2 tests:\n");
+    printf("Fp2 2x2x2 tests:\n");
     
     fp2_setzero_2x2x2(vR);
     int rem4x2 = NUM_LIMBS % 2;
@@ -2030,7 +2030,7 @@ bool test_fp2(int iterations)
         return false;
     }
 
-    printf("Fp2 lvl3 2x4x1 tests:\n");
+    printf("Fp2 2x4x1 tests:\n");
 
     fp2_setzero_2x4x1(vR);
     for(int i = 0; i < NUM_LIMBS; i++) {

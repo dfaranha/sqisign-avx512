@@ -1,5 +1,6 @@
 #include "sqi_isog.h"
 #include <assert.h>
+#include <stdio.h>
 
 // since we use degree 4 isogeny steps, we need to handle the odd case with care
 static uint32_t

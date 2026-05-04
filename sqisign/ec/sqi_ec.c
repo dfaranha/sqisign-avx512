@@ -1,3 +1,4 @@
+#include <assert.h>
 #include "sqi_ec.h"
 #include "mp.h"
 #include "sqi_fp_constants.h"

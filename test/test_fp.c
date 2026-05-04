@@ -16,7 +16,7 @@ bool test_fp(int iterations)
     one[0] = VSETALL(1);
     int passed = 1;
 
-    printf("Fp lvl3 8x1 tests:\n");
+    printf("Fp 8x1 tests:\n");
 
     // Equality test
     for(int i = 0; i < iterations; i++){
@@ -466,7 +466,7 @@ bool test_fp(int iterations)
         return false;
     }
 
-    printf("Fp lvl3 4x2 tests:\n");
+    printf("Fp 4x2 tests:\n");
     one[0] = VSET(1, 0, 1, 0, 1, 0, 1, 0);
 
     // Equality test
@@ -907,7 +907,7 @@ bool test_fp(int iterations)
         return false;
     }
 
-    printf("Fp lvl3 2x4 tests:\n");
+    printf("Fp 2x4 tests:\n");
 
     // Equality test
     for(int i = 0; i < iterations; i++){

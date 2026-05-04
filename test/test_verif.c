@@ -6,13 +6,15 @@
 
 #include "verif.h"
 #include "test.h"
+#include "sqi_encoded_sizes.h"
 
-// lvl 3 constants
-#define CRYPTO_SECRETKEYBYTES 529
-#define CRYPTO_PUBLICKEYBYTES 97
-#define CRYPTO_BYTES 224
-#define SIGNATURE_BYTES CRYPTO_BYTES
-#define CRYPTO_ALGNAME "SQIsign_lvl3"
+#if SECURITY_BITS == 128
+  #define CRYPTO_ALGNAME "SQIsign_lvl1"
+#elif SECURITY_BITS == 192
+  #define CRYPTO_ALGNAME "SQIsign_lvl3"
+#elif SECURITY_BITS == 256
+  #define CRYPTO_ALGNAME "SQIsign_lvl5"
+#endif
 
 #define MAX_MARKER_LEN         50
 
@@ -39,7 +41,7 @@ int test_verification_kat() {
 
 static int test_verification_kat_single(int cnt) {
 
-    unsigned char       pk_rsp[CRYPTO_PUBLICKEYBYTES];
+    unsigned char       pk_rsp[PUBLICKEY_BYTES];
     unsigned char       *m, *m1, *sm_rsp;
     unsigned long long  mlen, smlen, mlen1;
     int                 count;
@@ -49,7 +51,7 @@ static int test_verification_kat_single(int cnt) {
     char                fn_rsp[64];
     FILE                *fp_rsp;
 
-    sprintf(fn_rsp, "assets/PQCsignKAT_%d_%s.rsp", CRYPTO_SECRETKEYBYTES, CRYPTO_ALGNAME);
+    sprintf(fn_rsp, "assets/PQCsignKAT_%d_%s.rsp", SECRETKEY_BYTES, CRYPTO_ALGNAME);
     if ( (fp_rsp = fopen(fn_rsp, "r")) == NULL ) {
         printf("Couldn't open <%s> for read\n", fn_rsp);
         return KAT_FILE_OPEN_ERROR;
@@ -77,9 +79,9 @@ static int test_verification_kat_single(int cnt) {
             return KAT_DATA_ERROR;
         }
 
-        sm_rsp = (unsigned char *)calloc(mlen + CRYPTO_BYTES, sizeof(unsigned char));
+        sm_rsp = (unsigned char *)calloc(mlen + SIGNATURE_BYTES, sizeof(unsigned char));
 
-        if ( !ReadHex(fp_rsp, pk_rsp, CRYPTO_PUBLICKEYBYTES, "pk = ") ) {
+        if ( !ReadHex(fp_rsp, pk_rsp, PUBLICKEY_BYTES, "pk = ") ) {
             printf("ERROR: unable to read 'pk' from <%s>\n", fn_rsp);
             return KAT_DATA_ERROR;
         }
@@ -96,11 +98,11 @@ static int test_verification_kat_single(int cnt) {
             return KAT_DATA_ERROR;
         }
 
-        // Extract m and sig from sm: sm = [sig (CRYPTO_BYTES) | m (mlen)]
+        // Extract m and sig from sm: sm = [sig (SIGNATURE_BYTES) | m (mlen)]
         unsigned char *sig = sm_rsp;
         m = sm_rsp + SIGNATURE_BYTES;
 
-        if (!verify(m, mlen, sm_rsp, CRYPTO_BYTES, pk_rsp)) {
+        if (!verify(m, mlen, sm_rsp, SIGNATURE_BYTES, pk_rsp)) {
             printf("crypto_sign_open failed\n");
             return KAT_CRYPTO_FAILURE;
         }

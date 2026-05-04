@@ -107,10 +107,10 @@ bool test_theta_middle(int iterations)
 
         // Pair matches single
         theta_had_pair(d, a);
-        fp2_8x1x1_to_4x2x1(e, e+8, a);
+        fp2_8x1x1_to_4x2x1(e, e + NUM_LIMBS, a);
         theta_had_single(e, e);
-        theta_had_single(e+8, e+8);
-        fp2_4x2x1_to_8x1x1(f, e, e+8);
+        theta_had_single(e + NUM_LIMBS, e + NUM_LIMBS);
+        fp2_4x2x1_to_8x1x1(f, e, e + NUM_LIMBS);
 
         if (fp2_is_equal_8x1x1(d, f) != 0xff) {
             passed = 0;
@@ -129,10 +129,10 @@ bool test_theta_middle(int iterations)
 
         // Pair matches single
         theta_mul_pair(d, a, b);
-        fp2_8x1x1_to_4x2x1(e, e+8, a);
+        fp2_8x1x1_to_4x2x1(e, e + NUM_LIMBS, a);
         theta_mul_single(f, e, b);
-        theta_mul_single(f+8, e+8, b);
-        fp2_4x2x1_to_8x1x1(e, f, f+8);
+        theta_mul_single(f + NUM_LIMBS, e + NUM_LIMBS, b);
+        fp2_4x2x1_to_8x1x1(e, f, f + NUM_LIMBS);
 
         if (fp2_is_equal_8x1x1(d, e) != 0xff) {
             passed = 0;
@@ -150,10 +150,10 @@ bool test_theta_middle(int iterations)
         rand_fp2_4x2x1(c);
 
         // Pair matches single
-        fp2_8x1x1_to_4x2x1(e, e+8, a);
+        fp2_8x1x1_to_4x2x1(e, e + NUM_LIMBS, a);
         theta_double_single(f, e, b, c);
-        theta_double_single(f+8, e+8, b, c);
-        fp2_4x2x1_to_8x1x1(e, f, f+8);
+        theta_double_single(f + NUM_LIMBS, e + NUM_LIMBS, b, c);
+        fp2_4x2x1_to_8x1x1(e, f, f + NUM_LIMBS);
 
         fp2_4x2x1_to_8x1x1(b, b, b);
         fp2_4x2x1_to_8x1x1(c, c, c);
@@ -178,10 +178,10 @@ bool test_theta_middle(int iterations)
         bool h2 = true;
 
         // Pair matches single
-        fp2_8x1x1_to_4x2x1(e, e+8, a);
+        fp2_8x1x1_to_4x2x1(e, e + NUM_LIMBS, a);
         theta_eval_single(f, e, b, h1, h2);
-        theta_eval_single(f+8, e+8, b, h1, h2);
-        fp2_4x2x1_to_8x1x1(e, f, f+8);
+        theta_eval_single(f + NUM_LIMBS, e + NUM_LIMBS, b, h1, h2);
+        fp2_4x2x1_to_8x1x1(e, f, f + NUM_LIMBS);
 
         fp2_4x2x1_to_8x1x1(b, b, b);
         theta_eval_pair(d, a, b, h1, h2);

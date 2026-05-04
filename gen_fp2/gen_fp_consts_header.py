@@ -28,7 +28,7 @@ def write_fp_consts(f, pp, v):
         f.line(f"#define {v.p_plus_1_div2_top_hi} 0x{hi:x}ULL")
     f.line()
     
-    f.comment(f"Montgomery constant {v.R} = 2^({pp.num_limbs}*{pp.limb_len}) mod p")
+    f.comment(f"Montgomery constant {v.R} = 2^({pp.num_limbs_R}*{pp.limb_len}) mod p")
     f.limb_array_1d(pp.R, pp.num_limbs, pp.limb_len, v.R, v.num_limbs)
     f.comment(f"{v.R2} = {v.R}^2 mod p")
     f.limb_array_1d(pp.R2, pp.num_limbs, pp.limb_len, v.R2, v.num_limbs)
