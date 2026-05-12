@@ -3,14 +3,16 @@ from sage.all import ZZ, Matrix
 from hashlib import shake_256
 
 from avx_types import AVX_2x4x1
-from elliptic_types import Curve
+from elliptic_types import Curve, BasisX, PointJ
 from elliptic_arithmetic import (
     j_invariant,
     ladder_3pt_1x2x4x1,
     x_double_n_1x2x4x1,
     x_basis_double_n_1x2x4x1,
     ladder_biscalar_1x2x4x1,
-    ladder_double_biscalar_1x2x4x1,
+    mul_pair,
+    add_simple,
+    lift_normalised_basis_to_jacobian,
 )
 from limb_conversion import (
     basis_from_64_to_51_bit,
@@ -24,6 +26,7 @@ from elliptic_isogeny import (
 )
 from sqisign_parameters import SQISIGN_PARAMETERS, generate_finite_field
 from theta_isogeny_chain import theta_isogeny_chain_verification_8x1x1
+from utilities import batched_inversion
 
 
 class SQIsign:
@@ -180,48 +183,86 @@ class SQIsign:
 
     @staticmethod
     def _compute_short_two_isogeny(
-        A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], M: Matrix, len: ZZ, r: ZZ
+        A: AVX_2x4x1,
+        A24: AVX_2x4x1,
+        basis: tuple[AVX_2x4x1],
+        M: Matrix,
+        ker_len: ZZ,
+        r: ZZ,
     ):
         """
         Compute a short 2-isogeny chain given a basis and matrix from which to chose a kernel
         """
         # Compute the kernel depending on the change of basis M
-        if M[0][0] % 2 == 0 and M[1][0] % 2 == 0:
-            kernel = basis[1]
+        order = 2**ker_len
+        a00, a01, a10, a11 = [x % order for x in M.list()]
+
+        if a00 % 2 == 0 and a10 % 2 == 0:
+            kernel = ladder_biscalar_1x2x4x1(A, A24, basis, a01, a11)
         else:
-            kernel = basis[0]
+            kernel = ladder_biscalar_1x2x4x1(A, A24, basis, a00, a10)
 
         # Recover the kernel from repeated doubling
         ker = x_double_n_1x2x4x1(A24, kernel, r + 2)
-        codomain, evaluated_basis = two_isogeny_chain_1x2x4x1(A24, ker, len, basis)
+        codomain, evaluated_basis = two_isogeny_chain_1x2x4x1(A24, ker, ker_len, basis)
 
         return codomain, evaluated_basis
 
     @staticmethod
+    def normalise_chain_input(
+        E1: Curve, E2: Curve, B1: BasisX, B2: BasisX
+    ) -> tuple[Curve, Curve, BasisX, BasisX]:
+        """
+        Given a domain E1 x E2 and a two x-only bases on these curves
+        we normalize x(P1) and x(P2), and additionally the curve
+        constants
+        """
+        inv_P1_Z, inv_P2_Z, inv_E1_C, inv_E1_C24, inv_E2_C, inv_E2_C24 = (
+            batched_inversion(B1.PZ, B2.PZ, E1.C, E1.C24, E2.C, E2.C24)
+        )
+
+        E1 = Curve(E1.A * inv_E1_C, 1, E1.A24 * inv_E1_C24, 1)
+        E2 = Curve(E2.A * inv_E2_C, 1, E2.A24 * inv_E2_C24, 1)
+        B1 = BasisX(B1.PX * inv_P1_Z, 1, B1.QX, B1.QZ, B1.PmQX, B1.PmQZ)
+        B2 = BasisX(B2.PX * inv_P2_Z, 1, B2.QX, B2.QZ, B2.PmQX, B2.PmQZ)
+
+        return E1, E2, B1, B2
+
+    @staticmethod
     def apply_change_of_basis(
-        A: AVX_2x4x1, A24: AVX_2x4x1, basis: tuple[AVX_2x4x1], M: Matrix, order: ZZ
+        A: AVX_2x4x1, A24: AVX_2x4x1, P_chl: PointJ, Q_chl: PointJ, M: Matrix
     ):
         """
-        Evaluate a 2x2 matrix A on the vector of elliptic
-        curve points [P, Q] by acting with scalar multiplication
+        Evaluate a 2x2 matrix A on the vector of elliptic curve points [P, Q]
+        by acting with scalar multiplication.
         """
-        assert M.nrows() == M.ncols() == 2
-
         # Extract out scalars
         a00, a01, a10, a11 = M.list()
+        a, c = A
+        a24, c24 = A24
+        assert c == 1
+        assert c24 == 1
+        assert P_chl.Z == 1
 
-        # Compute the new scaled basis
-        # xR = ladder_biscalar_1x2x4x1(A, basis, a00, a10)
-        # xS = ladder_biscalar_1x2x4x1(A, basis, a01, a11)
-        xR, xS = ladder_double_biscalar_1x2x4x1(A, A24, basis, a00, a10, a01, a11)
+        # TODO: how should this data be best packed for C... We only actually need a here
+        curve_params = AVX_2x4x1(a, a24)
 
-        # For the difference point we must be careful the result
-        # is positive, so we work modulo the point order
-        diff_m = (a00 - a01) % order
-        diff_n = (a10 - a11) % order
-        xRS = ladder_biscalar_1x2x4x1(A, A24, basis, diff_m, diff_n)
+        # TODO
+        # We can use 8-way arithmetic when we do xDBLADD on the main chain using
+        # pairs of points, so we do pairwise multiplications, one to compute
+        # [a00] * P and [a01] * P, then another to compute [a10] Q and [a11] Q.
+        a00_P, a01_P = mul_pair(curve_params, P_chl, a00, a01)
+        a10_Q, a11_Q = mul_pair(curve_params, Q_chl, a10, a11)
 
-        return xR, xS, xRS
+        # We then perform three more additions to compute:
+        #
+        # R = [a00] * P + [a10] Q
+        # S = [a01] * P + [a11] Q
+        # TODO: this should be parallelized easily too for a tiny saving
+        R = add_simple(a, a00_P, a10_Q)
+        S = add_simple(a, a01_P, a11_Q)
+
+        return R, S
 
     def verify(self, message: bytes, signature: bytes, public_key: bytes) -> bool:
         """
@@ -308,14 +349,11 @@ class SQIsign:
             A24_chl, chl_basis, self.f - e_rsp_prime - r_rsp - 2
         )
 
-        # Apply the change of basis matrix
-        chl_basis = self.apply_change_of_basis(A_chl, A24_chl, chl_basis, M_chl, chl_order)
-
         # Compute the short 2^r_rsp isogeny and push through points
         if r_rsp > 0:
             try:
                 E_chl, chl_basis = self._compute_short_two_isogeny(
-                    A24_chl, chl_basis, M_chl, r_rsp, e_rsp_prime
+                    A_chl, A24_chl, chl_basis, M_chl, r_rsp, e_rsp_prime
                 )
             # For bad signatures, the chain may be malformed, if an error is triggered,
             # the signature is rejected.
@@ -323,8 +361,19 @@ class SQIsign:
                 print(f"{e = }")
                 return False
 
+        # Lift everything to the Jacobian now *before* the change of basis
+        # We need to convert some values ti 64 bit as we do an inversion
         aux_basis = basis_from_51_to_64_bit(aux_basis)
         chl_basis = basis_from_51_to_64_bit(chl_basis)
+        E_aux, E_chl, aux_basis, chl_basis = self.normalise_chain_input(
+            E_aux, E_chl, aux_basis, chl_basis
+        )
+        A_chl, A24_chl = curve_to_2x4x1_data(E_chl)  # TODO remove this conversion?
+        P_aux, Q_aux = lift_normalised_basis_to_jacobian(E_aux, aux_basis)
+        P_chl, Q_chl = lift_normalised_basis_to_jacobian(E_chl, chl_basis)
+
+        # Apply the change of basis matrix
+        P_chl, Q_chl = self.apply_change_of_basis(A_chl, A24_chl, P_chl, Q_chl, M_chl)
 
         # ==================================================================================
 
@@ -337,7 +386,7 @@ class SQIsign:
         # curve E3
         try:
             E3, _ = theta_isogeny_chain_verification_8x1x1(
-                (E_chl, E_aux), (chl_basis, aux_basis), e_rsp_prime
+                (E_chl, E_aux), (P_chl, Q_chl, P_aux, Q_aux), e_rsp_prime
             )
         except ValueError as e:
             print(f"{e = }")
