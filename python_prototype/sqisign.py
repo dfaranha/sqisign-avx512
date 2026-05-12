@@ -2,7 +2,7 @@ from sage.all import ZZ, Matrix
 
 from hashlib import shake_256
 
-from avx_types import AVX_2x4x1, AVX_4x2x1
+from avx_types import AVX_2x4x1
 from elliptic_types import Curve, BasisX, PointJ
 from elliptic_arithmetic import (
     j_invariant,
@@ -244,17 +244,13 @@ class SQIsign:
         assert c24 == 1
         assert P_chl.Z == 1
 
-        # TODO: how should this data be best packed for C...
+        # TODO: how should this data be best packed for C... We only actually need a here
         curve_params = AVX_2x4x1(a, a24)
-
-        # TODO
-        # i think it could be faster to normalise PZ and QZ to one here to
-        # same some muls down the chain?
 
         # TODO
         # We can use 8-way arithmetic when we do xDBLADD on the main chain using
         # pairs of points, so we do pairwise multiplications, one to compute
-        # [a00] * P and [a10] Q, then another to compute [a01] * P and [a11] Q.
+        # [a00] * P and [a01] * P, then another to compute [a10] Q and [a11] Q.
         a00_P, a01_P = mul_pair(curve_params, P_chl, a00, a01)
         a10_Q, a11_Q = mul_pair(curve_params, Q_chl, a10, a11)
 
