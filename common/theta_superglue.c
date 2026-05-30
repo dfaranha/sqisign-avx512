@@ -747,7 +747,7 @@ bool superglue_codomain(__m512i* res_OA, __m512i* A24_12, int *position,
 		bool *sign_flip, fp2_t dual_theta_null_square[4], fp2_t elements[6],
 		__m512i* x_8, __m512i* z_8) {
 	fp2_t p1[4], p2[4], t[4];
-    __m512i x_8_[NUM_LIMBS], z_8_[NUM_LIMBS], x_4[NUM_LIMBS], z_4[NUM_LIMBS];
+    __m512i x_8_[2*NUM_LIMBS], z_8_[2*NUM_LIMBS], x_4[NUM_LIMBS], z_4[NUM_LIMBS];
     __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
     __mmask8 mask;
 
