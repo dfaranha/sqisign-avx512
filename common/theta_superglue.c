@@ -1,5 +1,6 @@
 #include "ec.h"
 #include "fp2.h"
+#include "fp_consts.h"
 #include "fp_unvec.h"
 #include "theta_superglue.h"
 #include "theta_middle.h" // TODO: move had, sqr, mul to theta.h? Since they are "core" functions.
@@ -24,7 +25,7 @@ static int find_pos_early(fp2_t *s, fp2_t *r, fp2_t *s_other, fp2_t *r_other) {
 }
 
 bool compute_symmetric_position(int *pos_1, int *pos_2, __m512i* x_4, __m512i* z_4) {
-	__m512i t0[16], t1[16], t2[16];
+	__m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
 	fp2_t rs[8];
 	// The positions we will find
 	*pos_1 = *pos_2 = -1;
@@ -746,8 +747,8 @@ bool superglue_codomain(__m512i* res_OA, __m512i* A24_12, int *position,
 		bool *sign_flip, fp2_t dual_theta_null_square[4], fp2_t elements[6],
 		__m512i* x_8, __m512i* z_8) {
 	fp2_t p1[4], p2[4], t[4];
-    __m512i x_8_[8], z_8_[8], x_4[8], z_4[8];
-    __m512i t0[16], t1[16], t2[16];
+    __m512i x_8_[NUM_LIMBS], z_8_[NUM_LIMBS], x_4[NUM_LIMBS], z_4[NUM_LIMBS];
+    __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
     __mmask8 mask;
 
     // X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)

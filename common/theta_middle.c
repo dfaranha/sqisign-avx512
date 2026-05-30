@@ -588,7 +588,7 @@ bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
     idx2 = VSET(0, 2, 0, 2, 4, 4, 0, 0);
     idx3 = VSET(1, 3, 1, 3, 5, 5, 1, 1);
     idx1 = VSET(4, 5, 6, 7, 1, 0, 0, 0);
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < NUM_LIMBS; i++) {
         t2[i] = VPERM512(idx2, t1[i]);
         t2[i+NUM_LIMBS] = VPERM512(idx3, t1[i]);
         t1[i] = VPERM512(idx1, PQ[i]);
@@ -606,11 +606,11 @@ bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
     }
 #else
 	idx1 = VSET(4, 5, 3, 2, 12, 13, 11, 10);
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 2 * NUM_LIMBS; i++) {
 		res_inv[i] = VPERM512(idx1, t1[i]);
     }
 	idx1 = VSET(0, 8, 1, 9, 2, 10, 3, 11);
-	for (int i = 0; i < 8; i++) {
+	for (int i = 0; i < NUM_LIMBS; i++) {
 		res[i] = VBLENDPERM(idx1, t1[i], t1[i+NUM_LIMBS]);
 	}
 #endif
@@ -628,9 +628,9 @@ bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
 #ifdef SUPERGLUE
 	idx1 = VSET(4, 5, 3, 2, 4, 5, 3, 2);
 	idx2 = VSET(12, 13, 11, 10, 12, 13, 11, 10);
-	for (int i = 0; i < 8; i++) {
-		res_inv[i] = VBLENDPERM(idx1, t1[i], t1[i+8]);
-		res_inv[i+8] = VBLENDPERM(idx2, t1[i], t1[i+8]);
+	for (int i = 0; i < NUM_LIMBS; i++) {
+		res_inv[i] = VBLENDPERM(idx1, t1[i], t1[i+NUM_LIMBS]);
+		res_inv[i+NUM_LIMBS] = VBLENDPERM(idx2, t1[i], t1[i+NUM_LIMBS]);
 	}
 #endif
 	return true;
