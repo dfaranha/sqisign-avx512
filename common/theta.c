@@ -9,6 +9,7 @@
 #include "theta_gluing.h"
 #include "theta_middle.h"
 #include "theta_splitting.h"
+#include "theta_superglue.h"
 #include "utils.h"
 #include "sqi_test_extras.h"
 
@@ -213,11 +214,21 @@ bool theta_isogeny_chain_vec(
         A_12, strat_points_x, strat_points_y, strat_points_z, orders, space
     );
 
+#ifdef SUPERGLUE
+	int position;
+	bool sign_flip;
+	fp2_t dual_theta_null_square[4], elements[6];
+	success &= superglue_codomain(
+		OA, A24_12, &position, &sign_flip, dual_theta_null_square, elements,
+		strat_points_x + current*NUM_LIMBS, strat_points_z + current*NUM_LIMBS
+	);
+#else
     success &= gluing_codomain(
         OA, OA_dual_inv, J, matrix01, matrix23, A24_12, 
         strat_points_x + current*NUM_LIMBS, strat_points_z + current*NUM_LIMBS,
         verify
     );
+#endif
 
     // Package the point we use for translation
     // T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
@@ -236,19 +247,28 @@ bool theta_isogeny_chain_vec(
     // TODO: Is current = space-1 here? And even if it is not, is it better to use 8*space?
     __m512i strat_theta_pair[space * 2*NUM_LIMBS];
     for (int i = 0; i < current; i++) {
+#ifdef SUPERGLUE
+		superglue_eval_pair(
+			strat_theta_pair + i*2*NUM_LIMBS, //8x1x1,
+			A_12, strat_points_x + i*NUM_LIMBS, strat_points_y + i*NUM_LIMBS, strat_points_z + i*NUM_LIMBS,
+			T8_x, T8_y, T8_z, A24_12, position, sign_flip, dual_theta_null_square, elements);
+#else
         gluing_eval_pair(
             strat_theta_pair + i*2*NUM_LIMBS, //8x1x1
             A_12, strat_points_x + i*NUM_LIMBS, strat_points_y + i*NUM_LIMBS, strat_points_z + i*NUM_LIMBS,
             T8_x, T8_y, T8_z, J, matrix01, matrix23
         );
+#endif
         orders[i]--;
     }
     current--;
-
+#ifndef SUPERGLUE
     success &= gluing_eval_special_list_pair(
         eval_pts_theta, pts, OA_dual_inv, 
         matrix01, matrix23, num_pts, verify
     );
+    // printf("gluing eval %d\n", success);
+#endif
 
     // Step Two: Compute the rest of the chain
     int step = 0;

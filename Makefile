@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -O3 -march=native -flto=auto #-Wall -Wextra
+CFLAGS = -O3 -march=native -flto=auto #-DSUPERGLUE -Wall -Wextra
 TEST_CFLAGS = $(CFLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer
 BENCH_CFLAGS = $(CFLAGS) -DNDEBUG
 

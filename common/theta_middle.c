@@ -446,16 +446,41 @@ void theta_precomp_pair(__m512i* c1, __m512i* c2, __m512i* null)
         c1[i] = VUNPACKLO(t1_t2[i], t1_t2[i]);
         c2[i] = VUNPACKHI(t1_t2[i], t1_t2[i]);
     }
+	//fp2_4x2x1_to_8x1x1(c1, c1, c1);
+	//fp2_4x2x1_to_8x1x1(c2, c2, c2);
+#ifdef SUPERGLUE
+	fp2_t t[16];
+	fp2_8x1x1_to_unvectorized(t, c1);
+	fp2_cswap(&t[1], &t[2], -1);
+	fp2_cswap(&t[2], &t[4], -1);
+	fp2_cswap(&t[3], &t[6], -1);
+	fp2_cswap(&t[5], &t[6], -1);
+	fp2_unvectorized_to_8x1x1(c1, t);
+	fp2_8x1x1_to_unvectorized(t, c2);
+	fp2_cswap(&t[1], &t[2], -1);
+	fp2_cswap(&t[2], &t[4], -1);
+	fp2_cswap(&t[3], &t[6], -1);
+	fp2_cswap(&t[5], &t[6], -1);
+	fp2_unvectorized_to_8x1x1(c2, t);
+#endif
 }
 
 void theta_double_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2)
 {
     theta_sqr_pair(res, a);
-    theta_had_pair(res, res);
-    theta_sqr_pair(res, res);
-    fp2_mul_8x1x1(res, res, c1);
-    theta_had_pair(res, res);
-    fp2_mul_8x1x1(res, res, c2);
+#ifdef SUPERGLUE
+	theta_had_pair_alt(res, res);
+#else
+	theta_had_pair(res, res);
+#endif
+	theta_sqr_pair(res, res);
+	fp2_mul_8x1x1(res, res, c1);
+#ifdef SUPERGLUE
+	theta_had_pair_alt(res, res);
+#else
+	theta_had_pair(res, res);
+#endif
+	fp2_mul_8x1x1(res, res, c2);
 }
 
 void theta_double_iter_pair(__m512i* res, __m512i* a, __m512i* c1, __m512i* c2, const int n)
@@ -479,10 +504,15 @@ bool check_isotropic_pair(__m512i* PQ, __m512i* inv)
     // t0 = (inv0, inv0, inv1, inv1, inv2, inv2, inv3, inv3)
     fp2_mul_8x1x1(t0, PQ, inv);
 
+#ifndef SUPERGLUE
     // assert t0[0] == t0[2] & t0[4] == t0[6] & 
     //        t0[1] == t0[5] & t0[3] == t0[7]
     __m512i idx0 = VSET(0, 8, 4, 12, 1, 9, 3, 11);
     __m512i idx1 = VSET(2, 10, 6, 14, 5, 13, 7, 15);
+#else
+    __m512i idx0 = VSET(0, 8, 2, 10, 4, 12, 5, 13);
+    __m512i idx1 = VSET(1, 9, 3, 11, 6, 14, 7, 15);
+#endif
     for (int i = 0; i < NUM_LIMBS; i++) {
         t1[i] = VBLENDPERM(idx0, t0[i], t0[i + NUM_LIMBS]);
         t1[i + NUM_LIMBS] = VBLENDPERM(idx1, t0[i], t0[i + NUM_LIMBS]);
@@ -498,11 +528,19 @@ bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
     fp2_copy_8x1x1(PQ, k);
 
     if (h1) {
+#ifndef SUPERGLUE
         theta_had_pair(PQ, PQ);
+#else
+        theta_had_pair_alt(PQ, PQ);
+#endif
     }
 
     theta_sqr_pair(PQ, PQ);
+#ifndef SUPERGLUE
     theta_had_pair(PQ, PQ);
+#else
+    theta_had_pair_alt(PQ, PQ);
+#endif
 
     if (verify) {
         // xA, xB, yC, yD = ker_P
@@ -514,10 +552,17 @@ bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
         }
     }
 
+#ifndef SUPERGLUE
     // t1 = (x1, x2, z2, z2)
     // t2 = (y2, y1, w2, w2)
     idx1 = VSET(0, 8, 1, 9, 5, 13, 5, 13);
     idx2 = VSET(3, 11, 2, 10, 7, 15, 7, 15);
+#else
+    // t1 = (x1, x2, z2, w2)
+    // t2 = (y2, y1, w2, w2)
+    idx1 = VSET(0, 8, 4, 12, 6, 14, 6, 14);
+    idx2 = VSET(5, 13, 1, 9, 7, 15, 7, 15); 
+#endif
     for (int i = 0; i < NUM_LIMBS; i++) {
         t1[i] = VBLENDPERM(idx1, PQ[i], PQ[i + NUM_LIMBS]);
         t2[i] = VBLENDPERM(idx2, PQ[i], PQ[i + NUM_LIMBS]);
@@ -526,6 +571,7 @@ bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
     // t1 = (x1 * y2, y1 * x2, z2 * w2, w2 * z2) = (s1, s2, s3, s3)
     fp2_mul_4x2x1(t1, t1, t2);
 
+#ifndef SUPERGLUE
     // Computing res and res_inv simultenously with 8x1x1 mul (faster than 4x2x1 mul + 2x4x1 mul)
     // t2 = (s1, s2, s1, s2) and (s3, s3, s2, s1) interleaved
     idx2 = VSET(0, 4, 2, 4, 0, 2, 2, 0);
@@ -538,14 +584,36 @@ bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
         t1[i] = VPERM512(idx1, PQ[i]);
         t1[i + NUM_LIMBS] = VPERM512(idx1, PQ[i + NUM_LIMBS]);
     }
+#else
+    idx2 = VSET(0, 2, 0, 2, 4, 4, 0, 0);
+    idx3 = VSET(1, 3, 1, 3, 5, 5, 1, 1);
+    idx1 = VSET(4, 5, 6, 7, 1, 0, 0, 0);
+    for (int i = 0; i < 8; i++) {
+        t2[i] = VPERM512(idx2, t1[i]);
+        t2[i+NUM_LIMBS] = VPERM512(idx3, t1[i]);
+        t1[i] = VPERM512(idx1, PQ[i]);
+        t1[i+NUM_LIMBS] = VPERM512(idx1, PQ[i+NUM_LIMBS]);
+    }
+#endif
     fp2_mul_8x1x1(t1, t1, t2);
 
     // Preparing res in 4x2x1 and (res_inv, res_inv) in 8x1x1
+#ifndef SUPERGLUE
     fp2_8x1x1_to_first_4x2x1(res, t1);
     idx1 = VSET(1, 1, 3, 3, 5, 5, 7, 7);
     for (int i = 0; i < 2*NUM_LIMBS; i++) {
         res_inv[i] = VPERM512(idx1, t1[i]);
     }
+#else
+	idx1 = VSET(4, 5, 3, 2, 12, 13, 11, 10);
+    for (int i = 0; i < 16; i++) {
+		res_inv[i] = VPERM512(idx1, t1[i]);
+    }
+	idx1 = VSET(0, 8, 1, 9, 2, 10, 3, 11);
+	for (int i = 0; i < 8; i++) {
+		res[i] = VBLENDPERM(idx1, t1[i], t1[i+NUM_LIMBS]);
+	}
+#endif
 
     if (verify) {
         bool is_isotropic = check_isotropic_pair(PQ, res_inv);
@@ -557,19 +625,39 @@ bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
     if (h2) {
         theta_had_single(res, res);
     }
-    return true;
+#ifdef SUPERGLUE
+	idx1 = VSET(4, 5, 3, 2, 4, 5, 3, 2);
+	idx2 = VSET(12, 13, 11, 10, 12, 13, 11, 10);
+	for (int i = 0; i < 8; i++) {
+		res_inv[i] = VBLENDPERM(idx1, t1[i], t1[i+8]);
+		res_inv[i+8] = VBLENDPERM(idx2, t1[i], t1[i+8]);
+	}
+#endif
+	return true;
 }
 
 void theta_eval_pair(__m512i* res, __m512i* a, __m512i* inv, const bool h1, const bool h2)
 {
     if (h1) {
+#ifndef SUPERGLUE
         theta_had_pair(res, a);
+#else
+		theta_had_pair_alt(res, a);
+#endif
     }
     theta_sqr_pair(res, res);
+#ifndef SUPERGLUE
     theta_had_pair(res, res);
+#else
+	theta_had_pair_alt(res, res);
+#endif
     fp2_mul_8x1x1(res, res, inv);
     if (h2) {
+#ifndef SUPERGLUE
         theta_had_pair(res, res);
+#else
+		theta_had_pair_alt(res, res);
+#endif
     }
 }
 
