@@ -172,7 +172,7 @@ bool compute_superglue_coefficients(int *position, fp2_t dual_theta_null_square[
 		fp2_t elements[6], __m512i* x_4, __m512i* z_4) {
 	int pos_1, pos_2;
 	fp2_t t[8], u[8], v[8], g0_1[3], g1_1[3], g2_1[3], g0_2[3], g1_2[3], g2_2[3];
-	__m512i t0[16], t1[16], t2[16];
+	__m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
 
     // Compute the positions of each element
     // 2M + 10a
@@ -811,7 +811,7 @@ void superglue_eval_pair(__m512i *imP_Q, __m512i *A_12, __m512i *xP,
 		__m512i *yP, __m512i *zP, __m512i *T8x, __m512i *T8y, __m512i *T8z,
 		__m512i *ab, int position, bool sign_flip,
 		fp2_t dual_theta_null_square[4], fp2_t elements[6]) {
-	__m512i u[8], v[8], w[8];
+	__m512i u[NUM_LIMBS], v[NUM_LIMBS], w[NUM_LIMBS];
 	fp2_t p1[8], ab_[2];
     // 16S + 48M + 28a
     // U, V, W = four_add_components(A_12, P, T8)
