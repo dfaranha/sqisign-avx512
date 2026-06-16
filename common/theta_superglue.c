@@ -811,8 +811,8 @@ void superglue_eval_pair(__m512i *imP_Q, __m512i *A_12, __m512i *xP,
 		__m512i *yP, __m512i *zP, __m512i *T8x, __m512i *T8y, __m512i *T8z,
 		__m512i *ab, int position, bool sign_flip,
 		fp2_t dual_theta_null_square[4], fp2_t elements[6]) {
-	__m512i u[NUM_LIMBS], v[NUM_LIMBS], w[NUM_LIMBS];
-	fp2_t p1[8], ab_[2];
+	__m512i u[NUM_LIMBS], v[NUM_LIMBS], w[NUM_LIMBS], t[2 * NUM_LIMBS];
+	fp2_t p1[8];
     // 16S + 48M + 28a
     // U, V, W = four_add_components(A_12, P, T8)
 	ec_add_components_4x4x2x1(u, v, w, A_12, xP, yP, zP, T8x, T8y, T8z);
@@ -828,17 +828,15 @@ void superglue_eval_pair(__m512i *imP_Q, __m512i *A_12, __m512i *xP,
     // J = AVX_8x1x1(b, b, a, a, b, b, a, a)
     // 8M
     // imP_Q = avx_811_mul(imP_Q, J)
-	fp2_2x4x1_to_unvectorized(ab_, ab);
-	fp2_mul(&p1[0], &p1[0], &ab_[1]);
-	fp2_mul(&p1[1], &p1[1], &ab_[1]);
-	fp2_mul(&p1[2], &p1[2], &ab_[0]);
-	fp2_mul(&p1[3], &p1[3], &ab_[0]);
-	fp2_mul(&p1[4], &p1[4], &ab_[1]);
-	fp2_mul(&p1[5], &p1[5], &ab_[1]);
-	fp2_mul(&p1[6], &p1[6], &ab_[0]);
-	fp2_mul(&p1[7], &p1[7], &ab_[0]);
-
 	fp2_unvectorized_to_8x1x1(imP_Q, p1);
+
+	__m512i idx0 = VSET(4, 12, 0, 8, 4, 12, 0, 8);
+    __m512i idx1 = VSET(6, 14, 2, 10, 6, 14, 2, 10);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t[i] = VBLENDPERM(idx0, ab[i], ab[i]);
+        t[i + NUM_LIMBS] = VBLENDPERM(idx1, ab[i], ab[i]);
+    }
+	fp2_mul_8x1x1(imP_Q, imP_Q, t);
 
 	// 16a
     //imP_Q = hadamard_pair(imP_Q)
