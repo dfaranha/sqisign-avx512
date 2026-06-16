@@ -104,6 +104,7 @@ static int test_verification_kat_single(int cnt) {
 
         if (!verify(m, mlen, sm_rsp, SIGNATURE_BYTES, pk_rsp)) {
             printf("crypto_sign_open failed\n");
+			free(sm_rsp);
             return KAT_CRYPTO_FAILURE;
         }
 
