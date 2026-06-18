@@ -449,19 +449,11 @@ void theta_precomp_pair(__m512i* c1, __m512i* c2, __m512i* null)
 	//fp2_4x2x1_to_8x1x1(c1, c1, c1);
 	//fp2_4x2x1_to_8x1x1(c2, c2, c2);
 #ifdef SUPERGLUE
-	fp2_t t[16];
-	fp2_8x1x1_to_unvectorized(t, c1);
-	fp2_cswap(&t[1], &t[2], -1);
-	fp2_cswap(&t[2], &t[4], -1);
-	fp2_cswap(&t[3], &t[6], -1);
-	fp2_cswap(&t[5], &t[6], -1);
-	fp2_unvectorized_to_8x1x1(c1, t);
-	fp2_8x1x1_to_unvectorized(t, c2);
-	fp2_cswap(&t[1], &t[2], -1);
-	fp2_cswap(&t[2], &t[4], -1);
-	fp2_cswap(&t[3], &t[6], -1);
-	fp2_cswap(&t[5], &t[6], -1);
-	fp2_unvectorized_to_8x1x1(c2, t);
+    const __m512i idx = VSET(0, 2, 4, 6, 0, 2, 4, 6);
+    for (int i = 0; i < 2 * NUM_LIMBS; i++) {
+        c1[i] = VPERM512(idx, c1[i]);
+        c2[i] = VPERM512(idx, c2[i]);
+    }
 #endif
 }
 
@@ -601,19 +593,16 @@ bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
 #ifndef SUPERGLUE
     fp2_8x1x1_to_first_4x2x1(res, t1);
     idx1 = VSET(1, 1, 3, 3, 5, 5, 7, 7);
-    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+#else
+    idx1 = VSET(4, 5, 3, 2, 12, 13, 11, 10);
+    idx2 = VSET(0, 8, 1, 9, 2, 10, 3, 11);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        res[i] = VBLENDPERM(idx2, t1[i], t1[i+NUM_LIMBS]);
+    }
+#endif
+    for (int i = 0; i < 2 * NUM_LIMBS; i++) {
         res_inv[i] = VPERM512(idx1, t1[i]);
     }
-#else
-	idx1 = VSET(4, 5, 3, 2, 12, 13, 11, 10);
-    for (int i = 0; i < 2 * NUM_LIMBS; i++) {
-		res_inv[i] = VPERM512(idx1, t1[i]);
-    }
-	idx1 = VSET(0, 8, 1, 9, 2, 10, 3, 11);
-	for (int i = 0; i < NUM_LIMBS; i++) {
-		res[i] = VBLENDPERM(idx1, t1[i], t1[i+NUM_LIMBS]);
-	}
-#endif
 
     if (verify) {
         bool is_isotropic = check_isotropic_pair(PQ, res_inv);
