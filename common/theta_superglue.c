@@ -475,8 +475,8 @@ bool compute_superglue_coefficients(int *position, fp2_t dual_theta_null_square[
 	return sign_flip;
 }
 
-bool superglue_evaluation_on_position(fp2_t *p, fp2_t s[8], int position, fp2_t dual_theta_null_square[4], fp2_t elements[6]) {
-	fp2_t t2[8], t3[4], t8[8];
+bool superglue_evaluation_on_position(__m512i *_p, fp2_t s[8], int position, fp2_t dual_theta_null_square[4], fp2_t elements[6]) {
+	fp2_t t2[8], t3[4], t8[8], p[4];
 	// s0, s1, s2, s3, s4, s5, s6, s7 = data
     // A_inv, B_inv, C_inv, _ = dual_theta_null_square
 
@@ -612,10 +612,12 @@ bool superglue_evaluation_on_position(fp2_t *p, fp2_t s[8], int position, fp2_t 
 		printf("ValueError(evaluation failed due to unsupported case\n");
 		return false;
 	}
+
+	fp2_unvectorized_to_4x2x1(_p, p);
 	return true;
 }
 
-void superglue_evaluation_pair(fp2_t *p1, fp2_t *p2, __m512i *U, __m512i *V,
+void superglue_evaluation_pair(__m512i *p1, __m512i *p2, __m512i *U, __m512i *V,
 		__m512i *W, int position, bool sign_flip, fp2_t *dual_theta_null_square,
 		fp2_t *elements) {
 	fp2_t u[4], v[4], w[4], t0[8], t1[8], t2[8], t4[8], s2[4];
@@ -746,9 +748,9 @@ void superglue_evaluation_pair(fp2_t *p1, fp2_t *p2, __m512i *U, __m512i *V,
 bool superglue_codomain(__m512i* res_OA, __m512i* A24_12, int *position,
 		bool *sign_flip, fp2_t dual_theta_null_square[4], fp2_t elements[6],
 		__m512i* x_8, __m512i* z_8) {
-	fp2_t p1[4], p2[4], t[4];
     __m512i x_8_[2*NUM_LIMBS], z_8_[2*NUM_LIMBS], x_4[NUM_LIMBS], z_4[NUM_LIMBS];
     __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
+	__m512i p1[NUM_LIMBS], p2[NUM_LIMBS];
     __mmask8 mask;
 
     // X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)
@@ -783,22 +785,30 @@ bool superglue_codomain(__m512i* res_OA, __m512i* A24_12, int *position,
     // T0 = AVX_4x2x1(A1[0], A1[1], A1[0], A1[1])
     // T1 = AVX_4x2x1(A2[0], A2[0], A2[2], A2[2])
     // T2 = avx_421_mul(T0, T1)
-	fp2_mul(&t[0], &p1[0], &p2[0]);
-	fp2_mul(&t[1], &p1[1], &p2[0]);
-	fp2_mul(&t[2], &p1[0], &p2[2]);
-	fp2_set_zero(&t[3]);
-
-    // ABCD = AVX_4x2x1(T2[0], T2[1], T2[2], 0)
-	fp2_unvectorized_to_4x2x1(res_OA, t);
+	const __m512i idx0 = _mm512_set_epi64(8, 8, 5, 4, 3, 2, 1, 0);
+    const __m512i idx1 = _mm512_set_epi64(3, 2, 1, 0, 3, 2, 1, 0);
+    const __m512i idx2 = _mm512_set_epi64(5, 4, 5, 4, 1, 0, 1, 0);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VPERM512(idx1, p1[i]);
+        t1[i] = VPERM512(idx2, p2[i]);
+    }
+	fp2_mul_4x2x1(t0, t0, t1);
+	// ABCD = AVX_4x2x1(T2[0], T2[1], T2[2], 0)
+	for (int i = 0; i < NUM_LIMBS; i++) {
+		res_OA[i] = VBLENDPERM(idx0, t0[i], VZERO());
+	}
 
 	// 2M
     // T0 = AVX_2x4x1(A1[0], A1[2])
     // T1 = AVX_2x4x1(T2[3], ABCD[1])
     // ab = avx_241_mul(T0, T1)
-	fp2_mul(&t[3], &p1[1], &p2[2]);
-	fp2_mul(&t[0], &p1[0], &t[3]);
-	fp2_mul(&t[1], &p1[2], &t[1]);
-	fp2_unvectorized_to_2x4x1(A24_12, t);
+    const __m512i idx4 = _mm512_set_epi64(8, 5, 8, 4, 8, 1, 8, 0);
+    const __m512i idx5 = _mm512_set_epi64(8, 3, 8, 2, 8, 7, 8, 6);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VBLENDPERM(idx4, p1[i], VZERO());
+        t0[i] = VBLENDPERM(idx5, t0[i], VZERO());
+    }
+	fp2_mul_2x4x1(A24_12, t1, t0);
 
     // 8a
     //codomain = hadamard(ABCD)
@@ -812,7 +822,8 @@ void superglue_eval_pair(__m512i *imP_Q, __m512i *A_12, __m512i *xP,
 		__m512i *ab, int position, bool sign_flip,
 		fp2_t dual_theta_null_square[4], fp2_t elements[6]) {
 	__m512i u[NUM_LIMBS], v[NUM_LIMBS], w[NUM_LIMBS], t[2 * NUM_LIMBS];
-	fp2_t p1[8];
+	__m512i p1[2*N4x2], p2[2*N4x2];
+
     // 16S + 48M + 28a
     // U, V, W = four_add_components(A_12, P, T8)
 	ec_add_components_4x4x2x1(u, v, w, A_12, xP, yP, zP, T8x, T8y, T8z);
@@ -821,20 +832,26 @@ void superglue_eval_pair(__m512i *imP_Q, __m512i *A_12, __m512i *xP,
     //position, sign_flip, dual_theta_null_square, elements = precomputation
 
     // 20M + 24a
-    superglue_evaluation_pair(p1, p1+4, u, v, w, position, sign_flip, dual_theta_null_square, elements);
+    superglue_evaluation_pair(p1, p2, u, v, w, position, sign_flip, dual_theta_null_square, elements);
 
     // imP_Q = avx_421_to_811(P1, P2)
     // a, b = ab
     // J = AVX_8x1x1(b, b, a, a, b, b, a, a)
     // 8M
     // imP_Q = avx_811_mul(imP_Q, J)
-	fp2_unvectorized_to_8x1x1(imP_Q, p1);
+    const __m512i idx0 = _mm512_set_epi64(14, 12, 10, 8, 6, 4, 2, 0);
+    const __m512i idx1 = _mm512_set_epi64(15, 13, 11, 9, 7, 5, 3, 1);
+    for (__mmask8 i = 0; i < NUM_LIMBS; i++) {
+        __m512i s1 = p1[i], s2 = p2[i];
+        imP_Q[i] = VBLENDPERM(idx0, s1, s2);
+        imP_Q[i+NUM_LIMBS] = VBLENDPERM(idx1, s1, s2);
+    }
 
-	__m512i idx0 = VSET(4, 12, 0, 8, 4, 12, 0, 8);
-    __m512i idx1 = VSET(6, 14, 2, 10, 6, 14, 2, 10);
+	const __m512i idx2 = VSET(4, 12, 0, 8, 4, 12, 0, 8);
+    const __m512i idx3 = VSET(6, 14, 2, 10, 6, 14, 2, 10);
     for (int i = 0; i < NUM_LIMBS; i++) {
-        t[i] = VBLENDPERM(idx0, ab[i], ab[i]);
-        t[i + NUM_LIMBS] = VBLENDPERM(idx1, ab[i], ab[i]);
+        t[i] = VPERM512(idx2, ab[i]);
+        t[i + NUM_LIMBS] = VPERM512(idx3, ab[i]);
     }
 	fp2_mul_8x1x1(imP_Q, imP_Q, t);
 
