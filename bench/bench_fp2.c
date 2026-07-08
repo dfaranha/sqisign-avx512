@@ -53,7 +53,7 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_neg_8x1x1(b, a);
+            fp2_neg_8x1x1(a, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
@@ -66,7 +66,7 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_mul_8x1x1(c, b, a);
+            fp2_mul_8x1x1(b, b, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
@@ -79,12 +79,12 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_sqr_8x1x1(c, a);
+            fp2_sqr_8x1x1(a, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
     }
-    tmp = fp2_is_equal_8x1x1(c, a);
+    tmp = fp2_is_equal_8x1x1(b, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
 
@@ -120,7 +120,7 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_neg_4x1x2(b, a);
+            fp2_neg_4x1x2(a, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
@@ -133,12 +133,12 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_mul_4x1x2(c, b, a);
+            fp2_mul_4x1x2(b, b, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
     }
-    tmp = fp2_is_equal_4x1x2(c, b);
+    tmp = fp2_is_equal_4x1x2(a, b);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("multiplication", cycles[(N_RUNS/2) -1], tmp);
 
@@ -146,12 +146,12 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_sqr_4x1x2(c, a);
+            fp2_sqr_4x1x2(a, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
     }
-    tmp = fp2_is_equal_4x1x2(c, a);
+    tmp = fp2_is_equal_4x1x2(b, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
 
@@ -187,7 +187,7 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_neg_4x2x1(b, a);
+            fp2_neg_4x2x1(a, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
@@ -200,12 +200,12 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_mul_4x2x1(c, b, a);
+            fp2_mul_4x2x1(b, b, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
     }
-    tmp = fp2_is_equal_4x2x1(c, b);
+    tmp = fp2_is_equal_4x2x1(a, b);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("multiplication", cycles[(N_RUNS/2) -1], tmp);
 
@@ -213,12 +213,12 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_sqr_4x2x1(c, a);
+            fp2_sqr_4x2x1(a, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
     }
-    tmp = fp2_is_equal_4x2x1(c, a);
+    tmp = fp2_is_equal_4x2x1(a, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
 
@@ -254,7 +254,7 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_neg_2x2x2(b, a);
+            fp2_neg_2x2x2(a, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
@@ -267,12 +267,12 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_mul_2x2x2(c, b, a);
+            fp2_mul_2x2x2(b, b, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
     }
-    tmp = fp2_is_equal_2x2x2(c, b);
+    tmp = fp2_is_equal_2x2x2(a, b);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("multiplication", cycles[(N_RUNS/2) -1], tmp);
 
@@ -280,12 +280,12 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_sqr_2x2x2(c, a);
+            fp2_sqr_2x2x2(a, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
     }
-    tmp = fp2_is_equal_2x2x2(c, a);
+    tmp = fp2_is_equal_2x2x2(b, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
 
@@ -293,12 +293,12 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < 20; j++) {
-            fp2_sqrt_2x2x2(c, a);
+            fp2_sqrt_2x2x2(a, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/20;
     }
-    tmp = fp2_is_equal_2x2x2(c, a);
+    tmp = fp2_is_equal_2x2x2(b, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("sqrt", cycles[(N_RUNS/2) -1], tmp);
 
@@ -306,12 +306,12 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < 20; j++) {
-            fp2_inv_2x2x2(c, a);
+            fp2_inv_2x2x2(a, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/20;
     }
-    tmp = fp2_is_equal_2x2x2(c, a);
+    tmp = fp2_is_equal_2x2x2(b, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("inv", cycles[(N_RUNS/2) -1], tmp);
 
@@ -347,7 +347,7 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_neg_2x4x1(b, a);
+            fp2_neg_2x4x1(a, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
@@ -360,12 +360,12 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_mul_2x4x1(c, b, a);
+            fp2_mul_2x4x1(b, b, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
     }
-    tmp = fp2_is_equal_2x4x1(c, b);
+    tmp = fp2_is_equal_2x4x1(a, b);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("multiplication", cycles[(N_RUNS/2) -1], tmp);
 
@@ -373,106 +373,114 @@ void bench_fp2(int iterations)
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_sqr_2x4x1(c, a);
+            fp2_sqr_2x4x1(a, a);
         }
         end = cpucycles();
         cycles[i] = (end - start)/iterations;
     }
-    tmp = fp2_is_equal_2x4x1(c, a);
+    tmp = fp2_is_equal_2x4x1(b, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("squaring", cycles[(N_RUNS/2) -1], tmp);
 
     printf("Fp2 conversion benchmarks:\n");
 
-    // // unvec to 8x1x1
-    // fp2_t unvec[8];
-    // for(int i = 0; i < N_RUNS; i++) {
-    //     start = cpucycles();
-    //     for(int j = 0; j < iterations; j++) {
-    //         fp2_unvectorized_to_8x1x1(c, unvec);
-    //     }
-    //     end = cpucycles();
-    //     cycles[i] = (end - start)/iterations;
-    // }
-    // tmp = fp2_is_equal_8x1x1(c, a);
-    // qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    // print_bench_res("8x1x1 <- unvectorized", cycles[(N_RUNS/2) -1], tmp);
+    // unvec to 8x1x1
+    fp2_t unvec[8];
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int j = 0; j < iterations; j++) {
+            fp2_unvectorized_to_8x1x1(c, unvec);
+            CLOBBER(c);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("8x1x1 <- unvectorized", cycles[(N_RUNS/2) -1], tmp);
 
-    // // 8x1x1 to unvec
-    // for(int i = 0; i < N_RUNS; i++) {
-    //     start = cpucycles();
-    //     for(int j = 0; j < iterations; j++) {
-    //         fp2_8x1x1_to_unvectorized(unvec, c);
-    //     }
-    //     end = cpucycles();
-    //     cycles[i] = (end - start)/iterations;
-    // }
-    // tmp = fp2_is_equal_8x1x1(c, a);
-    // qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    // print_bench_res("8x1x1 -> unvectorized", cycles[(N_RUNS/2) -1], tmp);
+    // 8x1x1 to unvec
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int j = 0; j < iterations; j++) {
+            fp2_8x1x1_to_unvectorized(unvec, c);
+            CLOBBER(unvec);
+        }
+        end = cpucycles();
+        cycles[i] = (end - start)/iterations;
+    }
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("8x1x1 -> unvectorized", cycles[(N_RUNS/2) -1], tmp);
 
-    // // unvec to 4x2x1
-    // for(int i = 0; i < N_RUNS; i++) {
-    //     start = cpucycles();
-    //     for(int j = 0; j < iterations; j++) {
-    //         fp2_unvectorized_to_4x2x1(c, unvec);
-    //     }
-    //     end = cpucycles();
-    //     cycles[i] = (end - start)/iterations;
-    // }
-    // tmp = fp2_is_equal_4x2x1(c, a);
-    // qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    // print_bench_res("4x2x1 <- unvectorized", cycles[(N_RUNS/2) -1], tmp);
+    // unvec to 4x2x1
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int j = 0; j < iterations; j++) {
+            fp2_unvectorized_to_4x2x1(c, unvec);
+            CLOBBER(c);
+        }
+        end = cpucycles();
+        fp2_add_4x2x1(b, b, c);
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp2_is_equal_4x2x1(b, a);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("4x2x1 <- unvectorized", cycles[(N_RUNS/2) -1], tmp);
 
-    // // 4x2x1 to unvec
-    // for(int i = 0; i < N_RUNS; i++) {
-    //     start = cpucycles();
-    //     for(int j = 0; j < iterations; j++) {
-    //         fp2_4x2x1_to_unvectorized(unvec, c);
-    //     }
-    //     end = cpucycles();
-    //     cycles[i] = (end - start)/iterations;
-    // }
-    // tmp = fp2_is_equal_4x2x1(c, a);
-    // qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    // print_bench_res("4x2x1 -> unvectorized", cycles[(N_RUNS/2) -1], tmp);
+    // 4x2x1 to unvec
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int j = 0; j < iterations; j++) {
+            fp2_4x2x1_to_unvectorized(unvec, c);
+            CLOBBER(unvec);
+        }
+        end = cpucycles();
+        tmp += unvec[0].re.arr[0];
+        cycles[i] = (end - start)/iterations;
+    }
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("4x2x1 -> unvectorized", cycles[(N_RUNS/2) -1], tmp);
 
-    // // unvec to 2x4x1
-    // for(int i = 0; i < N_RUNS; i++) {
-    //     start = cpucycles();
-    //     for(int j = 0; j < iterations; j++) {
-    //         fp2_unvectorized_to_2x4x1(c, unvec);
-    //     }
-    //     end = cpucycles();
-    //     cycles[i] = (end - start)/iterations;
-    // }
-    // tmp = fp2_is_equal_2x4x1(c, a);
-    // qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    // print_bench_res("2x4x1 <- unvectorized", cycles[(N_RUNS/2) -1], tmp);
+    // unvec to 2x2x2
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int j = 0; j < iterations; j++) {
+            fp2_unvectorized_to_2x2x2(c, unvec);
+            CLOBBER(c);
+        }
+        end = cpucycles();
+        fp2_add_2x2x2(b, b, c);
+        cycles[i] = (end - start)/iterations;
+    }
+    tmp = fp2_is_equal_2x2x2(b, a);
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("2x2x2 <- unvectorized", cycles[(N_RUNS/2) -1], tmp);
 
-    // // 2x4x1 to unvec
-    // for(int i = 0; i < N_RUNS; i++) {
-    //     start = cpucycles();
-    //     for(int j = 0; j < iterations; j++) {
-    //         fp2_2x4x1_to_unvectorized(unvec, c);
-    //     }
-    //     end = cpucycles();
-    //     cycles[i] = (end - start)/iterations;
-    // }
-    // tmp = fp2_is_equal_2x4x1(c, a);
-    // qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    // print_bench_res("2x4x1 -> unvectorized", cycles[(N_RUNS/2) -1], tmp);
+    // 2x2x2 to unvec
+    for(int i = 0; i < N_RUNS; i++) {
+        start = cpucycles();
+        for(int j = 0; j < iterations; j++) {
+            fp2_2x2x2_to_unvectorized(unvec, c);
+            CLOBBER(unvec);
+        }
+        end = cpucycles();
+        tmp += unvec[0].re.arr[0];
+        cycles[i] = (end - start)/iterations;
+    }
+    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+    print_bench_res("2x2x2 -> unvectorized", cycles[(N_RUNS/2) -1], tmp);
 
     // 8x1x1 to 4x2x1
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
             fp2_8x1x1_to_4x2x1(c, c+NUM_LIMBS, a);
+            CLOBBER(c);
         }
         end = cpucycles();
+        fp2_add_4x2x1(b, b, c);
         cycles[i] = (end - start)/iterations;
     }
-    tmp = fp2_is_equal_8x1x1(c, a);
+    tmp = fp2_is_equal_8x1x1(b, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("8x1x1 -> 4x2x1", cycles[(N_RUNS/2) -1], tmp);
 
@@ -481,37 +489,44 @@ void bench_fp2(int iterations)
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
             fp2_4x2x1_to_8x1x1(a, b, c);
+            CLOBBER(a);
         }
         end = cpucycles();
+        fp2_add_8x1x1(c, c, a);
         cycles[i] = (end - start)/iterations;
     }
     tmp = fp2_is_equal_8x1x1(c, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("8x1x1 <- 4x2x1", cycles[(N_RUNS/2) -1], tmp);
 
-    // 4x2x1 to 2x4x1
+    // 4x2x1 to 2x2x2
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_4x2x1_to_2x4x1(b, c, a);
+            fp2_4x2x1_to_2x2x2(b, c, a);
+            CLOBBER(b);
+            CLOBBER(c);
         }
         end = cpucycles();
+        fp2_add_2x2x2(a, a, b);
         cycles[i] = (end - start)/iterations;
     }
-    tmp = fp2_is_equal_4x2x1(c, a);
+    tmp = fp2_is_equal_2x2x2(c, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("4x2x1 -> 2x4x1", cycles[(N_RUNS/2) -1], tmp);
+    print_bench_res("4x2x1 -> 2x2x2", cycles[(N_RUNS/2) -1], tmp);
 
-    // 2x4x1 to 4x2x1
+    // 2x2x2 to 4x2x1
     for(int i = 0; i < N_RUNS; i++) {
         start = cpucycles();
         for(int j = 0; j < iterations; j++) {
-            fp2_2x4x1_to_4x2x1(a, b, c);
+            fp2_2x2x2_to_4x2x1(a, b, c);
+            CLOBBER(a);
         }
         end = cpucycles();
+        fp2_add_4x2x1(c, c, a);
         cycles[i] = (end - start)/iterations;
     }
     tmp = fp2_is_equal_4x2x1(c, a);
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
-    print_bench_res("4x2x1 <- 2x4x1", cycles[(N_RUNS/2) -1], tmp);
+    print_bench_res("4x2x1 <- 2x2x2", cycles[(N_RUNS/2) -1], tmp);
 }
