@@ -1291,23 +1291,34 @@ def four_double_ws(
     with modified Jacobian coordinates
     """
     XX, t0 = avx_421_pair_sqr(X, Y)
-    A = avx_421_dbl(t0)
-    t0 = avx_421_add(X, A)
-    t0, AA = avx_421_pair_sqr(t0, A)
-    U = avx_421_dbl(AA)
-    t0 = avx_421_sub(t0, XX)
-    S = avx_421_sub(t0, AA)
-    t0 = avx_421_dbl(XX)
-    t0 = avx_421_add(t0, XX)
-    M = avx_421_add(t0, T)
+
+    A  = avx_421_dbl(t0)
+    t1 = avx_421_dbl(XX)
+
+    t2 = avx_421_add(X, A)
+    t3 = avx_421_add(t1, XX)
+
+    t2, AA = avx_421_pair_sqr(t2, A)
+
+    t2 = avx_421_sub(t2, XX)
+    U  = avx_421_dbl(AA)
+
+    M = avx_421_add(t3, T)
+    S = avx_421_sub(t2, AA)
+
     t0, t1 = avx_421_pair_mul(M, M, Y, Z)  # This is 1M, 1S
-    t2 = avx_421_dbl(S)
-    X3 = avx_421_sub(t0, t2)
-    t0 = avx_421_sub(S, X3)
-    t0, t2 = avx_421_pair_mul(M, t0, U, T)
-    Y3 = avx_421_sub(t0, U)
+
     Z3 = avx_421_dbl(t1)
-    T3 = avx_421_dbl(t2)
+    t2 = avx_421_dbl(S)
+
+    X3 = avx_421_sub(t0, t2)
+
+    t0 = avx_421_sub(S, X3)
+
+    t0, t1 = avx_421_pair_mul(M, t0, U, T)
+
+    Y3 = avx_421_sub(t0, U)
+    T3 = avx_421_dbl(t1)
 
     return X3, Y3, Z3, T3
 
