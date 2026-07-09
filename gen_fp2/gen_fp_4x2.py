@@ -557,7 +557,93 @@ def mp_mul_4x2(f, pp, v, strat):
 
     f.end()
 
-def rdc_4x2(f, pp, v, strat):
+def rdc_4x2_word_by_word(f, pp, v, strat):
+    f.comment("Algorithm 3 from \"Finite Field Arithmetic Using AVX-512 For Isogeny-Based Cryptography\"")
+    f.comment("by Orisaka, Aranha and López")
+    f.comment("Modifies a")
+    f.start("void rdc_4x2(__m512i* res, __m512i* a)")
+
+    f.line("__m512i carry, hi, shuf;")
+    f.line(f"const __m512i top_l = VSET({v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0);")
+    f.line(f"const __m512i top_r = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
+    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
+    f.line(f"const __m512i zero = VZERO();")
+    if not strat.mod_2p or not strat.R_ext:
+        f.line(f"__m512i sign_mask;")
+    if not strat.mod_2p:
+        f.line(f"const __m512i bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
+    if not strat.R_ext:
+        f.line(f"const __m512i two_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
+        f.line(f"const __m512i two_top = VSETALL(2*{v.p_plus_1_top});")
+    f.line()
+
+    f.comment("Montgomery reduction loop")
+    start_idx = pp.num_limbs_R
+    top_idx = pp.num_limbs - pp.n42 - 1 # idx of the last limb
+
+    for i in range(start_idx):
+        if i == 0:
+            f.comment("using the fact that -p^{-1} mod 2^(limb_len) = 1 + c* 2^f mod 2^(limb_len) = 1 as f > limb_len")
+        f.line(f"carry = VSRA(a[{i}], {v.limb_len});")
+        f.line(f"a[{i}] = VAND(a[{i}], limb_mask);")
+        f.line(f"a[{i+1}] = VADD(a[{i+1}], carry);")
+        if i == 0:
+            f.comment("a = a + u_i * p * 2^(limb_len * i)")
+            f.comment("To multiply by p, we multiply by (p+1) and subtract one.")
+            f.comment("However, since we will drop the lower limbs when we divide later, we don't need to subtract.")
+
+        f.line(f"shuf = VSHUFFLE(a[{i}], 0x4e);")
+        f.line(f"a[{i+top_idx}] = VMULADDL(a[{i+top_idx}], shuf, top_r);")
+        f.line(f"hi = VMULADDH(zero, shuf, top_r);")
+        f.line(f"hi = VSL(hi, {v.limb_align});")
+        f.line(f"a[{i+top_idx+1}] = VADD(a[{i+top_idx+1}], hi);")
+        if i == 0:
+            f.comment("Folding step")
+        f.line(f"a[{i+pp.n42}] = VADDMASK(a[{i+pp.n42}], 0x55, a[{i+pp.n42}], shuf);")
+        f.line()
+
+    f.comment(f"Result is now in a[{start_idx}], ..., a[{start_idx + pp.n42 - 1}]")
+    carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
+
+    top_sub_idx = start_idx + pp.n42 - 1 - pp.rem42
+    if not strat.mod_2p:
+        f.comment("Reducing to [0, p)")
+        f.line()
+        f.line(f"sign_mask = VSRA(a[{top_sub_idx}], 63);")
+        f.line(f"a[{start_idx}] = VADD(a[{start_idx}], bot);")
+        f.line(f"a[{top_sub_idx}] = VSUB(a[{top_sub_idx}], top_r);")
+        if not strat.R_ext:
+            f.line(f"a[{top_sub_idx}] = VADDMASK(a[{top_sub_idx}], 0xaa, a[{top_sub_idx}], VAND(sign_mask, two_top));")
+            f.line(f"sign_mask = VSHUFFLE(sign_mask, 0x4e);")
+            f.line(f"a[{start_idx}] = VSUB(a[{start_idx}], VAND(two_bot, sign_mask));")
+        f.line()
+
+        carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
+
+        f.comment("If still negative, add p")
+        f.line(f"sign_mask = VSRA(a[{top_sub_idx}], 63);")
+        f.line(f"a[{top_sub_idx}] = VADD(a[{top_sub_idx}], VAND(sign_mask, top_r));")
+        f.line(f"sign_mask = VSHUFFLE(sign_mask, 0x4e);")
+        f.line(f"a[{start_idx}] = VSUB(a[{start_idx}], VAND(bot, sign_mask));")
+        f.line()
+
+        carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
+    elif not strat.R_ext:
+        f.comment("Correcting sign")
+        f.line(f"sign_mask = VSRA(a[{top_sub_idx}], 63);")
+        f.line(f"a[{top_sub_idx}] = VADDMASK(a[{top_sub_idx}], 0xaa, a[{top_sub_idx}], VAND(sign_mask, two_top));")
+        f.line(f"sign_mask = VSHUFFLE(sign_mask, 0x4e);")
+        f.line(f"a[{start_idx}] = VSUB(a[{start_idx}], VAND(two_bot, sign_mask));")
+        f.line()
+
+        carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
+
+    for i in range(pp.n42):
+        f.line(f"res[{i}] = a[{i+start_idx}];")
+
+    f.end()
+
+def rdc_4x2_oneshot(f, pp, v, strat):
     f.comment("Algorithm 3 from \"Finite Field Arithmetic Using AVX-512 For Isogeny-Based Cryptography\"")
     f.comment("by Orisaka, Aranha and López")
     f.comment("Modifies a")
@@ -636,29 +722,6 @@ def rdc_4x2(f, pp, v, strat):
         f.line(f"hi = VSL(hi, {v.limb_align});")
         f.line(f"a[{target+1}] = VADD(a[{target+1}], hi);")
     f.line()
-    
-    # Old word-by-word approach
-    # top_idx = pp.num_limbs - pp.n42 - 1 # idx of the last limb
-    # for i in range(start_idx):
-    #     if i == 0:
-    #         f.comment("using the fact that -p^{-1} mod 2^(limb_len) = 1 + c* 2^f mod 2^(limb_len) = 1 as f > limb_len")
-    #     f.line(f"carry = VSRA(a[{i}], {v.limb_len});")
-    #     f.line(f"a[{i}] = VAND(a[{i}], limb_mask);")
-    #     f.line(f"a[{i+1}] = VADD(a[{i+1}], carry);")
-    #     if i == 0:
-    #         f.comment("a = a + u_i * p * 2^(limb_len * i)")
-    #         f.comment("To multiply by p, we multiply by (p+1) and subtract one.")
-    #         f.comment("However, since we will drop the lower limbs when we divide later, we don't need to subtract.")
-
-    #     f.line(f"shuf = VSHUFFLE(a[{i}], 0x4e);")
-    #     f.line(f"a[{i+top_idx}] = VMULADDL(a[{i+top_idx}], shuf, top_r);")
-    #     f.line(f"hi = VMULADDH(zero, shuf, top_r);")
-    #     f.line(f"hi = VSL(hi, {v.limb_align});")
-    #     f.line(f"a[{i+top_idx+1}] = VADD(a[{i+top_idx+1}], hi);")
-    #     if i == 0:
-    #         f.comment("Folding step")
-    #     f.line(f"a[{i+pp.n42}] = VADDMASK(a[{i+pp.n42}], 0x55, a[{i+pp.n42}], shuf);")
-    #     f.line()
 
     f.comment(f"Result is now in a[{start_idx}], ..., a[{start_idx + pp.n42 - 1}]")
     carry_prop_4x2(f, pp, v, "a", "limb_mask", "carry", start_idx)
@@ -700,6 +763,9 @@ def rdc_4x2(f, pp, v, strat):
         f.line(f"res[{i}] = a[{i+start_idx}];")
 
     f.end()
+
+def rdc_4x2(f, pp, v, strat):
+    rdc_4x2_oneshot(f, pp, v, strat)
 
 def fp_mul_4x2(f, pp, v):
     f.start("void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)")

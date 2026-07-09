@@ -661,9 +661,7 @@ def rdc_8x1_word_by_word(f, pp, v, strat):
 
 # c == 1 and e = 0 mod limb_len can not happen at the same time, for primes > 52 bits.
 # Mersenne primes need e prime.
-def rdc_8x1(f, pp, v, strat):
-    rdc_8x1_word_by_word(f, pp, v, strat)
-    return
+def rdc_8x1_oneshot(f, pp, v, strat):
 
     f.start("void rdc_8x1(__m512i* res, __m512i* a)")
 
@@ -773,6 +771,9 @@ def rdc_8x1(f, pp, v, strat):
     f.single_vars_to_array(var_name="t", arr_name="res", count=nl, start_idx = result_start)
 
     f.end()
+
+def rdc_8x1(f, pp, v, strat):
+    rdc_8x1_word_by_word(f, pp, v, strat)
 
 def fp_mul_8x1(f, pp, v):
     f.start("void fp_mul_8x1(__m512i* res, __m512i* a, __m512i* b)")
