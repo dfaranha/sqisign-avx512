@@ -620,24 +620,21 @@ bool superglue_evaluation_on_position(__m512i *_p, fp2_t s[8], int position, fp2
 void superglue_evaluation_pair(__m512i *p1, __m512i *p2, __m512i *U, __m512i *V,
         __m512i *W, int position, bool sign_flip, fp2_t *dual_theta_null_square,
         fp2_t *elements) {
-    __m512i _u[2 * NUM_LIMBS], _v[2 * NUM_LIMBS], T0[2 * NUM_LIMBS], T1[2 * NUM_LIMBS], T2[2 * NUM_LIMBS];
-    fp2_t u[4], v[4], w[4], t0[8], t1[8], t2[8], t4[8], s2[4];
+    __m512i u[2 * NUM_LIMBS], v[2 * NUM_LIMBS], w[2 * NUM_LIMBS];
+	__m512i T0[2 * NUM_LIMBS], T1[2 * NUM_LIMBS], T2[2 * NUM_LIMBS], T3[2 * NUM_LIMBS];
+    fp2_t t0[8], t1[8], t2[8], t4[8], s2[4];
     // TODO: for codomain vi is zero, we might find a nice optimization here?
     // u1, u3, u2, u4 = U
     // v1, v3, v2, v4 = V
     // w1, w3, w2, w4 = W
-    fp2_4x2x1_to_unvectorized(u, U);
-    fp2_4x2x1_to_unvectorized(v, V);
-
     fp2_copy_4x2x1(T0, W);
     if (sign_flip) {
         fp2_neg_4x2x1(T0, W);
     }
     const __m512i idx = _mm512_set_epi64(7, 6, 5, 4, 11, 10, 9, 8);
     for (__mmask8 i = 0; i < NUM_LIMBS; i++) {
-        T0[i] = VBLENDPERM(idx, W[i], T0[i]);
+        W[i] = VBLENDPERM(idx, W[i], T0[i]);
     }
-    fp2_4x2x1_to_unvectorized(w, T0);
 
     // 8 adds
     // T0 = AVX_8x1x1(u1, u2, u3, u4, u1, u2, u3, u4)
@@ -646,52 +643,54 @@ void superglue_evaluation_pair(__m512i *p1, __m512i *p2, __m512i *U, __m512i *V,
     const __m512i idx0 = VSET(0, 4, 2, 6, 0, 4, 2, 6);
     const __m512i idx1 = VSET(1, 5, 3, 7, 1, 5, 3, 7);
     for (int i = 0; i < NUM_LIMBS; i++) {
-        _u[i] = VPERM512(idx0, U[i]);
-        _u[i + NUM_LIMBS] = VPERM512(idx1, U[i]);
-        _v[i] = VPERM512(idx0, V[i]);
-        _v[i + NUM_LIMBS] = VPERM512(idx1, V[i]);
-    }
-    fp2_mixaddsub_8x1x1(T2, _u, _v, 0x0f, 0x0f),
-    fp2_8x1x1_to_unvectorized(t2, T2);
+        u[i] = VPERM512(idx0, U[i]);
+        u[i + NUM_LIMBS] = VPERM512(idx1, U[i]);
+        v[i] = VPERM512(idx0, V[i]);
+        v[i + NUM_LIMBS] = VPERM512(idx1, V[i]);
+        w[i] = VPERM512(idx0, W[i]);
+        w[i + NUM_LIMBS] = VPERM512(idx1, W[i]);
+	}
+    fp2_mixaddsub_8x1x1(T2, u, v, 0x0f, 0x0f);
 
     // 4M + 4S
     // T0 = AVX_8x1x1(T2[0], T2[1], w1, w2, T2[2], T2[3], w3, w4)
     // T1 = AVX_8x1x1(T2[4], T2[5], w1, w2, T2[6], T2[7], w3, w4)
     // T2 = avx_811_mul(T0, T1)
-    fp2_mul(&t2[0], &t2[0], &t2[4]);
-    fp2_mul(&t2[1], &t2[1], &t2[5]);
-    fp2_mul(&t2[4], &t2[2], &t2[6]);
-    fp2_mul(&t2[5], &t2[3], &t2[7]);
-    fp2_mul(&t2[2], &w[0], &w[0]);
-    fp2_mul(&t2[3], &w[2], &w[2]);
-    fp2_mul(&t2[6], &w[1], &w[1]);
-    fp2_mul(&t2[7], &w[3], &w[3]);
-
-    // 8 adds
-    // T0 = AVX_8x1x1(T2[0], T2[1], T2[4], T2[5], T2[0], T2[1], T2[4], T2[5])
-    // T1 = AVX_8x1x1(T2[2], T2[3], T2[6], T2[7], T2[2], T2[3], T2[6], T2[7])
-    // T2 = avx_811_add_sub(T0, T1)
-    fp2_add(&t0[0], &t2[0], &t2[2]);
-    fp2_add(&t0[1], &t2[1], &t2[3]);
-    fp2_add(&t0[2], &t2[4], &t2[6]);
-    fp2_add(&t0[3], &t2[5], &t2[7]);
-    fp2_sub(&t0[4], &t2[0], &t2[2]);
-    fp2_sub(&t0[5], &t2[1], &t2[3]);
-    fp2_sub(&t0[6], &t2[4], &t2[6]);
-    fp2_sub(&t0[7], &t2[5], &t2[7]);
+    const __m512i idx2 = _mm512_set_epi64(11, 10, 3, 2, 9, 8, 1, 0);
+	const __m512i idx3 = _mm512_set_epi64(11, 10, 7, 6, 9, 8, 5, 4);
+    for (__mmask8 i = 0; i < 2 * NUM_LIMBS; i++) {
+        T0[i] = VBLENDPERM(idx2, T2[i], w[i]);
+		T1[i] = VBLENDPERM(idx3, T2[i], w[i]);
+    }
+	fp2_mul_8x1x1(T2, T0, T1);
 
     // 8M
     // T0 = AVX_8x1x1(u1, u2, v1, w2, u3, u4, v3, w4)
     // T1 = AVX_8x1x1(w1, w2, v2, w1, w3, w4, v4, w3)
     // T3 = avx_811_mul(T0, T1)
-    fp2_mul(&t1[0], &u[0], &w[0]);
-    fp2_mul(&t1[1], &u[2], &w[2]);
-    fp2_mul(&t1[2], &v[0], &v[2]);
-    fp2_mul(&t1[3], &w[2], &w[0]);
-    fp2_mul(&t1[4], &u[1], &w[1]);
-    fp2_mul(&t1[5], &u[3], &w[3]);
-    fp2_mul(&t1[6], &v[1], &v[3]);
-    fp2_mul(&t1[7], &w[3], &w[1]);
+    const __m512i idx4 = _mm512_set_epi64(0, 10, 3, 2, 0, 8, 1, 0);
+	const __m512i idx5 = _mm512_set_epi64(11, 6, 5, 4, 9, 2, 1, 0);
+	const __m512i idx6 = _mm512_set_epi64(2, 11, 3, 2, 0, 9, 1, 0);
+    for (__mmask8 i = 0; i < 2 * NUM_LIMBS; i++) {
+        T0[i] = VBLENDPERM(idx4, u[i], v[i]);
+		T0[i] = VBLENDPERM(idx5, T0[i], w[i]);
+		T1[i] = VBLENDPERM(idx6, w[i], v[i]);
+    }
+	fp2_mul_8x1x1(T3, T1, T0);
+	fp2_8x1x1_to_unvectorized(t1, T3);
+
+    // 8 adds
+    // T0 = AVX_8x1x1(T2[0], T2[1], T2[4], T2[5], T2[0], T2[1], T2[4], T2[5])
+    // T1 = AVX_8x1x1(T2[2], T2[3], T2[6], T2[7], T2[2], T2[3], T2[6], T2[7])
+    // T2 = avx_811_add_sub(T0, T1)
+    const __m512i idx7 = _mm512_set_epi64(5, 4, 1, 0, 5, 4, 1, 0);
+	const __m512i idx8 = _mm512_set_epi64(7, 6, 3, 2, 7, 6, 3, 2);
+    for (__mmask8 i = 0; i < 2 * NUM_LIMBS; i++) {
+        T0[i] = VPERM512(idx7, T2[i]);
+		T1[i] = VPERM512(idx8, T2[i]);
+    }
+	fp2_mixaddsub_8x1x1(T2, T0, T1, 0x0f, 0x0f);
+	fp2_8x1x1_to_unvectorized(t0, T2);
 
     // 4M (s7, r7 only used for case 4 though)
     // S0 = AVX_4x2x1(T3[2], T2[5], T3[6], T2[7])
