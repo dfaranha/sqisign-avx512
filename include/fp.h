@@ -172,13 +172,13 @@ void mp_dblsubx2_8x1(__m512i* res, __m512i* a, __m512i* b);
 
 /**
  * res = res - a, double-length multiprecision subtraction, with carry propagation.
- * We always add p*R to make the result non-negative.
+ * If the result is negative, we add p*R.
  */
 void mp_subx2_8x1(__m512i* res, __m512i* a);
 
 /**
  * double-length multiprecision mixed add sub, with carry propagation.
- * We always add p*R to make the result non-negative.
+ * If the result is negative, we add p*R.
  */
 void mp_mixaddsubx2_8x1(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
 
@@ -354,13 +354,13 @@ void mp_dblsubx2_4x2(__m512i* res, __m512i* a, __m512i* b);
 
 /**
  * res = res - a, double-length multiprecision subtraction, without carry propagation.
- * We always add p*R to make the result non-negative.
+ * If the result is negative, we add p*R.
  */
 void mp_subx2_4x2(__m512i* res, __m512i* a);
 
 /**
  * double-length multiprecision mixed add sub, without carry propagation.
- * We always add p*R to make the result non-negative.
+ * If the result is negative, we add p*R.
  */
 void mp_mixaddsubx2_4x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask);
 

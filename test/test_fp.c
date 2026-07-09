@@ -257,6 +257,11 @@ bool test_fp(int iterations)
     fp_tomont_8x1(d, one);
     if (fp_is_equal_8x1(d, vR) != 0xff) {
         printf("The Montgomery representation of 1 is not R mod p\n");
+        printf("\n");
+        print_512i_array(one, NUM_LIMBS, "one");
+        print_512i_array(d, NUM_LIMBS, "expected");
+        print_512i_array(vR, NUM_LIMBS, "actual");
+
         passed = 0;
     }
 

@@ -592,9 +592,79 @@ def mp_mul_8x1(f, pp, v):
 
     f.end()
 
+def rdc_8x1_word_by_word(f, pp, v, strat):
+    f.start("void rdc_8x1(__m512i* res, __m512i* a)")
+
+    plus1 = " + 1" if strat.R_ext else ""
+    f.comment(f"Montgomery reduction with R = 2^n mod p, with n = ((num_limbs{plus1}) * limb_len)")
+    f.comment("low(a) = (a_0, a_1, ... , a_num_limbs)")
+    f.comment("m = -p^(-1) mod 2^n = p + 2 = c * 2^e + 1")
+    f.comment("The output of this reduction is (a + (low(a) * m mod 2^n )*p) / 2^n")
+    f.line()
+
+
+    f.array_to_single_vars(var_name="a", arr_name="a", count=2*pp.num_limbs, const=False)
+    if strat.R_ext:
+        f.line(f"__m512i a{2*pp.num_limbs} = VZERO();")
+    f.line("__mmask8 msb_mask;")
+    f.line(f"__m512i hi;")
+    if not strat.mod_2p:
+        f.line("__m512i sign_mask;")
+        f.line(f"const __m512i bot = VSETALL(1);")
+    f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
+    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
+    f.line(f"const __m512i zero = VZERO();")
+    f.line(f"const __m512i one = VSETALL(1);")
+    f.line()
+
+    for i in range(pp.num_limbs-1):
+        f.line(f"a{i+pp.num_limbs-1} = VMULADDL(a{i+pp.num_limbs-1}, a{i}, top);")
+        f.line(f"hi = VMULADDH(zero, a{i}, top);")
+        f.line(f"hi = VSL(hi, {v.limb_align});")
+        f.line(f"a{i+pp.num_limbs} = VADD(a{i+pp.num_limbs}, hi);")
+
+    for i in range(pp.num_limbs-1, pp.num_limbs_R):
+        f.line(f"a{i+1} = VADD(a{i+1}, VSRA(a{i}, {v.limb_len}));")
+        f.line(f"a{i} = VAND(a{i}, limb_mask);")
+        f.line(f"a{i+pp.num_limbs-1} = VMULADDL(a{i+pp.num_limbs-1}, a{i}, top);")
+        f.line(f"hi = VMULADDH(zero, a{i}, top);")
+        f.line(f"hi = VSL(hi, {v.limb_align});")
+        f.line(f"a{i+pp.num_limbs} = VADD(a{i+pp.num_limbs}, hi);")
+
+    carry_prop_8x1_var(f, pp, v, pp.num_limbs_R, "a", "limb_mask", start_idx=pp.num_limbs)
+
+    start = pp.num_limbs_R
+    end = pp.num_limbs_R + pp.num_limbs - 1
+    f.comment(f"After dividing by 2^n, the result is in a{start}, ..., a{end}")
+
+    if not strat.mod_2p:
+        f.comment(f"We fully reduce the result down to [0, p).")
+
+        f.comment("Subtract p, using special shape of p")
+        f.line(f"a{start} = VADD(a{start}, bot);")
+        f.line(f"a{end} = VSUB(a{end}, top);")
+        f.line()
+
+        carry_prop_8x1_var(f, pp, v, pp.num_limbs, "a", "limb_mask", start_idx=start)
+
+        f.comment("If result is negative, we undo the subtraction by p")
+        f.line(f"sign_mask = VSRA(a{end}, 63);")
+        f.line(f"a{start} = VSUB(a{start}, VAND(bot, sign_mask));")
+        f.line(f"a{end} = VADD(a{end}, VAND(top, sign_mask));")
+        f.line()
+
+        carry_prop_8x1_var(f, pp, v, pp.num_limbs, "a", "limb_mask", start_idx=start)
+    
+    f.single_vars_to_array(var_name="a", arr_name="res", count=pp.num_limbs, start_idx = start)
+
+    f.end()
+
 # c == 1 and e = 0 mod limb_len can not happen at the same time, for primes > 52 bits.
 # Mersenne primes need e prime.
 def rdc_8x1(f, pp, v, strat):
+    rdc_8x1_word_by_word(f, pp, v, strat)
+    return
+
     f.start("void rdc_8x1(__m512i* res, __m512i* a)")
 
     plus1 = " + 1" if strat.R_ext else ""
