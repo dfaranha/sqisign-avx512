@@ -710,8 +710,6 @@ void superglue_evaluation_pair(__m512i *p1, __m512i *p2, __m512i *U, __m512i *V,
     fp2_add(&t4[3], &t1[4], &t1[4]);
     fp2_add(&t4[4], &t1[5], &t1[5]);
     fp2_add(&t4[5], &s2[2], &s2[2]);
-    fp2_set_zero(&t4[6]);
-    fp2_set_zero(&t4[7]);
 
     // 2 adds
     // T0 = AVX_2x4x1(T4[2], T4[5])
