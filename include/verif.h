@@ -1,15 +1,13 @@
 #ifndef VERIF_H
 #define VERIF_H
 
+#include "ec.h"
 #include "fp_consts.h"
 #include "intrinsics_avx512.h"
 #include "tutil.h"
 #include <stdbool.h>
 
 typedef unsigned char byte_t;
-
-typedef digit_t scalar_t[NWORDS64];
-typedef scalar_t scalar_mtx_2x2_t[2][2];
 
 typedef struct public_key_2x2x2
 {

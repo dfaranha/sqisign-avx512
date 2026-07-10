@@ -1,6 +1,7 @@
 #ifndef EC_H
 #define EC_H
 
+#include "fp_consts.h"
 #include "intrinsics_avx512.h"
 
 #include "sqi_ec.h"
@@ -8,7 +9,7 @@
 
 // TODO replace digit_t with scalar_t where appropriate
 
-typedef digit_t scalar_t[NWORDS_ORDER];
+typedef digit_t scalar_t[NWORDS64];
 typedef scalar_t scalar_mtx_2x2_t[2][2];
 
 // TODO: Probably want to create structs to group elements together.

@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define CLOBBER(p) __asm__ volatile("" : : "r"(p) : "memory")
+
 void bench_fp(int iterations);
 void bench_fp2(int iterations);
 void bench_ec(int iterations);

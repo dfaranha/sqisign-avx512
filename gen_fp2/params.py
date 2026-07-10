@@ -122,7 +122,8 @@ def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
         mul_8x1 = Fp2Mode.lazy_carry
         sqr_8x1 = Fp2Mode.lazy_carry
         sqr_4x2 = Fp2Mode.lazy_carry
-        R_ext = num_limbs > 5 # Experimental data shows this is efficiency threshold
+        R_ext = False
+        #R_ext = num_limbs > 5 # Experimental data shows this is efficiency threshold
         mod_2p = True
     elif last_limb_len == 49: # 8x1 squaring must switch to mod p
         mul_8x1 = Fp2Mode.lazy_carry
@@ -144,7 +145,6 @@ def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
         mod_2p = False
 
     # TODO: Can we save one limb in prod when last_limb_len < 2 * limb_len?
-
     return Strat(
         gen_addchain = gen_addchain,
         mul_8x1 = mul_8x1,
