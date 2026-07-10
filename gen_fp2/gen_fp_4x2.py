@@ -557,7 +557,7 @@ def mp_mul_4x2(f, pp, v, strat):
 
     f.end()
 
-def rdc_4x2_word_by_word(f, pp, v, strat):
+def rdc_4x2_fused(f, pp, v, strat):
     f.comment("Algorithm 3 from \"Finite Field Arithmetic Using AVX-512 For Isogeny-Based Cryptography\"")
     f.comment("by Orisaka, Aranha and López")
     f.comment("Modifies a")
@@ -643,7 +643,7 @@ def rdc_4x2_word_by_word(f, pp, v, strat):
 
     f.end()
 
-def rdc_4x2_oneshot(f, pp, v, strat):
+def rdc_4x2_split(f, pp, v, strat):
     f.comment("Algorithm 3 from \"Finite Field Arithmetic Using AVX-512 For Isogeny-Based Cryptography\"")
     f.comment("by Orisaka, Aranha and López")
     f.comment("Modifies a")
@@ -765,7 +765,7 @@ def rdc_4x2_oneshot(f, pp, v, strat):
     f.end()
 
 def rdc_4x2(f, pp, v, strat):
-    rdc_4x2_oneshot(f, pp, v, strat)
+    rdc_4x2_split(f, pp, v, strat)
 
 def fp_mul_4x2(f, pp, v):
     f.start("void fp_mul_4x2(__m512i* res, __m512i* a, __m512i* b)")
