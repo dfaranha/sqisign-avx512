@@ -11,22 +11,43 @@
 #include "assert.h"
 #include "sqi_test_extras.h"
 
-static int find_pos_early(fp2_t *s, fp2_t *r, fp2_t *s_other, fp2_t *r_other) {
-    if (fp2_is_zero(s))
+// ============================================================================
+// MOVE TO theta_superglue.h:
+//
+// All step constants for superglue evaluation, in vectorized form. Filled
+// once per isogeny step by superglue_codomain; consumed read-only by every
+// superglue_eval_pair call. This replaces the scalar
+// (position, sign_flip, dual_theta_null_square[4], elements[6], ab) interface,
+// which forced superglue_evaluation_on_position to rebuild its vector
+// constants (12 fp2_copy + 3 conversions) twice per evaluated point.
+//
+// typedef struct {
+//     __m512i C0[2 * NUM_LIMBS]; // 8x1x1 multiplier of the first 8M block
+//     __m512i C1[NUM_LIMBS];     // 4x2x1 broadcast: B_inv (pos 4) / e5 (pos 1|7)
+//     __m512i J[2 * NUM_LIMBS];  // 8x1x1 (b, b, a, a, b, b, a, a) from ab
+//     int position;
+//     bool sign_flip;
+// } superglue_precomp_t;
+// ============================================================================
+
+// Decode a 4-bit zero-flag mask (bit k = element k is zero) into a position,
+// with the same priority order as the old scalar find_pos_early(e1, e0, e3, e2).
+static int find_pos_from_mask(unsigned mask) {
+    if (mask & 0x2)
         return 0;
-    else if (fp2_is_zero(r))
+    if (mask & 0x1)
         return 1;
-    else if (fp2_is_zero(s_other))
+    if (mask & 0x8)
         return 2;
-    else if (fp2_is_zero(r_other))
+    if (mask & 0x4)
         return 3;
-    else
-        return -1;
+    return -1;
 }
 
 bool compute_symmetric_position(int *pos_1, int *pos_2, __m512i* x_4, __m512i* z_4) {
     __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
     fp2_t rs[8];
+    __mmask8 zero_mask;
     // The positions we will find
     *pos_1 = *pos_2 = -1;
 
@@ -37,19 +58,22 @@ bool compute_symmetric_position(int *pos_1, int *pos_2, __m512i* x_4, __m512i* z
     fp2_4x2x1_to_8x1x1(t0, x_4, x_4);
     fp2_4x2x1_to_8x1x1(t1, z_4, z_4);
     fp2_mixaddsub_8x1x1(t2, t0, t1, 0x55, 0x55);
-    fp2_8x1x1_to_unvectorized(rs, t2);
 
-    // For SQIsign, pos_2 is always 2 or 3, but pos_1
-    // is unbounded. We can return early here if we're
-    // in the lucky 2/3 cases
-    *pos_1 = find_pos_early(&rs[1], &rs[0], &rs[3], &rs[2]);
-    *pos_2 = find_pos_early(&rs[5], &rs[4], &rs[7], &rs[6]);
+    // For SQIsign, pos_2 is always 2 or 3, but pos_1 is unbounded. We can
+    // return early here if we're in the lucky 2/3 cases. All eight zero
+    // tests happen in one vectorized call; the unvectorize is only needed
+    // on the slow path below.
+    zero_mask = fp2_is_zero_8x1x1(t2);
+    *pos_1 = find_pos_from_mask(zero_mask & 0xf);
+    *pos_2 = find_pos_from_mask((zero_mask >> 4) & 0xf);
 
     if (*pos_1 != -1)
         return true;
 
     // If we've reached here, we need to do extra work to find pos_1
-    // at a cost of 2M and 2a
+    // at a cost of 2M and 2a. Cold path: staging kept scalar, only the
+    // final zero test is vectorized.
+    fp2_8x1x1_to_unvectorized(rs, t2);
     // ir1 = i * r1
     fp2_mul_i(&rs[4], &rs[0], 1);
     fp2_copy(&rs[0], &rs[4]);
@@ -74,13 +98,12 @@ bool compute_symmetric_position(int *pos_1, int *pos_2, __m512i* x_4, __m512i* z
     fp2_copy(&rs[1], &rs[0]);
     fp2_unvectorized_to_2x4x1(t0, &rs[0]);
     fp2_mixaddsub_2x4x1(t2, t0, t1, 0x25);
-    // TODO: optimize with fp2_is_zero_2x4x1(t2)
-    fp2_2x4x1_to_unvectorized(rs, t2);
 
     // Find the position in the case where neither P or Q is above (0 : 1)
-    if (fp2_is_zero(&rs[0]))
+    zero_mask = fp2_is_zero_2x4x1(t2);
+    if (zero_mask & 0x1)
         *pos_1 = 4;
-    else if (fp2_is_zero(&rs[1]))
+    else if (zero_mask & 0x2)
         *pos_1 = 5;
     else {
         printf("No vanishing coordinate found in 4-torsion");
@@ -89,6 +112,8 @@ bool compute_symmetric_position(int *pos_1, int *pos_2, __m512i* x_4, __m512i* z
     return true;
 }
 
+// Left scalar deliberately: pure memory management (copies, negs, zero-sets;
+// no muls or adds) with six divergent placement patterns; runs once per gluing.
 void compute_symmetric_elements(fp2_t g1[3], fp2_t g2[3], fp2_t g3[2],
         fp2_t *r1, fp2_t *r2, fp2_t *delta, int pos) {
     fp2_t ir1, ir2;
@@ -172,7 +197,10 @@ bool compute_superglue_coefficients(int *position, fp2_t dual_theta_null_square[
         fp2_t elements[6], __m512i* x_4, __m512i* z_4) {
     int pos_1, pos_2;
     fp2_t t[8], u[8], v[8], g0_1[3], g1_1[3], g2_1[3], g0_2[3], g1_2[3], g2_2[3];
+    fp2_t ga[4], gb[4], arr8[8], sq[4], bc[4];
     __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
+    __m512i A4[NUM_LIMBS], B4[NUM_LIMBS], V4[NUM_LIMBS], S5v[NUM_LIMBS];
+    __m512i Sum4[NUM_LIMBS], Diff4[NUM_LIMBS], E8[NUM_LIMBS], O8[NUM_LIMBS];
 
     // Compute the positions of each element
     // 2M + 10a
@@ -183,7 +211,7 @@ bool compute_superglue_coefficients(int *position, fp2_t dual_theta_null_square[
 #endif
 
     // Memory management for what we send into compute_matrix_coefficients
-    //n based on pos_1 and pos_2
+    // based on pos_1 and pos_2 -- irregular, left scalar.
 
     // x1, x2, x3, _ = X_4
     // z1, z2, z3, _ = Z_4
@@ -205,7 +233,6 @@ bool compute_superglue_coefficients(int *position, fp2_t dual_theta_null_square[
     fp2_set_zero(&u[6]);
     fp2_set_zero(&u[7]);
     // x1, z1, x2, z2 = four_torsion
-    // 2M + 4S + 6a
     // 8M (2M wasted)
     // T0 = AVX_8x1x1(x1, z1, x2, z2, x1, x2, 0, 0)
     // T1 = AVX_8x1x1(x1, z1, x2, z2, z1, z2, 0, 0)
@@ -229,7 +256,6 @@ bool compute_superglue_coefficients(int *position, fp2_t dual_theta_null_square[
     // 8a (2a wasted)
     // T0 = AVX_8x1x1(s1, r2, s3, r4, s1, s3, 0, 0)
     fp2_unvectorized_to_8x1x1(t0, u);
-
     fp2_copy(&u[0], &t[1]);
     fp2_copy(&u[2], &t[3]);
     fp2_copy(&u[4], &t[1]);
@@ -241,18 +267,12 @@ bool compute_superglue_coefficients(int *position, fp2_t dual_theta_null_square[
     fp2_8x1x1_to_unvectorized(t, t2);
 
     // Compute the unique elements which we use to file the symmetric elements
-    // 2M + 4S + 6a
-    //coefficients = t2 = compute_matrix_coefficients(four_torsion)
-
-    // TODO: this can be done in parallel, but there is no arithmetic, only
-    // memory management so maybe it's not worth it
     // r1, r2, r3, r4, delta_1, delta_2, _, _ = coefficients
     // g0_1, g1_1, g2_1 = compute_symmetric_elements(r1, r2, delta_1, pos_1)
     // g0_2, g1_2, g2_2 = compute_symmetric_elements(r3, r4, delta_2, pos_2)
-
     compute_symmetric_elements(g0_1, g1_1, g2_1, &t[0], &t[1], &t[4], pos_1);
     compute_symmetric_elements(g0_2, g1_2, g2_2, &t[2], &t[3], &t[5], pos_2);
-    
+
     *position = 3 * (pos_1 >> 1) + (pos_2 >> 1);
 #ifndef NDEBUG
     // Generically there's 9 elements here for the Q basis, but we actually only need 7
@@ -260,24 +280,6 @@ bool compute_superglue_coefficients(int *position, fp2_t dual_theta_null_square[
     assert(fp2_is_equal(&g1_2[1], &g1_2[2]));
     // Handle special cases for positions
     assert(*position == 1 || *position == 4 || *position == 7);
-    // fp2_print("g0_1[0] = ", &g0_1[0]);
-    // fp2_print("g0_1[1] = ", &g0_1[1]);
-    // fp2_print("g0_1[2] = ", &g0_1[2]);
-    // fp2_print("g1_1[0] = ", &g1_1[0]);
-    // fp2_print("g1_1[1] = ", &g1_1[1]);
-    // fp2_print("g1_1[2] = ", &g1_1[2]);
-    // fp2_print("g2_1[0] = ", &g2_1[0]);
-    // fp2_print("g2_1[1] = ", &g2_1[1]);
-    // fp2_print("g2_1[2] = ", &g2_1[2]);
-    // fp2_print("g0_2[0] = ", &g0_2[0]);
-    // fp2_print("g0_2[1] = ", &g0_2[1]);
-    // fp2_print("g0_2[2] = ", &g0_2[2]);
-    // fp2_print("g1_2[0] = ", &g1_2[0]);
-    // fp2_print("g1_2[1] = ", &g1_2[1]);
-    // fp2_print("g1_2[2] = ", &g1_2[2]);
-    // fp2_print("g2_2[0] = ", &g2_2[0]);
-    // fp2_print("g2_2[1] = ", &g2_2[1]);
-    // fp2_print("g2_2[2] = ", &g2_2[2]);
 #endif
 
     /* 8M
@@ -308,95 +310,96 @@ bool compute_superglue_coefficients(int *position, fp2_t dual_theta_null_square[
     fp2_unvectorized_to_8x1x1(t1, u);
     fp2_mul_8x1x1(t2, t0, t1);
 
-    // 4a
-    //v = AVX_4x2x1(T2[0], T2[1], T2[2], T2[3])
-    //S0 = AVX_4x2x1(T2[4], T2[5], T2[6], T2[7])
-    //v = avx_421_add(v, S0)
+    // 4a: v[j] = element j + element (j+4). Kept scalar because u[4]
+    // (= S0[0]) is also needed later as the broadcast operand.
     fp2_8x1x1_to_unvectorized(u, t2);
     fp2_add(&v[0], &u[0], &u[4]);
     fp2_add(&v[1], &u[1], &u[5]);
     fp2_add(&v[2], &u[2], &u[6]);
     fp2_add(&v[3], &u[3], &u[7]);
+    fp2_unvectorized_to_4x2x1(V4, v);   // V4 = (v0, v1, v2, v3)
 
-    // 4M
+    // 4M as one vector mul
     // S1 = AVX_4x2x1(g2_1[0], g2_1[0], g2_1[1], g2_1[1])
     // S2 = AVX_4x2x1(g2_2[0], g2_2[1], g2_2[0], g2_2[1])
-    // S3 = avx_421_mul(S1, S2)
-    // v = avx_421_sub(v, S3)
-    fp2_mul(&t[0], &g2_1[0], &g2_2[0]);
-    fp2_mul(&t[1], &g2_1[0], &g2_2[1]);
-    fp2_mul(&t[2], &g2_1[1], &g2_2[0]);
-    fp2_mul(&t[3], &g2_1[1], &g2_2[1]);
-    fp2_sub(&v[0], &v[0], &t[0]);
-    fp2_sub(&v[1], &v[1], &t[1]);
-    fp2_sub(&v[2], &v[2], &t[2]);
-    fp2_sub(&v[3], &v[3], &t[3]);
+    // S3 = avx_421_mul(S1, S2);  v = avx_421_sub(v, S3)
+    fp2_copy(&ga[0], &g2_1[0]); fp2_copy(&ga[1], &g2_1[0]);
+    fp2_copy(&ga[2], &g2_1[1]); fp2_copy(&ga[3], &g2_1[1]);
+    fp2_copy(&gb[0], &g2_2[0]); fp2_copy(&gb[1], &g2_2[1]);
+    fp2_copy(&gb[2], &g2_2[0]); fp2_copy(&gb[3], &g2_2[1]);
+    fp2_unvectorized_to_4x2x1(A4, ga);
+    fp2_unvectorized_to_4x2x1(B4, gb);
+    fp2_mul_4x2x1(B4, A4, B4);
+    fp_sub_8x1(V4, V4, B4);            // fp2 sub in 4x2x1 is lanewise Fp sub
 
-    // 4M
+    // 4M as one vector mul
     // S4 = AVX_4x2x1(g1_2[0], g1_2[2], g0_1[0], g0_1[2])
     // S5 = AVX_4x2x1(v[0], v[1], v[0], v[2])
     // S6 = avx_421_mul(S4, S5)
-    fp2_mul(&v[4], &v[0], &g1_2[0]);
-    fp2_mul(&v[5], &v[1], &g1_2[1]);
-    fp2_mul(&v[6], &v[0], &g0_1[0]);
-    fp2_mul(&v[7], &v[2], &g0_1[2]);
-
-    // 2a
-    // R0 = AVX_2x4x1(S6[0], S6[2])
-    // R1 = AVX_2x4x1(S6[1], S6[3])
-    // R2 = avx_241_add(R0, R1)
-    fp2_add(&v[4], &v[4], &v[5]);
-    fp2_add(&v[5], &v[6], &v[7]);
+    fp2_copy(&ga[0], &g1_2[0]); fp2_copy(&ga[1], &g1_2[1]);
+    fp2_copy(&ga[2], &g0_1[0]); fp2_copy(&ga[3], &g0_1[2]);
+    fp2_unvectorized_to_4x2x1(A4, ga);
+    // S5 built from V4 via a per-limb self-permute
+    // (element indices (0,1,0,2) -> qword indices below):
+    const __m512i idxS5 = VSET(0, 1, 2, 3, 0, 1, 4, 5);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        S5v[i] = VPERM512(idxS5, V4[i]);
+    }
+    fp2_mul_4x2x1(B4, S5v, A4);
+    // Extract S6 into sq[] (NOT u[] -- u[4] = S0[0] must stay live for the
+    // broadcast mul below), then collapse into the two sums:
+    // R0 = AVX_2x4x1(S6[0], S6[2]); R1 = AVX_2x4x1(S6[1], S6[3]); R2 = R0+R1
+    fp2_4x2x1_to_unvectorized(sq, B4);
+    fp2_add(&v[4], &sq[0], &sq[1]);
+    fp2_add(&v[5], &sq[2], &sq[3]);
 
     // These first two are optional, but fit in a 4-way
-    // 4M
+    // 4M as one vector mul
     // S7 = AVX_4x2x1(g0_1[0], g0_1[2], delta_1, delta_2)
     // S8 = AVX_4x2x1(v[1], v[3], R2[0], R2[1])
     // S9 = avx_421_mul(S7, S8)
-    fp2_mul(&t[0], &v[1], &g0_1[0]);
-    fp2_mul(&t[1], &v[3], &g0_1[2]);
-    fp2_mul(&t[2], &v[4], &t[4]);
-    fp2_mul(&t[3], &v[5], &t[5]);
+    fp2_copy(&ga[0], &g0_1[0]); fp2_copy(&ga[1], &g0_1[2]);
+    fp2_copy(&ga[2], &t[4]);    fp2_copy(&ga[3], &t[5]);
+    fp2_unvectorized_to_4x2x1(A4, ga);
+    fp2_copy(&gb[0], &v[1]); fp2_copy(&gb[1], &v[3]);
+    fp2_copy(&gb[2], &v[4]); fp2_copy(&gb[3], &v[5]);
+    fp2_unvectorized_to_4x2x1(B4, gb);
+    fp2_mul_4x2x1(B4, A4, B4);
+    fp2_4x2x1_to_unvectorized(t, B4);     // t[0..3] = S9[0..3]
 
     // This only needs to be done 1/3 of the time
     fp2_t sgl_val;
     fp2_set_zero(&sgl_val);
     if (*position == 4) {
         // Another 1a + 1M
-        // R3 = AVX_2x4x1(S9[0], 0)
-        // R4 = AVX_2x4x1(S9[1], 0)
-        // R5 = avx_241_add(R3, R4)
-        // R6 = AVX_2x4x1(delta_2, 0)
-        // R7 = avx_241_mul(R5, R6)
-        // sgl_val = R7[0]
+        // R5 = S9[0] + S9[1]; sgl_val = R5 * delta_2
         fp2_add(&sgl_val, &t[0], &t[1]);
         fp2_mul(&sgl_val, &sgl_val, &t[5]);
     }
 
-    // 4M
-    // S10 = AVX_4x2x1(S0[0], S0[0], S0[0], S0[0])
-    // v = avx_421_mul(v, S10)
-    fp2_mul(&v[0], &v[0], &u[4]);
-    fp2_mul(&v[1], &v[1], &u[4]);
-    fp2_mul(&v[2], &v[2], &u[4]);
-    fp2_mul(&v[3], &v[3], &u[4]);
+    // 4M, broadcast mul
+    // S10 = AVX_4x2x1(S0[0], S0[0], S0[0], S0[0]); v = avx_421_mul(v, S10)
+    for (int k = 0; k < 4; k++)
+        fp2_copy(&bc[k], &u[4]);
+    fp2_unvectorized_to_4x2x1(A4, bc);
+    fp2_mul_4x2x1(V4, V4, A4);
+    fp2_4x2x1_to_unvectorized(v, V4);     // v[0..3] finalized as scalars
 
-    // Compute dual_theta_null_square for later
-    // 3S
-    // S11 = AVX_4x2x1(S9[2], S9[3], v[0], 0)
-    // S12 = avx_421_sqr(S11)
-    fp2_sqr(&t[4], &t[2]);
-    fp2_sqr(&t[5], &t[3]);
-    fp2_sqr(&t[6], &v[0]);
-    fp2_set_zero(&t[7]);
+    // Compute dual_theta_null_square for later. Squaring batched; the 3-way
+    // combine has an irregular operand pattern and stays scalar.
+    // S11 = AVX_4x2x1(S9[2], S9[3], v[0], 0); S12 = avx_421_sqr(S11)
+    fp2_copy(&ga[0], &t[2]);
+    fp2_copy(&ga[1], &t[3]);
+    fp2_copy(&ga[2], &v[0]);
+    fp2_set_zero(&ga[3]);
+    fp2_unvectorized_to_4x2x1(A4, ga);
+    fp2_sqr_4x2x1(A4, A4);   // use fp2_mul_4x2x1(A4, A4, A4) if no sqr variant
+    fp2_4x2x1_to_unvectorized(sq, A4);   // sq = (t4, t5, t6, _)
 
     // 3a
-    // S13 = AVX_4x2x1(S12[0], 0, S12[2], S12[2])
-    // S14 = AVX_4x2x1(S12[1], 0, S12[0], S12[1])
-    // S15 = avx_421_add_sub(S13, S14)
-    fp2_add(&t[0], &t[4], &t[5]);
-    fp2_sub(&t[2], &t[6], &t[4]);
-    fp2_sub(&t[4], &t[6], &t[5]);
+    fp2_add(&t[0], &sq[0], &sq[1]);
+    fp2_sub(&t[2], &sq[2], &sq[0]);
+    fp2_sub(&t[4], &sq[2], &sq[1]);
 
     // dual_theta_null_square = [S15[0], S15[2], S15[3], 0]
     fp2_copy(&dual_theta_null_square[0], &t[0]);
@@ -408,38 +411,39 @@ bool compute_superglue_coefficients(int *position, fp2_t dual_theta_null_square[
     if (*position == 1 || *position == 7) {
         // case 1 | 7:
         // Standard case: all four coordinates are nonzero
-        // 6M + 6a
-        // T3 = AVX_8x1x1(v[0], v[2], v[0], v[1], v[0], v[1], 0, 0)
-        // T4 = AVX_8x1x1(v[1], v[3], v[2], v[3], v[3], v[2], 0, 0)
+        // 6M as one 8-way mul (2 wasted lanes, matching the original budget)
+        // T3 = AVX_8x1x1(v[0], v[2], v[0], v[1], v[0], v[1], ., .)
+        // T4 = AVX_8x1x1(v[1], v[3], v[2], v[3], v[3], v[2], ., .)
         // T5 = avx_811_mul(T3, T4)
-        fp2_mul(&t[0], &v[0], &v[1]);
-        fp2_mul(&t[1], &v[2], &v[3]);
-        fp2_mul(&t[2], &v[0], &v[2]);
-        fp2_mul(&t[3], &v[1], &v[3]);
-        fp2_mul(&t[4], &v[0], &v[3]);
-        fp2_mul(&t[5], &v[1], &v[2]);
+        fp2_copy(&arr8[0], &v[0]); fp2_copy(&arr8[1], &v[2]);
+        fp2_copy(&arr8[2], &v[0]); fp2_copy(&arr8[3], &v[1]);
+        fp2_copy(&arr8[4], &v[0]); fp2_copy(&arr8[5], &v[1]);
+        fp2_copy(&arr8[6], &v[0]); fp2_copy(&arr8[7], &v[0]);
+        fp2_unvectorized_to_8x1x1(t0, arr8);
+        fp2_copy(&arr8[0], &v[1]); fp2_copy(&arr8[1], &v[3]);
+        fp2_copy(&arr8[2], &v[2]); fp2_copy(&arr8[3], &v[3]);
+        fp2_copy(&arr8[4], &v[3]); fp2_copy(&arr8[5], &v[2]);
+        // arr8[6], arr8[7] keep v[0]: junk lanes, valid field elements
+        fp2_unvectorized_to_8x1x1(t1, arr8);
+        fp2_mul_8x1x1(t2, t0, t1);
+        // t2 lanes 0-5 = T5[0..5] of the original comment; lanes 6,7 junk.
 
-        // T6 = AVX_8x1x1(T5[0], T5[2], T5[4], 0, T5[0], T5[2], T5[4], 0)
-        // T7 = AVX_8x1x1(T5[1], T5[3], T5[5], 0, T5[1], T5[3], T5[5], 0)
-        // T8 = avx_811_add_sub(T6, T7)
-        fp2_add(&v[0], &t[0], &t[1]);
-        fp2_add(&v[1], &t[2], &t[3]);
-        fp2_add(&v[2], &t[4], &t[5]);
-        fp2_sub(&v[4], &t[0], &t[1]);
-        fp2_sub(&v[5], &t[2], &t[3]);
-        fp2_sub(&v[6], &t[4], &t[5]);
+        // T8 = avx_811_add_sub over adjacent pairs = even/odd split + add/sub
+        fp2_8x1x1_to_4x2x1(E8, O8, t2);
+        fp_add_8x1(Sum4, E8, O8);    // (T8[0], T8[1], T8[2], .)
+        fp_sub_8x1(Diff4, E8, O8);   // (T8[4], T8[5], T8[6], .)
 
-        // elements = [T8[0], T8[4], T8[1], T8[5], T8[2], T8[6]]
-        fp2_copy(&elements[0], &v[0]);
-        fp2_copy(&elements[1], &v[4]);
-        fp2_copy(&elements[2], &v[1]);
-        fp2_copy(&elements[3], &v[5]);
-        fp2_copy(&elements[4], &v[2]);
-        fp2_copy(&elements[5], &v[6]);
+        // elements = [T8[0], T8[4], T8[1], T8[5], T8[2], T8[6]] -- exactly
+        // the even/odd interleave that fp2_4x2x1_to_8x1x1 implements.
+        fp2_4x2x1_to_8x1x1(t2, Sum4, Diff4);
+        fp2_8x1x1_to_unvectorized(arr8, t2);
+        for (int k = 0; k < 6; k++)
+            fp2_copy(&elements[k], &arr8[k]);
         sign_flip = false;
     } else if (*position == 4) {
-        // Special case: one coordinate vanishes, sign_flip encodes
-        // which square root branch to take
+        // Special case: one coordinate vanishes, sign_flip encodes which
+        // square root branch to take. Left scalar: rarely hot (1/3 of calls)
+        // and t[3]/sgl_val make the batch operands irregular.
         // 4M + 3a
         // S16 = AVX_4x2x1(v[0], S9[3], v[0], v[0])
         // S17 = AVX_4x2x1(v[1], sgl_val, v[1], v[2])
@@ -475,47 +479,83 @@ bool compute_superglue_coefficients(int *position, fp2_t dual_theta_null_square[
     return sign_flip;
 }
 
-// Signature change: s[8] (scalar fp2_t) is replaced by S in 8x1x1 layout.
-// Caller patch in superglue_evaluation_pair -- delete data_1/data_2 and both
-// fp2_8x1x1_to_unvectorized calls, then:
-//     superglue_evaluation_on_position(p1, T0, position, dual_theta_null_square, elements);
-//     superglue_evaluation_on_position(p2, T1, position, dual_theta_null_square, elements);
-// Signature change: s[8] (scalar fp2_t) is replaced by S in 8x1x1 layout;
-// the caller passes its packaged T0/T1 directly (no unvectorize round trip).
-bool superglue_evaluation_on_position(__m512i *_p, __m512i *S, int position,
-        fp2_t dual_theta_null_square[4], fp2_t elements[6])
+// Build the vectorized step constants from the scalar precomputation output.
+// Runs ONCE per isogeny step (superglue_codomain calls it); afterwards no
+// evaluation touches dual_theta_null_square/elements again.
+// pos 4:   C0 = AVX_8x1x1(A_inv, e0, e1, C_inv, C_inv, e1, e0, A_inv)
+//          C1 = AVX_4x2x1(B_inv x4)   -- only lanes 0,1 are ever read
+// pos 1|7: C0 = AVX_8x1x1(A|C, e0, e2, e4, B_inv, e3, C|A, e1)
+//          C1 = AVX_4x2x1(e5 x4)      -- only lanes 6,7 are ever read
+void superglue_precompute_consts(superglue_precomp_t *K, int position,
+        bool sign_flip, fp2_t dual_theta_null_square[4], fp2_t elements[6])
 {
-    __m512i T0[2 * NUM_LIMBS], T1[2 * NUM_LIMBS], T2[2 * NUM_LIMBS];
-    __m512i C0[2 * NUM_LIMBS], C1[NUM_LIMBS];
-    __m512i E[NUM_LIMBS], O[NUM_LIMBS], R[NUM_LIMBS];
-    fp2_t ce[4], co[4];
-    // S = AVX_8x1x1(s0, s1, s2, s3, s4, s5, s6, s7)
-    // A_inv, B_inv, C_inv, _ = dual_theta_null_square
+    fp2_t c8[8], ce[4];
+
+    K->position = position;
+    K->sign_flip = sign_flip;
 
     if (position == 4) {
-        // e0, e1, _, _, _, _ = elements
-        // Constants: these depend only on (dual_theta_null_square, elements)
-        // and the caller invokes this function twice with identical values --
-        // hoist them out of the hot path when convenient.
-        // C0 = AVX_8x1x1(A_inv, e0, e1, C_inv, C_inv, e1, e0, A_inv),
-        // built from its even/odd element halves (E, O used as scratch).
-        fp2_copy(&ce[0], &dual_theta_null_square[0]);
-        fp2_copy(&ce[1], &elements[1]);
-        fp2_copy(&ce[2], &dual_theta_null_square[2]);
-        fp2_copy(&ce[3], &elements[0]);
-        fp2_copy(&co[0], &elements[0]);
-        fp2_copy(&co[1], &dual_theta_null_square[2]);
-        fp2_copy(&co[2], &elements[1]);
-        fp2_copy(&co[3], &dual_theta_null_square[0]);
-        fp2_unvectorized_to_4x2x1(E, ce);
-        fp2_unvectorized_to_4x2x1(O, co);
-        fp2_4x2x1_to_8x1x1(C0, E, O);
-        // C1 = AVX_4x2x1(B_inv, B_inv, B_inv, B_inv);
-        // only lanes 0,1 are read (via indices 8,9 below)
+        fp2_copy(&c8[0], &dual_theta_null_square[0]);
+        fp2_copy(&c8[1], &elements[0]);
+        fp2_copy(&c8[2], &elements[1]);
+        fp2_copy(&c8[3], &dual_theta_null_square[2]);
+        fp2_copy(&c8[4], &dual_theta_null_square[2]);
+        fp2_copy(&c8[5], &elements[1]);
+        fp2_copy(&c8[6], &elements[0]);
+        fp2_copy(&c8[7], &dual_theta_null_square[0]);
+        fp2_unvectorized_to_8x1x1(K->C0, c8);
         for (int k = 0; k < 4; k++)
             fp2_copy(&ce[k], &dual_theta_null_square[1]);
-        fp2_unvectorized_to_4x2x1(C1, ce);
+        fp2_unvectorized_to_4x2x1(K->C1, ce);
+    } else if (position == 1 || position == 7) {
+        fp2_copy(&c8[0], (position == 7) ? &dual_theta_null_square[2]
+                                         : &dual_theta_null_square[0]);
+        fp2_copy(&c8[1], &elements[0]);
+        fp2_copy(&c8[2], &elements[2]);
+        fp2_copy(&c8[3], &elements[4]);
+        fp2_copy(&c8[4], &dual_theta_null_square[1]);
+        fp2_copy(&c8[5], &elements[3]);
+        fp2_copy(&c8[6], (position == 7) ? &dual_theta_null_square[0]
+                                         : &dual_theta_null_square[2]);
+        fp2_copy(&c8[7], &elements[1]);
+        fp2_unvectorized_to_8x1x1(K->C0, c8);
+        for (int k = 0; k < 4; k++)
+            fp2_copy(&ce[k], &elements[5]);
+        fp2_unvectorized_to_4x2x1(K->C1, ce);
+    }
+    // K->J is filled by superglue_precompute_eval_J once ab is available.
+}
 
+// Precompute the J multiplier for superglue_eval_pair from the ab output of
+// superglue_codomain (stored in A24_12). Called once per step at the end of
+// superglue_codomain -- hoists 2*NUM_LIMBS port-5 permutes out of the
+// per-point path.
+// a, b = ab;  J = AVX_8x1x1(b, b, a, a, b, b, a, a)
+void superglue_precompute_eval_J(superglue_precomp_t *K, __m512i *ab)
+{
+    const __m512i idx2 = VSET(4, 12, 0, 8, 4, 12, 0, 8);
+    const __m512i idx3 = VSET(6, 14, 2, 10, 6, 14, 2, 10);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        K->J[i] = VPERM512(idx2, ab[i]);
+        K->J[i + NUM_LIMBS] = VPERM512(idx3, ab[i]);
+    }
+}
+
+// Signature change: s[8] (scalar fp2_t) is replaced by S in 8x1x1 layout,
+// and (position, dual_theta_null_square, elements) by the precomputed K --
+// the constant staging that used to run here (twice per evaluated point)
+// now lives in superglue_precompute_consts, once per step.
+bool superglue_evaluation_on_position(__m512i *_p, __m512i *S,
+        const superglue_precomp_t *K)
+{
+    __m512i T0[2 * NUM_LIMBS], T1[2 * NUM_LIMBS], T2[2 * NUM_LIMBS];
+    __m512i E[NUM_LIMBS], O[NUM_LIMBS], R[NUM_LIMBS];
+    __m512i *C0 = (__m512i *)K->C0;   // read-only; casts for the fp2_* API
+    const __m512i *C1 = K->C1;
+    const int position = K->position;
+    // S = AVX_8x1x1(s0, s1, s2, s3, s4, s5, s6, s7)
+
+    if (position == 4) {
         // 8M
         // T0 = AVX_8x1x1(s1, s5, s1, s5, s1, s5, s1, s5)
         // T2 = avx_811_mul(T0, C0)
@@ -550,28 +590,6 @@ bool superglue_evaluation_on_position(__m512i *_p, __m512i *S, int position,
         fp2_8x1x1_to_4x2x1(E, O, T2);
         fp_add_8x1(_p, E, O);
     } else if (position == 1 || position == 7) {
-        // e0, e1, e2, e3, e4, e5 = elements
-        // For positions 1, 7 only the roles of A_inv and C_inv and then
-        // X, Z are reversed; both differences fold into the index constants.
-        // C0 = AVX_8x1x1(A_inv|C_inv, e0, e2, e4, B_inv, e3, C_inv|A_inv, e1)
-        fp2_copy(&ce[0], (position == 7) ? &dual_theta_null_square[2]
-                                         : &dual_theta_null_square[0]);
-        fp2_copy(&ce[1], &elements[2]);
-        fp2_copy(&ce[2], &dual_theta_null_square[1]);
-        fp2_copy(&ce[3], (position == 7) ? &dual_theta_null_square[0]
-                                         : &dual_theta_null_square[2]);
-        fp2_copy(&co[0], &elements[0]);
-        fp2_copy(&co[1], &elements[4]);
-        fp2_copy(&co[2], &elements[3]);
-        fp2_copy(&co[3], &elements[1]);
-        fp2_unvectorized_to_4x2x1(E, ce);
-        fp2_unvectorized_to_4x2x1(O, co);
-        fp2_4x2x1_to_8x1x1(C0, E, O);
-        // C1 = AVX_4x2x1(e5, e5, e5, e5); only lanes 6,7 are read
-        for (int k = 0; k < 4; k++)
-            fp2_copy(&ce[k], &elements[5]);
-        fp2_unvectorized_to_4x2x1(C1, ce);
-
         // 8M
         // T0 = AVX_8x1x1(s1, s5, s1, s5, s0, s4, s1, s5)
         // T2 = avx_811_mul(T0, C0) = (t2_0 .. t2_7)
@@ -627,9 +645,71 @@ bool superglue_evaluation_on_position(__m512i *_p, __m512i *S, int position,
     return true;
 }
 
+// Shared tail of the two evaluation-pair variants. On entry:
+//   T2 = products of the 4M+4S block (elements t0_0 .. t0_7 pre-Hadamard)
+//   T3 = products of the 8M block   (elements t1_0 .. t1_7)
+// Both are consumed/overwritten.
+static void superglue_evaluation_finish(__m512i *p1, __m512i *p2,
+        __m512i *T2, __m512i *T3, const superglue_precomp_t *K)
+{
+    __m512i T0[2 * NUM_LIMBS], T1[2 * NUM_LIMBS];
+    __m512i u[2 * NUM_LIMBS], v[2 * NUM_LIMBS], w[2 * NUM_LIMBS];
+
+    // 8 adds -- final Hadamard, restaged so outputs land grouped for packaging:
+    // T2 := (t0[0], t0[1], t0[4], t0[5] | t0[2], t0[3], t0[6], t0[7])
+    //     = (data_1 lanes 0-3          | data_2 lanes 0-3)
+    const __m512i idx7 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    const __m512i idx8 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    for (__mmask8 i = 0; i < 2 * NUM_LIMBS; i++) {
+        T0[i] = VPERM512(idx7, T2[i]);
+        T1[i] = VPERM512(idx8, T2[i]);
+    }
+    fp2_mixaddsub_8x1x1(T2, T0, T1, 0x33, 0x33);
+
+    // 4M as one 8-way mul (lanes 0,1,4,5 are don't-care):
+    // T0 = (., ., t1[2], t0[4], ., ., t1[6], t0[6])
+    // T1 = (., ., t1[3], t0[5], ., ., t1[7], t0[7])
+    // w  = (., ., s2[0], s2[1], ., ., s2[2], s2[3])
+    const __m512i idxA = VSET(0, 1, 2, 10, 4, 5, 6, 14);
+    const __m512i idxB = VSET(0, 1, 11, 3, 4, 5, 15, 7);
+    for (__mmask8 i = 0; i < 2 * NUM_LIMBS; i++) {
+        T0[i] = VBLENDPERM(idxA, T3[i], T2[i]);
+        T1[i] = VBLENDPERM(idxB, T2[i], T3[i]);
+    }
+    fp2_mul_8x1x1(w, T0, T1);
+
+    // 10 scalar adds -> 3 vector adds + 2 blends:
+    // u := (2t1[0], 2t1[1], 4s2[0], s2[1] | 2t1[4], 2t1[5], 4s2[2], s2[3])
+    //    = (data_1 lanes 4-7             | data_2 lanes 4-7)
+    fp_add_8x1(u, T3, T3);                                        // 2*t1
+    fp_add_8x1(u + NUM_LIMBS, T3 + NUM_LIMBS, T3 + NUM_LIMBS);
+    fp_add_8x1(v, w, w);                                          // 2*s2
+    fp_add_8x1(v + NUM_LIMBS, w + NUM_LIMBS, w + NUM_LIMBS);
+    fp_add_8x1(v, v, v);                                          // 4*s2
+    fp_add_8x1(v + NUM_LIMBS, v + NUM_LIMBS, v + NUM_LIMBS);
+    for (__mmask8 i = 0; i < 2 * NUM_LIMBS; i++) {
+        v[i] = VBLEND(0x88, v[i], w[i]);   // lanes 3,7 back to 1*s2
+        u[i] = VBLEND(0xCC, u[i], v[i]);   // splice s2 lanes into the 2*t1 lanes
+    }
+
+    // Package:
+    // data_1 = AVX_8x1x1(T2[0], T2[1], T2[4], T2[5], T4[0], T4[1], T5[0], S2[1])
+    // data_2 = AVX_8x1x1(T2[2], T2[3], T2[6], T2[7], T4[3], T4[4], T5[1], S2[3])
+    //        = (low 256 bits of T2 | low 256 of u) and (high 256 | high 256)
+    for (__mmask8 i = 0; i < 2 * NUM_LIMBS; i++) {
+        T0[i] = VPERM256HALF(T2[i], u[i], 0x44);
+        T1[i] = VPERM256HALF(T2[i], u[i], 0xEE);
+    }
+
+    // This could also be batched, but when case is 1 | 7 we do a 8 way then 7 way mul
+    // when case is 4 we do an 8 way then 6 way mul, we could only save time with batched
+    // additions and the code would be so much harder to read.
+    superglue_evaluation_on_position(p1, T0, K);
+    superglue_evaluation_on_position(p2, T1, K);
+}
+
 void superglue_evaluation_pair(__m512i *p1, __m512i *p2, __m512i *U, __m512i *V,
-        __m512i *W, int position, bool sign_flip, fp2_t *dual_theta_null_square,
-        fp2_t *elements)
+        __m512i *W, const superglue_precomp_t *K)
 {
     __m512i u[2 * NUM_LIMBS], v[2 * NUM_LIMBS], w[2 * NUM_LIMBS];
     __m512i T0[2 * NUM_LIMBS], T1[2 * NUM_LIMBS], T2[2 * NUM_LIMBS], T3[2 * NUM_LIMBS];
@@ -638,11 +718,11 @@ void superglue_evaluation_pair(__m512i *p1, __m512i *p2, __m512i *U, __m512i *V,
     // v1, v3, v2, v4 = V
     // w1, w3, w2, w4 = W
 
-    // Branch-free conditional negation of elements 0,1 of W.
-    // (Assumes fp2_select_*(res, a0, a1, s) yields a1 in elements where s is set;
-    //  flip the constants if the convention is the opposite.)
+    // Branch-free conditional negation of elements 0,1 of W (qword lanes 0-3).
     fp2_neg_4x2x1(T0, W);
-    fp2_select_4x2x1(W, W, T0, sign_flip ? 0x3 : 0x0);
+    for (__mmask8 i = 0; i < NUM_LIMBS; i++) {
+        W[i] = VBLEND(K->sign_flip ? 0x0f : 0x00, W[i], T0[i]);
+    }
 
     // 8 adds
     // T0 = AVX_8x1x1(u1, u2, u3, u4, u1, u2, u3, u4)
@@ -664,8 +744,8 @@ void superglue_evaluation_pair(__m512i *p1, __m512i *p2, __m512i *U, __m512i *V,
     // T0 = AVX_8x1x1(T2[0], T2[1], w1, w2, T2[2], T2[3], w3, w4)
     // T1 = AVX_8x1x1(T2[4], T2[5], w1, w2, T2[6], T2[7], w3, w4)
     // T2 = avx_811_mul(T0, T1)
-    const __m512i idx2 = _mm512_set_epi64(11, 10, 3, 2, 9, 8, 1, 0);
-    const __m512i idx3 = _mm512_set_epi64(11, 10, 7, 6, 9, 8, 5, 4);
+    const __m512i idx2 = VSET(0, 1, 8, 9, 2, 3, 10, 11);
+    const __m512i idx3 = VSET(4, 5, 8, 9, 6, 7, 10, 11);
     for (__mmask8 i = 0; i < 2 * NUM_LIMBS; i++) {
         T0[i] = VBLENDPERM(idx2, T2[i], w[i]);
         T1[i] = VBLENDPERM(idx3, T2[i], w[i]);
@@ -676,9 +756,9 @@ void superglue_evaluation_pair(__m512i *p1, __m512i *p2, __m512i *U, __m512i *V,
     // T0 = AVX_8x1x1(u1, u2, v1, w2, u3, u4, v3, w4)
     // T1 = AVX_8x1x1(w1, w2, v2, w1, w3, w4, v4, w3)
     // T3 = avx_811_mul(T0, T1)          -- T3 holds t1[0..7], kept vectorized
-    const __m512i idx4 = _mm512_set_epi64(0, 10, 3, 2, 0, 8, 1, 0);
-    const __m512i idx5 = _mm512_set_epi64(11, 6, 5, 4, 9, 2, 1, 0);
-    const __m512i idx6 = _mm512_set_epi64(2, 11, 3, 2, 0, 9, 1, 0);
+    const __m512i idx4 = VSET(0, 1, 8, 0, 2, 3, 10, 0);
+    const __m512i idx5 = VSET(0, 1, 2, 9, 4, 5, 6, 11);
+    const __m512i idx6 = VSET(0, 1, 9, 0, 2, 3, 11, 2);
     for (__mmask8 i = 0; i < 2 * NUM_LIMBS; i++) {
         T0[i] = VBLENDPERM(idx4, u[i], v[i]);
         T0[i] = VBLENDPERM(idx5, T0[i], w[i]);
@@ -686,65 +766,72 @@ void superglue_evaluation_pair(__m512i *p1, __m512i *p2, __m512i *U, __m512i *V,
     }
     fp2_mul_8x1x1(T3, T1, T0);
 
-    // 8 adds -- final Hadamard, restaged so outputs land grouped for packaging:
-    // T2 := (t0[0], t0[1], t0[4], t0[5] | t0[2], t0[3], t0[6], t0[7])
-    //     = (data_1 lanes 0-3          | data_2 lanes 0-3)
-    const __m512i idx7 = _mm512_set_epi64(5, 4, 5, 4, 1, 0, 1, 0);
-    const __m512i idx8 = _mm512_set_epi64(7, 6, 7, 6, 3, 2, 3, 2);
-    for (__mmask8 i = 0; i < 2 * NUM_LIMBS; i++) {
-        T0[i] = VPERM512(idx7, T2[i]);
-        T1[i] = VPERM512(idx8, T2[i]);
-    }
-    fp2_mixaddsub_8x1x1(T2, T0, T1, 0x33, 0x33);
+    superglue_evaluation_finish(p1, p2, T2, T3, K);
+}
 
-    // 4M as one 8-way mul (lanes 0,1,4,5 are don't-care):
-    // T0 = (., ., t1[2], t0[4], ., ., t1[6], t0[6])   base T3, splice T2 at 3,7
-    // T1 = (., ., t1[3], t0[5], ., ., t1[7], t0[7])   base T2, splice T3 at 2,6
-    // w  = (., ., s2[0], s2[1], ., ., s2[2], s2[3])
-    const __m512i idxA = _mm512_set_epi64(6, 0, 0, 0, 2, 0, 0, 0);
-    const __m512i idxB = _mm512_set_epi64(0, 7, 0, 0, 0, 3, 0, 0);
-    for (__mmask8 i = 0; i < 2 * NUM_LIMBS; i++) {
-        T0[i] = _mm512_mask_permutexvar_epi64(T3[i], 0x88, idxA, T2[i]);
-        T1[i] = _mm512_mask_permutexvar_epi64(T2[i], 0x44, idxB, T3[i]);
-    }
-    fp2_mul_8x1x1(w, T0, T1);
+// Specialization for the codomain computation, where V = 0 identically:
+//  * the initial add/sub degenerates (u +- 0 = u, and the idx0/idx1
+//    deinterleave already duplicates the four elements across both halves,
+//    so its output is just the deinterleaved U) -- saves 8 adds and a third
+//    of the deinterleave permutes;
+//  * the 4M+4S block's two operands coincide, so it is one 8-way squaring;
+//  * the two lanes of the 8M block that read V become zeros via maskz staging.
+void superglue_evaluation_pair_codomain(__m512i *p1, __m512i *p2, __m512i *U,
+        __m512i *W, const superglue_precomp_t *K)
+{
+    __m512i u[2 * NUM_LIMBS], w[2 * NUM_LIMBS];
+    __m512i T0[2 * NUM_LIMBS], T1[2 * NUM_LIMBS], T2[2 * NUM_LIMBS], T3[2 * NUM_LIMBS];
 
-    // 10 scalar adds -> 3 vector adds + 2 blends:
-    // u := (2t1[0], 2t1[1], 4s2[0], s2[1] | 2t1[4], 2t1[5], 4s2[2], s2[3])
-    //    = (data_1 lanes 4-7             | data_2 lanes 4-7)
-    fp_add_8x1(u, T3, T3);                                        // 2*t1
-    fp_add_8x1(u + NUM_LIMBS, T3 + NUM_LIMBS, T3 + NUM_LIMBS);
-    fp_add_8x1(v, w, w);                                          // 2*s2
-    fp_add_8x1(v + NUM_LIMBS, w + NUM_LIMBS, w + NUM_LIMBS);
-    fp_add_8x1(v, v, v);                                          // 4*s2
-    fp_add_8x1(v + NUM_LIMBS, v + NUM_LIMBS, v + NUM_LIMBS);
-    fp2_select_8x1x1(v, v, w, 0x88);   // lanes 3,7 back to 1*s2
-    fp2_select_8x1x1(u, u, v, 0xCC);   // splice s2 lanes into the 2*t1 lanes
-
-    // Package:
-    // data_1 = AVX_8x1x1(T2[0], T2[1], T2[4], T2[5], T4[0], T4[1], T5[0], S2[1])
-    // data_2 = AVX_8x1x1(T2[2], T2[3], T2[6], T2[7], T4[3], T4[4], T5[1], S2[3])
-    //        = (low 256 bits of T2 | low 256 of u) and (high 256 | high 256)
-    for (__mmask8 i = 0; i < 2 * NUM_LIMBS; i++) {
-        T0[i] = _mm512_shuffle_i64x2(T2[i], u[i], 0x44);
-        T1[i] = _mm512_shuffle_i64x2(T2[i], u[i], 0xEE);
+    // Branch-free conditional negation of elements 0,1 of W (qword lanes 0-3).
+    fp2_neg_4x2x1(T0, W);
+    for (__mmask8 i = 0; i < NUM_LIMBS; i++) {
+        W[i] = VBLEND(K->sign_flip ? 0x0f : 0x00, W[i], T0[i]);
     }
 
-    // This could also be batched, but when case is 1 | 7 we do a 8 way then 7 way mul
-    // when case is 4 we do an 8 way then 6 way mul, we could only save time with batched
-    // additions and the code would be so much harder to read.
-    superglue_evaluation_on_position(p1, T0, position, dual_theta_null_square, elements);
-    superglue_evaluation_on_position(p2, T1, position, dual_theta_null_square, elements);
+    const __m512i idx0 = VSET(0, 4, 2, 6, 0, 4, 2, 6);
+    const __m512i idx1 = VSET(1, 5, 3, 7, 1, 5, 3, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        u[i] = VPERM512(idx0, U[i]);
+        u[i + NUM_LIMBS] = VPERM512(idx1, U[i]);
+        w[i] = VPERM512(idx0, W[i]);
+        w[i + NUM_LIMBS] = VPERM512(idx1, W[i]);
+    }
+
+    // 4M + 4S with V = 0: both operands equal
+    // T0 = AVX_8x1x1(u1, u2, w1, w2, u3, u4, w3, w4); T2 = avx_811_sqr(T0)
+    const __m512i idx2 = VSET(0, 1, 8, 9, 2, 3, 10, 11);
+    for (__mmask8 i = 0; i < 2 * NUM_LIMBS; i++) {
+        T0[i] = VBLENDPERM(idx2, u[i], w[i]);
+    }
+    fp2_sqr_8x1x1(T2, T0);   // use fp2_mul_8x1x1(T2, T0, T0) if no sqr variant
+
+    // 8M with V = 0: the V lanes (2 and 6) become 0*0
+    // T0 = AVX_8x1x1(u1, u2, 0, w2, u3, u4, 0, w4)
+    // T1 = AVX_8x1x1(w1, w2, 0, w1, w3, w4, 0, w3)
+    const __m512i idx4 = VSET(0, 1, 0, 9, 2, 3, 0, 11);
+    const __m512i idx5 = VSET(0, 1, 0, 0, 2, 3, 0, 2);
+    for (__mmask8 i = 0; i < 2 * NUM_LIMBS; i++) {
+        T0[i] = VBLENDPERMMASKZ(0xBB, u[i], w[i], idx4);
+        T1[i] = VPERM512MASKZ(0xBB, w[i], idx5);
+    }
+    fp2_mul_8x1x1(T3, T1, T0);
+
+    superglue_evaluation_finish(p1, p2, T2, T3, K);
 }
 
 // TODO: Output (OA_inv, OA_inv) in 8x1x1 for special eval.
-bool superglue_codomain(__m512i* res_OA, __m512i* A24_12, int *position,
-        bool *sign_flip, fp2_t dual_theta_null_square[4], fp2_t elements[6],
-        __m512i* x_8, __m512i* z_8) {
+// Signature change: (position, sign_flip, dual_theta_null_square, elements)
+// outputs are replaced by the precomputation bundle K, which also absorbs J.
+// The scalar arrays are now locals -- they exist only long enough to be
+// baked into K->C0/K->C1.
+bool superglue_codomain(__m512i* res_OA, __m512i* A24_12,
+        superglue_precomp_t *K, __m512i* x_8, __m512i* z_8) {
     __m512i x_8_[2*NUM_LIMBS], z_8_[2*NUM_LIMBS], x_4[NUM_LIMBS], z_4[NUM_LIMBS];
-    __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
+    __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS];
     __m512i p1[NUM_LIMBS], p2[NUM_LIMBS];
-    __mmask8 mask;
+    fp2_t dual_theta_null_square[4], elements[6];
+    int position;
+    bool sign_flip;
 
     // X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)
     ec_jac_to_xz_4x4x2x1(x_8_, z_8_, x_8, z_8);
@@ -752,7 +839,7 @@ bool superglue_codomain(__m512i* res_OA, __m512i* A24_12, int *position,
     // Double points to recover 4-torsion for change of basis
     ec_double_4x4x2x1(x_4, z_4, A24_12, x_8_, z_8_);
 
-    *sign_flip = compute_superglue_coefficients(position, dual_theta_null_square, elements, x_4, z_4);
+    sign_flip = compute_superglue_coefficients(&position, dual_theta_null_square, elements, x_4, z_4);
 #ifndef NDEBUG
     // fp2_print("dtns0 = ", &dual_theta_null_square[0]);
     // fp2_print("dtns1 = ", &dual_theta_null_square[1]);
@@ -766,87 +853,83 @@ bool superglue_codomain(__m512i* res_OA, __m512i* A24_12, int *position,
     // fp2_print("elem5 = ", &elements[5]);
 #endif
 
-    // Pack the (u, v, w) coordinates directly from the 8 torsion
-    fp2_copy_8x1x1(t0, x_8_);
-    fp2_setzero_4x2x1(t1);
-    fp2_copy_8x1x1(t2, z_8_);
+    // Bake all step constants into vector form, once. Every evaluation from
+    // here on (including the two inside this function) reads only K.
+    superglue_precompute_consts(K, position, sign_flip,
+            dual_theta_null_square, elements);
 
-    // 20M + 24a
-    superglue_evaluation_pair(p1, p2, t0, t1, t2, *position, *sign_flip, dual_theta_null_square, elements);
+    // (u, v, w) = (x_8, 0, z_8): V vanishes on the codomain path, so use the
+    // specialized variant and pass the torsion coordinates directly -- both
+    // arrays are dead after this call (W is modified in place).
+    // 16M + 4S + 16a (was 20M + 24a)
+    superglue_evaluation_pair_codomain(p1, p2, x_8_, z_8_, K);
 
     // 4M
     // T0 = AVX_4x2x1(A1[0], A1[1], A1[0], A1[1])
     // T1 = AVX_4x2x1(A2[0], A2[0], A2[2], A2[2])
     // T2 = avx_421_mul(T0, T1)
-    const __m512i idx0 = _mm512_set_epi64(8, 8, 5, 4, 3, 2, 1, 0);
-    const __m512i idx1 = _mm512_set_epi64(3, 2, 1, 0, 3, 2, 1, 0);
-    const __m512i idx2 = _mm512_set_epi64(5, 4, 5, 4, 1, 0, 1, 0);
+    const __m512i idx1v = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    const __m512i idx2v = VSET(0, 1, 0, 1, 4, 5, 4, 5);
     for (int i = 0; i < NUM_LIMBS; i++) {
-        t0[i] = VPERM512(idx1, p1[i]);
-        t1[i] = VPERM512(idx2, p2[i]);
+        t0[i] = VPERM512(idx1v, p1[i]);
+        t1[i] = VPERM512(idx2v, p2[i]);
     }
     fp2_mul_4x2x1(t0, t0, t1);
     // ABCD = AVX_4x2x1(T2[0], T2[1], T2[2], 0)
     for (int i = 0; i < NUM_LIMBS; i++) {
-        res_OA[i] = VBLENDPERM(idx0, t0[i], VZERO());
+        res_OA[i] = MASKZ(0x3f, t0[i]);
     }
 
     // 2M
     // T0 = AVX_2x4x1(A1[0], A1[2])
     // T1 = AVX_2x4x1(T2[3], ABCD[1])
     // ab = avx_241_mul(T0, T1)
-    const __m512i idx4 = _mm512_set_epi64(8, 5, 8, 4, 8, 1, 8, 0);
-    const __m512i idx5 = _mm512_set_epi64(8, 3, 8, 2, 8, 7, 8, 6);
+    const __m512i idx4v = VSET(0, 0, 1, 0, 4, 0, 5, 0);
+    const __m512i idx5v = VSET(6, 0, 7, 0, 2, 0, 3, 0);
     for (int i = 0; i < NUM_LIMBS; i++) {
-        t1[i] = VBLENDPERM(idx4, p1[i], VZERO());
-        t0[i] = VBLENDPERM(idx5, t0[i], VZERO());
+        t1[i] = VPERM512MASKZ(0x55, p1[i], idx4v);
+        t0[i] = VPERM512MASKZ(0x55, t0[i], idx5v);
     }
     fp2_mul_2x4x1(A24_12, t1, t0);
+
+    // ab is now known: finish the precomputation bundle.
+    superglue_precompute_eval_J(K, A24_12);
 
     // 8a
     //codomain = hadamard(ABCD)
     theta_had_single(res_OA, res_OA);
-    
+
     return true;
 }
 
+// Signature change: (ab, position, sign_flip, dual_theta_null_square,
+// elements) collapse into the single precomputation bundle K.
 void superglue_eval_pair(__m512i *imP_Q, __m512i *A_12, __m512i *xP,
         __m512i *yP, __m512i *zP, __m512i *T8x, __m512i *T8y, __m512i *T8z,
-        __m512i *ab, int position, bool sign_flip,
-        fp2_t dual_theta_null_square[4], fp2_t elements[6]) {
-    __m512i u[NUM_LIMBS], v[NUM_LIMBS], w[NUM_LIMBS], t[2 * NUM_LIMBS];
+        const superglue_precomp_t *K) {
+    __m512i u[NUM_LIMBS], v[NUM_LIMBS], w[NUM_LIMBS];
     __m512i p1[2*N4x2], p2[2*N4x2];
 
     // 16S + 48M + 28a
     // U, V, W = four_add_components(A_12, P, T8)
     ec_add_components_4x4x2x1(u, v, w, A_12, xP, yP, zP, T8x, T8y, T8z);
 
-    // Unpack the insane precomputation
-    //position, sign_flip, dual_theta_null_square, elements = precomputation
-
     // 20M + 24a
-    superglue_evaluation_pair(p1, p2, u, v, w, position, sign_flip, dual_theta_null_square, elements);
+    superglue_evaluation_pair(p1, p2, u, v, w, K);
 
-    // imP_Q = avx_421_to_811(P1, P2)
-    // a, b = ab
-    // J = AVX_8x1x1(b, b, a, a, b, b, a, a)
-    // 8M
-    // imP_Q = avx_811_mul(imP_Q, J)
-    const __m512i idx0 = _mm512_set_epi64(14, 12, 10, 8, 6, 4, 2, 0);
-    const __m512i idx1 = _mm512_set_epi64(15, 13, 11, 9, 7, 5, 3, 1);
+    // imP_Q = avx_421_to_811(P1, P2) -- P1's elements land in lanes 0-3 and
+    // P2's in lanes 4-7 (grouped, NOT the interleaved order of
+    // fp2_4x2x1_to_8x1x1), matching theta_had_pair_alt and the J layout.
+    const __m512i idx0 = VSET(0, 2, 4, 6, 8, 10, 12, 14);
+    const __m512i idx1 = VSET(1, 3, 5, 7, 9, 11, 13, 15);
     for (__mmask8 i = 0; i < NUM_LIMBS; i++) {
         __m512i s1 = p1[i], s2 = p2[i];
         imP_Q[i] = VBLENDPERM(idx0, s1, s2);
         imP_Q[i+NUM_LIMBS] = VBLENDPERM(idx1, s1, s2);
     }
 
-    const __m512i idx2 = VSET(4, 12, 0, 8, 4, 12, 0, 8);
-    const __m512i idx3 = VSET(6, 14, 2, 10, 6, 14, 2, 10);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t[i] = VPERM512(idx2, ab[i]);
-        t[i + NUM_LIMBS] = VPERM512(idx3, ab[i]);
-    }
-    fp2_mul_8x1x1(imP_Q, imP_Q, t);
+    // 8M -- J = AVX_8x1x1(b, b, a, a, b, b, a, a), precomputed once per step
+    fp2_mul_8x1x1(imP_Q, imP_Q, (__m512i *)K->J);
 
     // 16a
     //imP_Q = hadamard_pair(imP_Q)

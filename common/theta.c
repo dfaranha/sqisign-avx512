@@ -215,12 +215,9 @@ bool theta_isogeny_chain_vec(
     );
 
 #ifdef SUPERGLUE
-	int position;
-	bool sign_flip;
-	fp2_t dual_theta_null_square[4], elements[6];
+	superglue_precomp_t precomp;
 	success &= superglue_codomain(
-		OA, A24_12, &position, &sign_flip, dual_theta_null_square, elements,
-		strat_points_x + current*NUM_LIMBS, strat_points_z + current*NUM_LIMBS
+		OA, A24_12, &precomp, strat_points_x + current*NUM_LIMBS, strat_points_z + current*NUM_LIMBS
 	);
 #else
     success &= gluing_codomain(
@@ -251,7 +248,7 @@ bool theta_isogeny_chain_vec(
 		superglue_eval_pair(
 			strat_theta_pair + i*2*NUM_LIMBS, //8x1x1,
 			A_12, strat_points_x + i*NUM_LIMBS, strat_points_y + i*NUM_LIMBS, strat_points_z + i*NUM_LIMBS,
-			T8_x, T8_y, T8_z, A24_12, position, sign_flip, dual_theta_null_square, elements);
+			T8_x, T8_y, T8_z, &precomp);
 #else
         gluing_eval_pair(
             strat_theta_pair + i*2*NUM_LIMBS, //8x1x1
