@@ -471,7 +471,7 @@ def get_fold_mask(pp):
 def get_rdc_2x4_size(pp):
     return pp.num_limbs_R + 4 * pp.n24
 
-# Not designed for fp2 lazy red, correction step would need to handle input in [-p, 2p) like other fmts
+#Slightly faster, but so messy!
 def rdc_2x4_old(f, pp, v, strat):
     f.comment(f"Modifies a. Its length must be at least {get_rdc_2x4_size(pp)}.")
     f.start("void rdc_2x4(__m512i* res, __m512i* a)")
@@ -772,8 +772,9 @@ def rdc_2x4_split(f, pp, v, strat):
 
 #     f.end()
 
+# Not designed for fp2 lazy red, correction step would need to handle input in [-p, 2p) like other fmts
 def rdc_2x4(f, pp, v, strat):
-    rdc_2x4_fused(f, pp, v, strat)
+    rdc_2x4_split(f, pp, v, strat)
 
 def fp_mul_2x4(f, pp, v):
     f.start("void fp_mul_2x4(__m512i* res, __m512i* a, __m512i* b)")
