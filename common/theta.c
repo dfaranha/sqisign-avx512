@@ -383,11 +383,18 @@ bool theta_isogeny_chain_vec_verif(
         A_12, strat_points_x, strat_points_y, strat_points_z, orders, space
     );
 
+#ifdef SUPERGLUE
+	superglue_precomp_t precomp;
+	success &= superglue_codomain(
+		OA, A24_12, &precomp, strat_points_x + current*NUM_LIMBS, strat_points_z + current*NUM_LIMBS
+	);
+#else
     success &= gluing_codomain(
         OA, OA_dual_inv, J, matrix01, matrix23, A24_12, 
         strat_points_x + current*NUM_LIMBS, strat_points_z + current*NUM_LIMBS,
         verify
     );
+#endif
 
     // Package the point we use for translation
     // T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
@@ -406,11 +413,18 @@ bool theta_isogeny_chain_vec_verif(
     // TODO: Is current = space-1 here? And even if it is not, is it better to use 8*space?
     __m512i strat_theta_pair[space * 2*NUM_LIMBS];
     for (int i = 0; i < current; i++) {
+#ifdef SUPERGLUE
+		superglue_eval_pair(
+			strat_theta_pair + i*2*NUM_LIMBS, //8x1x1,
+			A_12, strat_points_x + i*NUM_LIMBS, strat_points_y + i*NUM_LIMBS, strat_points_z + i*NUM_LIMBS,
+			T8_x, T8_y, T8_z, &precomp);
+#else
         gluing_eval_pair(
             strat_theta_pair + i*2*NUM_LIMBS, //8x1x1
             A_12, strat_points_x + i*NUM_LIMBS, strat_points_y + i*NUM_LIMBS, strat_points_z + i*NUM_LIMBS,
             T8_x, T8_y, T8_z, J, matrix01, matrix23
         );
+#endif
         orders[i]--;
     }
     current--;
@@ -603,11 +617,18 @@ bool theta_isogeny_chain_no_torsion_vec(
         A_12, strat_points_x, strat_points_y, strat_points_z, orders, space
     );
 
+#ifdef SUPERGLUE
+	superglue_precomp_t precomp;
+	success &= superglue_codomain(
+		OA, A24_12, &precomp, strat_points_x + current*NUM_LIMBS, strat_points_z + current*NUM_LIMBS
+	);
+#else
     success &= gluing_codomain(
         OA, OA_dual_inv, J, matrix01, matrix23, A24_12, 
         strat_points_x + current*NUM_LIMBS, strat_points_z + current*NUM_LIMBS,
         verify
     );
+#endif
 
     // Package the point we use for translation
     // T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
@@ -626,11 +647,18 @@ bool theta_isogeny_chain_no_torsion_vec(
     // TODO: Is current = space-1 here? And even if it is not, is it better to use 8*space?
     __m512i strat_theta_pair[space * 2*NUM_LIMBS];
     for (int i = 0; i < current; i++) {
+#ifdef SUPERGLUE
+		superglue_eval_pair(
+			strat_theta_pair + i*2*NUM_LIMBS, //8x1x1,
+			A_12, strat_points_x + i*NUM_LIMBS, strat_points_y + i*NUM_LIMBS, strat_points_z + i*NUM_LIMBS,
+			T8_x, T8_y, T8_z, &precomp);
+#else
         gluing_eval_pair(
             strat_theta_pair + i*2*NUM_LIMBS, //8x1x1
             A_12, strat_points_x + i*NUM_LIMBS, strat_points_y + i*NUM_LIMBS, strat_points_z + i*NUM_LIMBS,
             T8_x, T8_y, T8_z, J, matrix01, matrix23
         );
+#endif
         orders[i]--;
     }
     current--;
