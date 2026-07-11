@@ -662,11 +662,13 @@ bool theta_isogeny_chain_no_torsion_vec(
         orders[i]--;
     }
     current--;
-
+#ifndef SUPERGLUE
     success &= gluing_eval_special_list_pair(
         eval_pts_theta, pts, OA_dual_inv, 
         matrix01, matrix23, num_pts, verify
     );
+	// printf("gluing eval %d\n", success);
+#endif
 
     // Step Two: Compute the rest of the chain
     int step = 0;

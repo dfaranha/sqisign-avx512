@@ -310,7 +310,7 @@ bool splitting_theta_to_product(__m512i* res, __m512i* null, const bool verify)
     // check that C1 != 0 and C2 != 0
     if (verify) {
         int nz_mask = ~fp2_is_zero_4x2x1(res);
-        if (nz_mask & 0xa != 0xa) {
+        if ((nz_mask & 0xa) != 0xa) {
             return false;
         }
     }
@@ -435,8 +435,8 @@ bool splitting_theta_point_to_mont_pair(
     // check that points are not zero and that xi * wi == yi * zi
     __mmask8 zmask = fp2_is_zero_8x1x1(theta_pair);
     if (verify) {
-        bool P_zero = zmask & 0x55 == 0x55;
-        bool Q_zero = zmask & 0xaa == 0xaa;
+        bool P_zero = (zmask & 0x55) == 0x55;
+        bool Q_zero = (zmask & 0xaa) == 0xaa;
         if (P_zero || Q_zero) {
             return false;
         }

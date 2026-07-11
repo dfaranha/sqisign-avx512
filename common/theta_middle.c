@@ -442,17 +442,17 @@ void theta_precomp_pair(__m512i* c1, __m512i* c2, __m512i* null)
     fp2_mul_8x1x1(t1_t2, t1_t2, c1);
 
     // Output (c1, c1) and (c2, c2)
+#ifdef SUPERGLUE
+    const __m512i idx_ev = VSET(0, 2, 4, 6, 0, 2, 4, 6);
+	const __m512i idx_od = VSET(1, 3, 5, 7, 1, 3, 5, 7);
+    for (int i = 0; i < 2 * NUM_LIMBS; i++) {
+        c1[i] = VPERM512(idx_ev, t1_t2[i]);
+        c2[i] = VPERM512(idx_od, t1_t2[i]);
+    }
+#else
     for (int i = 0; i < 2*NUM_LIMBS; i++) {
         c1[i] = VUNPACKLO(t1_t2[i], t1_t2[i]);
         c2[i] = VUNPACKHI(t1_t2[i], t1_t2[i]);
-    }
-	//fp2_4x2x1_to_8x1x1(c1, c1, c1);
-	//fp2_4x2x1_to_8x1x1(c2, c2, c2);
-#ifdef SUPERGLUE
-    const __m512i idx = VSET(0, 2, 4, 6, 0, 2, 4, 6);
-    for (int i = 0; i < 2 * NUM_LIMBS; i++) {
-        c1[i] = VPERM512(idx, c1[i]);
-        c2[i] = VPERM512(idx, c2[i]);
     }
 #endif
 }
@@ -539,7 +539,7 @@ bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
         // zA, wB, zC, wD = ker_Q
         // assert all but yC and yD are nonzero
         int nz_mask = ~fp2_is_zero_8x1x1(PQ);
-        if (nz_mask & 0xaf != 0xaf) {
+        if ((nz_mask & 0xaf) != 0xaf) {
             return false;
         }
     }
@@ -609,10 +609,8 @@ bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
         theta_had_single(res, res);
     }
 #ifdef SUPERGLUE
-	idx1 = VSET(4, 5, 3, 2, 4, 5, 3, 2);
 	idx2 = VSET(12, 13, 11, 10, 12, 13, 11, 10);
 	for (int i = 0; i < NUM_LIMBS; i++) {
-		res_inv[i] = VBLENDPERM(idx1, t1[i], t1[i+NUM_LIMBS]);
 		res_inv[i+NUM_LIMBS] = VBLENDPERM(idx2, t1[i], t1[i+NUM_LIMBS]);
 	}
 #endif
