@@ -570,23 +570,17 @@ bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
     idx3 = VSET(1, 5, 3, 5, 1, 3, 3, 1);
     // t1 = (x2, y2, z2, w2) and (y1, z1, w2, z2) interleaved
     idx1 = VSET(1, 2, 3, 0, 5, 7, 7, 5);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t2[i] = VPERM512(idx2, t1[i]);
-        t2[i + NUM_LIMBS] = VPERM512(idx3, t1[i]);
-        t1[i] = VPERM512(idx1, PQ[i]);
-        t1[i + NUM_LIMBS] = VPERM512(idx1, PQ[i + NUM_LIMBS]);
-    }
 #else
     idx2 = VSET(0, 2, 0, 2, 4, 4, 0, 0);
     idx3 = VSET(1, 3, 1, 3, 5, 5, 1, 1);
     idx1 = VSET(4, 5, 6, 7, 1, 0, 0, 0);
+#endif
     for (int i = 0; i < NUM_LIMBS; i++) {
         t2[i] = VPERM512(idx2, t1[i]);
         t2[i+NUM_LIMBS] = VPERM512(idx3, t1[i]);
         t1[i] = VPERM512(idx1, PQ[i]);
         t1[i+NUM_LIMBS] = VPERM512(idx1, PQ[i+NUM_LIMBS]);
     }
-#endif
     fp2_mul_8x1x1(t1, t1, t2);
 
     // Preparing res in 4x2x1 and (res_inv, res_inv) in 8x1x1
