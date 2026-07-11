@@ -62,8 +62,9 @@ bool theta_isogeny_chain_vec(
 /**
  * Computes (2,2)-isogeny for SQIsign verification, with randomize = false, verify = true, and no eval points.
  * @param res_A_34 Output: The AC coeffients of the codomain as (A3, C3, A4, C4) in 4x2x1
- * @param ker_basis1 The kernel basis for E1, as a list of three points (X, Z) in 2x2x2
- * @param ker_basis2 The kernel basis for E2, as a list of three points (X, Z) in 2x2x2
+ * @param ker_x The Jacobian x-coordinates of the kernel generators (P1, P2), (Q1, Q2), packed as (P1.X, Q1.X, P2.X, Q2.X) in 4x2x1.
+ * @param ker_y The Jacobian y-coordinates of the kernel generators (P1, P2), (Q1, Q2), packed as (P1.Y, Q1.Y, P2.Y, Q2.Y) in 4x2x1.
+ * @param ker_z The Jacobian z-coordinates of the kernel generators (P1, P2), (Q1, Q2), packed as (P1.Z, Q1.Z, P2.Z, Q2.Z) in 4x2x1.
  * @param normA_1 The normalized Montgomery A-coefficient of E1 as (A1, 1) in 2x2x2
  * @param normA_2 The normalized Montgomery A-coefficient of E2 as (A2, 1) in 2x2x2
  * @param normA24_1 The normalized A24-coefficient of E1 as (A24_1, 1) in 2x2x2
@@ -72,8 +73,9 @@ bool theta_isogeny_chain_vec(
  */
 bool theta_isogeny_chain_vec_verif(
     __m512i* res_A_34, 
-    __m512i* ker_basis1,
-    __m512i* ker_basis2,
+    __m512i* ker_x,
+    __m512i* ker_y,
+    __m512i* ker_z,
     __m512i* normA_1,
     __m512i* normA_2, 
     __m512i* normA24_1,
@@ -91,13 +93,6 @@ bool theta_isogeny_chain(
     const int num_pts, 
     const bool randomize,
     const bool verify
-);
-
-bool theta_isogeny_chain_verif(
-    theta_couple_curve_t* res_E34, 
-    theta_couple_curve_t* E12, 
-    theta_kernel_couple_points_t* ker,
-    const int n
 );
 
 

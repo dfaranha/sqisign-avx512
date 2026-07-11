@@ -670,11 +670,11 @@ static void ec_scalar_mul_inner_1x4x2x1(__m512i* X0_X1, __m512i* XD_A24, const d
     }
 }
 
-static void ec_scalar_mul_normA_inner_1x4x2x1(__m512i* X0_X1, __m512i* XD_A, const digit_t* m, const unsigned int mbits) {
+static void ec_scalar_mul_normA_inner_1x4x2x1(__m512i* X0_X1, __m512i* XD_A, const digit_t* m, int from_bit, int to_bit) {
     unsigned int bit;
     __m512i idx_swap = VSET(4, 5, 6, 7, 0, 1, 2, 3);
 
-    for (int i = mbits - 1; i >= 0; i--) {
+    for (int i = to_bit; i >= from_bit; i--) {
         bit = (m[i >> LOG2RADIX] >> (i & (RADIX - 1))) & 1;
 
         if (bit) { // swap
@@ -756,12 +756,12 @@ void ec_scalar_mul_normA_1x2x4x1(__m512i* res, __m512i* P, __m512i* A, const dig
         return;
     }
 
-    // X0 = P, X1 = 0, XD = P
+    // X0 = 0, X1 = P, XD = P
     ec_set_zero_1x2x4x1(X0_X1);
     fp2_2x4x1_to_4x2x1(X0_X1, X0_X1, P);
     fp2_2x4x1_to_4x2x1(XD_A, P, A);
 
-    ec_scalar_mul_normA_inner_1x4x2x1(X0_X1, XD_A, m, mbits);
+    ec_scalar_mul_normA_inner_1x4x2x1(X0_X1, XD_A, m, 0, mbits-1);
 
     // Ignore X1 and output X0
     fp2_4x2x1_to_2x4x1(res, XD_A, X0_X1);
@@ -1089,6 +1089,7 @@ bool ec_biscalar_mul_normA_1x2x4x1(
 
     fp2_2x4x1_to_4x2x1(X0_X1, basis, basis + NUM_LIMBS);
     fp2_2x4x1_to_4x2x1(XD_A, basis + 2*NUM_LIMBS, A);
+    
     mp_copy(s0, scalarP, NWORDS_ORDER);
     mp_copy(s1, scalarQ, NWORDS_ORDER);
 
@@ -1801,7 +1802,7 @@ void ec_scalar_mul_normA_1x2x2x2(__m512i* res, __m512i* P, __m512i* A, const dig
     fp2_2x2x2_to_4x2x1(X0_X1, X0_X1, P);
     fp2_2x2x2_to_4x2x1(XD_A, P, A);
 
-    ec_scalar_mul_normA_inner_1x4x2x1(X0_X1, XD_A, m, mbits);
+    ec_scalar_mul_normA_inner_1x4x2x1(X0_X1, XD_A, m, 0, mbits-1);
 
     // Ignore X1 and output X0
     fp2_4x2x1_to_2x2x2(res, XD_A, X0_X1);
@@ -3149,7 +3150,7 @@ bool ec_recover_y_pair_2x2x2(__m512i* res, __m512i* normX1, __m512i* normX2, __m
 }
 
 // Lifts a pair of bases x(P), x(Q), x(P-Q) assuming the curve's A coefficient and x(P) are normalized.
-// Outputs each basis P, Q in Jacobian coordinates, as res_x = (P1.X, Q1.X, P2.X, Q2.X) etc.
+// Outputs each basis (P, Q) in Jacobian coordinates, as res_x = (P1.X, Q1.X, P2.X, Q2.X) etc.
 bool lift_basis_pair_normalized_2x2x2(
     __m512i* res_x, __m512i* res_y, __m512i* res_z,
     __m512i* basis1, __m512i* basis2, __m512i* normA1, __m512i* normA2, 
@@ -3329,4 +3330,534 @@ bool test_basis_order_twof_1x2x2x2(__m512i* B, __m512i* A24, unsigned int f)
         test_point_order_twof_1x2x2x2(B, A24, f) &
         test_point_order_twof_1x2x2x2(B + N4x2, A24, f) &
         test_point_order_twof_1x2x2x2(B + 2*N4x2, A24, f);
+}
+
+// =============================== Jacobian arithmetic ====================================================
+
+
+void jac_mul_pair(__m512i* res, __m512i* P, __m512i* normA, const digit_t* m0, const digit_t* m1)
+{
+    __m512i X0_X1_XD_A[2*NUM_LIMBS], Y0_Y1_YD_A[2*NUM_LIMBS], R1_R2_S1_S2[2*NUM_LIMBS], t[2*N4x2];
+    __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
+    __m512i idx0, idx1, idx2, idx3;
+    digit_t s0[NWORDS_ORDER], s1[NWORDS_ORDER];
+
+    mp_copy(s0, m0, NWORDS_ORDER);
+    mp_copy(s1, m1, NWORDS_ORDER);
+
+    // Convert from Jacobian to x-only Montgomery
+    // t = (xP, zP) = (X, Z^2)
+    fp2_4x2x1_to_2x2x2(t, t + N4x2, P);
+    fp2_sqr_2x2x2(t + N4x2, t + N4x2);
+    idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    for (int i = 0; i < N4x2; i++) {
+        t[i] = VBLENDPERM(idx0, t[i], t[i+N4x2]);
+    }
+
+    // x-only Montgomery ladder
+    // We don't know that s0 and s1 have the same bit-length,
+    // so we do the longer one on its own first
+    int len0 = mp_bitlength(s0, NWORDS_ORDER);
+    int len1 = mp_bitlength(s1, NWORDS_ORDER);
+    int len = len0;
+
+    // X0 = 0, X1 = P, XD = P
+    ec_set_zero_1x2x2x2(X0_X1_XD_A);
+    fp2_2x2x2_to_4x2x1(X0_X1_XD_A, X0_X1_XD_A, t);
+    fp2_2x2x2_to_4x2x1(X0_X1_XD_A + NUM_LIMBS, t, normA);
+    fp2_copy_4x2x1(t, X0_X1_XD_A); // save for later, t = (1, 0, xP, zP)
+
+    if (len0 != len1) {
+        int from_bit, to_bit;
+        digit_t* s;
+        if (len0 < len1) {
+            from_bit = len0; to_bit = len1-1; s = s1; 
+            len = len0;
+        } else {
+            from_bit = len1; to_bit = len0-1; s = s0; 
+            len = len1;
+        }
+
+        // output is X0_X1
+        ec_scalar_mul_normA_inner_1x4x2x1(X0_X1_XD_A, X0_X1_XD_A + NUM_LIMBS, s, from_bit, to_bit);
+    }
+
+    // Convert to 8x1x1 for joint ladder
+    if (len0 < len1) {
+        fp2_4x2x1_to_8x1x1(Y0_Y1_YD_A, X0_X1_XD_A, X0_X1_XD_A + NUM_LIMBS);
+        fp2_4x2x1_to_8x1x1(X0_X1_XD_A, t, X0_X1_XD_A + NUM_LIMBS);
+    } else if (len0 > len1) {
+        fp2_4x2x1_to_8x1x1(Y0_Y1_YD_A, t, X0_X1_XD_A + NUM_LIMBS);
+        fp2_4x2x1_to_8x1x1(X0_X1_XD_A, X0_X1_XD_A, X0_X1_XD_A + NUM_LIMBS);
+    } else {
+        fp2_4x2x1_to_8x1x1(X0_X1_XD_A, X0_X1_XD_A, X0_X1_XD_A + NUM_LIMBS);
+        fp2_copy_8x1x1(Y0_Y1_YD_A, X0_X1_XD_A);
+    }
+
+    // joint ladder
+    for (int i = len-1; i >= 0; i--) {
+        unsigned int bit0 = (s0[i >> LOG2RADIX] >> (i & (RADIX - 1))) & 1;
+        unsigned int bit1 = (s1[i >> LOG2RADIX] >> (i & (RADIX - 1))) & 1;
+
+        // swap X0 and X1
+        if (bit0) { 
+            idx0 = VSET(4, 1, 6, 3, 0, 5, 2, 7);
+            for (int k = 0; k < 2*NUM_LIMBS; k++) {
+                X0_X1_XD_A[k] = VPERM512(idx0, X0_X1_XD_A[k]);
+            }
+        }
+        if (bit1) {
+            idx0 = VSET(4, 1, 6, 3, 0, 5, 2, 7);
+            for (int k = 0; k < 2*NUM_LIMBS; k++) {
+                Y0_Y1_YD_A[k] = VPERM512(idx0, Y0_Y1_YD_A[k]);
+            }
+        }
+
+        ec_double_add_pair_normA_8x1x1(R1_R2_S1_S2, X0_X1_XD_A, Y0_Y1_YD_A);
+
+        if (!bit0) { // X0_X1 = R1_R2
+            idx0 = VSET(8, 1, 10, 3, 12, 5, 14, 7);
+        } else { // swap
+            idx0 = VSET(12, 1, 14, 3, 8, 5, 10, 7);
+        }
+        for (int k = 0; k < 2*NUM_LIMBS; k++) {
+            X0_X1_XD_A[k] = VBLENDPERM(idx0, X0_X1_XD_A[k], R1_R2_S1_S2[k]);
+        }
+
+        if (!bit1) { // Y0_Y1 = S1_S2
+            idx0 = VSET(9, 1, 11, 3, 13, 5, 15, 7);
+            
+        } else { // swap
+            idx0 = VSET(13, 1, 15, 3, 9, 5, 11, 7);
+        }
+        for (int k = 0; k < 2*NUM_LIMBS; k++) {
+            Y0_Y1_YD_A[k] = VBLENDPERM(idx0, Y0_Y1_YD_A[k], R1_R2_S1_S2[k]);
+        }
+    }
+
+    // R1_R2 = (X0, Z0, X1, Z1)
+    idx0 = VSET(0, 8, 2, 10, 4, 12, 6, 14);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        R1_R2_S1_S2[i] = VBLENDPERM(idx0, X0_X1_XD_A[i], Y0_Y1_YD_A[i]);
+    }
+
+
+    // We will now compute the result in Jacobian coordinates.
+    // Most of the work is in recovering the y-coordinates.
+
+    // T0 = (PX, PY, PZ, -) = (X * Z, Y, Z * zP, -)
+    idx0 = VSET(12, 13, 0, 1, 6, 7, 2, 3);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VBLENDPERM(idx0, t[i], P[i]); // (Z, 1, zP, 0)
+    }
+    fp2_mul_4x2x1(t0, t0, P);
+
+    // Pair computation in 8x1x1
+    // T0 = (PX, PX, PZ, PZ)
+    idx0 = VSET(0, 0, 0, 0, 4, 4, 4, 4);
+    idx1 = VSET(1, 1, 1, 1, 5, 5, 5, 5);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i + NUM_LIMBS] = VPERM512(idx1, t0[i]);
+        t0[i] = VPERM512(idx0, t0[i]);
+    }
+    // T1 = (X0, Z0, X0, Z0) for each res
+    idx0 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t1[i] = VPERM512(idx0, R1_R2_S1_S2[i]);
+    }
+    // T0 = (tt, t1, t2, t3)
+    fp2_mul_8x1x1(t0, t0, t1);
+
+    // Registers:
+    // T0 = (tt, t1, t2, t3)
+
+    // T1 = (tt, A, t1, Y)
+    idx0 = VSET(0, 1, 13, 13, 2, 3, 0, 0);
+    idx1 = VSET(0, 1, 2, 3, 4, 5, 10, 10);
+    idx2 = VSET(0, 1, 2, 3, 4, 5, 11, 11);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VBLENDPERM(idx0, t0[i], X0_X1_XD_A[i]);
+        t1[i+NUM_LIMBS] = VBLENDPERM(idx0, t0[i+NUM_LIMBS], X0_X1_XD_A[i+NUM_LIMBS]);
+        t1[i] = VBLENDPERM(idx1, t1[i], P[i]);
+        t1[i+NUM_LIMBS] = VBLENDPERM(idx2, t1[i+NUM_LIMBS], P[i]);
+    }
+
+    // T2 = (t3, A, t2, Y)
+    idx0 = VSET(6, 7, 13, 13, 4, 5, 0, 0);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t2[i] = VBLENDPERM(idx0, t0[i], X0_X1_XD_A[i]);
+        t2[i+NUM_LIMBS] = VBLENDPERM(idx0, t0[i+NUM_LIMBS], X0_X1_XD_A[i+NUM_LIMBS]);
+        t2[i] = VBLENDPERM(idx1, t2[i], P[i]);
+        t2[i+NUM_LIMBS] = VBLENDPERM(idx2, t2[i+NUM_LIMBS], P[i]);
+    }
+    fp2_add_8x1x1(t1, t1, t2);
+
+    // Registers:
+    // T0 = (-, t1, t2, t3)
+    // T1 = (t0, t4, t5, v0)
+
+    // T2 = (t3, t3), (t4, v0)
+    idx0 = VSET(6, 14, 6, 14, 7, 15, 7, 15);
+    idx1 = VSET(2, 10, 6, 14, 3, 11, 7, 15);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t2[i] = VBLENDPERM(idx0, t0[i], t0[i+NUM_LIMBS]);
+        t2[i+NUM_LIMBS] = VBLENDPERM(idx1, t1[i], t1[i+NUM_LIMBS]);
+    }
+    fp2_mul_4x2x1(t2, t2, t2+NUM_LIMBS);
+
+    // Registers:
+    // T0 = (-, t1, t2, t3)
+    // T1 = (t0, -, t5, -)
+    // T2 = (t4, v0)
+
+    // T1 = (t0, 0, t5, 0)
+    // T2 = (0, t4, t4, v0)
+    idx0 = VSET(0, 0, 0, 4, 0, 4, 2, 6);
+    idx1 = VSET(0, 0, 1, 5, 1, 5, 3, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VPERM256MASKZ(0x33, t1[i], 0xe4);
+        t1[i+NUM_LIMBS] = VPERM256MASKZ(0x33, t1[i+NUM_LIMBS], 0xe4);
+        t2[i+NUM_LIMBS] = VPERM512MASKZ(0xfc, t2[i], idx1);
+        t2[i] = VPERM512MASKZ(0xfc, t2[i], idx0);
+    }
+    fp2_add_8x1x1(t1, t1, t2);
+
+    // Registers:
+    // T0 = (-, t1, t2, t3)
+    // T1 = (t0, t4, t5, v0)
+
+    // T2 = (t5, t3, -, Z1)
+    idx0 = VSET(12, 13, 6, 7, 0, 0, 0, 0);
+    idx1 = VSET(0, 1, 2, 3, 4, 5, 14, 15);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t2[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        t2[i] = VBLENDPERM(idx1, t2[i], R1_R2_S1_S2[i]);
+    }
+    fp2_mul_8x1x1(t1, t1, t2);
+
+    // Registers:
+    // T0 = (-, t1, t2, -)
+    // T1 = (t5, t6, -, v0)
+
+    // T0 = (v0, t1, t5, v0)
+    // T2 = (0,  t2, t6, 0)
+    idx0 = VSET(14, 15, 2, 3, 8, 9, 14, 15);
+    idx2 = VSET(0, 0, 4, 5, 10, 11, 0, 0);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t2[i] = VBLENDPERMMASKZ(0x3c, t0[i], t1[i], idx2);
+        t0[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+    }
+    fp2_sub_8x1x1(t0, t0, t2);
+
+    // Registers:
+    // T0 = (v0, t0, u0, v0)
+
+    // T1 = (X0, t0, Z1, Z0)
+    idx0 = VSET(8, 9, 2, 3, 14, 15, 10, 11);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t1[i] = VBLENDPERM(idx0, t0[i], R1_R2_S1_S2[i]);
+    }
+    fp2_mul_8x1x1(t0, t0, t1);
+
+    // Registers:
+    // T0 = (RX, t0, RY, RZ) 
+
+    // T0 = (RX, t0), (RY, RZ)
+    idx0 = VSET(0, 8, 2, 10, 1, 9, 3, 11);
+    idx1 = VSET(4, 12, 6, 14, 5, 13, 7, 15);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        __m512i r0 = t0[i], r1 = t0[i+NUM_LIMBS];
+        t0[i] = VBLENDPERM(idx0, r0, r1);
+        t0[i+NUM_LIMBS] = VBLENDPERM(idx1, r0, r1);
+    }
+    
+    // T1 = (RZ, X1)
+    idx0 = VSET(2, 3, 12, 0, 6, 7, 13, 0);
+    idx1 = VSET(0, 1, 2, 12, 4, 5, 6, 13);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VBLENDPERM(idx0, t0[i+NUM_LIMBS], R1_R2_S1_S2[i]);
+        t1[i] = VBLENDPERM(idx1, t1[i], R1_R2_S1_S2[i+NUM_LIMBS]);
+    }
+    fp2_mul_4x2x1(t0, t0, t1);
+
+    // Registers:
+    // T0 = (RX, t0), (RY, RZ)
+
+    // T1 = (t0, 0)
+    idx0 = VSET(2, 3, 0, 0, 6, 7, 0, 0);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VPERM512MASKZ(0x33, t0[i], idx0);
+    }
+    fp2_sub_4x2x1(t0+NUM_LIMBS, t0+NUM_LIMBS, t1);
+    fp2_sqr_4x2x1(t1, t0+NUM_LIMBS);
+
+    // Registers:
+    // T0 = (RX, -), (RY, RZ)
+    // T1 = (-, t0)
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VPERM512MASKZ(0x33, t1[i], idx0);
+    }
+
+    fp2_mul_4x2x1(t1, t1, t0+NUM_LIMBS);
+
+    // T0 = (RX, -), (-, RZ)
+    // T1 = (RY, 0)
+
+    // res = (RX, RY, RZ, 0)
+    idx0 = VSET(0, 4, 8, 12, 0, 0, 10, 14);
+    idx1 = VSET(1, 5, 9, 13, 0, 0, 11, 15);
+
+    idx2 = VSET(0, 1, 2, 3, 10, 14, 6, 7);
+    idx3 = VSET(0, 1, 2, 3, 11, 15, 6, 7);
+
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        res[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        res[i+NUM_LIMBS] = VBLENDPERM(idx1, t0[i], t1[i]);
+        res[i] = VBLENDPERM(idx2, res[i], t0[i+NUM_LIMBS]);
+        res[i+NUM_LIMBS] = VBLENDPERM(idx3, res[i+NUM_LIMBS], t0[i+NUM_LIMBS]);
+    }
+}
+
+void jac_add_pair(__m512i* res, __m512i* P1_P2, __m512i* Q1_Q2, __m512i* normA)
+{
+    __m512i A_dup[2*NUM_LIMBS];
+    __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS], t3[2*NUM_LIMBS], t4[2*NUM_LIMBS];
+    __m512i idx0, idx1, idx2, idx3;
+
+    fp2_2x2x2_to_4x2x1(A_dup, normA, normA);
+    fp2_4x2x1_to_8x1x1(A_dup, A_dup, A_dup);
+
+    // T0 = (zP, zQ, xP, zP)
+    // T1 = (zP, zQ, xP, zQ)
+    idx0 = VSET(4, 5, 12, 13, 0, 1, 4, 5);
+    idx1 = VSET(4, 5, 12, 13, 0, 1, 12, 13);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t0[i] = VBLENDPERM(idx0, P1_P2[i], Q1_Q2[i]);
+        t1[i] = VBLENDPERM(idx1, P1_P2[i], Q1_Q2[i]);
+    }
+    fp2_mul_8x1x1(t0, t0, t1);
+
+    // Registers:
+    // T0 = (t0, t1, t4, t5)
+
+    // T1 = (t1, t0, t0, t1)
+    // T2 = (zQ, zP, xQ, xP)
+    idx0 = VSET(2, 3, 0, 1, 0, 1, 2, 3);
+    idx1 = VSET(12, 13, 4, 5, 8, 9, 0, 1);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t1[i] = VPERM512(idx0, t0[i]);
+        t2[i] = VBLENDPERM(idx1, P1_P2[i], Q1_Q2[i]);
+    }
+    fp2_mul_8x1x1(t1, t1, t2);
+
+    // Registers:
+    // T0 = (t0, -, t4, t5)
+    // T1 = (v1, t2, u2, u1)
+
+    // T2 = (v1, t2, A, t5)
+    // T3 = (yP, yQ, xP, t5)
+    idx0 = VSET(0, 1, 2, 3, 0, 0, 14, 15);
+    idx1 = VSET(0, 1, 2, 3, 8, 8, 6, 7);
+
+    idx2 = VSET(2, 3, 10, 11, 0, 1, 0, 0);
+    idx3 = VSET(0, 1, 2, 3, 4, 5, 14, 15);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t2[i] = VBLENDPERM(idx0, t1[i], t0[i]);
+        t2[i] = VBLENDPERM(idx1, t2[i], A_dup[i]);
+        t3[i] = VBLENDPERM(idx2, P1_P2[i], Q1_Q2[i]);
+        t3[i] = VBLENDPERM(idx3, t3[i], t0[i]);
+    }
+    fp2_mul_8x1x1(t2, t2, t3);
+
+    // Registers:
+    // T0 = (t0, -, t4, t5)
+    // T1 = (-, -, u2, u1)
+    // T2 = (v1, t2, t3, t8)
+
+    // T3 = (t2, u2, yP, t3)
+    // T4 = (v1, u1, yP, t3)
+    idx0 = VSET(10, 11, 4, 5, 0, 0, 12, 13);
+    idx1 = VSET(0, 1, 2, 3, 10, 11, 6, 7);
+
+    idx2 = VSET(8, 9, 6, 7, 0, 0, 12, 13);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t3[i] = VBLENDPERM(idx0, t1[i], t2[i]);
+        t4[i] = VBLENDPERM(idx2, t1[i], t2[i]);
+        t3[i] = VBLENDPERM(idx1, t3[i], P1_P2[i]);
+        t4[i] = VBLENDPERM(idx1, t4[i], P1_P2[i]);
+    }
+    fp2_mixaddsub_8x1x1(t3, t3, t4, 0xf0, 0xf0);
+
+    // Registers:
+    // T0 = (t0, -, t4, t5)
+    // T1 = (-, -, u2, u1)
+    // T2 = (v1, -, -, t8)
+    // T3 = (dy, dx, t7, t3)
+
+    // In preparation for select, putting dx in correct position
+    // T2 = (v1, dy, dx, t8)
+    idx0 = VSET(0, 1, 8, 9, 10, 11, 6, 7);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t2[i] = VBLENDPERM(idx0, t2[i], t3[i]);
+    }
+    // if dx = 0 and dy = 0: dx = t7
+    __mmask8 zmask = fp2_is_zero_8x1x1(t2);
+    zmask = (zmask & (zmask << 2) & 0x30);
+    fp2_select_8x1x1(t2, t2, t3, zmask);
+
+    // Registers:
+    // T0 = (t0, -, t4, t5)
+    // T1 = (-, -, u2, u1)
+    // T2 = (v1, dy, dx, t8)
+    // T3 = (-, -, -, t3)
+
+    // T1 = (t0, t4, u2, u1)
+    // T3 = (t3, t4, u1, 0 )
+    idx0 = VSET(0, 1, 4, 5, 12, 13, 14, 15);
+    idx1 = VSET(14, 15, 4, 5, 6, 7, 0, 0);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t1[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+        t3[i] = VBLENDPERMMASKZ(0x3f, t1[i], t3[i], idx1);
+    }
+    fp2_add_8x1x1(t1, t1, t3);
+
+    // Registers:
+    // T0 = (t0, -, t4, t5)
+    // T1 = (t3, t9, u2, u1)
+    // T2 = (v1, dy, dx, t8)
+
+    // T3 = (t0, dx, t8, t5)
+    // T4 = (t3, dx, A, dx)
+    idx0 = VSET(0, 1, 12, 13, 14, 15, 6, 7);
+    idx1 = VSET(0, 1, 12, 13, 0, 0, 12, 13);
+    idx2 = VSET(0, 1, 2, 3, 8, 8, 6, 7);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t3[i] = VBLENDPERM(idx0, t0[i], t2[i]);
+        t4[i] = VBLENDPERM(idx1, t1[i], t2[i]);
+        t4[i] = VBLENDPERM(idx2, t4[i], A_dup[i]);
+    }
+    fp2_mul_8x1x1(t3, t3, t4);
+
+    // Registers:
+    // T0 = (-, - , t4, -)
+    // T1 = (-, t9, u2, u1)
+    // T2 = (v1, dy, dx, -)
+    // T3 = (t3, t6, xR, zR)
+
+    // T4 = (t9, 0, u2, 0)
+    idx0 = VSET(2, 3, 0, 0, 4, 5, 0, 0);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t4[i] = VPERM512MASKZ(0x33, t1[i], idx0);
+    }
+    fp2_add_8x1x1(t3, t3, t4);
+
+    // Registers:
+    // T0 = (-, - , t4, -)
+    // T1 = (-, -, -, u1)
+    // T2 = (v1, dy, dx, -)
+    // T3 = (t3, t6, xR, zR)
+
+    // T4 = (t4, 0, 0, 0)
+    idx0 = VSET(4, 5, 0, 0, 0, 0, 0, 0);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t4[i] = VPERM512MASKZ(0x3, t0[i], idx0);
+    }
+    fp2_add_4x2x1(t3, t3, t4);
+
+    // Registers:
+    // T1 = (-, -, -, u1)
+    // T2 = (v1, dy, dx, -)
+    // T3 = (t3, t6, xR, zR)
+    // T4 = (t4, 0, 0, 0)
+
+    // T0 = (t6, zQ, t6, t6)
+    // T1 = (xR, t3, u1, dx)
+    idx0 = VSET(2, 3, 12, 13, 2, 3, 2, 3);
+    idx1 = VSET(12, 13, 8, 9, 6, 7, 0, 0);
+    idx2 = VSET(0, 1, 2, 3, 4, 5, 12, 13);
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t0[i] = VBLENDPERM(idx0, t3[i], Q1_Q2[i]);
+        t1[i] = VBLENDPERM(idx1, t1[i], t3[i]);
+        t1[i] = VBLENDPERM(idx2, t1[i], t2[i]);
+    }
+    fp2_mul_8x1x1(t0, t0, t1);
+
+    // Registers:
+    // T0 = (xR, t3, yR, t4)
+    // T2 = (v1, dy, -, -)
+    // T3 = (-, -, -, zR)
+
+    // If dx == 0 and dy == 0: dy = t3
+    fp2_select_8x1x1(t2, t2, t0, zmask >> 2);
+
+    // T1 = (dy, t4)
+    // T2 = (dy, v1)
+    idx0 = VSET(0, 0, 6, 14, 0, 0, 7, 15);
+    idx1 = VSET(10, 0, 2, 3, 11, 0, 6, 7);
+    idx2 = VSET(0, 10, 2, 3, 4, 11, 6, 7);
+
+    idx3 = VSET(2, 10, 0, 8, 3, 11, 1, 9);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VBLENDPERM(idx0, t0[i], t0[i+NUM_LIMBS]);
+        t1[i] = VBLENDPERM(idx1, t1[i], t2[i]);
+        t1[i] = VBLENDPERM(idx2, t1[i], t2[i+NUM_LIMBS]);
+        t2[i] = VBLENDPERM(idx3, t2[i], t2[i+NUM_LIMBS]);
+    }
+    fp2_mul_4x2x1(t1, t1, t2);
+
+    // Registers:
+    // T0 = (xR, -, yR, -)
+    // T1 = (t3, t4)
+    // T2 = (dy, -)
+    // T3 = (-, -, -, zR)
+
+    // T4 = (xR, 0), (yR, 0)
+    idx0 = VSET(0, 8, 0, 0, 1, 9, 0, 0);
+    idx1 = VSET(4, 12, 0, 0, 5, 13, 0, 0);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t4[i] = VBLENDPERMMASKZ(0x33, t0[i], t0[i+NUM_LIMBS], idx0);
+        t4[i+NUM_LIMBS] = VBLENDPERMMASKZ(0x33, t0[i], t0[i+NUM_LIMBS], idx1);
+    }
+    fp2_sub_4x2x1(t4, t1, t4);
+    fp2_sub_4x2x1(t4+NUM_LIMBS, t4+NUM_LIMBS, t4);
+
+    // Registers:
+    // T2 = (dy, -)
+    // T3 = (-, -, -, zR)
+    // T4 = (xR, t4), (yR, -)
+
+    fp2_mul_4x2x1(t4+NUM_LIMBS, t4+NUM_LIMBS, t2);
+
+    // Registers:
+    // T3 = (-, -, -, zR)
+    // T4 = (xR, t4), (yR, -)
+
+    // T0 = (t4, -)
+    idx0 = VSET(2, 3, 0, 0, 6, 7, 0, 0);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VPERM512(idx0, t4[i]);
+    }
+    fp2_sub_4x2x1(t4+NUM_LIMBS, t4+NUM_LIMBS, t0);
+
+    // T3 = (-, -, -, zR)
+    // T4 = (xR, -), (yR, -)
+
+    // res = (xR, yR, zR, 0)
+    idx0 = VSET(0, 4, 8, 12, 0, 0, 0, 0);
+    idx1 = VSET(1, 5, 9, 13, 0, 0, 0, 0);
+    idx2 = VSET(0, 1, 2, 3, 14, 15, 0, 0);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        res[i] = VBLENDPERM(idx0, t4[i], t4[i+NUM_LIMBS]);
+        res[i+NUM_LIMBS] = VBLENDPERM(idx1, t4[i], t4[i+NUM_LIMBS]);
+        res[i] = VBLENDPERMMASKZ(0x3f, res[i], t3[i], idx2);
+        res[i+NUM_LIMBS] = VBLENDPERMMASKZ(0x3f, res[i+NUM_LIMBS], t3[i+NUM_LIMBS], idx2);
+    }
+    
+    // If zP = 0: R= Q. If zQ = 0: R = P.
+    __mmask8 zmask_P = fp2_is_zero_8x1x1(P1_P2) & 0x30;
+    __mmask8 zmask_Q = fp2_is_zero_8x1x1(Q1_Q2) & 0x30;
+    zmask_P = (zmask_P >> 4) | (zmask_P >> 2) | zmask_P;
+    zmask_Q = (zmask_Q >> 4) | (zmask_Q >> 2) | zmask_Q;
+    fp2_select_8x1x1(res, res, Q1_Q2, zmask_P);
+    fp2_select_8x1x1(res, res, P1_P2, zmask_Q);
 }

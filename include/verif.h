@@ -1,8 +1,8 @@
 #ifndef VERIF_H
 #define VERIF_H
 
-#include "ec.h"
 #include "fp_consts.h"
+#include "ec.h"
 #include "intrinsics_avx512.h"
 #include "tutil.h"
 #include <stdbool.h>

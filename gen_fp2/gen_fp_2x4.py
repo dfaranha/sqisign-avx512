@@ -471,8 +471,8 @@ def get_fold_mask(pp):
 def get_rdc_2x4_size(pp):
     return pp.num_limbs_R + 4 * pp.n24
 
-# Not designed for fp2 lazy red, correction step would need to handle input in [-p, 2p) like other fmts
-def rdc_2x4(f, pp, v, strat):
+#Slightly faster, but so messy!
+def rdc_2x4_old(f, pp, v, strat):
     f.comment(f"Modifies a. Its length must be at least {get_rdc_2x4_size(pp)}.")
     f.start("void rdc_2x4(__m512i* res, __m512i* a)")
 
@@ -570,6 +570,211 @@ def rdc_2x4(f, pp, v, strat):
         carry_prop_2x4(f, pp, v, "res", "limb_mask", "carry", "idx_shift")
 
     f.end()
+
+# split into carry + fold stage and mult stage
+def rdc_2x4_split(f, pp, v, strat):
+    f.comment(f"Modifies a. Its length must be at least {pp.num_limbs_R + pp.n24}.")
+    f.start("void rdc_2x4(__m512i* res, __m512i* a)")
+
+    N = pp.num_limbs
+    n24 = pp.n24
+    idx_top, limb_top = get_top_idx(pp)
+    start_idx = pp.num_limbs_R
+
+    f.line("__m512i carry, lo, hi, shuf;")
+    f.line("const __m512i zero = VZERO();")
+    f.line(f"const __m512i p_top_all = VSETALL({v.p_plus_1_top});")
+    f.line(f"const __m512i top_first = VSET({v.p_plus_1_top}, 0, 0, 0, {v.p_plus_1_top}, 0, 0, 0);")
+    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
+    f.line(f"const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
+    if not strat.mod_2p:
+        f.line("__m512i sign_mask;")
+        f.line(f"const __m512i idx_sign = VSET({limb_top}, {limb_top}, {limb_top}, {limb_top}, {limb_top+4}, {limb_top+4}, {limb_top+4}, {limb_top+4});")
+    write_p(f, v, strat.mod_2p, limb_top)
+    f.line()
+
+    fold_mask = get_fold_mask(pp)
+
+    f.comment("Move each limb one step to the left, for each half")
+    f.line("const __m512i idx = VSET(1, 2, 3, 0, 5, 6, 7, 0);")
+    f.line()
+
+    if strat.R_ext:
+        f.line(f"a[{N+n24}] = VZERO();")
+
+    f.comment("Carry and fold")
+    for i in range(start_idx):
+        f.line(f"carry = VSRA(a[{i}], {v.limb_len});")
+        f.line(f"a[{i}] = VAND(a[{i}], limb_mask);")
+        f.line(f"a[{i+1}] = VADD(a[{i+1}], carry);")
+        # fold:
+        f.line(f"a[{i + n24}] = VADD(a[{i + n24}], VPERM512MASKZ(0x{fold_mask:02x}, a[{i}], idx));")
+        f.line()
+
+    f.comment("Aggregation in lane 0") #Only overlaps with first N limbs at i=0
+    extra = 1 if strat.R_ext else 0
+    for i in range(n24 + extra):
+        target = i + N -1
+        f.line(f"a[{target}] = VMULADDL(a[{target}], a[{i}], top_first);")
+        f.line(f"hi = VMULADDH(zero, a[{i}], top_first);")
+        f.line(f"a[{target + 1}] = VADD(a[{target + 1}], VSL(hi, {v.limb_align}));")
+
+    f.comment("Carry propagation at affected later iterations")
+    for i in range(N-1, pp.num_limbs_R):
+        f.line(f"carry = VSRA(a[{i}], {v.limb_len});")
+        f.line(f"a[{i}] = VAND(a[{i}], limb_mask);")
+        f.line(f"a[{i+1}] = VADD(a[{i+1}], carry);")
+
+    f.comment("Split aggregation")
+    f.line(f"shuf = VSHUFFLEMASKZ(0x0c0c, a[{n24+extra}], 0x4e);")
+    f.line(f"a[{n24+extra + N-1}] = VMULADDL(a[{n24+extra + N-1}], a[{n24+extra}], top_first);")
+    f.line(f"hi = VMULADDH(zero, shuf, p_top_all);")
+    f.line(f"a[{n24+extra + N-n24}] = VADD(a[{n24+extra + N-n24}], VSL(hi, {v.limb_align}));")
+
+    if n24+extra +1 < pp.num_limbs_R:
+        f.comment("Aggregation in second lane")
+        max_second = min(2*n24+extra, pp.num_limbs_R)
+        for i in range(n24 + extra + 1, max_second):
+            target = i + N-1-n24
+            f.line(f"shuf = VSHUFFLEMASKZ(0x0c0c, a[{i}], 0x4e);")
+            f.line(f"a[{target}] = VMULADDL(a[{target}], shuf, p_top_all);")
+            f.line(f"hi = VMULADDH(zero, shuf, p_top_all);")
+            f.line(f"a[{target+1}] = VADD(a[{target+1}], VSL(hi, {v.limb_align}));")
+
+    if 2*n24+extra < pp.num_limbs_R:
+        f.comment("Split aggregation")
+        f.line(f"lo = VSHUFFLEMASKZ(0x0c0c, a[{2*n24+extra}], 0x4e);") # second lane
+        f.line(f"shuf = VPERM256MASKZ(0x44, a[{2*n24+extra}], 0x00);") # third lane
+        f.line(f"a[{2*n24+extra + N-n24-1}] = VMULADDL(a[{2*n24+extra + N-n24-1}], lo, p_top_all);")
+        f.line(f"hi = VMULADDH(zero, shuf, p_top_all);")
+        f.line(f"a[{2*n24+extra + N-2*n24}] = VADD(a[{2*n24+extra + N-2*n24}], VSL(hi, {v.limb_align}));")
+
+    if 2*n24+extra+1 < pp.num_limbs_R:
+        max_third = min(3*n24+extra, pp.num_limbs_R) #N=5, n24=2, 3*n24 = 6, 2*n24+1 = 5
+        f.comment("Aggregation in third lane")
+        for i in range(2*n24+extra+1, max_third):
+            target = i + N - 1 - 2*n24
+            f.line(f"shuf = VPERM256MASKZ(0x44, a[{i}], 0x00);")
+            f.line(f"a[{target}] = VMULADDL(a[{target}], shuf, p_top_all);")
+            f.line(f"hi = VMULADDH(zero, shuf, p_top_all);")
+            f.line(f"a[{target+1}] = VADD(a[{target+1}], VSL(hi, {v.limb_align}));")
+    
+    if 3*n24+extra < pp.num_limbs_R:
+        f.comment("Split aggregation")
+        f.line(f"lo = VPERM256MASKZ(0x44, a[{3*n24+extra}], 0x00);") # third lane
+        f.line(f"shuf = VPERM256MASKZ(0x88, a[{3*n24+extra}], 0x00);") # fourth lane
+        f.line(f"a[{3*n24+extra + N-1-2*n24}] = VMULADDL(a[{3*n24+extra + N-1-2*n24}], lo, p_top_all);")
+        f.line(f"hi = VMULADDH(zero, shuf, p_top_all);")
+        f.line(f"a[{3*n24+extra+ N-3*n24}] = VADD(a[{3*n24+extra + N-3*n24}], VSL(hi, {v.limb_align}));")
+    
+    if 3*n24+extra+1 < pp.num_limbs_R:
+        f.comment("Aggregation in third lane")
+        for i in range(3*n24+extra+1, pp.num_limbs_R):
+            target = i + N - 1 - 3*n24
+            f.line(f"shuf = VPERM256MASKZ(0x88, a[{i}], 0x00);")
+            f.line(f"a[{target}] = VMULADDL(a[{target}], shuf, p_top_all);")
+            f.line(f"hi = VMULADDH(zero, shuf, p_top_all);")
+            f.line(f"a[{target+1}] = VADD(a[{target+1}], VSL(hi, {v.limb_align}));")
+
+    for i in range(n24):
+        f.line(f"res[{i}] = a[{i+pp.num_limbs_R}];")
+
+    carry_prop_2x4(f, pp, v, "res", "limb_mask", "carry", "idx_shift")
+
+    if not strat.mod_2p:
+        f.comment("Reduce from [0, 2p) to [0, p)")
+        f.comment("Subtract p")
+        f.line(f"res[0] = VADD(res[0], p_bot);")
+        f.line(f"res[{idx_top}] = VSUB(res[{idx_top}], p_top);")
+        f.line()
+
+        carry_prop_2x4(f, pp, v, "res", "limb_mask", "carry", "idx_shift")
+
+        f.comment("If negative, add p back")
+        f.line(f"sign_mask = VSRA(res[{n24-1}], 63);")
+        f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
+        f.line(f"res[{idx_top}] = VADD(res[{idx_top}], VAND(p_top, sign_mask));")
+        f.line(f"res[0] = VSUB(res[0], VAND(p_bot, sign_mask));")
+        f.line()
+
+        carry_prop_2x4(f, pp, v, "res", "limb_mask", "carry", "idx_shift")
+
+    f.end()
+
+# WIP
+# def rdc_2x4_fused(f, pp, v, strat):
+#     f.comment(f"Modifies a. Its length must be at least {pp.num_limbs_R + pp.n24}.")
+#     f.start("void rdc_2x4(__m512i* res, __m512i* a)")
+
+#     N = pp.num_limbs
+#     n24 = pp.n24
+#     idx_top, limb_top = get_top_idx(pp)
+#     start_idx = pp.num_limbs_R
+#     top_offset = N - 1 - n24
+
+#     f.line("__m512i carry, lo, hi, shuf;")
+#     f.line("const __m512i zero = VZERO();")
+#     f.line(f"const __m512i p_top_all = VSETALL({v.p_plus_1_top});")
+#     f.line(f"const __m512i top_first = VSET({v.p_plus_1_top}, 0, 0, 0, {v.p_plus_1_top}, 0, 0, 0);")
+#     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
+#     f.line(f"const __m512i idx_shift = VSET(0, 0, 1, 2, 0, 4, 5, 6);")
+#     if not strat.mod_2p:
+#         f.line("__m512i sign_mask;")
+#         f.line(f"const __m512i idx_sign = VSET({limb_top}, {limb_top}, {limb_top}, {limb_top}, {limb_top+4}, {limb_top+4}, {limb_top+4}, {limb_top+4});")
+#     write_p(f, v, strat.mod_2p, limb_top)
+#     f.line()
+
+#     fold_mask = get_fold_mask(pp)
+
+#     f.comment("Move each limb one step to the left, for each half")
+#     f.line("const __m512i idx = VSET(1, 2, 3, 0, 5, 6, 7, 0);")
+#     f.line()
+
+#     if strat.R_ext:
+#         f.line(f"a[{N+n24}] = VZERO();")
+
+#     f.comment("Generalized Montgomery reduction loop")
+#     for i in range(start_idx):
+#         f.line(f"carry = VSRA(a[{i}], {v.limb_len});")
+#         f.line(f"a[{i}] = VAND(a[{i}], limb_mask);")
+#         f.line(f"a[{i+1}] = VADD(a[{i+1}], carry);")
+        
+#         f.line(f"shuf = VSHUFFLEMASKZ(0x0c0c, a[{i}], 0x4e);")
+#         f.line(f"a[{i + top_offset}] = VMULADDL(a[{i + top_offset}], shuf, p_top_all);")
+#         f.line(f"hi = VMULADDH(zero, shuf, p_top_all);")
+#         f.line(f"a[{i + top_offset + 1}] = VADD(a[{i + top_offset + 1}], VSL(hi, {v.limb_align}));")
+        
+#         f.line(f"a[{i + n24}] = VADD(a[{i + n24}], VPERM512MASKZ(0x{fold_mask:02x}, a[{i}], idx));")
+#         f.line()
+
+#     for i in range(n24):
+#         f.line(f"res[{i}] = a[{i+pp.num_limbs_R}];")
+
+#     carry_prop_2x4(f, pp, v, "res", "limb_mask", "carry", "idx_shift")
+
+#     if not strat.mod_2p:
+#         f.comment("Reduce from [0, 2p) to [0, p)")
+#         f.comment("Subtract p")
+#         f.line(f"res[0] = VADD(res[0], p_bot);")
+#         f.line(f"res[{idx_top}] = VSUB(res[{idx_top}], p_top);")
+#         f.line()
+
+#         carry_prop_2x4(f, pp, v, "res", "limb_mask", "carry", "idx_shift")
+
+#         f.comment("If negative, add p back")
+#         f.line(f"sign_mask = VSRA(res[{n24-1}], 63);")
+#         f.line(f"sign_mask = VPERM512(idx_sign, sign_mask);")
+#         f.line(f"res[{idx_top}] = VADD(res[{idx_top}], VAND(p_top, sign_mask));")
+#         f.line(f"res[0] = VSUB(res[0], VAND(p_bot, sign_mask));")
+#         f.line()
+
+#         carry_prop_2x4(f, pp, v, "res", "limb_mask", "carry", "idx_shift")
+
+#     f.end()
+
+# Not designed for fp2 lazy red, correction step would need to handle input in [-p, 2p) like other fmts
+def rdc_2x4(f, pp, v, strat):
+    rdc_2x4_split(f, pp, v, strat)
 
 def fp_mul_2x4(f, pp, v):
     f.start("void fp_mul_2x4(__m512i* res, __m512i* a, __m512i* b)")
