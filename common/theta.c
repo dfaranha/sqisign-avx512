@@ -314,10 +314,12 @@ bool theta_isogeny_chain_vec(
     return success;
 }
 
+// Takes kernel points in Jacobian coordinates.
 bool theta_isogeny_chain_vec_verif(
     __m512i* res_A_34, 
-    __m512i* ker_basis1,
-    __m512i* ker_basis2,
+    __m512i* ker_x,
+    __m512i* ker_y,
+    __m512i* ker_z,
     __m512i* normA_1,
     __m512i* normA_2, 
     __m512i* normA24_1,
@@ -325,14 +327,132 @@ bool theta_isogeny_chain_vec_verif(
     const int n
 )
 {
-    __m512i* pts = NULL;
-    int num_pts = 0;
-    bool randomize = false, verify = true;
-    return theta_isogeny_chain_vec(
-        res_A_34, pts,
-        ker_basis1, ker_basis2, normA_1, normA_2, normA24_1, normA24_2, pts,
-        n, num_pts, randomize, verify
+    __m512i A_12[NUM_LIMBS], A24_12[NUM_LIMBS], OA[NUM_LIMBS], OA_dual_inv[2*NUM_LIMBS];
+    __m512i J[NUM_LIMBS], matrix01[2*NUM_LIMBS], matrix23[2*NUM_LIMBS], T8_x[NUM_LIMBS], T8_y[NUM_LIMBS], T8_z[NUM_LIMBS], gluing_eval_res[2*NUM_LIMBS];
+    __m512i t0[N4x2], t1[N4x2], idx;
+    __m512i c1[2*NUM_LIMBS], c2[2*NUM_LIMBS], p1[NUM_LIMBS], p2[NUM_LIMBS], k1[NUM_LIMBS], k2[NUM_LIMBS];
+    splitting_matrix_t isom_matrix, rand_matrix;
+    bool h1, h2, success = true, verify = true, randomize = false;
+    
+    // Packing curve coefficients
+    // A_12 = AVX_4x2x1(E1.A, E1.A, E2.A, E2.A)
+    idx = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(idx, normA_1[i]);
+        t1[i] = VPERM512(idx, normA_2[i]);
+    }
+    fp2_2x2x2_to_4x2x1(A_12, t0, t1);
+    // A24_12 = AVX_4x2x1(E1.A24, E1.A24, E2.A24, E2.A24)
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(idx, normA24_1[i]);
+        t1[i] = VPERM512(idx, normA24_2[i]);
+    }
+    fp2_2x2x2_to_4x2x1(A24_12, t0, t1);
+
+    // Setting up the strategy
+    int space = 1;
+    for (unsigned i = 1; i < n; i *= 2) // n.bit_length + 1
+        ++space;
+
+    uint16_t orders[space];
+    __m512i strat_points_x[space*NUM_LIMBS], strat_points_y[space*NUM_LIMBS], strat_points_z[space*NUM_LIMBS];
+    // TODO: ker_x, ker_y, ker_z never used again, remove copies.
+    orders[0] = n;
+    fp2_copy_4x2x1(strat_points_x, ker_x);
+    fp2_copy_4x2x1(strat_points_y, ker_y);
+    fp2_copy_4x2x1(strat_points_z, ker_z);
+
+    int current = theta_compute_product_doubles(
+        A_12, strat_points_x, strat_points_y, strat_points_z, orders, space
     );
+
+    success &= gluing_codomain(
+        OA, OA_dual_inv, J, matrix01, matrix23, A24_12, 
+        strat_points_x + current*NUM_LIMBS, strat_points_z + current*NUM_LIMBS,
+        verify
+    );
+
+    // Package the point we use for translation
+    // T8_X = AVX_4x2x1(X_8[0], X_8[0], X_8[2], X_8[2])
+    // T8_Y = AVX_4x2x1(Y_8[0], Y_8[0], Y_8[2], Y_8[2])
+    // T8_Z = AVX_4x2x1(Z_8[0], Z_8[0], Z_8[2], Z_8[2])
+    idx = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        int j = current*NUM_LIMBS + i;
+        T8_x[i] = VPERM512(idx, strat_points_x[j]);
+        T8_y[i] = VPERM512(idx, strat_points_y[j]);
+        T8_z[i] = VPERM512(idx, strat_points_z[j]);
+    }
+
+    // Push kernel though the gluing isogeny
+    // 4 Jacobian points for the kernel become 2 theta points
+    // TODO: Is current = space-1 here? And even if it is not, is it better to use 8*space?
+    __m512i strat_theta_pair[space * 2*NUM_LIMBS];
+    for (int i = 0; i < current; i++) {
+        gluing_eval_pair(
+            strat_theta_pair + i*2*NUM_LIMBS, //8x1x1
+            A_12, strat_points_x + i*NUM_LIMBS, strat_points_y + i*NUM_LIMBS, strat_points_z + i*NUM_LIMBS,
+            T8_x, T8_y, T8_z, J, matrix01, matrix23
+        );
+        orders[i]--;
+    }
+    current--;
+
+    // Step Two: Compute the rest of the chain
+    int step = 0;
+    bool codom_verify = verify;
+    while (current >= 0 && orders[current] != 0) {
+        // Precompute constants for doubling
+        theta_precomp_pair(c1, c2, OA);
+        
+        while (orders[current] != 1) {
+            current++;
+
+            int num_dbls = orders[current-1] / 2;
+            theta_double_iter_pair(
+                strat_theta_pair + current * 2*NUM_LIMBS, 
+                strat_theta_pair + (current-1) * 2*NUM_LIMBS, 
+                c1, c2, num_dbls
+            );
+            orders[current] = orders[current-1] - num_dbls;
+        }
+
+        if (step == n - 2) {
+            h1 = true; h2 = false;
+            codom_verify = false;
+        } else if (step == n - 3) {
+            h1 = false; h2 = false;
+        } else {
+            h1 = false; h2 = true;
+        }
+        
+        // Compute the codomain of the kernel
+        success &= theta_codomain_pair(
+            OA, OA_dual_inv, strat_theta_pair + current * 2*NUM_LIMBS, 
+            h1, h2, codom_verify
+        );
+
+        // Push the kernel through the images
+        // we have current number of pairs, so 2*current number of points
+        theta_eval_list_pair(strat_theta_pair, OA_dual_inv, h1, h2, 2*current);
+        for (int i = 0; i < current; i++) {
+            orders[i]--;
+        }
+        current--;
+        step++;
+    }
+
+    // Step Three: Splitting
+    success &= splitting_isom_matrix(&isom_matrix, OA, verify);
+    splitting_apply_isomorphism_single(OA, OA, &isom_matrix);
+
+    if (randomize) {
+        splitting_rand_matrix(&rand_matrix);
+        splitting_apply_isomorphism_single(OA, OA, &rand_matrix);
+    }
+
+    success &= splitting_theta_to_product(res_A_34, OA, verify);
+    return success;
 }
 
 bool theta_isogeny_chain(
@@ -399,21 +519,6 @@ bool theta_isogeny_chain(
     }
 
     return ret;
-}
-
-bool theta_isogeny_chain_verif(
-    theta_couple_curve_t* res_E34, 
-    theta_couple_curve_t* E12, 
-    theta_kernel_couple_points_t* ker,
-    const int n
-)
-{
-    theta_couple_point_t pts[0], res_pts[0];
-    int num_pts = 0;
-    bool randomize = false, verify = true;
-    return theta_isogeny_chain(
-        res_E34, res_pts, E12, ker, pts, n, num_pts, randomize, verify
-    );
 }
 
 // ====================================================================

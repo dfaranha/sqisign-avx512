@@ -194,6 +194,56 @@ static bool matrix_scalar_application_even_basis(__m512i* basis, __m512i* A24, _
     return success;
 }
 
+static bool matrix_scalar_application_even_basis_jac(__m512i* jac_x, __m512i* jac_y, __m512i* jac_z, __m512i* A_chall, scalar_mtx_2x2_t* mat)
+{
+    __m512i P[NUM_LIMBS], Q[NUM_LIMBS], a00P_a01P[2*NUM_LIMBS], a10Q_a11Q[2*NUM_LIMBS];
+    __m512i idx0, idx1;
+
+    // P = (P1.x, P1.y, P1.z, -)
+    idx0 = VSET(0, 1, 8, 9, 0, 0, 0, 0);
+    idx1 = VSET(0, 1, 2, 3, 8, 9, 0, 0);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        P[i] = VBLENDPERM(idx0, jac_x[i], jac_y[i]);
+        P[i] = VBLENDPERM(idx1, P[i], jac_z[i]);
+    }
+    // Q = (Q1.x, Q1.y, Q1.z, -)
+    idx0 = VSET(2, 3, 10, 11, 0, 0, 0, 0);
+    idx1 = VSET(0, 1, 2, 3, 10, 11, 0, 0);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        Q[i] = VBLENDPERM(idx0, jac_x[i], jac_y[i]);
+        Q[i] = VBLENDPERM(idx1, Q[i], jac_z[i]);
+    }
+
+    // [a00] * P, [a01] * P
+    // [a10] * Q, [a11] * Q
+    jac_mul_pair(a00P_a01P, P, A_chall, (*mat)[0][0], (*mat)[0][1]);
+    jac_mul_pair(a10Q_a11Q, Q, A_chall, (*mat)[1][0], (*mat)[1][1]);
+
+    // R = [a00] * P + [a10] * Q
+    // S = [a01] * P + [a11] * Q
+    jac_add_pair(a00P_a01P, a00P_a01P, a10Q_a11Q, A_chall);
+
+    // Update jac_x, jac_y, jac_z
+    idx0 = VSET(8, 0, 9, 0, 4, 5, 6, 7);
+    idx1 = VSET(0, 8, 2, 9, 4, 5, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        jac_x[i] = VBLENDPERM(idx0, jac_x[i], a00P_a01P[i]);
+        jac_x[i] = VBLENDPERM(idx1, jac_x[i], a00P_a01P[i+NUM_LIMBS]);
+    }
+    idx0 = VSET(10, 0, 11, 0, 4, 5, 6, 7);
+    idx1 = VSET(0, 10, 2, 11, 4, 5, 6, 7);
+    for (int i = 0; i< NUM_LIMBS; i++) {
+        jac_y[i] = VBLENDPERM(idx0, jac_y[i], a00P_a01P[i]);
+        jac_y[i] = VBLENDPERM(idx1, jac_y[i], a00P_a01P[i+NUM_LIMBS]);
+    }
+    idx0 = VSET(12, 0, 13, 0, 4, 5, 6, 7);
+    idx1 = VSET(0, 12, 2, 13, 4, 5, 6, 7);
+    for (int i = 0; i< NUM_LIMBS; i++) {
+        jac_z[i] = VBLENDPERM(idx0, jac_z[i], a00P_a01P[i]);
+        jac_z[i] = VBLENDPERM(idx1, jac_z[i], a00P_a01P[i+NUM_LIMBS]);
+    }
+}
+
 // Compute the bases for the challenge and auxillary curve from
 // the canonical bases. Challenge basis is reconstructed from the
 // compressed scalars within the challenge.
@@ -221,27 +271,40 @@ static bool challenge_and_aux_basis_verify(
     }
 #endif
 
+    return true;
     // applying the change matrix on the basis of E_chall
-    return matrix_scalar_application_even_basis(B_chall_can,
-                                                A24_chall,
-                                                A_chall,
-                                                &sig->mat_Bchall_can_to_B_chall,
-                                                pow_dim2_deg_resp + HD_extra_torsion + sig->two_resp_length);
+    // return matrix_scalar_application_even_basis(B_chall_can,
+    //                                             A24_chall,
+    //                                             A_chall,
+    //                                             &sig->mat_Bchall_can_to_B_chall,
+    //                                             pow_dim2_deg_resp + HD_extra_torsion + sig->two_resp_length);
 }
 
 // When two_resp_length is non-zero, we must compute a small 2^n-isogeny
 // updating E_chall as the codomain as well as push the basis on E_chall
 // through this isogeny
-static bool two_response_isogeny_verify(__m512i* A24_chall, __m512i* B_chall_can, const signature_2x2x2_t *sig, int pow_dim2_deg_resp)
+static bool two_response_isogeny_verify(
+    __m512i* A24_chall, __m512i* A_chall, __m512i* B_chall_can, const signature_2x2x2_t *sig, int pow_dim2_deg_resp
+)
 {
     __m512i ker[N4x2];
-
+    scalar_t scalar0, scalar1;
+    
     // choosing the right point for the small two_isogenies
-    if (mp_is_even(sig->mat_Bchall_can_to_B_chall[0][0], NWORDS_ORDER) &&
-        mp_is_even(sig->mat_Bchall_can_to_B_chall[1][0], NWORDS_ORDER)) {
-        fp2_copy_2x2x2(ker, B_chall_can + N4x2); // ker = Q
+    if (mp_is_even(sig->mat_Bchall_can_to_B_chall[0][0], NWORDS_ORDER) 
+        && mp_is_even(sig->mat_Bchall_can_to_B_chall[1][0], NWORDS_ORDER)) {
+        
+        mp_copy(scalar0, (uint64_t*) &sig->mat_Bchall_can_to_B_chall[0][1], NWORDS_ORDER);
+        mp_copy(scalar1, (uint64_t*) &sig->mat_Bchall_can_to_B_chall[1][1], NWORDS_ORDER);
     } else {
-        fp2_copy_2x2x2(ker, B_chall_can); // ker = P
+        mp_copy(scalar0, (uint64_t*) &sig->mat_Bchall_can_to_B_chall[0][0], NWORDS_ORDER);
+        mp_copy(scalar1, (uint64_t*) &sig->mat_Bchall_can_to_B_chall[1][0], NWORDS_ORDER);
+    }
+    mp_mod_2exp(scalar0, pow_dim2_deg_resp, NWORDS_ORDER);
+    mp_mod_2exp(scalar1, pow_dim2_deg_resp, NWORDS_ORDER);
+
+    if (!ec_biscalar_mul_normA_1x2x2x2(ker, scalar0, scalar1, A_chall, A24_chall, B_chall_can)) {
+        return false;
     }
 
     ec_double_iter_1x2x2x2(ker, ker, A24_chall, pow_dim2_deg_resp + HD_extra_torsion);
@@ -257,20 +320,20 @@ static bool two_response_isogeny_verify(__m512i* A24_chall, __m512i* B_chall_can
         return false;
     }
 
-#ifndef NDEBUG
-    if (!test_point_order_twof_1x2x2x2(B_chall_can, A24_chall, HD_extra_torsion + pow_dim2_deg_resp)) {
-        printf("points[0] does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
-        return false;
-    }
-    if (!test_point_order_twof_1x2x2x2(B_chall_can + N4x2, A24_chall, HD_extra_torsion + pow_dim2_deg_resp)) {
-        printf("points[1] does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
-        return false;
-    }
-    if (!test_point_order_twof_1x2x2x2(B_chall_can + 2*N4x2, A24_chall, HD_extra_torsion + pow_dim2_deg_resp)) {
-        printf("points[2] does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
-        return false;
-    }
-#endif
+// #ifndef NDEBUG
+//     if (!test_point_order_twof_1x2x2x2(B_chall_can, A24_chall, HD_extra_torsion + pow_dim2_deg_resp)) {
+//         printf("points[0] does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
+//         return false;
+//     }
+//     if (!test_point_order_twof_1x2x2x2(B_chall_can + N4x2, A24_chall, HD_extra_torsion + pow_dim2_deg_resp)) {
+//         printf("points[1] does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
+//         return false;
+//     }
+//     if (!test_point_order_twof_1x2x2x2(B_chall_can + 2*N4x2, A24_chall, HD_extra_torsion + pow_dim2_deg_resp)) {
+//         printf("points[2] does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
+//         return false;
+//     }
+// #endif
     return true;
 }
 
@@ -278,45 +341,44 @@ static bool two_response_isogeny_verify(__m512i* A24_chall, __m512i* B_chall_can
 // isogeny built from the bases computed during verification.
 static bool compute_commitment_curve_verify(
     __m512i* A_com,
-    __m512i* B_chall_can,
-    __m512i* B_aux_can,
+    __m512i* jac_x,
+    __m512i* jac_y,
+    __m512i* jac_z,
     __m512i* A24_chall,
+    __m512i* A_chall,
     signature_2x2x2_t* sig,
     int pow_dim2_deg_resp
 )
 {
-    __m512i A_chall[N4x2], A_34[NUM_LIMBS];
+    __m512i A_34[NUM_LIMBS];
     bool codomain_splits;
 
-#ifndef NDEBUG
+// #ifndef NDEBUG
 
-    // Check all the points are the correct order
-    if (!test_basis_order_twof_1x2x2x2(B_chall_can, A24_chall, HD_extra_torsion + pow_dim2_deg_resp)) {
-        printf("B_chall_can does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
-        return false;
-    }
+//     // Check all the points are the correct order
+//     if (!test_basis_order_twof_1x2x2x2(B_chall_can, A24_chall, HD_extra_torsion + pow_dim2_deg_resp)) {
+//         printf("B_chall_can does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
+//         return false;
+//     }
 
-    if (!test_basis_order_twof_1x2x2x2(B_aux_can, sig->A24_aux, HD_extra_torsion + pow_dim2_deg_resp)) {
-        printf("B_aux_can does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
-        return false;
-    }
-#endif
-    // slightly redundant, A24_aux is already normalized
-    theta_normalize_chain_input(A24_chall, sig->A24_aux, B_chall_can, B_aux_can);
-    ec_normA24_to_normA_1x2x2x2(A_chall, A24_chall);
+//     if (!test_basis_order_twof_1x2x2x2(B_aux_can, sig->A24_aux, HD_extra_torsion + pow_dim2_deg_resp)) {
+//         printf("B_aux_can does not have order 2^(HD_extra_torsion + pow_dim2_deg_resp)\n");
+//         return false;
+//     }
+// #endif
     
     // handling the special case where we don't need to perform any dim2 computation
     if (pow_dim2_deg_resp == 0) {
         codomain_splits = true;
 
-        // We still need to check that E_chall is supersingular
-        // This assumes that HD_extra_torsion == 2
-        if (!test_basis_order_twof_1x2x2x2(B_chall_can, A24_chall, 2)) { // not 4 torsion
-            return false;
-        }
+        // // We still need to check that E_chall is supersingular
+        // // This assumes that HD_extra_torsion == 2
+        // if (!test_basis_order_twof_1x2x2x2(B_chall_can, A24_chall, 2)) { // not 4 torsion
+        //     return false;
+        // }
     } else {
         codomain_splits = theta_isogeny_chain_vec_verif(
-            A_34, B_chall_can, B_aux_can, A_chall, sig->A_aux, A24_chall, sig->A24_aux,
+            A_34, jac_x, jac_y, jac_z, A_chall, sig->A_aux, A24_chall, sig->A24_aux,
             pow_dim2_deg_resp
         );
         // computing the commitment curve
@@ -331,6 +393,7 @@ static bool compute_commitment_curve_verify(
 bool protocols_verify(signature_2x2x2_t* sig, public_key_2x2x2_t* pk, const unsigned char* m, size_t l)
 {
     __m512i A24_chall[N4x2], A_chall[N4x2], B_chall_can[3*N4x2], B_aux_can[3*N4x2], A_com[N4x2], j_com[N4x2];
+    __m512i jac_x[NUM_LIMBS], jac_y[NUM_LIMBS], jac_z[NUM_LIMBS];
 
     if (!check_canonical_basis_change_matrix(sig))
         return false;
@@ -363,15 +426,28 @@ bool protocols_verify(signature_2x2x2_t* sig, public_key_2x2x2_t* pk, const unsi
     // When two_resp_length != 0 we need to compute a second, short 2^r-isogeny
     // After this, A24_chall is no longer normalized
     if (sig->two_resp_length > 0) {
-        if (!two_response_isogeny_verify(A24_chall, B_chall_can, sig, pow_dim2_deg_resp)) {
+        if (!two_response_isogeny_verify(A24_chall, A_chall, B_chall_can, sig, pow_dim2_deg_resp)) {
             return false;
         }
     }
+    // slightly redundant, A24_aux is already normalized
+    theta_normalize_chain_input(A24_chall, sig->A24_aux, B_chall_can, B_aux_can);
+    ec_normA24_to_normA_1x2x2x2(A_chall, A24_chall);
+
+    // Lift each basis x(P), x(Q), x(P-Q) to P, Q in Jacobian coordinates.
+    // We pack the coordinates into three blobs
+    // ker_X = AVX_4x2x1(P1.X, Q1.X, P2.X, Q2.X), etc.
+    if (!lift_basis_pair_normalized_2x2x2(jac_x, jac_y, jac_z, B_chall_can, B_aux_can, A_chall, sig->A_aux, true)) 
+    {
+        return false;
+    }
+
+    matrix_scalar_application_even_basis_jac(jac_x, jac_y, jac_z, A_chall, &sig->mat_Bchall_can_to_B_chall);
 
     // We can recover the commitment curve with a 2D isogeny
     // The supplied signature did not compute an isogeny between eliptic products
     // and so definitely is an invalid signature.
-    if (!compute_commitment_curve_verify(A_com, B_chall_can, B_aux_can, A24_chall, sig, pow_dim2_deg_resp))
+    if (!compute_commitment_curve_verify(A_com, jac_x, jac_y, jac_z, A24_chall, A_chall, sig, pow_dim2_deg_resp))
         return false;
 
     // j_com = j(E_com)

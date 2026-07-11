@@ -408,4 +408,23 @@ bool lift_basis_pair_normalized_2x2x2(
 bool test_point_order_twof_1x2x2x2(__m512i* P, __m512i* A24, unsigned int f);
 bool test_basis_order_twof_1x2x2x2(__m512i* B, __m512i* A24, unsigned int f);
 
+// =============================== Jacobian arithmetic ====================================================
+
+/**
+ * @param res Output: [m0]*P and [m1]*P as a pair of Jacobian points (X, Y, Z, -) in 8x1x1
+ * @param P The input point in Jacobian coordinates as (X, Y, Z, -) in 4x2x1
+ * @param normA The normalized A-coefficent of the curve as (A, 1) in 2x2x2
+ * @param m0 The first scalar. Must be at most NWORDS64 words.
+ * @param m1 The second scalar. Must be at most NWORDS64 words.
+ */
+void jac_mul_pair(__m512i* res, __m512i* P, __m512i* normA, const digit_t* m0, const digit_t* m1);
+
+/**
+ * @param res Output: P1+Q1 and P2+Q2 as a pair of Jacobian points (X, Y, Z, -) in 8x1x1
+ * @param P1_P2 A pair of points P1 and P2 in Jacobian coordinates as (X, Y, Z, -) in 8x1x1
+ * @param Q1_Q2 A pair of points Q1 and Q2 in Jacobian coordinates as (X, Y, Z, -) in 8x1x1
+ * @param normA The normalized A-coefficent of the curve as (A, 1) in 2x2x2
+ */
+void jac_add_pair(__m512i* res, __m512i* P1_P2, __m512i* Q1_Q2, __m512i* normA);
+
 #endif
