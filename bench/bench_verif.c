@@ -26,10 +26,12 @@
 #define KAT_CRYPTO_FAILURE     -4
 #define KAT_VERIFICATION_ERROR -5
 
-#define N_RUNS 10
+#define N_RUNS 100
 
 static int      FindMarker(FILE *infile, const char *marker);
 static int      ReadHex(FILE *infile, unsigned char *A, int Length, char *str);
+
+extern uint64_t num_chain, num_codomain, num_eval, total_chain, total_codomain, total_eval;
 
 void bench_verif(int iterations) {
 
@@ -52,6 +54,11 @@ void bench_verif(int iterations) {
         printf("Couldn't open <%s> for read\n", fn_rsp);
         return;
     }
+
+#ifdef MICROB
+	num_codomain = num_eval = num_chain = 0;
+	total_codomain = total_eval = total_chain = 0;
+#endif
 
     done = 0;
     do {
@@ -115,8 +122,15 @@ void bench_verif(int iterations) {
 
     fclose(fp_rsp);
 
-    qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
+	qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("sqisign verif", cycles[(N_RUNS/2) -1], tmp);
+
+#ifdef MICROB
+	printf("\nMicrobenchmarks:\n");
+	print_bench_res("gluing codomain", total_codomain/num_codomain, 0);
+	print_bench_res("gluing eval", total_eval/num_eval, 0);
+	print_bench_res("theta chain", total_chain/num_chain, 0);
+#endif
 }
 
 //

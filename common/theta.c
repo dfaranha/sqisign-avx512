@@ -11,7 +11,10 @@
 #include "theta_splitting.h"
 #include "theta_superglue.h"
 #include "utils.h"
+#include "bench.h"
 #include "sqi_test_extras.h"
+
+uint64_t num_chain = 0, num_codomain = 0, num_eval = 0, total_chain = 0, total_codomain = 0, total_eval = 0;
 
 // ====================================================================
 //                 Helper functions for isogeny chains    
@@ -213,7 +216,6 @@ bool theta_isogeny_chain_vec(
     int current = theta_compute_product_doubles(
         A_12, strat_points_x, strat_points_y, strat_points_z, orders, space
     );
-
 #ifdef SUPERGLUE
 	superglue_precomp_t precomp;
 	success &= superglue_codomain(
@@ -383,6 +385,9 @@ bool theta_isogeny_chain_vec_verif(
         A_12, strat_points_x, strat_points_y, strat_points_z, orders, space
     );
 
+#ifdef MICROB
+		uint64_t start = cpucycles();
+#endif
 #ifdef SUPERGLUE
 	superglue_precomp_t precomp;
 	success &= superglue_codomain(
@@ -394,6 +399,11 @@ bool theta_isogeny_chain_vec_verif(
         strat_points_x + current*NUM_LIMBS, strat_points_z + current*NUM_LIMBS,
         verify
     );
+#endif
+#ifdef MICROB
+	uint64_t end = cpucycles();
+	total_codomain += (end - start);
+	num_codomain++;
 #endif
 
     // Package the point we use for translation
@@ -413,6 +423,9 @@ bool theta_isogeny_chain_vec_verif(
     // TODO: Is current = space-1 here? And even if it is not, is it better to use 8*space?
     __m512i strat_theta_pair[space * 2*NUM_LIMBS];
     for (int i = 0; i < current; i++) {
+#ifdef MICROB
+		uint64_t start = cpucycles();
+#endif
 #ifdef SUPERGLUE
 		superglue_eval_pair(
 			strat_theta_pair + i*2*NUM_LIMBS, //8x1x1,
@@ -424,6 +437,11 @@ bool theta_isogeny_chain_vec_verif(
             A_12, strat_points_x + i*NUM_LIMBS, strat_points_y + i*NUM_LIMBS, strat_points_z + i*NUM_LIMBS,
             T8_x, T8_y, T8_z, J, matrix01, matrix23
         );
+#endif
+#ifdef MICROB
+		uint64_t end = cpucycles();
+		total_eval += (end - start);
+		num_eval++;
 #endif
         orders[i]--;
     }

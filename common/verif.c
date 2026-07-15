@@ -14,6 +14,7 @@
 #include "theta.h"
 #include "sqi_test_extras.h"
 #include "utils.h"
+#include "bench.h"
 
 #include "sqi_verif_util.h"
 #include "mp.h"
@@ -21,6 +22,8 @@
 
 #define NBYTES_FP2 8*2*NWORDS64
 #define NBYTES_PK NBYTES_FP2 + 1
+
+extern uint64_t num_chain, num_codomain, num_eval, total_chain, total_codomain, total_eval;
 
 static void decode_digits(digit_t *x, const byte_t *enc, size_t nbytes, size_t ndigits)
 {
@@ -377,10 +380,16 @@ static bool compute_commitment_curve_verify(
         //     return false;
         // }
     } else {
+#ifdef MICROB
+		uint64_t start = cpucycles();
         codomain_splits = theta_isogeny_chain_vec_verif(
             A_34, jac_x, jac_y, jac_z, A_chall, sig->A_aux, A24_chall, sig->A24_aux,
             pow_dim2_deg_resp
         );
+		uint64_t end = cpucycles();
+		num_chain++;
+		total_chain += (end - start);
+#endif
         // computing the commitment curve
         // its always the first one because of our (2^n,2^n)-isogeny formulae
         fp2_4x2x1_to_2x2x2(A_com, A_34, A_34);
