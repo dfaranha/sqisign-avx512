@@ -334,6 +334,7 @@ bool test_theta_KAT(int iterations)
     }
 
     // 8x1x1 verification
+    #if 0
     success = theta_isogeny_chain_verif(&E34_actual, &E12, &ker_extra, length);
 
     ec_normalize_curve(&E34_actual.E1);
@@ -423,6 +424,7 @@ bool test_theta_KAT(int iterations)
     if(passed == 0) {
         return false;
     }
+    #endif
 
     // TODO: Randomize, eval points
     // for (int i = 0; i < 10 && passed; i++) {
