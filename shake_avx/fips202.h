@@ -231,7 +231,7 @@ static inline void shake256_oneblock_32(uint8_t *out, const uint8_t *in) {
 }
 
 // lvl3
-inline void shake256_oneblock_48(uint8_t *out, const uint8_t *in) {
+static inline void shake256_oneblock_48(uint8_t *out, const uint8_t *in) {
     __m512i x[5];
 
     // x[0]: load 5 qwords (40 bytes) of message.
