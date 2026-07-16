@@ -750,7 +750,7 @@ bool gluing_eval_special(
     // Check that the points are of the form (P1, 0) or (0, P2)
     if (verify) {
         __mmask8 nzmask = ~fp2_is_zero_4x2x1(P1_P2);
-        if (nzmask & 0xa != 0xa) { // P1.z != 0 and P2.z != 0
+        if ((nzmask & 0xa) != 0xa) { // P1.z != 0 and P2.z != 0
             return false;
         }
     }
@@ -760,7 +760,7 @@ bool gluing_eval_special(
 
     // check that w = 0
     if (verify) {
-        if (fp2_is_zero_4x2x1(res) & 0x8 != 0x8) { return false; }
+        if ((fp2_is_zero_4x2x1(res) & 0x8) != 0x8) { return false; }
     }
     fp2_mul_4x2x1(res, res, OA_inv);
     theta_had_single(res, res);
@@ -790,11 +790,11 @@ bool gluing_eval_special_pair(
     // check that pair of points are of the form (P1, 0) or (0, P2)
     if (verify) {
         __mmask8 nzmask = ~fp2_is_zero_4x2x1(P1_P2);
-        if (nzmask & 0xa != 0xa) { // P1.z != 0 and P2.z != 0
+        if ((nzmask & 0xa) != 0xa) { // P1.z != 0 and P2.z != 0
             return false;
         }
         nzmask = ~fp2_is_zero_4x2x1(Q1_Q2);
-        if (nzmask & 0xa != 0xa) { // Q1.z != 0 and Q2.z != 0
+        if ((nzmask & 0xa) != 0xa) { // Q1.z != 0 and Q2.z != 0
             return false;
         }
     }
@@ -804,7 +804,7 @@ bool gluing_eval_special_pair(
 
     // check that w1 = 0 and w2 = 0:
     if (verify) {
-        if (fp2_is_zero_8x1x1(res) & 0xc0 != 0xc0) { return false; }
+        if ((fp2_is_zero_8x1x1(res) & 0xc0) != 0xc0) { return false; }
     }
     theta_mul_pair(res, res, OA_inv);
     theta_had_pair(res, res);
