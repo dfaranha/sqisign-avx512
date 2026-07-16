@@ -79,11 +79,37 @@ def get_limb_params(pbits, e, c):
     num_limbs = ceil(pbits/51)
     num_words64 = ceil(pbits/64)
 
-    limb_len = ceil(pbits/num_limbs)
-    last_limb_len = pbits - limb_len*(num_limbs-1)
+    assert num_limbs >= 4
 
-    # For simplicity we require that all but the last limb of c is limb_mask
-    assert c == 1 or (c.bit_length() + (e % limb_len) <= last_limb_len)
+    # Selecting limb length to have the fastest multiplication strategy
+    min_len = ceil(pbits/num_limbs)
+    max_len = min(51, e // (num_limbs-1)) # For simplicity we require that all but the last limb of c is limb_mask
+    assert min_len <= max_len
+
+    l = [ell for ell in range(min_len, max_len+1)]
+    last = lambda ell: pbits - (num_limbs-1)*ell
+
+    # First priority: last_limb_len < 50
+    ll = [ell for ell in l if last(ell) < 50]
+    l = ll if len(ll) > 0 else l
+
+    # Second priority: limb_len < 51
+    ll = [ell for ell in l if ell < 51]
+    l = ll if len(ll) > 0 else l
+
+    # Third priority gap >= 2, if not >= 1, if not 0.
+    ll2 = [ell for ell in l if last(ell) <= ell - 2]
+    ll1 = [ell for ell in l if last(ell) == ell - 1]
+    if len(ll2) > 0:
+        l = ll2
+    elif len(ll1) > 0:
+        l = ll1
+
+    assert len(l) > 0
+    limb_len = l[0]
+    last_limb_len = last(limb_len)
+
+    # TODO NOW Fix strategy and code needs new add with R_ext or cond add strategy!
 
     return num_limbs, limb_len, last_limb_len, num_words64
 
@@ -112,7 +138,7 @@ def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
         sqr_4x2 = Fp2Mode.lazy
         R_ext = True
         mod_2p = True
-    elif limb_len == 50 and last_limb_len == 50: # 8x1 sqr needs mod p
+    elif limb_len == 50 and last_limb_len == 50: # 8x1 mul and sqr needs mod p
         mul_8x1 = Fp2Mode.lazy
         sqr_8x1 = Fp2Mode.lazy_carry
         sqr_4x2 = Fp2Mode.lazy
