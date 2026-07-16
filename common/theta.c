@@ -14,7 +14,8 @@
 #include "bench.h"
 #include "sqi_test_extras.h"
 
-uint64_t num_chain = 0, num_codomain = 0, num_eval = 0, total_chain = 0, total_codomain = 0, total_eval = 0;
+uint64_t num_chain = 0, num_codomain = 0, num_eval = 0, num_dbls = 0, num_split = 0;
+uint64_t total_chain = 0, total_codomain = 0, total_eval = 0, total_dbls = 0, total_split = 0;
 
 // ====================================================================
 //                 Helper functions for isogeny chains    
@@ -446,7 +447,9 @@ bool theta_isogeny_chain_vec_verif(
         orders[i]--;
     }
     current--;
-
+#ifdef MICROB
+	start = cpucycles();
+#endif
     // Step Two: Compute the rest of the chain
     int step = 0;
     bool codom_verify = verify;
@@ -490,7 +493,12 @@ bool theta_isogeny_chain_vec_verif(
         current--;
         step++;
     }
-
+#ifdef MICROB
+	end = cpucycles();
+	total_dbls += (end - start);
+	num_dbls++;
+	start = cpucycles();
+#endif
     // Step Three: Splitting
     success &= splitting_isom_matrix(&isom_matrix, OA, verify);
     splitting_apply_isomorphism_single(OA, OA, &isom_matrix);
@@ -501,6 +509,11 @@ bool theta_isogeny_chain_vec_verif(
     }
 
     success &= splitting_theta_to_product(res_A_34, OA, verify);
+#ifdef MICROB
+	end = cpucycles();
+	total_split += (end - start);
+	num_split++;
+#endif
     return success;
 }
 

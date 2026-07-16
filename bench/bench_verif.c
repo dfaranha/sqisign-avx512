@@ -31,7 +31,8 @@
 static int      FindMarker(FILE *infile, const char *marker);
 static int      ReadHex(FILE *infile, unsigned char *A, int Length, char *str);
 
-extern uint64_t num_chain, num_codomain, num_eval, total_chain, total_codomain, total_eval;
+extern uint64_t num_chain, num_codomain, num_eval, num_dbls, num_split;
+extern uint64_t total_chain, total_codomain, total_eval, total_dbls, total_split;
 
 void bench_verif(int iterations) {
 
@@ -129,6 +130,8 @@ void bench_verif(int iterations) {
 	printf("\nMicrobenchmarks:\n");
 	print_bench_res("gluing codomain", total_codomain/num_codomain, 0);
 	print_bench_res("gluing eval", total_eval/num_eval, 0);
+	print_bench_res("doublings", total_dbls/num_dbls, 0);
+	print_bench_res("splitting", total_split/num_split, 0);
 	print_bench_res("theta chain", total_chain/num_chain, 0);
 #endif
 }
