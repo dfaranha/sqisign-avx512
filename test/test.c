@@ -36,23 +36,23 @@ int main()
     passed = test_fp(n_tests);
     if(!passed) { return 0; }
 
-    // passed = test_fp2(n_tests);
-    // if(!passed) { return 0; }
+    passed = test_fp2(n_tests);
+    if(!passed) { return 0; }
 
-    // passed = test_fp_unvec(n_tests);
-    // if (!passed) { return 0; }
+    passed = test_fp_unvec(n_tests);
+    if (!passed) { return 0; }
 
-    // passed = test_ec(n_tests);
-    // if (!passed) { return 0; }
+    passed = test_ec(n_tests);
+    if (!passed) { return 0; }
 
     // passed = test_theta_gluing(n_tests);
     // if (!passed) { return 0; }
 
-    // passed = test_theta_middle(n_tests);
-    // if (!passed) { return 0; }
+    //passed = test_theta_middle(n_tests);
+    //if (!passed) { return 0; }
 
-    // passed = test_theta_splitting(n_tests);
-    // if (!passed) { return 0; }
+    //passed = test_theta_splitting(n_tests);
+    //if (!passed) { return 0; }
 
     // passed = test_theta_KAT(n_tests);
     // if (!passed) { return 0; }

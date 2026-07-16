@@ -1421,7 +1421,7 @@ bool test_fp2(int iterations)
         fp2_conjugate_4x2x1(c, a);
         fp2_add_4x2x1(c, c, a);
         fp2_add_4x2x1(d, a, a);
-        if (fp_is_equal_8x1(c, d) & 0x55 != 0x55 || fp_is_zero_8x1(c) & 0xaa != 0xaa)
+        if ((fp_is_equal_8x1(c, d) & 0x55) != 0x55 || (fp_is_zero_8x1(c) & 0xaa) != 0xaa)
         {
             passed = 0;
             printf("a + conjugate(a) != 2*re(a)\n");
@@ -1931,7 +1931,7 @@ bool test_fp2(int iterations)
         fp2_conjugate_2x2x2(c, a);
         fp2_add_2x2x2(c, c, a);
         fp2_add_2x2x2(d, a, a);
-        if (fp_is_equal_4x2(c, d) & 0x5 != 0x5 || fp_is_zero_4x2(c) & 0xa != 0xa)
+        if ((fp_is_equal_4x2(c, d) & 0x5) != 0x5 || (fp_is_zero_4x2(c) & 0xa) != 0xa)
         {
             passed = 0;
             printf("a + conjugate(a) != 2*re(a)\n");
@@ -2437,7 +2437,7 @@ bool test_fp2(int iterations)
         fp2_conjugate_2x4x1(c, a);
         fp2_add_2x4x1(c, c, a);
         fp2_add_2x4x1(d, a, a);
-        if (fp_is_equal_8x1(c, d) & 0x33 != 0x33 || fp_is_zero_8x1(c) & 0xcc != 0xcc)
+        if ((fp_is_equal_8x1(c, d) & 0x33) != 0x33 || (fp_is_zero_8x1(c) & 0xcc) != 0xcc)
         {
             passed = 0;
             printf("a + conjugate(a) != 2*re(a)\n");
