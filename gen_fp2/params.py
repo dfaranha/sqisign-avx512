@@ -57,6 +57,12 @@ class Strat:
     gen_addchain: bool
     R_ext: bool
     mod_2p: bool
+    mul8_faster_nonneg: bool
+    carry_prop_karat: bool
+    reduce_everything: bool
+    sqr8_use_add_p_sub: bool
+    sqr8_faster_add_p_sub: bool
+    sqr4_faster_add_p_sub: bool
     mul_8x1: Fp2Mode
     sqr_8x1: Fp2Mode
     sqr_4x2: Fp2Mode
@@ -104,7 +110,7 @@ def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
         mul_8x1 = Fp2Mode.lazy
         sqr_8x1 = Fp2Mode.lazy
         sqr_4x2 = Fp2Mode.lazy
-        R_ext = True
+        R_ext = False
         mod_2p = True
     elif limb_len == 50 and last_limb_len <= 49: # 8x1 sqr needs carry when limb_ln = 50
         mul_8x1 = Fp2Mode.lazy
@@ -151,8 +157,124 @@ def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
         sqr_8x1 = sqr_8x1,
         sqr_4x2 = sqr_4x2,
         R_ext = R_ext,
-        mod_2p = mod_2p
+        mod_2p = mod_2p,
+        carry_prop_karat = False,
+        reduce_everything = False,
+        mul8_faster_nonneg = False,
+        sqr8_use_add_p_sub = False,
+        sqr8_faster_add_p_sub = False,
+        sqr4_faster_add_p_sub = False
     )
+
+def get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain):
+
+    # About to implement new strategies, adding this to swap out one by one and make debugging easier !!!!
+    
+    if limb_len <= 49:
+        mul_8x1 = Fp2Mode.lazy
+        sqr_8x1 = Fp2Mode.lazy
+        sqr_4x2 = Fp2Mode.lazy
+        R_ext = False
+        mod_2p = True
+    elif limb_len == 50 and last_limb_len <= 49: # 8x1 sqr needs carry when limb_ln = 50
+        mul_8x1 = Fp2Mode.lazy
+        sqr_8x1 = Fp2Mode.lazy_carry
+        sqr_4x2 = Fp2Mode.lazy
+        R_ext = True
+        mod_2p = True
+    elif limb_len == 50 and last_limb_len == 50: # 8x1 sqr needs mod p
+        mul_8x1 = Fp2Mode.lazy
+        sqr_8x1 = Fp2Mode.lazy_carry
+        sqr_4x2 = Fp2Mode.lazy
+        R_ext = True
+        mod_2p = False
+    elif last_limb_len <= 48: # 8x1 mul & 4x2 sqr requires carry
+        mul_8x1 = Fp2Mode.lazy_carry
+        sqr_8x1 = Fp2Mode.lazy_carry
+        sqr_4x2 = Fp2Mode.lazy_carry
+        R_ext = False
+        #R_ext = num_limbs > 5 # Experimental data shows this is efficiency threshold
+        mod_2p = True
+    elif last_limb_len == 49: # 8x1 squaring must switch to mod p
+        mul_8x1 = Fp2Mode.lazy_carry
+        sqr_8x1 = Fp2Mode.lazy_carry
+        sqr_4x2 = Fp2Mode.lazy_carry
+        R_ext = False
+        mod_2p = False
+    elif last_limb_len == 50: # 8x1 squaring must reduce sub, need R_ext to keep square within [0, pR)
+        mul_8x1 = Fp2Mode.lazy_carry
+        sqr_8x1 = Fp2Mode.reduce
+        sqr_4x2 = Fp2Mode.lazy_carry
+        R_ext = True
+        mod_2p = False
+    else: #8x1x1 lazy mult & squaring doesn't work
+        mul_8x1 = Fp2Mode.reduce_everything
+        sqr_8x1 = Fp2Mode.reduce_everything
+        sqr_4x2 = Fp2Mode.lazy_carry
+        R_ext = True
+        mod_2p = False
+
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    # main strats to optimize 8x1x1 mul
+    if limb_len <= 50:
+        carry_prop_karat = False
+        reduce_everything = False
+        if last_limb_len <= limb_len-2:
+            mod_2p = True
+            R_ext = True
+            mul8_faster_nonneg = True
+        elif last_limb_len == limb_len-1 or limb_len < 50:
+            mod_2p = True
+            R_ext = True
+            mul8_faster_nonneg = False
+        else:
+            mod_2p = False
+            R_ext = True
+            mul8_faster_nonneg = False
+    else: # limb_len = 51
+        carry_prop_karat = True # Also in fp2 sqr
+        if last_limb_len <= 49:
+            mod_2p = True
+            R_ext = True
+            mul8_faster_nonneg = True
+            reduce_everything = False
+        elif last_limb_len == 50:
+            mod_2p = False
+            R_ext = False
+            mul8_faster_nonneg = False
+            reduce_everything = False
+        else: #last_limb_len = 51
+            mod_2p = False
+            R_ext = False
+            mul8_faster_nonneg = False
+            reduce_everything = True
+
+    # additional strat for squaring
+    sqr8_use_add_p_sub = R_ext
+    if mod_2p:
+        sqr8_faster_add_p_sub = (limb_len <= 49)
+        sqr4_faster_add_p_sub = (limb_len <= 50)
+    else:
+        sqr8_faster_add_p_sub = (limb_len <= 50)
+        sqr4_faster_add_p_sub = True
+
+    return Strat(
+        gen_addchain = gen_addchain,
+        mul_8x1 = mul_8x1,
+        sqr_8x1 = sqr_8x1,
+        sqr_4x2 = sqr_4x2,
+        R_ext = R_ext,
+        mod_2p = mod_2p,
+        carry_prop_karat = carry_prop_karat,
+        reduce_everything = reduce_everything,
+        mul8_faster_nonneg = mul8_faster_nonneg,
+        sqr8_use_add_p_sub = sqr8_faster_add_p_sub,
+        sqr8_faster_add_p_sub = sqr8_faster_add_p_sub,
+        sqr4_faster_add_p_sub = sqr4_faster_add_p_sub
+    )
+
+
 
 def get_mont_const(p, num_limbs, limb_len, strat):
     num_limbs_R = num_limbs+1 if strat.R_ext else num_limbs
