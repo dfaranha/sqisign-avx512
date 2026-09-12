@@ -304,9 +304,9 @@ def comp_params_and_strat(e, c, num_kat, gen_addchain):
     p, pbits = get_p(e, c)
     num_limbs, limb_len, last_limb_len, num_words64 = get_limb_params(pbits, e, c)
     n42, n24, rem42, rem24 = get_len_42_24(num_limbs)
-    strat = get_strat(num_limbs, limb_len, last_limb_len, gen_addchain)
+    strat = get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain)
     num_limbs_R, R, R2 = get_mont_const(p, num_limbs, limb_len, strat)
-
+    
     pp = FpParams(
         e = e, 
         c = c, 
