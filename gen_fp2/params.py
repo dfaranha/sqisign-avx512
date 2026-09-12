@@ -110,7 +110,7 @@ def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
         mul_8x1 = Fp2Mode.lazy
         sqr_8x1 = Fp2Mode.lazy
         sqr_4x2 = Fp2Mode.lazy
-        R_ext = False
+        R_ext = True
         mod_2p = True
     elif limb_len == 50 and last_limb_len <= 49: # 8x1 sqr needs carry when limb_ln = 50
         mul_8x1 = Fp2Mode.lazy
@@ -174,7 +174,7 @@ def get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain):
         mul_8x1 = Fp2Mode.lazy
         sqr_8x1 = Fp2Mode.lazy
         sqr_4x2 = Fp2Mode.lazy
-        R_ext = False
+        R_ext = True
         mod_2p = True
     elif limb_len == 50 and last_limb_len <= 49: # 8x1 sqr needs carry when limb_ln = 50
         mul_8x1 = Fp2Mode.lazy
