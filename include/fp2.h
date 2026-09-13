@@ -110,7 +110,7 @@ void fp2_select_8x1x1(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s);
 static inline void fp2_add_8x1x1(__m512i* res, __m512i* a, __m512i* b)
 {
     fp_add_8x1(res, a, b);
-    fp_add_8x1(res+10, a+10, b+10);
+    fp_add_8x1(res+5, a+5, b+5);
 }
 
 /**
@@ -119,7 +119,7 @@ static inline void fp2_add_8x1x1(__m512i* res, __m512i* a, __m512i* b)
 static inline void fp2_sub_8x1x1(__m512i* res, __m512i* a, __m512i* b)
 {
     fp_sub_8x1(res, a, b);
-    fp_sub_8x1(res+10, a+10, b+10);
+    fp_sub_8x1(res+5, a+5, b+5);
 }
 
 /**
@@ -128,7 +128,7 @@ static inline void fp2_sub_8x1x1(__m512i* res, __m512i* a, __m512i* b)
 static inline void fp2_neg_8x1x1(__m512i* res, __m512i* a)
 {
     fp_neg_8x1(res, a);
-    fp_neg_8x1(res+10, a+10);
+    fp_neg_8x1(res+5, a+5);
 }
 
 /**
@@ -140,7 +140,7 @@ static inline void fp2_mixaddsub_8x1x1(__m512i* res, __m512i* a, __m512i* b,
     const __mmask8 add_mask_re, const __mmask8 add_mask_im)
 {
     fp_mixaddsub_8x1(res, a, b, add_mask_re);
-    fp_mixaddsub_8x1(res+10, a+10, b+10, add_mask_im);
+    fp_mixaddsub_8x1(res+5, a+5, b+5, add_mask_im);
 }
 
 /**
@@ -148,16 +148,16 @@ static inline void fp2_mixaddsub_8x1x1(__m512i* res, __m512i* a, __m512i* b,
  */
 static inline void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i tt1[20], tt2[20], tt3[20];
+    __m512i tt1[10], tt2[10], tt3[10];
     
-    mp_add_8x1(tt3, a, a + 10);
-    mp_add_8x1(tt3 + 10, b, b + 10);
+    mp_add_8x1(tt3, a, a + 5);
+    mp_add_8x1(tt3 + 5, b, b + 5);
     mp_mul_8x1(tt1, a, b);
-    mp_mul_8x1(tt2, a + 10, b + 10);
-    mp_mul_8x1(tt3, tt3, tt3 + 10);
+    mp_mul_8x1(tt2, a + 5, b + 5);
+    mp_mul_8x1(tt3, tt3, tt3 + 5);
     mp_dblsubx2_8x1(tt3, tt1, tt2);
     mp_subx2_8x1(tt1, tt2);
-    rdc_8x1(res + 10, tt3);
+    rdc_8x1(res + 5, tt3);
     rdc_8x1(res, tt1);
 }
 
@@ -166,13 +166,13 @@ static inline void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)
  */
 static inline void fp2_sqr_8x1x1(__m512i* res, __m512i* a)
 {
-    __m512i s1[10], s2[10], s3[10];
+    __m512i s1[5], s2[5], s3[5];
     
-    mp_add_8x1(s1, a, a + 10);
-    mp_add_p_sub_8x1(s2, a, a + 10);
+    mp_add_8x1(s1, a, a + 5);
+    mp_add_p_sub_8x1(s2, a, a + 5);
     mp_add_8x1(s3, a, a);
     fp_mul_8x1(res, s1, s2);
-    fp_mul_8x1(res + 10, s3, a + 10);
+    fp_mul_8x1(res + 5, s3, a + 5);
 }
 
 /**
@@ -265,7 +265,7 @@ void fp2_select_4x1x2(__m512i* res, __m512i* a0, __m512i* a1, const __mmask8 s);
 static inline void fp2_add_4x1x2(__m512i* res, __m512i* a, __m512i* b)
 {
     fp_add_4x2(res, a, b);
-    fp_add_4x2(res+5, a+5, b+5);
+    fp_add_4x2(res+3, a+3, b+3);
 }
 
 /**
@@ -274,7 +274,7 @@ static inline void fp2_add_4x1x2(__m512i* res, __m512i* a, __m512i* b)
 static inline void fp2_sub_4x1x2(__m512i* res, __m512i* a, __m512i* b)
 {
     fp_sub_4x2(res, a, b);
-    fp_sub_4x2(res+5, a+5, b+5);
+    fp_sub_4x2(res+3, a+3, b+3);
 }
 
 /**
@@ -283,7 +283,7 @@ static inline void fp2_sub_4x1x2(__m512i* res, __m512i* a, __m512i* b)
 static inline void fp2_neg_4x1x2(__m512i* res, __m512i* a)
 {
     fp_neg_4x2(res, a);
-    fp_neg_4x2(res+5, a+5);
+    fp_neg_4x2(res+3, a+3);
 }
 
 /**
@@ -295,7 +295,7 @@ static inline void fp2_mixaddsub_4x1x2(__m512i* res, __m512i* a, __m512i* b,
     const __mmask8 add_mask_re, const __mmask8 add_mask_im)
 {
     fp_mixaddsub_4x2(res, a, b, add_mask_re);
-    fp_mixaddsub_4x2(res+5, a+5, b+5, add_mask_im);
+    fp_mixaddsub_4x2(res+3, a+3, b+3, add_mask_im);
 }
 
 /**
@@ -303,16 +303,16 @@ static inline void fp2_mixaddsub_4x1x2(__m512i* res, __m512i* a, __m512i* b,
  */
 static inline void fp2_mul_4x1x2(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i t1[16], t2[16], t3[16];
+    __m512i t1[9], t2[9], t3[9];
     
-    mp_add_4x2(t3, a, a + 5);
-    mp_add_4x2(t3 + 5, b, b + 5);
+    mp_add_4x2(t3, a, a + 3);
+    mp_add_4x2(t3 + 3, b, b + 3);
     mp_mul_4x2(t1, a, b);
-    mp_mul_4x2(t2, a+5, b+5);
-    mp_mul_4x2(t3, t3, t3+5);
+    mp_mul_4x2(t2, a+3, b+3);
+    mp_mul_4x2(t3, t3, t3+3);
     mp_dblsubx2_4x2(t3, t1, t2);
     mp_subx2_4x2(t1, t2);
-    rdc_4x2(res+5, t3);
+    rdc_4x2(res+3, t3);
     rdc_4x2(res, t1);
 }
 
@@ -321,12 +321,12 @@ static inline void fp2_mul_4x1x2(__m512i* res, __m512i* a, __m512i* b)
  */
 static inline void fp2_sqr_4x1x2(__m512i* res, __m512i* a)
 {
-    __m512i s1[5], s2[5], s3[5];
+    __m512i s1[3], s2[3], s3[3];
     
-    mp_add_4x2(s1, a, a + 5);
-    mp_add_p_sub_4x2(s2, a, a + 5);
+    mp_add_4x2(s1, a, a + 3);
+    mp_add_p_sub_4x2(s2, a, a + 3);
     mp_add_4x2(s3, a, a);
-    fp_mul_4x2(res + 5, s3, a + 5);
+    fp_mul_4x2(res + 3, s3, a + 3);
     fp_mul_4x2(res, s1, s2);
 }
 
@@ -452,14 +452,14 @@ static inline void fp2_mixaddsub_4x2x1(__m512i* res, __m512i* a, __m512i* b, con
  */
 static inline void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i t0[20], t1[20];
-    for (__mmask8 i = 0; i < 10; i++) {
+    __m512i t0[10], t1[10];
+    for (__mmask8 i = 0; i < 5; i++) {
         t0[i] = VSHUFFLE(a[i], 0x44); // a0, a0
         t1[i] = VSHUFFLE(a[i], 0xee); // a1, a1
-        t1[i + 10] = VSHUFFLE(b[i], 0x4e); // b0, b1
+        t1[i + 5] = VSHUFFLE(b[i], 0x4e); // b0, b1
     }
     mp_mul_8x1(t0, t0, b);
-    mp_mul_8x1(t1, t1, t1 + 10);
+    mp_mul_8x1(t1, t1, t1 + 5);
     mp_mixaddsubx2_8x1(t0, t0, t1, 0xaa);
     rdc_8x1(res, t0);
 }
@@ -469,9 +469,9 @@ static inline void fp2_mul_4x2x1(__m512i* res, __m512i* a, __m512i* b)
  */
 static inline void fp2_sqr_4x2x1(__m512i* res, __m512i* a)
 {
-    __m512i s1[10], s2[10], s3[10];
+    __m512i s1[5], s2[5], s3[5];
     __mmask16 mask = 0b0011001100110011;
-    for (__mmask8 i = 0; i < 10; i++) {
+    for (__mmask8 i = 0; i < 5; i++) {
         s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0
         s2[i] = VSHUFFLEMASKZ(mask, a[i], 0x0e); // 0, a1
         s3[i] = VSHUFFLE(a[i], 0x4e); // a0, a1
@@ -486,7 +486,7 @@ static inline void fp2_sqr_4x2x1(__m512i* res, __m512i* a)
  */
 static inline void fp2_mulx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* b1, __m512i* a2, __m512i* b2)
 {
-    __m512i t0[20], t1[20];
+    __m512i t0[10], t1[10];
     
     fp2_4x2x1_to_8x1x1(t0, a1, a2);
     fp2_4x2x1_to_8x1x1(t1, b1, b2);
@@ -499,7 +499,7 @@ static inline void fp2_mulx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __
  */
 static inline void fp2_sqrx2_4x2x1(__m512i* res1, __m512i* res2, __m512i* a1, __m512i* a2)
 {
-    __m512i t[20];
+    __m512i t[10];
     
     fp2_4x2x1_to_8x1x1(t, a1, a2);
     fp2_sqr_8x1x1(t, t);
@@ -628,15 +628,15 @@ static inline void fp2_mixaddsub_2x2x2(__m512i* res, __m512i* a, __m512i* b, con
  */
 static inline void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i t0[16], t1[16];
+    __m512i t0[9], t1[9];
     
-    for (__mmask8 i = 0; i < 5; i++) {
+    for (__mmask8 i = 0; i < 3; i++) {
         t0[i] = VPERM256(a[i], 0x44); // a0, a0
         t1[i] = VPERM256(a[i], 0xee); // a1, a1
-        t1[i + 5] = VPERM256(b[i], 0x4e); // b0, b1
+        t1[i + 3] = VPERM256(b[i], 0x4e); // b0, b1
     }
     mp_mul_4x2(t0, t0, b);
-    mp_mul_4x2(t1, t1, t1+5);
+    mp_mul_4x2(t1, t1, t1+3);
     mp_mixaddsubx2_4x2(t0, t0, t1, 0xcc);
     rdc_4x2(res, t0);
 }
@@ -646,14 +646,14 @@ static inline void fp2_mul_2x2x2(__m512i* res, __m512i* a, __m512i* b)
  */
 static inline void fp2_sqr_2x2x2(__m512i* res, __m512i* a)
 {
-    __m512i s1[5], s2[5];
+    __m512i s1[3], s2[3];
     
-    for (__mmask8 i = 0; i < 5; i++) {
+    for (__mmask8 i = 0; i < 3; i++) {
         s1[i] = VPERM256(a[i], 0x44); // a0, a0
         s2[i] = VPERM256(a[i], 0x4e); // a1, a0
     }
     mp_add_4x2(s1, s1, s2);
-    for (__mmask8 i = 0; i < 5; i++) {
+    for (__mmask8 i = 0; i < 3; i++) {
         s2[i] = VPERM256MASKZ(0x33, a[i], 0x4e); // a1, 0
     }
     mp_add_p_sub_4x2(s2, a, s2); // a0 - a1, a1
@@ -782,13 +782,13 @@ static inline void fp2_mixaddsub_2x4x1(__m512i* res, __m512i* a, __m512i* b, con
  */
 static inline void fp2_mul_2x4x1(__m512i* res, __m512i* a, __m512i* b)
 {
-    __m512i s1[10], s2[10];
-    for (__mmask8 i = 0; i < 10; i++) {
+    __m512i s1[5], s2[5];
+    for (__mmask8 i = 0; i < 5; i++) {
         s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0, a1, a1
         s2[i] = VPERM256(b[i], 0x28); // b0, b1, b1, b0
     }
     fp_mul_8x1(s1, s1, s2);
-    for (__mmask8 i = 0; i < 10; i++) {
+    for (__mmask8 i = 0; i < 5; i++) {
         s2[i] = VPERM256MASKZ(0x55, s1[i], 0x32);
         s1[i] = VPERM256MASKZ(0x55, s1[i], 0x10);
     }
@@ -800,13 +800,13 @@ static inline void fp2_mul_2x4x1(__m512i* res, __m512i* a, __m512i* b)
  */
 static inline void fp2_sqr_2x4x1(__m512i* res, __m512i* a)
 {
-    __m512i s1[10], s2[10];
-    for (__mmask8 i = 0; i < 10; i++) {
+    __m512i s1[5], s2[5];
+    for (__mmask8 i = 0; i < 5; i++) {
         s1[i] = VSHUFFLE(a[i], 0x44); // a0, a0, a1, a1
         s2[i] = VPERM256(a[i], 0x28); // a0, a1, a1, a0
     }
     fp_mul_8x1(s1, s1, s2);
-    for (__mmask8 i = 0; i < 10; i++) {
+    for (__mmask8 i = 0; i < 5; i++) {
         s2[i] = VPERM256MASKZ(0x55, s1[i], 0x32);
         s1[i] = VPERM256MASKZ(0x55, s1[i], 0x10);
     }
