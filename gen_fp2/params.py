@@ -52,12 +52,18 @@ class Fp2Mode(Enum):
     reduce = 2
     reduce_everything = 3
 
+class MulNonnegMode(Enum):
+    cond_add = 0        # conditionally add p*2^(N*l), only to be used with R_ext = False
+    add_p_shifted = 1   # add p*2^(Nl)
+    add_2p_shifted = 2  # add 2p*2^(Nl)
+    add_4p_shifted = 3  # add 4p*2^(Nl)
+
 @dataclass
 class Strat:
     gen_addchain: bool
     R_ext: bool
     mod_2p: bool
-    mul_faster_nonneg: bool
+    mul_nonneg: MulNonnegMode
     carry_prop_karat: bool
     reduce_everything: bool
     sqr_use_add_p_sub: bool
@@ -160,7 +166,7 @@ def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
         mod_2p = mod_2p,
         carry_prop_karat = False,
         reduce_everything = False,
-        mul_faster_nonneg = False,
+        mul_nonneg = MulNonnegMode.cond_add,
         sqr_use_add_p_sub = False,
         sqr8_faster_add_p_sub = False,
         sqr4_faster_add_p_sub = False
@@ -223,31 +229,35 @@ def get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain):
         if last_limb_len <= limb_len-2:
             mod_2p = True
             R_ext = True
-            mul_faster_nonneg = True
-        elif last_limb_len == limb_len-1 or limb_len < 50:
+            mul_nonneg = MulNonnegMode.add_p_shifted
+        elif last_limb_len == limb_len-1:
             mod_2p = True
             R_ext = True
-            mul_faster_nonneg = False
+            mul_nonneg = MulNonnegMode.add_2p_shifted
+        elif limb_len < 50:
+            mod_2p = True
+            R_ext = True
+            mul_nonneg = MulNonnegMode.add_4p_shifted
         else:
             mod_2p = False
             R_ext = True
-            mul_faster_nonneg = False
+            mul_nonneg = MulNonnegMode.add_p_shifted
     else: # limb_len = 51
         carry_prop_karat = True # Also in fp2 sqr
         if last_limb_len <= 49:
             mod_2p = True
             R_ext = True
-            mul_faster_nonneg = True
+            mul_nonneg = MulNonnegMode.add_p_shifted
             reduce_everything = False
         elif last_limb_len == 50:
             mod_2p = False
-            R_ext = False
-            mul_faster_nonneg = False
+            R_ext = True
+            mul_nonneg = MulNonnegMode.add_2p_shifted
             reduce_everything = False
         else: #last_limb_len = 51
             mod_2p = False
             R_ext = False
-            mul_faster_nonneg = False
+            mul_nonneg = MulNonnegMode.cond_add
             reduce_everything = True
 
     # additional strat for squaring
@@ -268,7 +278,7 @@ def get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain):
         mod_2p = mod_2p,
         carry_prop_karat = carry_prop_karat,
         reduce_everything = reduce_everything,
-        mul_faster_nonneg = mul_faster_nonneg,
+        mul_nonneg = mul_nonneg,
         sqr_use_add_p_sub = sqr_use_add_p_sub,
         sqr8_faster_add_p_sub = sqr8_faster_add_p_sub,
         sqr4_faster_add_p_sub = sqr4_faster_add_p_sub
