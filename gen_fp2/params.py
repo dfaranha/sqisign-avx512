@@ -57,10 +57,10 @@ class Strat:
     gen_addchain: bool
     R_ext: bool
     mod_2p: bool
-    mul8_faster_nonneg: bool
+    mul_faster_nonneg: bool
     carry_prop_karat: bool
     reduce_everything: bool
-    sqr8_use_add_p_sub: bool
+    sqr_use_add_p_sub: bool
     sqr8_faster_add_p_sub: bool
     sqr4_faster_add_p_sub: bool
     mul_8x1: Fp2Mode
@@ -160,8 +160,8 @@ def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
         mod_2p = mod_2p,
         carry_prop_karat = False,
         reduce_everything = False,
-        mul8_faster_nonneg = False,
-        sqr8_use_add_p_sub = False,
+        mul_faster_nonneg = False,
+        sqr_use_add_p_sub = False,
         sqr8_faster_add_p_sub = False,
         sqr4_faster_add_p_sub = False
     )
@@ -223,35 +223,35 @@ def get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain):
         if last_limb_len <= limb_len-2:
             mod_2p = True
             R_ext = True
-            mul8_faster_nonneg = True
+            mul_faster_nonneg = True
         elif last_limb_len == limb_len-1 or limb_len < 50:
             mod_2p = True
             R_ext = True
-            mul8_faster_nonneg = False
+            mul_faster_nonneg = False
         else:
             mod_2p = False
             R_ext = True
-            mul8_faster_nonneg = False
+            mul_faster_nonneg = False
     else: # limb_len = 51
         carry_prop_karat = True # Also in fp2 sqr
         if last_limb_len <= 49:
             mod_2p = True
             R_ext = True
-            mul8_faster_nonneg = True
+            mul_faster_nonneg = True
             reduce_everything = False
         elif last_limb_len == 50:
             mod_2p = False
             R_ext = False
-            mul8_faster_nonneg = False
+            mul_faster_nonneg = False
             reduce_everything = False
         else: #last_limb_len = 51
             mod_2p = False
             R_ext = False
-            mul8_faster_nonneg = False
+            mul_faster_nonneg = False
             reduce_everything = True
 
     # additional strat for squaring
-    sqr8_use_add_p_sub = R_ext
+    sqr_use_add_p_sub = R_ext
     if mod_2p:
         sqr8_faster_add_p_sub = (limb_len <= 49)
         sqr4_faster_add_p_sub = (limb_len <= 50)
@@ -268,8 +268,8 @@ def get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain):
         mod_2p = mod_2p,
         carry_prop_karat = carry_prop_karat,
         reduce_everything = reduce_everything,
-        mul8_faster_nonneg = mul8_faster_nonneg,
-        sqr8_use_add_p_sub = sqr8_faster_add_p_sub,
+        mul_faster_nonneg = mul_faster_nonneg,
+        sqr_use_add_p_sub = sqr_use_add_p_sub,
         sqr8_faster_add_p_sub = sqr8_faster_add_p_sub,
         sqr4_faster_add_p_sub = sqr4_faster_add_p_sub
     )
@@ -304,6 +304,7 @@ def comp_params_and_strat(e, c, num_kat, gen_addchain):
     p, pbits = get_p(e, c)
     num_limbs, limb_len, last_limb_len, num_words64 = get_limb_params(pbits, e, c)
     n42, n24, rem42, rem24 = get_len_42_24(num_limbs)
+    print("old_strat:", get_strat(num_limbs, limb_len, last_limb_len, gen_addchain))
     strat = get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain)
     num_limbs_R, R, R2 = get_mont_const(p, num_limbs, limb_len, strat)
     

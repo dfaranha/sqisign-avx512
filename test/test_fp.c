@@ -259,8 +259,8 @@ bool test_fp(int iterations)
         printf("The Montgomery representation of 1 is not R mod p\n");
         printf("\n");
         print_512i_array(one, NUM_LIMBS, "one");
-        print_512i_array(d, NUM_LIMBS, "expected");
-        print_512i_array(vR, NUM_LIMBS, "actual");
+        print_512i_array(vR, NUM_LIMBS, "expected?");
+        print_512i_array(d, NUM_LIMBS, "actual");
 
         passed = 0;
     }
