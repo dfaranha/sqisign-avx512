@@ -83,21 +83,7 @@ def get_p(e, c):
     # min_limb_len <= 39 when num_limbs >= 4
     assert c.bit_length() <= 39
 
-    
-
     return p, pbits
-
-def get_limb_params(pbits, e, c):
-    num_limbs = ceil(pbits/51)
-    num_words64 = ceil(pbits/64)
-
-    limb_len = ceil(pbits/num_limbs)
-    last_limb_len = pbits - limb_len*(num_limbs-1)
-
-    # For simplicity we require that all but the last limb of c is limb_mask
-    assert c == 1 or (c.bit_length() + (e % limb_len) <= last_limb_len)
-
-    return num_limbs, limb_len, last_limb_len, num_words64
 
 def get_len_42_24(num_limbs):
     n42 = ceil(num_limbs/2)
@@ -284,7 +270,58 @@ def get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain):
         sqr4_faster_add_p_sub = sqr4_faster_add_p_sub
     )
 
+def get_limb_params(pbits, e, c):
+    num_limbs = ceil(pbits/51)
+    num_words64 = ceil(pbits/64)
 
+    min_limb_len = ceil(pbits/num_limbs)
+    # We use the assumption that all but the top limb is all 1's.
+    # e >= (N-1) ell => ell <= floor(e/(N-1))
+    max_limb_len = min(51, e//(num_limbs-1))
+    assert min_limb_len <= max_limb_len
+
+    limb_len = find_best_limb_len_in_range(pbits, num_limbs, min_limb_len, max_limb_len)
+    last_limb_len = get_last_limb_len(pbits, num_limbs, limb_len)
+
+    return num_limbs, limb_len, last_limb_len, num_words64
+
+def get_last_limb_len(pbits, num_limbs, limb_len):
+    return pbits - limb_len*(num_limbs-1)
+
+def find_best_limb_len_in_range(pbits, num_limbs, min_limb_len, max_limb_len):
+    if min_limb_len == max_limb_len:
+        return min_limb_len
+
+    candidates = [ell for ell in range(min_limb_len, max_limb_len+1)]
+
+    # Sorted by priority
+    predicates = [
+        lambda strat: strat.mod_2p,
+        lambda strat: not strat.carry_prop_karat,
+        lambda strat: strat.mul_nonneg != MulNonnegMode.cond_add,
+        lambda strat: strat.sqr_use_add_p_sub,
+        lambda strat: strat.sqr8_faster_add_p_sub,
+        lambda strat: strat.sqr4_faster_add_p_sub,
+        lambda strat: strat.R_ext if num_limbs > 4 else not strat.R_ext,
+        lambda strat: not strat.reduce_everything
+    ]
+    
+    for pred in predicates:
+        new_candidates = find_candidates_satisfying_predicate(pbits, num_limbs, candidates, pred)
+        if len(new_candidates) == 1:
+            return new_candidates[0]
+        elif len(new_candidates) > 1:
+            candidates = new_candidates
+    return candidates[0]
+
+def find_candidates_satisfying_predicate(pbits, num_limbs, candidates, pred):
+    new_candidates = []
+    for limb_len in candidates:
+        last_limb_len = get_last_limb_len(pbits, num_limbs, limb_len)
+        strat = get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain=None)
+        if pred(strat):
+            new_candidates.append(limb_len)
+    return new_candidates
 
 def get_mont_const(p, num_limbs, limb_len, strat):
     num_limbs_R = num_limbs+1 if strat.R_ext else num_limbs

@@ -488,8 +488,15 @@ def mp_subx2_4x2(f, pp, v, strat):
     n_prod = pp.n42 + pp.num_limbs
     f.line(f"__m512i t[{n_prod}];")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    if strat.mul_nonneg != MulNonnegMode.cond_add:
-        f.comment("We can get result in [0, p*R) by always adding p * 2^(num_limbs * limb_len)")
+    if strat.mul_nonneg == MulNonnegMode.cond_add:
+        f.line("__m512i sign_mask;")
+    if strat.mul_nonneg == MulNonnegMode.add_2p_shifted:
+        f.line(f"const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
+        f.line(f"const __m512i p_top = VSET(0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top});")
+    elif strat.mul_nonneg == MulNonnegMode.add_4p_shifted:
+        f.line(f"const __m512i p_bot = VSET(4, 0, 4, 0, 4, 0, 4, 0);")
+        f.line(f"const __m512i p_top = VSET(0, 4*{v.p_plus_1_top}, 0, 4*{v.p_plus_1_top}, 0, 4*{v.p_plus_1_top}, 0, 4*{v.p_plus_1_top});")
+    else:
         f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
         f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
     f.line()
@@ -498,7 +505,19 @@ def mp_subx2_4x2(f, pp, v, strat):
         f.line(f"t[{i}] = VSUB(res[{i}], a[{i}]);")
     f.line()
 
-    if strat.mul_nonneg != MulNonnegMode.cond_add:
+    match strat.mul_nonneg:
+        case MulNonnegMode.cond_add:
+            f.comment("Conditionally add p*R if negative")
+        case MulNonnegMode.add_p_shifted:
+            f.comment("We can get result in [0, p*R) by always adding p * 2^(num_limbs * limb_len)")
+        case MulNonnegMode.add_2p_shifted:
+            f.comment("We can get result in [0, p*R) by always adding 2p * 2^(num_limbs * limb_len)")
+        case MulNonnegMode.add_4p_shifted:
+            f.comment("We can get result in [0, p*R) by always adding 4p * 2^(num_limbs * limb_len)")
+
+    if strat.mul_nonneg == MulNonnegMode.cond_add:
+        pass #TODO need carry prop
+    else:
         f.line(f"t[{pp.num_limbs}] = VSUB(t[{pp.num_limbs}], p_bot);")
         f.line(f"t[{n_prod-1-pp.rem42}] = VADD(t[{n_prod-1-pp.rem42}], p_top);")
 
