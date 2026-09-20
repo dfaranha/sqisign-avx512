@@ -6,6 +6,7 @@
 #include "fp_unvec.h"
 #include "fp2.h"
 #include "mp.h"
+#include "sqi_ec_params.h"
 
 #include "utils.h"
 
@@ -2299,6 +2300,109 @@ void ec_normalize_curve_2x2x2(__m512i* res_A24, __m512i* res_A, __m512i* A24)
     fp2_copy_2x2x2(res_A24, t2);
 }
 
+// a > b for canonical Fp2 elements stored as (re, im), ordered by im then re.
+static bool fp2_64_is_greater(const uint64_t *a, const uint64_t *b)
+{
+    for (int i = 2*NWORDS64 - 1; i >= 0; i--) {
+        if (a[i] != b[i]) {
+            return a[i] > b[i];
+        }
+    }
+    return false;
+}
+
+// Largest of the six isomorphic A = -2 (a^4 + b^4) / (a^4 - b^4), taken over the
+// pairs (a, b), (a + b, a - b), (i*a + b, a + i*b) and their negations, ordered
+// by (im, re). ab is (a, b) in 2x2x2, res_normA is (A, 1). False if a^4 == b^4.
+bool ec_normalized_A_from_pair_2x2x2(__m512i* res_normA, __m512i* ab)
+{
+    __m512i t0[N4x2], t1[N4x2], a01[N4x2], b01[N4x2], a22[N4x2], b22[N4x2];
+    __m512i rowA[NUM_LIMBS], rowB[NUM_LIMBS], num[NUM_LIMBS], den[NUM_LIMBS];
+    uint64_t pos[6*NWORDS64], neg[6*NWORDS64], enc[4*NWORDS64];
+
+    const __m512i dup_lo = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    const __m512i dup_hi = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    const __m512i swap   = VSET(4, 5, 6, 7, 0, 1, 2, 3);
+    const __m512i idx_a  = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    const __m512i idx_b  = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+
+    // t0 = (a, a), t1 = (b, b), then t0 = (a + b, a - b) = (a1, b1)
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(dup_lo, ab[i]);
+        t1[i] = VPERM512(dup_hi, ab[i]);
+    }
+    fp2_mixaddsub_2x2x2(t0, t0, t1, 0x0f);
+
+    // t1 = i*(a, b) + (b, a) = (i*a + b, a + i*b) = (a2, b2)
+    fp2_muli_2x2x2(t1, ab);
+    for (int i = 0; i < N4x2; i++) {
+        a22[i] = VPERM512(swap, ab[i]);
+    }
+    fp2_add_2x2x2(t1, t1, a22);
+
+    // The fourth slot repeats the third, to fill the vector and keep it invertible.
+    for (int i = 0; i < N4x2; i++) {
+        a01[i] = VBLENDPERM(idx_a, ab[i], t0[i]); // (a0, a1)
+        b01[i] = VBLENDPERM(idx_b, ab[i], t0[i]); // (b0, b1)
+        a22[i] = VPERM512(dup_lo, t1[i]);         // (a2, a2)
+        b22[i] = VPERM512(dup_hi, t1[i]);         // (b2, b2)
+    }
+    fp2_2x2x2_to_4x2x1(rowA, a01, a22);
+    fp2_2x2x2_to_4x2x1(rowB, b01, b22);
+
+    // Fourth powers of both rows
+    fp2_sqrx2_4x2x1(rowA, rowB, rowA, rowB);
+    fp2_sqrx2_4x2x1(rowA, rowB, rowA, rowB);
+
+    // A_k = -2 (a_k^4 + b_k^4) / (a_k^4 - b_k^4)
+    fp2_add_4x2x1(num, rowA, rowB);
+    fp2_add_4x2x1(num, num, num);
+    fp2_neg_4x2x1(num, num);
+    fp2_sub_4x2x1(den, rowA, rowB);
+    if (fp2_is_zero_4x2x1(den) & 0x7) {
+        return false;
+    }
+    fp2_inv_4x2x1(den, den);
+    fp2_mul_4x2x1(num, num, den);
+
+    // Decode the three coefficients and their negations to canonical integers
+    fp2_4x2x1_to_2x2x2(t0, t1, num);
+    fp2_frommont_2x2x2(t0, t0);
+    fp2_frommont_2x2x2(t1, t1);
+    fp_limbs_to_64_4x2(pos, t0);
+    fp_limbs_to_64_4x2(enc, t1);
+    memcpy(pos + 4*NWORDS64, enc, 2*NWORDS64*sizeof(uint64_t));
+
+    fp2_neg_4x2x1(num, num);
+    fp2_4x2x1_to_2x2x2(t0, t1, num);
+    fp2_frommont_2x2x2(t0, t0);
+    fp2_frommont_2x2x2(t1, t1);
+    fp_limbs_to_64_4x2(neg, t0);
+    fp_limbs_to_64_4x2(enc, t1);
+    memcpy(neg + 4*NWORDS64, enc, 2*NWORDS64*sizeof(uint64_t));
+
+    const uint64_t *best = pos;
+    for (int i = 1; i < 3; i++) {
+        if (fp2_64_is_greater(pos + 2*i*NWORDS64, best)) {
+            best = pos + 2*i*NWORDS64;
+        }
+    }
+    for (int i = 0; i < 3; i++) {
+        if (fp2_64_is_greater(neg + 2*i*NWORDS64, best)) {
+            best = neg + 2*i*NWORDS64;
+        }
+    }
+
+    // res_normA = (A_max, 1)
+    memcpy(enc, best, 2*NWORDS64*sizeof(uint64_t));
+    memset(enc + 2*NWORDS64, 0, 2*NWORDS64*sizeof(uint64_t));
+    enc[2*NWORDS64] = 1;
+    fp_64_to_limbs_4x2(res_normA, enc);
+    fp_tomont_4x2(res_normA, res_normA);
+
+    return true;
+}
+
 // Slower than previous
 void ec_normalize_curve_SQI_2x2x2(__m512i* res_A24, __m512i* res_A, __m512i* A24)
 {
@@ -2515,238 +2619,18 @@ void ec_j_inv_2x2x2(__m512i* res, __m512i* AC)
     fp2_mul_2x2x2(res, t0, t1);
 }
 
-void ec_proj_diff_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA)
-{
-    // Need t0 and t1 to be able to store two 2x2x2 elements.
-    __m512i t0[2*N4x2], t1[2*N4x2], t2[2*N4x2];
-    __m512i idx0, idx1;
-
-    // TODO: Suboptimal, we do one extra permutation for t1, 
-    //       to have code that works regardless of NUM_LIMBS % 2.
-    // t0 = (P.x, P.z, P.x, P.z)
-    // t1 = (Q.x, Q.z, Q.z, Q.x)
-    idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);
-    for (int i = 0; i < N4x2; i++) {
-        t1[i] = VPERM512(idx0, Q[i]); // (Q.z, Q.x)
-    }
-    fp2_2x2x2_to_4x2x1(t0, P, P);
-    fp2_2x2x2_to_4x2x1(t1, Q, t1);
-
-    fp2_mul_4x2x1(t0, t0, t1);
-
-    // Hadamard
-    // t1 = (t0[0], t0[0], t0[2], t0[2])
-    //         +      -      +      -
-    // t2 = (t0[1], t0[1], t0[3], t0[3])
-    idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
-    idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t1[i] = VPERM512(idx0, t0[i]);
-        t2[i] = VPERM512(idx1, t0[i]);
-    }
-
-    fp2_mixaddsub_4x2x1(t1, t1, t2, 0x33);
-
-    // t2 = (t1[2], t0[1], t1[1], t1[3])
-    // t1 = (t1[0], t0[0], t1[1], t1[3])
-    idx0 = VSET(12, 13, 2, 3, 10, 11, 14, 15);
-    idx1 = VSET(8, 9, 0, 1, 10, 11, 14, 15);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t2[i] = VBLENDPERM(idx0, t0[i], t1[i]);
-        t1[i] = VBLENDPERM(idx1, t0[i], t1[i]);
-    }
-    fp2_mul_4x2x1(t1, t1, t2);
-
-    // Convert to 2x2x2
-    fp2_4x2x1_to_2x2x2(t2, t2 + N4x2, t0);
-    fp2_4x2x1_to_2x2x2(t0, t0 + N4x2, t1);
-
-    // Conjugate t2[1] (we don't need the other entries anymore)
-    fp2_conjugate_2x2x2(t2, t2);
-
-    // t2 = (A * t0[1], t2[1]^2)
-    idx0 = VSET(8, 9, 10, 11, 4, 5, 6, 7);
-    idx1 = VSET(12, 13, 14, 15, 4, 5, 6, 7);
-    for (int i = 0; i < N4x2; i++) {
-        t1[i] = VBLENDPERM(idx0, t2[i], normA[i]);
-        t2[i] = VBLENDPERM(idx1, t2[i], t1[i]);
-    }
-    fp2_mul_2x2x2(t2, t2, t1);
-    
-    // t2 = (t10, lam)
-    // t0 = (t8, t9), (b_xx, b_zz)
-
-    // Annoying add
-    // t0[0] = t0[0] + 2*t2[0]
-    fp2_add_2x2x2(t0, t0, t2);
-    fp2_add_2x2x2(t0, t0, t2);
-
-    // TODO: This is suboptimal extra shuffle for code to be independent of NUM_LIMBS % 2
-    // t2 = (t2[1], t2[1], t2[1], t2[1])
-    idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
-    for (int i = 0; i < N4x2; i++) {
-        t2[i] = VPERM512(idx0, t2[i]);
-    }
-    fp2_2x2x2_to_4x2x1(t1, t0, t0 + N4x2);
-    fp2_2x2x2_to_4x2x1(t0, t2, t2);
-
-    // At this point we have
-    // t0 = (lam, -, lam, lam)
-    // t1 = (b_xz, -, b_xx, b_zz)
-
-    // 3 multiplications (1 wasted)
-    fp2_mul_4x2x1(t0, t0, t1);
-    
-    // TODO: Again suboptimal to be independent of NUM_LIMBS % 2
-    // t0 = (b_xz, b_xx, b_xz, b_zz)
-    idx0 = VSET(0, 1, 4, 5, 0, 1, 6, 7);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t0[i] = VPERM512(idx0, t0[i]);
-    }
-
-    // t2 = (b_xz^2, b_xx * b_zz), (b_xz, b_zz)
-    fp2_4x2x1_to_2x2x2(t2, t2 + N4x2, t0);
-    fp2_mul_2x2x2(t2, t2, t2 + N4x2);
-
-    // t2[0] = (t2[0] - t2[1], 0)
-    idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
-    for (int i = 0; i < N4x2; i++) {
-        t1[i] = VPERM512(idx0, t2[i]);
-    }
-    fp2_sub_2x2x2(t2, t2, t1);
-
-    // TODO: One wasted sqrt
-    // t2 = (delta, 0), (b_xz, b_zz)
-    fp2_sqrt_2x2x2(t2, t2);
-
-    // res_PmQ = (delta + b_xz, b_zz)
-    fp2_add_2x2x2(res_PmQ, t2, t2 + N4x2);
-}
-
-// Calls unvectorized sqrt instead of doing a wasteful 2x2x2
-void ec_proj_diff_SQI_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA)
-{
-    // Need t0 and t1 to be able to store two 2x2x2 elements.
-    fp2_t delta[2];
-    __m512i t0[2*N4x2], t1[2*N4x2], t2[2*N4x2];
-    __m512i idx0, idx1;
-
-    // TODO: Suboptimal, we do one extra permutation for t1, 
-    //       to have code that works regardless of NUM_LIMBS % 2.
-    // t0 = (P.x, P.z, P.x, P.z)
-    // t1 = (Q.x, Q.z, Q.z, Q.x)
-    idx0 = VSET(4, 5, 6, 7, 0, 1, 2, 3);
-    for (int i = 0; i < N4x2; i++) {
-        t1[i] = VPERM512(idx0, Q[i]); // (Q.z, Q.x)
-    }
-    fp2_2x2x2_to_4x2x1(t0, P, P);
-    fp2_2x2x2_to_4x2x1(t1, Q, t1);
-
-    fp2_mul_4x2x1(t0, t0, t1);
-
-    // Hadamard
-    // t1 = (t0[0], t0[0], t0[2], t0[2])
-    //         +      -      +      -
-    // t2 = (t0[1], t0[1], t0[3], t0[3])
-    idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
-    idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t1[i] = VPERM512(idx0, t0[i]);
-        t2[i] = VPERM512(idx1, t0[i]);
-    }
-
-    fp2_mixaddsub_4x2x1(t1, t1, t2, 0x33);
-
-    // t2 = (t1[2], t0[1], t1[1], t1[3])
-    // t1 = (t1[0], t0[0], t1[1], t1[3])
-    idx0 = VSET(12, 13, 2, 3, 10, 11, 14, 15);
-    idx1 = VSET(8, 9, 0, 1, 10, 11, 14, 15);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t2[i] = VBLENDPERM(idx0, t0[i], t1[i]);
-        t1[i] = VBLENDPERM(idx1, t0[i], t1[i]);
-    }
-    fp2_mul_4x2x1(t1, t1, t2);
-
-    // Convert to 2x2x2
-    fp2_4x2x1_to_2x2x2(t2, t2 + N4x2, t0);
-    fp2_4x2x1_to_2x2x2(t0, t0 + N4x2, t1);
-
-    // Conjugate t2[1] (we don't need the other entries anymore)
-    fp2_conjugate_2x2x2(t2, t2);
-
-    // t2 = (A * t0[1], t2[1]^2)
-    idx0 = VSET(8, 9, 10, 11, 4, 5, 6, 7);
-    idx1 = VSET(12, 13, 14, 15, 4, 5, 6, 7);
-    for (int i = 0; i < N4x2; i++) {
-        t1[i] = VBLENDPERM(idx0, t2[i], normA[i]);
-        t2[i] = VBLENDPERM(idx1, t2[i], t0[i]);
-    }
-    fp2_mul_2x2x2(t2, t2, t1);
-    
-    // t2 = (t10, lam)
-    // t0 = (t8, t9), (b_xx, b_zz)
-
-    // Annoying add
-    // t0[0] = t0[0] + 2*t2[0]
-    fp2_add_2x2x2(t0, t0, t2);
-    fp2_add_2x2x2(t0, t0, t2);
-
-    // TODO: This is suboptimal extra shuffle for code to be independent of NUM_LIMBS % 2
-    // t2 = (t2[1], t2[1], t2[1], t2[1])
-    idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
-    for (int i = 0; i < N4x2; i++) {
-        t2[i] = VPERM512(idx0, t2[i]);
-    }
-    fp2_2x2x2_to_4x2x1(t1, t0, t0 + N4x2);
-    fp2_2x2x2_to_4x2x1(t0, t2, t2);
-
-    // At this point we have
-    // t0 = (lam, -, lam, lam)
-    // t1 = (b_xz, -, b_xx, b_zz)
-
-    // 3 multiplications (1 wasted)
-    fp2_mul_4x2x1(t0, t0, t1);
-    
-    // TODO: Again suboptimal to be independent of NUM_LIMBS % 2
-    // t0 = (b_xz, b_xx, b_xz, b_zz)
-    idx0 = VSET(0, 1, 4, 5, 0, 1, 6, 7);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t0[i] = VPERM512(idx0, t0[i]);
-    }
-
-    // t2 = (b_xz^2, b_xx * b_zz), (b_xz, b_zz)
-    fp2_4x2x1_to_2x2x2(t2, t2 + N4x2, t0);
-    fp2_mul_2x2x2(t2, t2, t2 + N4x2);
-
-    // t2[0] = (t2[0] - t2[1], 0)
-    idx0 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
-    for (int i = 0; i < N4x2; i++) {
-        t1[i] = VPERM512(idx0, t2[i]);
-    }
-    fp2_sub_2x2x2(t2, t2, t1);
-
-    // t2 = (delta, 0), (b_xz, b_zz)
-    fp2_2x2x2_to_unvectorized(delta, t2);
-    fp2_sqrt(delta);
-    fp2_unvectorized_to_2x2x2(t2, delta);
-
-    // res_PmQ = (delta + b_xz, b_zz)
-    fp2_add_2x2x2(res_PmQ, t2, t2 + N4x2);
-}
-
-// P, Q and normA are pairs of points in 4x2x1
-// P = (P1.x, P1.z, P2.x, P2.z)
+// Deterministic x(P - Q) for a pair of curves. P and Q are
+// (P1.x, P1.z, P2.x, P2.z) in 4x2x1 and normA is (A1, 1, A2, 1).
 void ec_proj_diff_pair_4x2x1(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA)
 {
     __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
+    __m512i b_xz[NUM_LIMBS], b_xxzz[NUM_LIMBS], lam[NUM_LIMBS];
+    __m512i u[NUM_LIMBS], v[NUM_LIMBS], delta[N4x2], tmp[N4x2];
     __m512i idx0, idx1;
 
-    // Comments are copied from the 1x2x2x2 variant
-    // We apply the operations independently to each point in the pair.
-    
-    // t0 = (P.x, P.z, P.x, P.z) in the original code
-    // t1 = (Q.x, Q.z, Q.z, Q.x)
-    // In 8x1x1, we actually have t0 = (P1.x, P1.x, P1.z, P1.z, P2.x, P2.x, P2.z, P2.z) etc.
+    // In 8x1x1 we have t0 = (P1.x, P1.x, P1.z, P1.z, P2.x, P2.x, P2.z, P2.z)
+    // and t1 = (Q1.x, Q1.z, Q1.z, Q1.x, Q2.x, Q2.z, Q2.z, Q2.x), so that the
+    // product holds (t0, t4, t1, t5) for each of the two curves.
     fp2_4x2x1_to_8x1x1(t0, P, P);
     idx0 = VSET(0, 2, 2, 0, 4, 6, 6, 4);
     idx1 = VSET(1, 3, 3, 1, 5, 7, 7, 5);
@@ -2754,13 +2638,9 @@ void ec_proj_diff_pair_4x2x1(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* 
         t1[i] = VPERM512(idx0, Q[i]);
         t1[i+NUM_LIMBS] = VPERM512(idx1, Q[i]);
     }
-
     fp2_mul_8x1x1(t0, t0, t1);
 
-    // Hadamard
-    // t1 = (t0[0], t0[0], t0[2], t0[2])
-    //         +      -      +      -
-    // t2 = (t0[1], t0[1], t0[3], t0[3])
+    // Hadamard, giving (t0 + t1, t4 + t5, t0 - t1, t4 - t5) per curve
     idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
     idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
     for (int i = 0; i < 2*NUM_LIMBS; i++) {
@@ -2769,99 +2649,85 @@ void ec_proj_diff_pair_4x2x1(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* 
     }
     fp2_mixaddsub_8x1x1(t1, t1, t2, 0x33, 0x33);
 
-    // t2 = (t1[2], t0[1], t1[1], t1[3])
-    // t1 = (t1[0], t0[0], t1[1], t1[3])
-    idx0 = VSET(9, 10, 2, 11, 13, 14, 6, 15);
-    idx1 = VSET(8, 10, 0, 11, 12, 14, 4, 15);
+    // ((t0 + t1)(t4 + t5), (t0 - t1)^2, t4 t5, (t4 - t5)^2) per curve
+    idx0 = VSET(9, 10, 3, 11, 13, 14, 7, 15);
+    idx1 = VSET(8, 10, 1, 11, 12, 14, 5, 15);
     for (int i = 0; i < 2*NUM_LIMBS; i++) {
         t2[i] = VBLENDPERM(idx0, t0[i], t1[i]);
         t1[i] = VBLENDPERM(idx1, t0[i], t1[i]);
     }
-
     fp2_mul_8x1x1(t1, t1, t2);
 
-    // Convert to 4x2x1
-    fp2_8x1x1_to_4x2x1(t0, t0 + NUM_LIMBS, t0);
+    // t1 = ((t0+t1)(t4+t5), t4 t5) per curve, t1 + NUM_LIMBS = (b_xx, b_zz)
     fp2_8x1x1_to_4x2x1(t1, t1 + NUM_LIMBS, t1);
 
-    // Conjugate t0[1] (we don't need the other entries anymore)
-    fp2_conjugate_4x2x1(t0, t0);
-
-    // t0 = (A * t1[1], t0[1]^2)
-    idx0 = VSET(8, 9, 2, 3, 12, 13, 6, 7);
-    idx1 = VSET(10, 11, 2, 3, 14, 15, 6, 7);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t2[i] = VBLENDPERM(idx0, t0[i], normA[i]);
-        t0[i] = VBLENDPERM(idx1, t0[i], t1[i]);
-    }
-    fp2_mul_4x2x1(t0, t0, t2);
-    
-    // t0 = (t10, lam)
-    // t1 = (t8, t9), (b_xx, b_zz)
-
-    // Annoying add
-    // t1[0] = t1[0] + 2*t0[0]
-    fp2_add_4x2x1(t1, t1, t0);
-    fp2_add_4x2x1(t1, t1, t0);
-
-    // t0 = (t0[1], t0[1], t0[1], t0[1])
-    idx0 = VSET(2, 2, 2, 2, 6, 6, 6, 6);
-    idx1 = VSET(3, 3, 3, 3, 7, 7, 7, 7);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t0[i+NUM_LIMBS] = VPERM512(idx1, t0[i]);
-        t0[i] = VPERM512(idx0, t0[i]);
-    }
-    fp2_4x2x1_to_8x1x1(t1, t1, t1 + NUM_LIMBS);
-
-    // At this point we have
-    // t0 = (lam, -, lam, lam)
-    // t1 = (b_xz, -, b_xx, b_zz)
-
-    // 3 multiplications (1 wasted)
-    fp2_mul_8x1x1(t0, t0, t1);
-    // in 8x1x1: (b_xz, b_xx, -, b_zz, -||-)
-
-    // t0 = (b_xz, b_xx), (b_xz, b_zz)
-    idx0 = VSET(0, 8, 1, 9, 4, 12, 5, 13);
-    idx1 = VSET(0, 8, 3, 11, 4, 12, 7, 15);
-    for(int i = 0; i < NUM_LIMBS; i++) {
-        __m512i s_re = t0[i], s_im = t0[i+NUM_LIMBS];
-        t0[i] = VBLENDPERM(idx0, s_re, s_im);
-        t0[i+NUM_LIMBS] = VBLENDPERM(idx1, s_re, s_im);
-    }
-
-    // t0 = (b_xz^2, b_xx * b_zz), (b_xz, b_zz)
-    fp2_mul_4x2x1(t0, t0, t0 + NUM_LIMBS);
-
-    // t0[0] = (t0[0] - t0[1], 0)
+    // b_xz = (t0 + t1)(t4 + t5) + 2 A t4 t5, held in slots 0, 1 and 2, 3
     idx0 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    idx1 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
     for (int i = 0; i < NUM_LIMBS; i++) {
-        t1[i] = VPERM512(idx0, t0[i]);
+        u[i] = VPERM512(idx0, t1[i]);     // (t4 t5, t4 t5) per curve
+        v[i] = VPERM512(idx1, normA[i]);  // (A, A) per curve
+        b_xz[i] = VPERM512(idx1, t1[i]);  // ((t0+t1)(t4+t5), same) per curve
     }
-    fp2_sub_4x2x1(t0, t0, t1);
+    fp2_mul_4x2x1(u, u, v);
+    fp2_add_4x2x1(b_xz, b_xz, u);
+    fp2_add_4x2x1(b_xz, b_xz, u);
 
-    // compute delta = sqrt(t0[0])
-    // TODO: Suboptimal shuffle to make code independent of NUM_LIMBS % 2
-    // With an alternating 4x2x1_to_2x2x2, this would be solved.
-    // t1 = (t0[0]), t2 = (b_xz)
-    idx0 = VSET(0, 1, 4, 5, 8, 9, 12, 13);
+    // lam = conj(b_zz), broadcast over both slots of each curve
+    fp2_conjugate_4x2x1(u, t1 + NUM_LIMBS);
     for (int i = 0; i < NUM_LIMBS; i++) {
-        t1[i] = VBLENDPERM(idx0, t0[i], t0[i+NUM_LIMBS]);
+        lam[i] = VPERM512(idx0, u[i]);
     }
-    fp2_4x2x1_to_2x2x2(t1, t2, t1);
+    fp2_mulx2_4x2x1(b_xz, b_xxzz, b_xz, lam, t1 + NUM_LIMBS, lam);
 
-    // t1 = delta + b_xz
-    fp2_sqrt_2x2x2(t1, t1);
-    fp2_add_2x2x2(t1, t1, t2);
-    
-    // res_PmQ = (delta + b_xz, b_zz)
-    fp2_2x2x2_to_4x2x1(t0, t1, t1);
-    // TODO: Suboptimal shuffle to make code independent of NUM_LIMBS % 2
-    // With an alternating 4x2x1_to_2x2x2, this would be solved.
+    // delta^2 = b_xz^2 - b_xx b_zz, gathered into the first two slots
+    idx0 = VSET(0, 1, 8, 9, 4, 5, 12, 13);
+    idx1 = VSET(0, 1, 10, 11, 4, 5, 14, 15);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        u[i] = VBLENDPERM(idx0, b_xz[i], b_xxzz[i]);
+        v[i] = VBLENDPERM(idx1, b_xz[i], b_xxzz[i]);
+    }
+    fp2_mul_4x2x1(u, u, v);
+    idx0 = VSET(0, 1, 4, 5, 0, 1, 4, 5);
+    idx1 = VSET(2, 3, 6, 7, 2, 3, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        v[i] = VPERM512(idx1, u[i]);
+        u[i] = VPERM512(idx0, u[i]);
+    }
+    fp2_sub_4x2x1(u, u, v);
+
+    // Both square roots fit in one 2x2x2 call
+    fp2_4x2x1_to_2x2x2(delta, tmp, u);
+    fp2_sqrt_2x2x2(delta, delta);
+    fp2_2x2x2_to_4x2x1(v, delta, delta);
+
+    // res_PmQ = (b_xz - delta, b_zz) per curve
+    idx0 = VSET(0, 1, 4, 5, 0, 1, 4, 5);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        u[i] = VPERM512(idx0, b_xz[i]);
+    }
+    fp2_sub_4x2x1(u, u, v);
     idx0 = VSET(0, 1, 10, 11, 2, 3, 14, 15);
     for (int i = 0; i < NUM_LIMBS; i++) {
-        res_PmQ[i] = VBLENDPERM(idx0, t0[i], t0[i+NUM_LIMBS]);
+        res_PmQ[i] = VBLENDPERM(idx0, u[i], b_xxzz[i]);
     }
+}
+
+// Single curve version, computed with the pair routine on a duplicated input.
+void ec_proj_diff_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA)
+{
+    __m512i Pv[NUM_LIMBS], Qv[NUM_LIMBS], Av[NUM_LIMBS], res[NUM_LIMBS], tmp[N4x2];
+
+    fp2_2x2x2_to_4x2x1(Pv, P, P);
+    fp2_2x2x2_to_4x2x1(Qv, Q, Q);
+    fp2_2x2x2_to_4x2x1(Av, normA, normA);
+    ec_proj_diff_pair_4x2x1(res, Pv, Qv, Av);
+    fp2_4x2x1_to_2x2x2(res_PmQ, tmp, res);
+}
+
+void ec_proj_diff_SQI_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA)
+{
+    ec_proj_diff_1x2x2x2(res_PmQ, P, Q, normA);
 }
 
 // Assums hint_P != 0
@@ -2935,27 +2801,46 @@ void ec_curve_to_basis_from_hint_1x2x2x2(__m512i* res_basis, __m512i* normA, con
     ec_proj_diff_1x2x2x2(res_basis+N4x2, res_basis, res_basis+2*N4x2, normA);
 }
 
-// Calls unvectorized sqrt instead of wasting half of sqrt_2x2x2.
-void ec_curve_to_basis_from_hint_SQI_1x2x2x2(__m512i* res_basis, __m512i* normA, const uint8_t hint)
+// (p + 1) / 2^e, returning its bit length.
+static unsigned int ec_cofactor_for_twoe(digit_t* m, const int e)
 {
+    const int shift = TORSION_EVEN_POWER - e;
+
+    assert(shift >= 0);
+    memset(m, 0, NWORDS_ORDER * sizeof(digit_t));
+    memcpy(m, COFACTOR, COFACTOR_NWORDS64 * sizeof(digit_t));
+    multiple_mp_shiftl(m, shift, NWORDS_ORDER);
+
+    return COFACTOR_NBITS + shift;
+}
+
+// Basis of E[2^e] from a hint. The difference point is only deterministic at the
+// order it is computed at, so clear the cofactor to 2^e before computing it.
+void ec_curve_to_basis_from_hint_SQI_1x2x2x2(__m512i* res_basis, __m512i* normA, const uint8_t hint, const int e)
+{
+    digit_t m[NWORDS_ORDER];
+    unsigned int mbits = ec_cofactor_for_twoe(m, e);
+
     ec_curve_to_basis_from_hint_1x2x2x2_inner_set_P_Q(res_basis, res_basis+2*N4x2, normA, hint);
 
-    ec_scalar_mul_pair_normA_2x2x2(res_basis, res_basis + 2*N4x2, res_basis, res_basis + 2*N4x2, normA, normA, COFACTOR, COFACTOR_NBITS);
+    ec_scalar_mul_pair_normA_2x2x2(res_basis, res_basis + 2*N4x2, res_basis, res_basis + 2*N4x2, normA, normA, m, mbits);
 
     // compute PmQ, set PmQ to Q to ensure Q above (0,0)
     ec_proj_diff_SQI_1x2x2x2(res_basis+N4x2, res_basis, res_basis+2*N4x2, normA);
 }
 
-void ec_curve_to_basis_from_hint_2x2x2x2(__m512i* res_basis1, __m512i* res_basis2, __m512i* normA1, __m512i* normA2, const uint8_t hint1, const uint8_t hint2)
+void ec_curve_to_basis_from_hint_2x2x2x2(__m512i* res_basis1, __m512i* res_basis2, __m512i* normA1, __m512i* normA2, const uint8_t hint1, const uint8_t hint2, const int e)
 {
     __m512i P[NUM_LIMBS], Q[NUM_LIMBS], A[NUM_LIMBS];
+    digit_t m[NWORDS_ORDER];
+    unsigned int mbits = ec_cofactor_for_twoe(m, e);
 
     // Faster to do separately
     ec_curve_to_basis_from_hint_1x2x2x2_inner_set_P_Q(res_basis1, res_basis1+2*N4x2, normA1, hint1);
     ec_curve_to_basis_from_hint_1x2x2x2_inner_set_P_Q(res_basis2, res_basis2+2*N4x2, normA2, hint2);
 
-    ec_scalar_mul_pair_normA_2x2x2(res_basis1, res_basis1 + 2*N4x2, res_basis1, res_basis1 + 2*N4x2, normA1, normA1, COFACTOR, COFACTOR_NBITS);
-    ec_scalar_mul_pair_normA_2x2x2(res_basis2, res_basis2 + 2*N4x2, res_basis2, res_basis2 + 2*N4x2, normA2, normA2, COFACTOR, COFACTOR_NBITS);
+    ec_scalar_mul_pair_normA_2x2x2(res_basis1, res_basis1 + 2*N4x2, res_basis1, res_basis1 + 2*N4x2, normA1, normA1, m, mbits);
+    ec_scalar_mul_pair_normA_2x2x2(res_basis2, res_basis2 + 2*N4x2, res_basis2, res_basis2 + 2*N4x2, normA2, normA2, m, mbits);
 
     // compute PmQ, set PmQ to Q to ensure Q above (0,0)
     fp2_2x2x2_to_4x2x1(P, res_basis1, res_basis2);

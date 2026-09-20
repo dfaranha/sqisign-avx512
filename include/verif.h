@@ -20,8 +20,6 @@ typedef struct signature_2x2x2
 {
     __m512i A_aux[N4x2]; // the normalized A-coefficient of the auxiliary curve
     __m512i A24_aux[N4x2]; // the normalized A24-coefficient of the auxilliary curve
-    uint8_t backtracking;
-    uint8_t two_resp_length;
     scalar_mtx_2x2_t mat_Bchall_can_to_B_chall; // the matrix of the desired basis
     scalar_t chall_coeff;
     uint8_t hint_aux;
@@ -39,8 +37,8 @@ typedef struct signature_2x2x2
  */
 bool protocols_verify(
     signature_2x2x2_t* sig,
-    public_key_2x2x2_t* pk, 
-    const unsigned char* m, 
+    public_key_2x2x2_t* pk,
+    const unsigned char* m,
     size_t l
 );
 

@@ -5,6 +5,7 @@
 #include "ec.h"
 #include <assert.h>
 #include "sqi_test_extras.h"
+#include "sqi_hd.h"
 
 // ============================== 2x4x1 ================================================
 
@@ -575,6 +576,8 @@ void four_isog_eval_quad_8x1x1(__m512i* Q, __m512i* eval_data, __m512i* P)
     fp2_mul_8x1x1(Q, t0, t1);
 }
 
+// With res_four_torsion non-NULL, ker has order 2^(isog_len + 2) and the point
+// of order four left above the codomain is written there.
 bool isog_chain_1d_1x2x2x2(
     __m512i* res_A24,
     __m512i *A24,
@@ -582,20 +585,24 @@ bool isog_chain_1d_1x2x2x2(
     const unsigned int isog_len,
     __m512i *pts,
     const unsigned int num_pts,
-    const bool verify
+    const bool verify,
+    __m512i *res_four_torsion
 )
 {
     uint64_t total = 0;
     uint64_t total2 = 0;
 
+    const unsigned int extra = res_four_torsion ? HD_extra_torsion : 0;
+    assert(!extra || isog_len % 2 == 0);
+
     int space = 1;
-    for (int i = 1; i < isog_len; i *= 2) {
+    for (int i = 1; i < isog_len + extra; i *= 2) {
         space++;
     }
     __m512i strat[space * N4x2], test[N4x2];
     __m512i eval_data[2 * N4x2], eval_data_pair[2*NUM_LIMBS], eval_data_quad[4*NUM_LIMBS];
     uint16_t orders[space];
-    orders[0] = isog_len;
+    orders[0] = isog_len + extra;
     int current = 0;
     fp2_copy_2x2x2(strat, ker);
     fp2_copy_2x2x2(res_A24, A24);
@@ -712,7 +719,7 @@ bool isog_chain_1d_1x2x2x2(
         current--;
     }
 
-    assert(isog_len % 2 ? !current : current == -1);
+    assert(extra ? current == 0 : (isog_len % 2 ? !current : current == -1));
     if (isog_len % 2 == 1) { // last 2-isogeny
         if (verify) {
             int zmask = fp2_is_zero_2x2x2(strat);
@@ -756,6 +763,10 @@ bool isog_chain_1d_1x2x2x2(
         fp2_copy_2x2x2(pts + (4*num_pts_quad)*N4x2, pts_coupled + num_pts_quad*2*NUM_LIMBS);
     }
 
+    if (res_four_torsion) {
+        fp2_copy_2x2x2(res_four_torsion, strat);
+    }
+
     return true;
 }
 
@@ -777,7 +788,7 @@ bool isog_chain_1d(
         ec_point_unvec_to_1x2x2x2(pts_vec + i*N4x2, pts+i);
     }
 
-    bool success = isog_chain_1d_1x2x2x2(A24, A24, ker_vec, isog_len, pts_vec, num_pts, verify);
+    bool success = isog_chain_1d_1x2x2x2(A24, A24, ker_vec, isog_len, pts_vec, num_pts, verify, NULL);
 
     ec_point_1x2x2x2_to_unvec(&res_E2->A24, A24);
     for (int i = 0; i < num_pts; i++) {

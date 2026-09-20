@@ -2,6 +2,7 @@
 #include "fp_consts.h"
 #include "fp_unvec.h"
 #include "fp2.h"
+#include "ec.h"
 #include "theta.h"
 #include "theta_splitting.h"
 #include "utils.h"
@@ -258,8 +259,7 @@ void splitting_apply_isomorphism_list_pair(__m512i* pts, const splitting_matrix_
 
 bool splitting_theta_to_product(__m512i* res, __m512i* null, const bool verify) 
 {    
-    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], idx0, idx1;
-    __mmask8 mask;
+    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], idx0;
 
     // assert a * d == b * c
     if (verify) {
@@ -279,41 +279,20 @@ bool splitting_theta_to_product(__m512i* res, __m512i* null, const bool verify)
         if (!equal) { return false; }
     }
     
-    // x = a^4, y = b^4, z = c^4
-    // TODO: Wastes one squaring, can we make use of it? I think the answer is no...
-    fp2_sqr_4x2x1(t0, null);
-    fp2_sqr_4x2x1(t0, t0);
+    // Normalized curves from the null point pairs (a, c) and (a, b).
+    fp2_4x2x1_to_2x2x2(t0, t1, null);   // t0 = (a, b), t1 = (c, d)
 
-    // (z, y, z, y)
-    idx0 = VSET(4, 5, 2, 3, 4, 5, 2, 3);
-    // (x, x, x, x)
-    idx1 = VSET(0, 1, 0, 1, 0, 1, 0, 1);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t1[i] = VPERM512(idx1, t0[i]);
-        t0[i] = VPERM512(idx0, t0[i]);
-    }
-    
-    // (x+z, x+y, x-z, x-y)
-    mask = 0x0f;
-    fp2_mixaddsub_4x2x1(t1, t1, t0, mask);
-
-    // (-2*(x+z), -2*(x+y), -, -)
-    fp2_add_4x2x1(t0, t1, t1);
-    fp2_neg_4x2x1(t0, t0);
-    
-    // (A1, C1, A2, C2) = (-2*(x+z), x-z, -2*(x+y), x-y)
-    idx0 = VSET(0, 1, 12, 13, 2, 3, 14, 15);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        res[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+    idx0 = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    for (int i = 0; i < N4x2; i++) {
+        t1[i] = VBLENDPERM(idx0, t0[i], t1[i]);   // (a, c)
     }
 
-    // check that C1 != 0 and C2 != 0
-    if (verify) {
-        int nz_mask = ~fp2_is_zero_4x2x1(res);
-        if (nz_mask & 0xa != 0xa) {
-            return false;
-        }
+    if (!ec_normalized_A_from_pair_2x2x2(t1, t1) || !ec_normalized_A_from_pair_2x2x2(t0, t0)) {
+        return false;   // failed to split to a product of elliptic curves
     }
+
+    // res = (A1, 1, A2, 1)
+    fp2_2x2x2_to_4x2x1(res, t1, t0);
 
     return true;
 }

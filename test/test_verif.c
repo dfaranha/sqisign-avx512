@@ -8,13 +8,7 @@
 #include "test.h"
 #include "sqi_encoded_sizes.h"
 
-#if SECURITY_BITS == 128
-  #define CRYPTO_ALGNAME "SQIsign_lvl1"
-#elif SECURITY_BITS == 192
-  #define CRYPTO_ALGNAME "SQIsign_lvl3"
-#elif SECURITY_BITS == 256
-  #define CRYPTO_ALGNAME "SQIsign_lvl5"
-#endif
+#define CRYPTO_ALGNAME "SQIsign_" SQIsign_PRIME_NAME
 
 #define MAX_MARKER_LEN         50
 
