@@ -12,13 +12,25 @@
 #include "theta_middle.h"
 #include "theta_splitting.h"
 #include "utils.h"
-#include "test_output.h"
 
 #include "sqi_ec.h"
+#include "sqi_ec_params.h"
 #include "sqi_test_extras.h"
+
+// The KAT data below is lvl3-only: elsewhere fp_decode silently zeroes it,
+// leaving every point zero, so skip the test instead.
+#define THETA_KAT_IS_FOR_THIS_LEVEL (NWORDS_FIELD == 6 && TORSION_EVEN_POWER == 376)
+
+#include "test_output.h" // defines TESTS, guarded by the macro above
 
 bool test_theta_KAT(int iterations)
 {
+#if !THETA_KAT_IS_FOR_THIS_LEVEL
+    (void) iterations;
+    printf("Theta chain KAT tests\n");
+    printf("   chain KAT data is lvl3-only ............................ SKIPPED\n");
+    return true;
+#else
     // ========== Setup ==================
     int length = 188;
     theta_couple_curve_t E12, E34_expected, E34_actual;
@@ -259,9 +271,7 @@ bool test_theta_KAT(int iterations)
     theta_couple_point_t res_pts[3]; 
     ec_point_t RmS1, RpS1, RmS2, RpS2;
     bool success;
-    // The signing-side chains below run unverified; the verification chain
-    // further down sets the flag itself.
-    bool verify = false;
+    bool verify = false; // the verification chain below sets the flag itself
 
     // with torsion
     for (int ridx = 0; ridx < 2 && passed; ridx++) {
@@ -339,13 +349,8 @@ bool test_theta_KAT(int iterations)
         return false;
     }
 
-    // 4x2x1 verification
-    // The verification chain is only available in vectorized form, so we pack
-    // its inputs the way common/verif.c does: the curve coefficients as (A, 1)
-    // and (A24, 1) in 2x2x2, and the kernel lifted to Jacobian coordinates as
-    // ker_x = (P1.X, Q1.X, P2.X, Q2.X) in 4x2x1, etc. The domain and the kernel
-    // were normalized above by theta_normalize_chain_input_unvec, which is what
-    // the lift assumes.
+    // 4x2x1 verification, packing the inputs as common/verif.c does.
+    // theta_normalize_chain_input_unvec above gives the lift what it assumes.
     __m512i ker_basis1[3*N4x2], ker_basis2[3*N4x2], A_34[NUM_LIMBS];
     __m512i normA_1[N4x2], normA_2[N4x2], normA24_1[N4x2], normA24_2[N4x2];
     __m512i ker_x[NUM_LIMBS], ker_y[NUM_LIMBS], ker_z[NUM_LIMBS];
@@ -492,4 +497,5 @@ bool test_theta_KAT(int iterations)
     // }
 
     return true;
+#endif
 }
