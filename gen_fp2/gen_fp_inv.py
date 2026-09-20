@@ -262,7 +262,7 @@ def lindiv31abs_64(f, pp, v):
 
     f.end()
 
-def fp_mul_64(f, pp, v):
+def fp_mul_64_oneshot(f, pp, v):
     n = pp.num_words64
     split_word = pp.e // 64
     split_bit = pp.e % 64
@@ -333,6 +333,93 @@ def fp_mul_64(f, pp, v):
     if remaining > 0:
         f.line(f"for (int i = {split_word + n + 1}; i < {2 * n}; i++) cc = adc(cc, e[i], 0, &e[i]);")
     f.line()
+
+    f.comment("Conditional subtraction of p for full reduction")
+    f.line(f"uint64_t r[{n}];")
+    f.line("cc = 0;")
+    f.line(f"for (int i = 0; i < {n}; i++) cc = sbb(cc, e[{n} + i], P[i], &r[i]);")
+    f.line("uint64_t mask = -(uint64_t)cc;")
+    f.line(f"for (int i = 0; i < {n}; i++) res[i] = (e[{n} + i] & mask) | (r[i] & ~mask);")
+
+    f.end()
+
+def fp_mul_64(f, pp, v):
+    n = pp.num_words64
+    e_val = pp.e
+    split_word = e_val // 64
+    split_bit = e_val % 64
+    C = int(pp.c)
+    c_bits = C.bit_length()
+
+    # p = -1 mod 2^64  <=>  e >= 64, which makes p' = -p^{-1} mod 2^64 = 1 (u = s[i]).
+    assert e_val >= 64, "Montgomery-friendly word reduction requires e >= 64"
+    # Short product u*c must be a single 64x64->128 multiply.
+    assert c_bits <= 64, "reduction assumes c fits in one 64-bit word"
+
+    p_hex = limbs_to_hex(int_to_limbs(pp.p, 64))
+
+    f.comment(f"Montgomery multiplication: res = a * b / 2^{64*n} mod p")
+    f.comment(f"p = {pp.c} * 2^{pp.e} - 1")
+    f.start("void fp_mul_64(uint64_t* res, const uint64_t* a, const uint64_t* b)")
+
+    f.line(f"const uint64_t P[{n}] = {{")
+    f.indent()
+    for i in range(n):
+        comma = "," if i < n - 1 else ""
+        f.line(f"{p_hex[i]}ULL{comma}")
+    f.unindent()
+    f.line("};")
+    f.line()
+
+    f.line(f"uint64_t e[{2 * n}], u, lo, hi;")
+    f.line("unsigned char cc;")
+    f.line()
+
+    f.comment("Schoolbook multiplication: e = a * b")
+    for i in range(n):
+        if i == 0:
+            f.line("umul_64(&e[0], &hi, a[0], b[0]);")
+            for j in range(1, n):
+                f.line(f"umul_add_64(&e[{j}], &hi, a[0], b[{j}], hi);")
+            f.line(f"e[{n}] = hi;")
+        else:
+            f.line(f"umul_64(&lo, &hi, a[{i}], b[0]);")
+            f.line(f"cc = adc(0, e[{i}], lo, &e[{i}]);")
+            for j in range(1, n):
+                f.line(f"umul_add_64(&lo, &hi, a[{i}], b[{j}], hi);")
+                f.line(f"cc = adc(cc, e[{i + j}], lo, &e[{i + j}]);")
+            f.line(f"e[{i + n}] = hi + (uint64_t)cc;")
+        f.line()
+
+    f.comment("Montgomery reduction word-by-word")
+    top = 2 * n - 1
+    for i in range(n):
+        base = split_word + i
+        f.line(f"u = e[{i}];")
+        f.line(f"umul_64(&lo, &hi, u, {C}ULL);")
+
+        # (hi:lo) << split_bit, spread across up to three words starting at base.
+        if split_bit == 0:
+            words = [(base, "lo"), (base + 1, "hi")]
+        else:
+            sb = split_bit
+            words = [
+                (base,     f"lo << {sb}"),
+                (base + 1, f"(lo >> {64 - sb}) | (hi << {sb})"),
+                (base + 2, f"hi >> {64 - sb}"),
+            ]
+        # Words landing at index >= 2n are zero so we drop them
+        words = [(idx, expr) for (idx, expr) in words if idx <= top]
+
+        last_idx = base
+        for k, (idx, expr) in enumerate(words):
+            carry_in = "0" if k == 0 else "cc"
+            f.line(f"cc = adc({carry_in}, e[{idx}], {expr}, &e[{idx}]);")
+            last_idx = idx
+        # Ripple the remaining carry up to the top word.
+        for k in range(last_idx + 1, top + 1):
+            f.line(f"cc = adc(cc, e[{k}], 0, &e[{k}]);")
+        f.line()
 
     f.comment("Conditional subtraction of p for full reduction")
     f.line(f"uint64_t r[{n}];")

@@ -78,10 +78,10 @@ def get_p(e, c):
     pbits = p.bit_length()
     #assert p.is_prime()
     # script only designed for cryptographically sized primes
-    assert pbits >= 51*4 
+    assert pbits > 51*3 # need at least 4 limbs
 
     # min_limb_len <= 39 when num_limbs >= 4
-    assert c.bit_length() <= 39
+    # assert c.bit_length() <= 39
 
     return p, pbits
 
@@ -211,23 +211,26 @@ def get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain):
     # main strats to optimize 8x1x1 mul
     if limb_len <= 50:
         carry_prop_karat = False
-        reduce_everything = False
         if last_limb_len <= limb_len-2:
             mod_2p = True
             R_ext = True
             mul_nonneg = MulNonnegMode.add_p_shifted
+            reduce_everything = False
         elif last_limb_len == limb_len-1:
             mod_2p = True
             R_ext = True
             mul_nonneg = MulNonnegMode.add_2p_shifted
+            reduce_everything = False
         elif limb_len < 50:
             mod_2p = True
             R_ext = True
             mul_nonneg = MulNonnegMode.add_4p_shifted
+            reduce_everything = False
         else:
-            mod_2p = False
+            mod_2p = True
             R_ext = True
             mul_nonneg = MulNonnegMode.add_p_shifted
+            reduce_everything = True
     else: # limb_len = 51
         carry_prop_karat = True # Also in fp2 sqr
         if last_limb_len <= 49:
@@ -236,15 +239,43 @@ def get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain):
             mul_nonneg = MulNonnegMode.add_p_shifted
             reduce_everything = False
         elif last_limb_len == 50:
-            mod_2p = False
+            mod_2p = True
             R_ext = True
-            mul_nonneg = MulNonnegMode.add_2p_shifted
-            reduce_everything = False
+            mul_nonneg = MulNonnegMode.add_p_shifted
+            reduce_everything = True
         else: #last_limb_len = 51
             mod_2p = False
-            R_ext = False
-            mul_nonneg = MulNonnegMode.cond_add
+            R_ext = True
+            mul_nonneg = MulNonnegMode.add_p_shifted
             reduce_everything = True
+
+    # Notes on what I'm doing:
+    # Realizes that we can do mod_2p and most of lazy red for the "worst" cases
+    # if we keep using R_ext = True and so the Karatsuba add fully reduced
+
+    # For limb_len = last_limb_len = 51: 
+    # By using R_ext = True, we can add p shifted, skipping cond add p
+    # Furthermore, while we before did no lazy comp, I realized that we just need to
+    # compute the Karatsuba addition properly, then the input to fp_mul_8x1 has 51 bit limbs.
+    # After this, we can go way beyond the limb size, so the rest of the computation can be 
+    # lazy like before. For my test prime, I went from 260 -> 187 cycles.
+
+    # For limb_len = 51, last_limb_len = 50:
+    # By doing the Karatsuba addition properly, we can keep inputs mod 2p.
+    # This gave a speedup from 234 -> 212 cycles for my test prime.
+
+    # For limb_len = last_limb_len = 50: 
+    # with mod 2p, we get 51 bits in top, and then Karatsuba add gives 52.
+    # However, by doing the addition properly, we once again get 51 bits in the top.
+    # carry prop karat doesn't work here, as that would only increase the top by an additional bit
+    # 228 -> 213
+    
+    # TODO:
+    # remove cond_add mode?
+    # add mode for karatsuba add: lazy, carry, reduce
+    # fix 8x1x1 sqr too
+    # other modes
+    # remove old strat data
 
     # additional strat for squaring
     sqr_use_add_p_sub = R_ext

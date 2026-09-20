@@ -93,10 +93,28 @@ def fp2_mixaddsub_8x1x1(f, pp, v, inline=False):
 def fp2_mul_8x1x1(f, pp, v, strat, inline=False):
     f.start("void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)", inline=inline)
 
+    # if strat.reduce_everything:
+    #     fp2_mul_8x1x1_standard(f, pp, v)
+    # else:
+    #     fp2_mul_8x1x1_lazy(f, pp, v)
+
+    f.line(f"__m512i tt1[{2*pp.num_limbs}], tt2[{2*pp.num_limbs}], tt3[{2*pp.num_limbs}];")
+    f.line()
+
     if strat.reduce_everything:
-        fp2_mul_8x1x1_standard(f, pp, v)
+        f.line(f"fp_add_8x1(tt3, a, a + {pp.num_limbs});")
+        f.line(f"fp_add_8x1(tt3 + {pp.num_limbs}, b, b + {pp.num_limbs});")
     else:
-        fp2_mul_8x1x1_lazy(f, pp, v)
+        f.line(f"mp_add_8x1(tt3, a, a + {pp.num_limbs});")
+        f.line(f"mp_add_8x1(tt3 + {pp.num_limbs}, b, b + {pp.num_limbs});")
+
+    f.line(f"mp_mul_8x1(tt1, a, b);")
+    f.line(f"mp_mul_8x1(tt2, a + {pp.num_limbs}, b + {pp.num_limbs});")
+    f.line(f"mp_mul_8x1(tt3, tt3, tt3 + {pp.num_limbs});")
+    f.line(f"mp_dblsubx2_8x1(tt3, tt1, tt2);") # Always >=0
+    f.line(f"mp_subx2_8x1(tt1, tt2);") # Can be negative
+    f.line(f"rdc_8x1(res + {pp.num_limbs}, tt3);")
+    f.line(f"rdc_8x1(res, tt1);")
 
     f.end()
 
@@ -108,7 +126,7 @@ def fp2_mul_8x1x1_standard(f, pp, v):
     # f.line(f"__m512i zero[{pp.num_limbs}];")
     # f.line(f"fp_setzero_8x1(zero);")
     # f.line()
-
+    
     f.line(f"fp_add_8x1(s1, a, a + {pp.num_limbs});")
     f.line(f"fp_add_8x1(s2, b, b + {pp.num_limbs});")
     f.line(f"fp_mul_8x1(s3, s1, s2);")
@@ -127,7 +145,7 @@ def fp2_mul_8x1x1_standard(f, pp, v):
 def fp2_mul_8x1x1_lazy(f, pp, v):
     f.line(f"__m512i tt1[{2*pp.num_limbs}], tt2[{2*pp.num_limbs}], tt3[{2*pp.num_limbs}];")
     f.line()
-
+    
     f.line(f"mp_add_8x1(tt3, a, a + {pp.num_limbs});")
     f.line(f"mp_add_8x1(tt3 + {pp.num_limbs}, b, b + {pp.num_limbs});")
     f.line(f"mp_mul_8x1(tt1, a, b);")

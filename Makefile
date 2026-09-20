@@ -1,6 +1,6 @@
-CC = gcc
+CC = clang # experiments indicate it is faster than gcc
 CFLAGS = -O3 -march=native -flto=auto -MMD -MP #-Wall -Wextra
-TEST_CFLAGS = $(CFLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer -g
+TEST_CFLAGS = $(CFLAGS) -fno-omit-frame-pointer -g -fsanitize=address,undefined
 BENCH_CFLAGS = $(CFLAGS) -DNDEBUG
 
 # ---------------------------------------------------------
