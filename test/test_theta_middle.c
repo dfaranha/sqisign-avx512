@@ -7,6 +7,35 @@
 #include "theta_middle.h"
 #include "utils.h"
 
+// Under SUPERGLUE the pair functions store a pair as (a1, b1, c1, d1, a2, b2,
+// c2, d2) rather than interleaved, so fp2_{8x1x1_to_4x2x1,4x2x1_to_8x1x1} do
+// not split and join it. These do.
+#ifdef SUPERGLUE
+static void pair_split(__m512i* res1, __m512i* res2, __m512i* src)
+{
+    const __m512i idx_lo = VSET(0, 8, 1, 9, 2, 10, 3, 11);
+    const __m512i idx_hi = VSET(4, 12, 5, 13, 6, 14, 7, 15);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        res1[i] = VBLENDPERM(idx_lo, src[i], src[i + NUM_LIMBS]);
+        res2[i] = VBLENDPERM(idx_hi, src[i], src[i + NUM_LIMBS]);
+    }
+}
+
+static void pair_join(__m512i* res, __m512i* src1, __m512i* src2)
+{
+    const __m512i idx_re = VSET(0, 2, 4, 6, 8, 10, 12, 14);
+    const __m512i idx_im = VSET(1, 3, 5, 7, 9, 11, 13, 15);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        __m512i re = VBLENDPERM(idx_re, src1[i], src2[i]);
+        res[i + NUM_LIMBS] = VBLENDPERM(idx_im, src1[i], src2[i]);
+        res[i] = re;
+    }
+}
+#else
+#define pair_split fp2_8x1x1_to_4x2x1
+#define pair_join fp2_4x2x1_to_8x1x1
+#endif
+
 bool test_theta_middle(int iterations)
 {
     __m512i a[2*NUM_LIMBS], b[2*NUM_LIMBS], c[2*NUM_LIMBS], d[2*NUM_LIMBS], e[2*NUM_LIMBS];
@@ -150,13 +179,13 @@ bool test_theta_middle(int iterations)
         rand_fp2_4x2x1(c);
 
         // Pair matches single
-        fp2_8x1x1_to_4x2x1(e, e + NUM_LIMBS, a);
+        pair_split(e, e + NUM_LIMBS, a);
         theta_double_single(f, e, b, c);
         theta_double_single(f + NUM_LIMBS, e + NUM_LIMBS, b, c);
-        fp2_4x2x1_to_8x1x1(e, f, f + NUM_LIMBS);
+        pair_join(e, f, f + NUM_LIMBS);
 
-        fp2_4x2x1_to_8x1x1(b, b, b);
-        fp2_4x2x1_to_8x1x1(c, c, c);
+        pair_join(b, b, b);
+        pair_join(c, c, c);
         theta_double_pair(d, a, b, c);
         
         if (fp2_is_equal_8x1x1(d, e) != 0xff) {
