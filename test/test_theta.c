@@ -1,8 +1,11 @@
 #include <stdio.h>
 #include <assert.h>
 
+#include "ec.h"
 #include "fp.h"
 #include "fp2.h"
+#include "fp_consts.h"
+#include "fp_unvec.h"
 #include "test.h"
 #include "theta.h"
 #include "theta_gluing.h"
@@ -255,7 +258,10 @@ bool test_theta_KAT(int iterations)
     int num_pts_vals[NUM_INPUT_LISTS] = { 2, 3 };
     theta_couple_point_t res_pts[3]; 
     ec_point_t RmS1, RpS1, RmS2, RpS2;
-    bool success, verify;
+    bool success;
+    // The signing-side chains below run unverified; the verification chain
+    // further down sets the flag itself.
+    bool verify = false;
 
     // with torsion
     for (int ridx = 0; ridx < 2 && passed; ridx++) {
@@ -333,9 +339,49 @@ bool test_theta_KAT(int iterations)
         return false;
     }
 
-    // 8x1x1 verification
-    #if 0
-    success = theta_isogeny_chain_verif(&E34_actual, &E12, &ker_extra, length);
+    // 4x2x1 verification
+    // The verification chain is only available in vectorized form, so we pack
+    // its inputs the way common/verif.c does: the curve coefficients as (A, 1)
+    // and (A24, 1) in 2x2x2, and the kernel lifted to Jacobian coordinates as
+    // ker_x = (P1.X, Q1.X, P2.X, Q2.X) in 4x2x1, etc. The domain and the kernel
+    // were normalized above by theta_normalize_chain_input_unvec, which is what
+    // the lift assumes.
+    __m512i ker_basis1[3*N4x2], ker_basis2[3*N4x2], A_34[NUM_LIMBS];
+    __m512i normA_1[N4x2], normA_2[N4x2], normA24_1[N4x2], normA24_2[N4x2];
+    __m512i ker_x[NUM_LIMBS], ker_y[NUM_LIMBS], ker_z[NUM_LIMBS];
+    ec_point_t AC;
+    fp2_t A_34_unvec[4];
+
+    ec_point_unvec_to_1x2x2x2(ker_basis1, &ker_extra.T1.P1);
+    ec_point_unvec_to_1x2x2x2(ker_basis1 + N4x2, &ker_extra.T2.P1);
+    ec_point_unvec_to_1x2x2x2(ker_basis1 + 2*N4x2, &ker_extra.T1m2.P1);
+    ec_point_unvec_to_1x2x2x2(ker_basis2, &ker_extra.T1.P2);
+    ec_point_unvec_to_1x2x2x2(ker_basis2 + N4x2, &ker_extra.T2.P2);
+    ec_point_unvec_to_1x2x2x2(ker_basis2 + 2*N4x2, &ker_extra.T1m2.P2);
+
+    fp2_copy(&AC.x, &E12.E1.A);
+    fp2_set_one(&AC.z);
+    ec_point_unvec_to_1x2x2x2(normA_1, &AC);
+    fp2_copy(&AC.x, &E12.E2.A);
+    fp2_set_one(&AC.z);
+    ec_point_unvec_to_1x2x2x2(normA_2, &AC);
+    ec_point_unvec_to_1x2x2x2(normA24_1, &E12.E1.A24);
+    ec_point_unvec_to_1x2x2x2(normA24_2, &E12.E2.A24);
+
+    success = lift_basis_pair_normalized_2x2x2(
+        ker_x, ker_y, ker_z, ker_basis1, ker_basis2, normA_1, normA_2, true
+    );
+    success &= theta_isogeny_chain_vec_verif(
+        A_34, ker_x, ker_y, ker_z, normA_1, normA_2, normA24_1, normA24_2, length
+    );
+
+    fp2_4x2x1_to_unvectorized(A_34_unvec, A_34);
+    ec_curve_init(&E34_actual.E1);
+    ec_curve_init(&E34_actual.E2);
+    E34_actual.E1.A = A_34_unvec[0];
+    E34_actual.E1.C = A_34_unvec[1];
+    E34_actual.E2.A = A_34_unvec[2];
+    E34_actual.E2.C = A_34_unvec[3];
 
     ec_normalize_curve(&E34_actual.E1);
     ec_normalize_curve(&E34_actual.E2);
@@ -424,7 +470,6 @@ bool test_theta_KAT(int iterations)
     if(passed == 0) {
         return false;
     }
-    #endif
 
     // TODO: Randomize, eval points
     // for (int i = 0; i < 10 && passed; i++) {
