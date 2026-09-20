@@ -1,6 +1,6 @@
 from math import ceil
 from gen_addchain import (write_dbl_and_add, write_fp_exp3_div4_naive, write_exp_function)
-from params import MulNonnegMode
+from params import (KaratsubaAddMode, MulNonnegMode)
 
 def fp_setzero_8x1(f, pp, v):
     f.start("void fp_setzero_8x1(__m512i* res)")
@@ -330,7 +330,7 @@ def mp_add_8x1(f, pp, v, strat):
     f.start("void mp_add_8x1(__m512i* res, __m512i* a, __m512i* b)")
 
     f.declare_single_vars(var_name="t", count=pp.num_limbs)
-    if strat.carry_prop_karat:
+    if strat.karat_add == KaratsubaAddMode.carry_prop:
         f.line(f"const __m512i limb_mask = VSETALL(LIMB_MASK);")
     f.line()
 
@@ -338,7 +338,7 @@ def mp_add_8x1(f, pp, v, strat):
         f.line(f"t{i} = VADD(a[{i}], b[{i}]);")
     f.line()
 
-    if strat.carry_prop_karat:
+    if strat.karat_add == KaratsubaAddMode.carry_prop:
         carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask")
 
     f.single_vars_to_array(var_name="t", arr_name="res", count=pp.num_limbs)
@@ -378,8 +378,8 @@ def mp_subx2_8x1(f, pp, v, strat):
 
     num_limbs_prod = get_num_limbs_prod(pp)
     f.declare_single_vars(var_name="t", count=num_limbs_prod)
-    if strat.mul_nonneg == MulNonnegMode.cond_add:
-        f.line("__m512i sign_mask;")
+    # if strat.mul_nonneg == MulNonnegMode.cond_add:
+    #     f.line("__m512i sign_mask;")
     if strat.mul_nonneg == MulNonnegMode.add_2p_shifted:
         f.line("const __m512i p_bot = VSETALL(2);")
         f.line(f"const __m512i p_top = VSETALL(2*{v.p_plus_1_top});")
@@ -398,8 +398,8 @@ def mp_subx2_8x1(f, pp, v, strat):
     f.line()
 
     match strat.mul_nonneg:
-        case MulNonnegMode.cond_add:
-            f.comment("Conditionally add p*R if negative")
+        # case MulNonnegMode.cond_add:
+        #     f.comment("Conditionally add p*R if negative")
         case MulNonnegMode.add_p_shifted:
             f.comment("We can get result in [0, p*R) by always adding p * 2^(num_limbs * limb_len)")
         case MulNonnegMode.add_2p_shifted:
@@ -407,21 +407,21 @@ def mp_subx2_8x1(f, pp, v, strat):
         case MulNonnegMode.add_4p_shifted:
             f.comment("We can get result in [0, p*R) by always adding 4p * 2^(num_limbs * limb_len)")
 
-    if strat.mul_nonneg != MulNonnegMode.cond_add:
-        f.line(f"t{pp.num_limbs} = VSUB(t{pp.num_limbs}, p_bot);")
-        f.line(f"t{num_limbs_prod-1} = VADD(t{num_limbs_prod-1}, p_top);")
-        f.line()
+    # if strat.mul_nonneg != MulNonnegMode.cond_add:
+    f.line(f"t{pp.num_limbs} = VSUB(t{pp.num_limbs}, p_bot);")
+    f.line(f"t{num_limbs_prod-1} = VADD(t{num_limbs_prod-1}, p_top);")
+    f.line()
 
     carry_prop_8x1_var(f, pp, v, num_limbs_prod, "t", "limb_mask")
 
-    if strat.mul_nonneg == MulNonnegMode.cond_add:
-        # if result is negative, add p*R. 
-        # Keeps output in [0, p*R), ensuring that Montgomery red gives result in [0, 2p)
-        f.line(f"sign_mask = VSRA(t{num_limbs_prod-1}, 63);")
-        f.line(f"t{pp.num_limbs} = VSUB(t{pp.num_limbs}, VAND(p_bot, sign_mask));")
-        f.line(f"t{num_limbs_prod-1} = VADD(t{num_limbs_prod-1}, VAND(p_top, sign_mask));")
+    # if strat.mul_nonneg == MulNonnegMode.cond_add:
+    #     # if result is negative, add p*R. 
+    #     # Keeps output in [0, p*R), ensuring that Montgomery red gives result in [0, 2p)
+    #     f.line(f"sign_mask = VSRA(t{num_limbs_prod-1}, 63);")
+    #     f.line(f"t{pp.num_limbs} = VSUB(t{pp.num_limbs}, VAND(p_bot, sign_mask));")
+    #     f.line(f"t{num_limbs_prod-1} = VADD(t{num_limbs_prod-1}, VAND(p_top, sign_mask));")
 
-        carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask", pp.num_limbs)
+    #     carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask", pp.num_limbs)
 
     f.single_vars_to_array(var_name="t", arr_name="res", count=num_limbs_prod)
 
@@ -432,8 +432,8 @@ def mp_mixaddsubx2_8x1(f, pp, v, strat):
 
     num_limbs_prod = get_num_limbs_prod(pp)
     f.declare_single_vars(var_name="t", count=num_limbs_prod)
-    if strat.mul_nonneg == MulNonnegMode.cond_add:
-        f.line("__m512i sign_mask;")
+    # if strat.mul_nonneg == MulNonnegMode.cond_add:
+    #     f.line("__m512i sign_mask;")
     if strat.mul_nonneg == MulNonnegMode.add_2p_shifted:
         f.line("const __m512i p_bot = VSETALL(2);")
         f.line(f"const __m512i p_top = VSETALL(2*{v.p_plus_1_top});")
@@ -453,8 +453,8 @@ def mp_mixaddsubx2_8x1(f, pp, v, strat):
     f.line()
 
     match strat.mul_nonneg:
-        case MulNonnegMode.cond_add:
-            f.comment("Conditionally add p*R if negative")
+        # case MulNonnegMode.cond_add:
+        #     f.comment("Conditionally add p*R if negative")
         case MulNonnegMode.add_p_shifted:
             f.comment("We can get result in [0, p*R) by always adding p * 2^(num_limbs * limb_len)")
         case MulNonnegMode.add_2p_shifted:
@@ -462,10 +462,10 @@ def mp_mixaddsubx2_8x1(f, pp, v, strat):
         case MulNonnegMode.add_4p_shifted:
             f.comment("We can get result in [0, p*R) by always adding 4p * 2^(num_limbs * limb_len)")
 
-    if strat.mul_nonneg != MulNonnegMode.cond_add:
-        f.line(f"t{pp.num_limbs} = VSUB(t{pp.num_limbs}, p_bot);")
-        f.line(f"t{num_limbs_prod-1} = VADD(t{num_limbs_prod-1}, p_top);")
-        f.line()
+    # if strat.mul_nonneg != MulNonnegMode.cond_add:
+    f.line(f"t{pp.num_limbs} = VSUB(t{pp.num_limbs}, p_bot);")
+    f.line(f"t{num_limbs_prod-1} = VADD(t{num_limbs_prod-1}, p_top);")
+    f.line()
 
     for i in range(num_limbs_prod):
         f.line(f"t{i} = VADDMASK(t{i}, add_mask, a[{i}], b[{i}]);")
@@ -473,14 +473,14 @@ def mp_mixaddsubx2_8x1(f, pp, v, strat):
 
     carry_prop_8x1_var(f, pp, v, num_limbs_prod, "t", "limb_mask")
 
-    if strat.mul_nonneg == MulNonnegMode.cond_add:
-        # if result is negative, add p*R. 
-        # Keeps output in [0, p*R), ensuring that Montgomery red gives result in [0, 2p)
-        f.line(f"sign_mask = VSRA(t{num_limbs_prod-1}, 63);")
-        f.line(f"t{pp.num_limbs} = VSUB(t{pp.num_limbs}, VAND(p_bot, sign_mask));")
-        f.line(f"t{num_limbs_prod-1} = VADD(t{num_limbs_prod-1}, VAND(p_top, sign_mask));")
+    # if strat.mul_nonneg == MulNonnegMode.cond_add:
+    #     # if result is negative, add p*R. 
+    #     # Keeps output in [0, p*R), ensuring that Montgomery red gives result in [0, 2p)
+    #     f.line(f"sign_mask = VSRA(t{num_limbs_prod-1}, 63);")
+    #     f.line(f"t{pp.num_limbs} = VSUB(t{pp.num_limbs}, VAND(p_bot, sign_mask));")
+    #     f.line(f"t{num_limbs_prod-1} = VADD(t{num_limbs_prod-1}, VAND(p_top, sign_mask));")
 
-        carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask", pp.num_limbs)
+    #     carry_prop_8x1_var(f, pp, v, pp.num_limbs, "t", "limb_mask", pp.num_limbs)
 
     f.single_vars_to_array(var_name="t", arr_name="res", count=num_limbs_prod)
 

@@ -53,10 +53,14 @@ class Fp2Mode(Enum):
     reduce_everything = 3
 
 class MulNonnegMode(Enum):
-    cond_add = 0        # conditionally add p*2^(N*l), only to be used with R_ext = False
     add_p_shifted = 1   # add p*2^(Nl)
     add_2p_shifted = 2  # add 2p*2^(Nl)
     add_4p_shifted = 3  # add 4p*2^(Nl)
+
+class KaratsubaAddMode(Enum):
+    lazy = 0
+    carry_prop = 1
+    reduce = 2
 
 @dataclass
 class Strat:
@@ -64,14 +68,11 @@ class Strat:
     R_ext: bool
     mod_2p: bool
     mul_nonneg: MulNonnegMode
-    carry_prop_karat: bool
+    karat_add: KaratsubaAddMode
     reduce_everything: bool
     sqr_use_add_p_sub: bool
     sqr8_faster_add_p_sub: bool
     sqr4_faster_add_p_sub: bool
-    mul_8x1: Fp2Mode
-    sqr_8x1: Fp2Mode
-    sqr_4x2: Fp2Mode
 
 def get_p(e, c):
     p = c * 2**e -1
@@ -93,160 +94,51 @@ def get_len_42_24(num_limbs):
     return n42, n24, rem42, rem24
 
 def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
-    #TODO:
-    # mp_add_p_sub relies on all but top limb of p being limb_mask
-    #   which is why we have the assert in get_limb_params. Generalize to the case c_bits + (e mod limb_len) > last_limb_len
-    #  (mult by c, shift by e mod limb_limb_len) Find example with limb_len 51
-
-    if limb_len <= 49:
-        mul_8x1 = Fp2Mode.lazy
-        sqr_8x1 = Fp2Mode.lazy
-        sqr_4x2 = Fp2Mode.lazy
-        R_ext = True
-        mod_2p = True
-    elif limb_len == 50 and last_limb_len <= 49: # 8x1 sqr needs carry when limb_ln = 50
-        mul_8x1 = Fp2Mode.lazy
-        sqr_8x1 = Fp2Mode.lazy_carry
-        sqr_4x2 = Fp2Mode.lazy
-        R_ext = True
-        mod_2p = True
-    elif limb_len == 50 and last_limb_len == 50: # 8x1 sqr needs mod p
-        mul_8x1 = Fp2Mode.lazy
-        sqr_8x1 = Fp2Mode.lazy_carry
-        sqr_4x2 = Fp2Mode.lazy
-        R_ext = True
-        mod_2p = False
-    elif last_limb_len <= 48: # 8x1 mul & 4x2 sqr requires carry
-        mul_8x1 = Fp2Mode.lazy_carry
-        sqr_8x1 = Fp2Mode.lazy_carry
-        sqr_4x2 = Fp2Mode.lazy_carry
-        R_ext = False
-        #R_ext = num_limbs > 5 # Experimental data shows this is efficiency threshold
-        mod_2p = True
-    elif last_limb_len == 49: # 8x1 squaring must switch to mod p
-        mul_8x1 = Fp2Mode.lazy_carry
-        sqr_8x1 = Fp2Mode.lazy_carry
-        sqr_4x2 = Fp2Mode.lazy_carry
-        R_ext = False
-        mod_2p = False
-    elif last_limb_len == 50: # 8x1 squaring must reduce sub, need R_ext to keep square within [0, pR)
-        mul_8x1 = Fp2Mode.lazy_carry
-        sqr_8x1 = Fp2Mode.reduce
-        sqr_4x2 = Fp2Mode.lazy_carry
-        R_ext = True
-        mod_2p = False
-    else: #8x1x1 lazy mult & squaring doesn't work
-        mul_8x1 = Fp2Mode.reduce_everything
-        sqr_8x1 = Fp2Mode.reduce_everything
-        sqr_4x2 = Fp2Mode.lazy_carry
-        R_ext = True
-        mod_2p = False
-
-    # TODO: Can we save one limb in prod when last_limb_len < 2 * limb_len?
-    return Strat(
-        gen_addchain = gen_addchain,
-        mul_8x1 = mul_8x1,
-        sqr_8x1 = sqr_8x1,
-        sqr_4x2 = sqr_4x2,
-        R_ext = R_ext,
-        mod_2p = mod_2p,
-        carry_prop_karat = False,
-        reduce_everything = False,
-        mul_nonneg = MulNonnegMode.cond_add,
-        sqr_use_add_p_sub = False,
-        sqr8_faster_add_p_sub = False,
-        sqr4_faster_add_p_sub = False
-    )
-
-def get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain):
-
-    # About to implement new strategies, adding this to swap out one by one and make debugging easier !!!!
-    
-    if limb_len <= 49:
-        mul_8x1 = Fp2Mode.lazy
-        sqr_8x1 = Fp2Mode.lazy
-        sqr_4x2 = Fp2Mode.lazy
-        R_ext = True
-        mod_2p = True
-    elif limb_len == 50 and last_limb_len <= 49: # 8x1 sqr needs carry when limb_ln = 50
-        mul_8x1 = Fp2Mode.lazy
-        sqr_8x1 = Fp2Mode.lazy_carry
-        sqr_4x2 = Fp2Mode.lazy
-        R_ext = True
-        mod_2p = True
-    elif limb_len == 50 and last_limb_len == 50: # 8x1 sqr needs mod p
-        mul_8x1 = Fp2Mode.lazy
-        sqr_8x1 = Fp2Mode.lazy_carry
-        sqr_4x2 = Fp2Mode.lazy
-        R_ext = True
-        mod_2p = False
-    elif last_limb_len <= 48: # 8x1 mul & 4x2 sqr requires carry
-        mul_8x1 = Fp2Mode.lazy_carry
-        sqr_8x1 = Fp2Mode.lazy_carry
-        sqr_4x2 = Fp2Mode.lazy_carry
-        R_ext = False
-        #R_ext = num_limbs > 5 # Experimental data shows this is efficiency threshold
-        mod_2p = True
-    elif last_limb_len == 49: # 8x1 squaring must switch to mod p
-        mul_8x1 = Fp2Mode.lazy_carry
-        sqr_8x1 = Fp2Mode.lazy_carry
-        sqr_4x2 = Fp2Mode.lazy_carry
-        R_ext = False
-        mod_2p = False
-    elif last_limb_len == 50: # 8x1 squaring must reduce sub, need R_ext to keep square within [0, pR)
-        mul_8x1 = Fp2Mode.lazy_carry
-        sqr_8x1 = Fp2Mode.reduce
-        sqr_4x2 = Fp2Mode.lazy_carry
-        R_ext = True
-        mod_2p = False
-    else: #8x1x1 lazy mult & squaring doesn't work
-        mul_8x1 = Fp2Mode.reduce_everything
-        sqr_8x1 = Fp2Mode.reduce_everything
-        sqr_4x2 = Fp2Mode.lazy_carry
-        R_ext = True
-        mod_2p = False
-
-    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     # main strats to optimize 8x1x1 mul
     if limb_len <= 50:
-        carry_prop_karat = False
         if last_limb_len <= limb_len-2:
             mod_2p = True
             R_ext = True
             mul_nonneg = MulNonnegMode.add_p_shifted
+            karat_add = KaratsubaAddMode.lazy
             reduce_everything = False
         elif last_limb_len == limb_len-1:
             mod_2p = True
             R_ext = True
             mul_nonneg = MulNonnegMode.add_2p_shifted
+            karat_add = KaratsubaAddMode.lazy
             reduce_everything = False
         elif limb_len < 50:
             mod_2p = True
             R_ext = True
             mul_nonneg = MulNonnegMode.add_4p_shifted
+            karat_add = KaratsubaAddMode.lazy
             reduce_everything = False
         else:
             mod_2p = True
             R_ext = True
             mul_nonneg = MulNonnegMode.add_p_shifted
+            karat_add = KaratsubaAddMode.reduce
             reduce_everything = True
     else: # limb_len = 51
-        carry_prop_karat = True # Also in fp2 sqr
         if last_limb_len <= 49:
             mod_2p = True
             R_ext = True
             mul_nonneg = MulNonnegMode.add_p_shifted
+            karat_add = KaratsubaAddMode.carry_prop
             reduce_everything = False
         elif last_limb_len == 50:
             mod_2p = True
             R_ext = True
             mul_nonneg = MulNonnegMode.add_p_shifted
+            karat_add = KaratsubaAddMode.reduce
             reduce_everything = True
         else: #last_limb_len = 51
             mod_2p = False
             R_ext = True
             mul_nonneg = MulNonnegMode.add_p_shifted
+            karat_add = KaratsubaAddMode.reduce
             reduce_everything = True
 
     # Notes on what I'm doing:
@@ -271,11 +163,14 @@ def get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain):
     # 228 -> 213
     
     # TODO:
-    # remove cond_add mode?
-    # add mode for karatsuba add: lazy, carry, reduce
+    # remove cond_add mode? [x]
+    # add mode for karatsuba add: lazy, carry, reduce [x]
     # fix 8x1x1 sqr too
     # other modes
+    # update limb_len picker
     # remove old strat data
+    # add SQIsign v3 primes
+    # check Patrick optimization
 
     # additional strat for squaring
     sqr_use_add_p_sub = R_ext
@@ -288,14 +183,11 @@ def get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain):
 
     return Strat(
         gen_addchain = gen_addchain,
-        mul_8x1 = mul_8x1,
-        sqr_8x1 = sqr_8x1,
-        sqr_4x2 = sqr_4x2,
         R_ext = R_ext,
         mod_2p = mod_2p,
-        carry_prop_karat = carry_prop_karat,
         reduce_everything = reduce_everything,
         mul_nonneg = mul_nonneg,
+        karat_add = karat_add,
         sqr_use_add_p_sub = sqr_use_add_p_sub,
         sqr8_faster_add_p_sub = sqr8_faster_add_p_sub,
         sqr4_faster_add_p_sub = sqr4_faster_add_p_sub
@@ -328,8 +220,8 @@ def find_best_limb_len_in_range(pbits, num_limbs, min_limb_len, max_limb_len):
     # Sorted by priority
     predicates = [
         lambda strat: strat.mod_2p,
-        lambda strat: not strat.carry_prop_karat,
-        lambda strat: strat.mul_nonneg != MulNonnegMode.cond_add,
+        lambda strat: not strat.karat_add == KaratsubaAddMode.reduce,
+        lambda strat: strat.karat_add == KaratsubaAddMode.lazy,
         lambda strat: strat.sqr_use_add_p_sub,
         lambda strat: strat.sqr8_faster_add_p_sub,
         lambda strat: strat.sqr4_faster_add_p_sub,
@@ -349,7 +241,7 @@ def find_candidates_satisfying_predicate(pbits, num_limbs, candidates, pred):
     new_candidates = []
     for limb_len in candidates:
         last_limb_len = get_last_limb_len(pbits, num_limbs, limb_len)
-        strat = get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain=None)
+        strat = get_strat(num_limbs, limb_len, last_limb_len, gen_addchain=None)
         if pred(strat):
             new_candidates.append(limb_len)
     return new_candidates
@@ -382,8 +274,7 @@ def comp_params_and_strat(e, c, num_kat, gen_addchain):
     p, pbits = get_p(e, c)
     num_limbs, limb_len, last_limb_len, num_words64 = get_limb_params(pbits, e, c)
     n42, n24, rem42, rem24 = get_len_42_24(num_limbs)
-    print("old_strat:", get_strat(num_limbs, limb_len, last_limb_len, gen_addchain))
-    strat = get_strat_new(num_limbs, limb_len, last_limb_len, gen_addchain)
+    strat = get_strat(num_limbs, limb_len, last_limb_len, gen_addchain)
     num_limbs_R, R, R2 = get_mont_const(p, num_limbs, limb_len, strat)
     
     pp = FpParams(
