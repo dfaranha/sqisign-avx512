@@ -31,7 +31,7 @@ def parse_kat_file(filename):
 def generic_KAT_test(level=1, num_tests=100):
     sqisign = SQIsign(level)
     kat_tests = parse_kat_file(
-        f"../assets/PQCsignKAT_{sqisign.sk_len}_SQIsign_lvl{level}.rsp"
+        f"../assets/PQCsignKAT_{sqisign.sk_len}_SQIsign_p{sqisign.f}_{sqisign.c}.rsp"
     )
 
     print(f"Testing {num_tests} of total {len(kat_tests)} tests for level {level}")
@@ -50,6 +50,7 @@ def generic_KAT_test(level=1, num_tests=100):
 
         # Run SQIsign verification
         assert sqisign.verify(test["msg"], signature, test["pk"])
+
     print(f" level {level} tests passed!")
 
 

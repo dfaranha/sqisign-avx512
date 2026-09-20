@@ -233,10 +233,37 @@ def four_isogeny_eval_array(points: tuple[AVX_2x4x1], C01: AVX_2x4x1, C2: AVX_2x
 
     return images
 
+def normalize_curve_from_four_torsion(four_torsion: AVX_2x4x1):
+    # TODO: vectorize this!
+
+    Fp2 = four_torsion[0].parent()
+    i = Fp2.gen()
+    assert i**2 == -1
+
+    a0, b0 = four_torsion
+    a1, b1 = a0 + b0, a0 - b0
+    a2, b2 = a0 * i + b0, a0 + i * b0
+
+    # TODO: batch invert these values
+    A0 = -2 * (a0**4 + b0**4) / (a0**4 - b0**4)
+    A1 = -2 * (a1**4 + b1**4) / (a1**4 - b1**4)
+    A2 = -2 * (a2**4 + b2**4) / (a2**4 - b2**4)
+    A3 = -A0
+    A4 = -A1
+    A5 = -A2
+
+    # TODO: constant time swap
+    def fp2_key(x):
+        return (int(x[1]), int(x[0]))
+    A_max = max([A0, A1, A2, A3, A4, A5], key=lambda c: fp2_key(c))
+
+    return Curve(A_max, Fp2.one(), (A_max + 2) / 4, Fp2.one())
 
 def two_isogeny_chain_1x2x4x1(
     domain: AVX_2x4x1, kernel: AVX_2x4x1, length: int, points: list[AVX_2x4x1] = []
 ):
+    assert length % 2 == 0, "assumes an even length"
+
     # Extract out constants from domain
     A24 = domain
 
@@ -246,7 +273,7 @@ def two_isogeny_chain_1x2x4x1(
     orders = [0] * space
 
     strat_points[0] = kernel
-    orders[0] = length
+    orders[0] = length + 2 # We input the four torsion above
     k = 0
 
     # Main loop: Compute with balanced strategies
@@ -277,22 +304,10 @@ def two_isogeny_chain_1x2x4x1(
 
         points = four_isogeny_eval_array(points, C01, C2)
 
-    # Compute a 2-isogeny if the length is odd
-    if length % 2:
-        ker = strat_points[0]
-
-        # Ensure K has order 2 and is not the point (0 : 1)
-        tmp = x_double_1x2x4x1(A24, ker)
-        if ker[1].is_zero() or not tmp[1].is_zero():
-            raise ValueError("chain failed: kernel has wrong order")
-        if ker[0].is_zero():
-            raise ValueError("chain failed: unexpected singular 2-isogeny")
-
-        A24 = two_isogeny_codomain(ker)
-        points = [two_isogeny_eval(ker, Q) for Q in points]
+    four_torsion = strat_points[0]
 
     # Create the Kummer Line from the constants
-    codomain = curve_from_AC24(A24)
+    codomain = normalize_curve_from_four_torsion(four_torsion)
     points = [PointX(XQ, ZQ) for (XQ, ZQ) in points]
 
     return codomain, points
