@@ -370,9 +370,9 @@ void ec_normA24_to_normA_1x2x2x2(__m512i* res, __m512i* normA24);
 void ec_normA_to_normA24_1x2x2x2(__m512i* res, __m512i* normA);
 void ec_normalize_curve_2x2x2(__m512i* res_A24, __m512i* res_A, __m512i* A24);
 void ec_normalize_curve_SQI_2x2x2(__m512i* res_A24, __m512i* res_A, __m512i* A24);
+
 // Normalized A of the curve given by the pair (a : b) in 2x2x2, as (A, 1).
 bool ec_normalized_A_from_pair_2x2x2(__m512i* res_normA, __m512i* ab);
-
 void ec_normalize_curve_pair_2x2x2(__m512i* res_A24_1, __m512i* res_A24_2, __m512i* res_A_1, __m512i* res_A_2, __m512i* A24_1, __m512i* A24_2);
 bool ec_curve_verify_normA_pair_2x2x2(__m512i* normA1, __m512i* normA2);
 
@@ -385,8 +385,8 @@ void ec_proj_diff_SQI_1x2x2x2(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i*
 // P = (P1.x, P1.z, P2.x, P2.z)
 void ec_proj_diff_pair_4x2x1(__m512i* res_PmQ, __m512i* P, __m512i* Q, __m512i* normA);
 void ec_curve_to_basis_from_hint_1x2x2x2(__m512i* res_basis, __m512i* normA, const uint8_t hint_pk);
-void ec_curve_to_basis_from_hint_SQI_1x2x2x2(__m512i* res_basis, __m512i* normA, const uint8_t hint);
-void ec_curve_to_basis_from_hint_2x2x2x2(__m512i* res_basis1, __m512i* res_basis2, __m512i* normA1, __m512i* normA2, const uint8_t hint1, const uint8_t hint2);
+void ec_curve_to_basis_from_hint_SQI_1x2x2x2(__m512i* res_basis, __m512i* normA, const uint8_t hint, const int e);
+void ec_curve_to_basis_from_hint_2x2x2x2(__m512i* res_basis1, __m512i* res_basis2, __m512i* normA1, __m512i* normA2, const uint8_t hint1, const uint8_t hint2, const int e);
 
 // Recover y-coordinate of a normalized x point on the Montgomery curve y^2 = x^3 + Ax^2 + x
 // Returns (x, y, 1, -) in 4x2x1

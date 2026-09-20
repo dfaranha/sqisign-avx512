@@ -55,6 +55,8 @@ void four_isog_eval_pair_4x2x1(__m512i* Q, __m512i* eval_data, __m512i* P);
 // P contains four points in 8x1x1 and eval_data is duplicated in 8x1x1
 void four_isog_eval_quad_8x1x1(__m512i* Q, __m512i* eval_data, __m512i* P);
 
+// With res_four_torsion non-NULL, ker has order 2^(isog_len + 2) and the point
+// of order four left above the codomain is returned there.
 bool isog_chain_1d_1x2x2x2(
     __m512i* res_A24,
     __m512i *A24,
@@ -62,7 +64,8 @@ bool isog_chain_1d_1x2x2x2(
     const unsigned int isog_len,
     __m512i *pts,
     const unsigned int num_pts,
-    const bool verify
+    const bool verify,
+    __m512i *res_four_torsion
 );
 
 bool isog_chain_1d(
