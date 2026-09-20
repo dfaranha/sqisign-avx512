@@ -51,7 +51,7 @@ def get_index_splitting(OA: AVX_4x2x1):
             index = (i, j)
             count += 1
     if index is None or count != 1:
-        raise ValueError("error in index splitting computation")
+        raise ValueError(f"error in index splitting computation: {count}")
     return index
 
 
@@ -131,6 +131,33 @@ def randomized_null_point(P: AVX_4x2x1) -> AVX_4x2x1:
     return apply_isomorphism(P, N), N
 
 
+def normalize_curve_from_null(null_point):
+    # TODO: vectorize this!
+    # TODO: this is identical to the function in the isogeny file
+
+    Fp2 = null_point[0].parent()
+    i = Fp2.gen()
+    assert i**2 == -1
+
+    a0, b0 = null_point
+    a1, b1 = a0 + b0, a0 - b0
+    a2, b2 = a0 * i + b0, a0 + i * b0
+
+    # TODO: batch invert these values
+    A0 = -2 * (a0**4 + b0**4) / (a0**4 - b0**4)
+    A1 = -2 * (a1**4 + b1**4) / (a1**4 - b1**4)
+    A2 = -2 * (a2**4 + b2**4) / (a2**4 - b2**4)
+    A3 = -A0
+    A4 = -A1
+    A5 = -A2
+
+    # TODO: constant time swap
+    def fp2_key(x):
+        return (int(x[1]), int(x[0]))
+    A_max = max([A0, A1, A2, A3, A4, A5], key=lambda c: fp2_key(c))
+
+    return A_max
+
 def theta_to_product(OA: AVX_4x2x1, verify: bool = False):
     """
     Algorithm 8.45 of the SQIsign spec.
@@ -154,27 +181,10 @@ def theta_to_product(OA: AVX_4x2x1, verify: bool = False):
         if not avx_421_eq(T1, T2):
             raise ValueError("OA does not come from a product theta structure")
 
-    # TODO:
-    # here we can do 6 Fp2 squares or two calls to squaring on OA
-    # Fourth powers of null point coords
-    x = a**4
-    y = b**4
-    z = c**4
+    A1 = normalize_curve_from_null((a, c))
+    A2 = normalize_curve_from_null((a, b))
 
-    # A2 = -2(a^4 + b^4) / (a^4 - b^4)
-    A2 = -2 * (x + y)
-    C2 = x - y
-
-    # A1 = -2(a^4 + c^4) / (a^4 - c^4)
-    A1 = -2 * (x + z)
-    C1 = x - z
-
-    if verify:
-        T1 = AVX_4x2x1(C1, C2, C1, C2)
-        if avx_421_any_zero(T1):
-            raise ValueError("failed to split to a product of elliptic curves")
-
-    return (A1, C1), (A2, C2)
+    return A1, A2
 
 
 def theta_product_point_to_montgomery(

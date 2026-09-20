@@ -15,63 +15,30 @@ def normalize_curve_constants(E: Curve):
 
 def projective_difference(E: Curve, xP: PointX, xQ: PointX):
     """
-    Algorithm 8.10 of the SQISign spec.
-
-    Given (XP : ZP) and (XQ : ZQ) compute xPQ which is
-    equal to x(P ± Q) with a deterministic choice
+    Had to re-write for the KAT, need to re-parallize
     """
     A = E.A
-    assert E.C.is_one()
     XP, ZP = xP
     XQ, ZQ = xQ
 
-    # 4M parallel
     t0 = XP * XQ
     t1 = ZP * ZQ
     t4 = XP * ZQ
     t5 = ZP * XQ
 
-    # 4 add parallel
-    t3 = t0 + t1
-    t7 = t4 + t5
-    t2 = t0 - t1
-    t6 = t4 - t5
+    b_xx = (t0 - t1)**2
+    b_zz = (t4 - t5)**2
+    b_xz = (t0 + t1) * (t4 + t5) + 2 * A * (t4 * t5)
 
-    # 4M parallel (uses 2S)
-    t8 = t3 * t7
-    t9 = t0 * t1
-    b_xx = t2**2  # This could be done later
-    b_zz = t6**2  # This could be done later
+    lam = b_zz.conjugate()
+    b_xx *= lam
+    b_xz *= lam
+    b_zz *= lam
 
-    # No need to mul, we have t11 from t1 directly with one fp negation
-    # t11 = ZP.conjugate() * ZQ.conjugate()
-    F = t1.parent()
-    t11 = F([t1[0], -t1[1]])
-    assert t11 == ZP.conjugate() * ZQ.conjugate()
+    delta = sqrt_fp2(b_xz**2 - b_xx * b_zz)
 
-    # 2M (wasteful)
-    t10 = A * t9  # This has do be done after the last mul and before the next
-    lam = t11**2  # This could be done earlier
-
-    # Annoying add
-    b_xz = t8 + t10 + t10
-
-    # 3M parallel (wasteful)
-    b_xx = lam * b_xx
-    b_xz = lam * b_xz
-    b_zz = lam * b_zz
-
-    # 2M parallel
-    t12 = b_xz**2
-    t13 = b_xx * b_zz
-
-    # Annoying add
-    delta = sqrt_fp2(t12 - t13)
-
-    # Annoying add
-    xPQ = PointX(delta + b_xz, b_zz)
-
-    return xPQ
+    PmQ = PointX(b_xz - delta, b_zz)
+    return PmQ
 
 
 def torsion_basis_from_hint(E: Curve, hint: ZZ, e: ZZ) -> BasisX:

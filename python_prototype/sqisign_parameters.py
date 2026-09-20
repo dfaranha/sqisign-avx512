@@ -3,38 +3,35 @@ from sage.rings.integer_ring import ZZ
 
 SQISIGN_PARAMETERS_LEVEL_1 = {
     "security_bits": 128,
-    "cofactor": 5,
-    "f": 248,
-    "response_length": 126,
-    "hash_iterations": 64,
-    "fp_encoded_len": 32,
-    "pk_len": 65,
-    "sk_len": 353,
-    "sig_len": 148,
+    "cofactor": 3,
+    "f": 324,
+    "response_len": 196,
+    "fp_encoded_len": 41,
+    "pk_len": 83,
+    "sk_len": 270,
+    "sig_len": 200,
 }
 
 SQISIGN_PARAMETERS_LEVEL_3 = {
     "security_bits": 192,
-    "cofactor": 65,
-    "f": 376,
-    "response_length": 192,
-    "hash_iterations": 256,
-    "fp_encoded_len": 48,
-    "pk_len": 97,
-    "sk_len": 529,
-    "sig_len": 224,
+    "cofactor": 27,
+    "f": 500,
+    "response_len": 302,
+    "fp_encoded_len": 64,
+    "pk_len": 129,
+    "sk_len": 417,
+    "sig_len": 306,
 }
 
 SQISIGN_PARAMETERS_LEVEL_5 = {
     "security_bits": 256,
-    "cofactor": 27,
-    "f": 500,
-    "response_length": 253,
-    "hash_iterations": 512,
-    "fp_encoded_len": 64,
-    "pk_len": 129,
-    "sk_len": 701,
-    "sig_len": 292,
+    "cofactor": 17,
+    "f": 664,
+    "response_len": 400,
+    "fp_encoded_len": 84,
+    "pk_len": 169,
+    "sk_len": 549,
+    "sig_len": 406,
 }
 
 SQISIGN_PARAMETERS = {
