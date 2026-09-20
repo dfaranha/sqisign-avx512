@@ -200,24 +200,29 @@ bool test_theta_middle(int iterations)
 
     // TODO: Test is not using an actual dual theta point
     // eval
-    for (int i = 0; i < iterations; i++) {
+    for (int i = 0; i < iterations && passed; i++) {
         rand_fp2_8x1x1(a);
         rand_fp2_4x2x1(b);
-        bool h1 = false;
-        bool h2 = true;
+        pair_join(g, b, b);
 
-        // Pair matches single
-        fp2_8x1x1_to_4x2x1(e, e + NUM_LIMBS, a);
-        theta_eval_single(f, e, b, h1, h2);
-        theta_eval_single(f + NUM_LIMBS, e + NUM_LIMBS, b, h1, h2);
-        fp2_4x2x1_to_8x1x1(e, f, f + NUM_LIMBS);
+        for (int hidx = 0; hidx < 4; hidx++) {
+            bool h1 = hidx & 1;
+            bool h2 = hidx & 2;
 
-        fp2_4x2x1_to_8x1x1(b, b, b);
-        theta_eval_pair(d, a, b, h1, h2);
+            // Evaluate in place, as the chain does: with h1 = false these read
+            // res without ever copying a into it.
+            pair_split(f, f + NUM_LIMBS, a);
+            theta_eval_single(f, f, b, h1, h2);
+            theta_eval_single(f + NUM_LIMBS, f + NUM_LIMBS, b, h1, h2);
+            pair_join(e, f, f + NUM_LIMBS);
 
-        if (fp2_is_equal_8x1x1(d, e) != 0xff) {
-            passed = 0;
-            break;
+            fp2_copy_8x1x1(d, a);
+            theta_eval_pair(d, d, g, h1, h2);
+
+            if (fp2_is_equal_8x1x1(d, e) != 0xff) {
+                passed = 0;
+                break;
+            }
         }
     }
     print_test_res("eval", passed);
