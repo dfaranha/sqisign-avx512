@@ -370,6 +370,9 @@ void ec_normA24_to_normA_1x2x2x2(__m512i* res, __m512i* normA24);
 void ec_normA_to_normA24_1x2x2x2(__m512i* res, __m512i* normA);
 void ec_normalize_curve_2x2x2(__m512i* res_A24, __m512i* res_A, __m512i* A24);
 void ec_normalize_curve_SQI_2x2x2(__m512i* res_A24, __m512i* res_A, __m512i* A24);
+// Normalized A of the curve given by the pair (a : b) in 2x2x2, as (A, 1).
+bool ec_normalized_A_from_pair_2x2x2(__m512i* res_normA, __m512i* ab);
+
 void ec_normalize_curve_pair_2x2x2(__m512i* res_A24_1, __m512i* res_A24_2, __m512i* res_A_1, __m512i* res_A_2, __m512i* A24_1, __m512i* A24_2);
 bool ec_curve_verify_normA_pair_2x2x2(__m512i* normA1, __m512i* normA2);
 

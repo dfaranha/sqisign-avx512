@@ -2299,6 +2299,109 @@ void ec_normalize_curve_2x2x2(__m512i* res_A24, __m512i* res_A, __m512i* A24)
     fp2_copy_2x2x2(res_A24, t2);
 }
 
+// a > b for canonical Fp2 elements stored as (re, im), ordered by im then re.
+static bool fp2_64_is_greater(const uint64_t *a, const uint64_t *b)
+{
+    for (int i = 2*NWORDS64 - 1; i >= 0; i--) {
+        if (a[i] != b[i]) {
+            return a[i] > b[i];
+        }
+    }
+    return false;
+}
+
+// Largest of the six isomorphic A = -2 (a^4 + b^4) / (a^4 - b^4), taken over the
+// pairs (a, b), (a + b, a - b), (i*a + b, a + i*b) and their negations, ordered
+// by (im, re). ab is (a, b) in 2x2x2, res_normA is (A, 1). False if a^4 == b^4.
+bool ec_normalized_A_from_pair_2x2x2(__m512i* res_normA, __m512i* ab)
+{
+    __m512i t0[N4x2], t1[N4x2], a01[N4x2], b01[N4x2], a22[N4x2], b22[N4x2];
+    __m512i rowA[NUM_LIMBS], rowB[NUM_LIMBS], num[NUM_LIMBS], den[NUM_LIMBS];
+    uint64_t pos[6*NWORDS64], neg[6*NWORDS64], enc[4*NWORDS64];
+
+    const __m512i dup_lo = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    const __m512i dup_hi = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    const __m512i swap   = VSET(4, 5, 6, 7, 0, 1, 2, 3);
+    const __m512i idx_a  = VSET(0, 1, 2, 3, 8, 9, 10, 11);
+    const __m512i idx_b  = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+
+    // t0 = (a, a), t1 = (b, b), then t0 = (a + b, a - b) = (a1, b1)
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(dup_lo, ab[i]);
+        t1[i] = VPERM512(dup_hi, ab[i]);
+    }
+    fp2_mixaddsub_2x2x2(t0, t0, t1, 0x0f);
+
+    // t1 = i*(a, b) + (b, a) = (i*a + b, a + i*b) = (a2, b2)
+    fp2_muli_2x2x2(t1, ab);
+    for (int i = 0; i < N4x2; i++) {
+        a22[i] = VPERM512(swap, ab[i]);
+    }
+    fp2_add_2x2x2(t1, t1, a22);
+
+    // The fourth slot repeats the third, to fill the vector and keep it invertible.
+    for (int i = 0; i < N4x2; i++) {
+        a01[i] = VBLENDPERM(idx_a, ab[i], t0[i]); // (a0, a1)
+        b01[i] = VBLENDPERM(idx_b, ab[i], t0[i]); // (b0, b1)
+        a22[i] = VPERM512(dup_lo, t1[i]);         // (a2, a2)
+        b22[i] = VPERM512(dup_hi, t1[i]);         // (b2, b2)
+    }
+    fp2_2x2x2_to_4x2x1(rowA, a01, a22);
+    fp2_2x2x2_to_4x2x1(rowB, b01, b22);
+
+    // Fourth powers of both rows
+    fp2_sqrx2_4x2x1(rowA, rowB, rowA, rowB);
+    fp2_sqrx2_4x2x1(rowA, rowB, rowA, rowB);
+
+    // A_k = -2 (a_k^4 + b_k^4) / (a_k^4 - b_k^4)
+    fp2_add_4x2x1(num, rowA, rowB);
+    fp2_add_4x2x1(num, num, num);
+    fp2_neg_4x2x1(num, num);
+    fp2_sub_4x2x1(den, rowA, rowB);
+    if (fp2_is_zero_4x2x1(den) & 0x7) {
+        return false;
+    }
+    fp2_inv_4x2x1(den, den);
+    fp2_mul_4x2x1(num, num, den);
+
+    // Decode the three coefficients and their negations to canonical integers
+    fp2_4x2x1_to_2x2x2(t0, t1, num);
+    fp2_frommont_2x2x2(t0, t0);
+    fp2_frommont_2x2x2(t1, t1);
+    fp_limbs_to_64_4x2(pos, t0);
+    fp_limbs_to_64_4x2(enc, t1);
+    memcpy(pos + 4*NWORDS64, enc, 2*NWORDS64*sizeof(uint64_t));
+
+    fp2_neg_4x2x1(num, num);
+    fp2_4x2x1_to_2x2x2(t0, t1, num);
+    fp2_frommont_2x2x2(t0, t0);
+    fp2_frommont_2x2x2(t1, t1);
+    fp_limbs_to_64_4x2(neg, t0);
+    fp_limbs_to_64_4x2(enc, t1);
+    memcpy(neg + 4*NWORDS64, enc, 2*NWORDS64*sizeof(uint64_t));
+
+    const uint64_t *best = pos;
+    for (int i = 1; i < 3; i++) {
+        if (fp2_64_is_greater(pos + 2*i*NWORDS64, best)) {
+            best = pos + 2*i*NWORDS64;
+        }
+    }
+    for (int i = 0; i < 3; i++) {
+        if (fp2_64_is_greater(neg + 2*i*NWORDS64, best)) {
+            best = neg + 2*i*NWORDS64;
+        }
+    }
+
+    // res_normA = (A_max, 1)
+    memcpy(enc, best, 2*NWORDS64*sizeof(uint64_t));
+    memset(enc + 2*NWORDS64, 0, 2*NWORDS64*sizeof(uint64_t));
+    enc[2*NWORDS64] = 1;
+    fp_64_to_limbs_4x2(res_normA, enc);
+    fp_tomont_4x2(res_normA, res_normA);
+
+    return true;
+}
+
 // Slower than previous
 void ec_normalize_curve_SQI_2x2x2(__m512i* res_A24, __m512i* res_A, __m512i* A24)
 {
