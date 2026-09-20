@@ -116,7 +116,7 @@ def fp2_mul_8x1x1(f, pp, v, strat, inline=False):
 def fp2_sqr_8x1x1(f, pp, v, strat, inline=False):
     f.start("void fp2_sqr_8x1x1(__m512i* res, __m512i* a)", inline=inline)
 
-    if strat.reduce_everything:
+    if strat.karat_add == KaratsubaAddMode.reduce:
         fp2_sqr_8x1x1_standard(f, pp, v)
     else:
         fp2_sqr_8x1x1_lazy(f, pp, v, strat)
@@ -138,10 +138,7 @@ def fp2_sqr_8x1x1_lazy(f, pp, v, strat):
     f.line()
 
     f.line(f"mp_add_8x1(s1, a, a + {pp.num_limbs});")
-    if strat.sqr_use_add_p_sub:
-        f.line(f"mp_add_p_sub_8x1(s2, a, a + {pp.num_limbs});")
-    else:
-        f.line(f"fp_sub_8x1(s2, a, a + {pp.num_limbs});")
+    f.line(f"mp_add_p_sub_8x1(s2, a, a + {pp.num_limbs});")
     f.line(f"mp_add_8x1(s3, a, a);")
     f.line(f"fp_mul_8x1(res, s1, s2);")
     f.line(f"fp_mul_8x1(res + {pp.num_limbs}, s3, a + {pp.num_limbs});")

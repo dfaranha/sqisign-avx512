@@ -173,7 +173,7 @@ def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
     # check Patrick optimization
 
     # additional strat for squaring
-    sqr_use_add_p_sub = R_ext
+    sqr_use_add_p_sub = R_ext  #  TODO: Working on removing this
     if mod_2p:
         sqr8_faster_add_p_sub = (limb_len <= 49)
         sqr4_faster_add_p_sub = (limb_len <= 50)
