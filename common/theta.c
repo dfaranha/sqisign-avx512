@@ -19,9 +19,11 @@
 //                 Helper functions for isogeny chains    
 // ====================================================================
 
-// Cost of theta_double_pair and theta_eval_pair, in mp_mul_8x1 units.
+// Relative cost of theta_double_pair and theta_eval_pair. Only the ratio matters.
+// Tuned by measurement: an evaluation costs more than its multiplications alone,
+// since theta_eval_list_pair reloads each node from strat_theta_pair.
 #define THETA_DBL_COST 10
-#define THETA_EVAL_COST 5
+#define THETA_EVAL_COST 6
 
 // Splits for the (2,2)-chain, built once. A chain is never longer than the
 // available even torsion.
