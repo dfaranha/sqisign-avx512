@@ -6,6 +6,28 @@
 #include <assert.h>
 #include "sqi_test_extras.h"
 #include "sqi_hd.h"
+#include "strategy.h"
+#include "sqi_ec_params.h"
+
+// Cost of descending one four-isogeny level by doubling (two ec_double_1x2x2x2)
+// against pushing one point through it, in mp_mul_8x1 units.
+#define ISOG1D_DBL_COST 5
+#define ISOG1D_EVAL_COST 3
+
+// Splits for the four-isogeny chain, built once and indexed in four-isogeny
+// levels. A chain is never longer than the available even torsion.
+static const uint16_t *
+isog1d_strategy(void)
+{
+    static uint16_t split[TORSION_EVEN_POWER / 2 + 1];
+    static bool ready = false;
+
+    if (!ready) {
+        strategy_splits(split, TORSION_EVEN_POWER / 2, ISOG1D_DBL_COST, ISOG1D_EVAL_COST);
+        ready = true;
+    }
+    return split;
+}
 
 // ============================== 2x4x1 ================================================
 
@@ -171,6 +193,7 @@ bool isog_chain_1d_1x2x4x1(
 
     __m512i strat[space * NUM_LIMBS], eval_data[2 * NUM_LIMBS], test[NUM_LIMBS];
     uint16_t orders[space];
+    const uint16_t *split = isog1d_strategy();
     orders[0] = isog_len;
     int current = 0;
     fp2_copy_2x4x1(strat, ker);
@@ -187,7 +210,7 @@ bool isog_chain_1d_1x2x4x1(
             current++;
             fp2_copy_2x4x1(strat + current*NUM_LIMBS, strat + (current-1)*NUM_LIMBS);
             // if we copied from the very first element, then we perform one additional doubling
-            int num_dbls = (orders[current - 1] / 4) * 2 + orders[current - 1] % 2;
+            int num_dbls = 2 * split[orders[current - 1] / 2] + orders[current - 1] % 2;
             orders[current] = orders[current-1] - num_dbls;
             while (num_dbls--) {
                 ec_double_1x2x4x1(strat + current*NUM_LIMBS, strat + current*NUM_LIMBS, res_A24);
@@ -602,6 +625,7 @@ bool isog_chain_1d_1x2x2x2(
     __m512i strat[space * N4x2], test[N4x2];
     __m512i eval_data[2 * N4x2], eval_data_pair[2*NUM_LIMBS], eval_data_quad[4*NUM_LIMBS];
     uint16_t orders[space];
+    const uint16_t *split = isog1d_strategy();
     orders[0] = isog_len + extra;
     int current = 0;
     fp2_copy_2x2x2(strat, ker);
@@ -642,7 +666,7 @@ bool isog_chain_1d_1x2x2x2(
             assert(orders[current] >= 3);
             current++;
             fp2_copy_2x2x2(strat + current*N4x2, strat + (current-1)*N4x2);
-            int num_dbls = (orders[current - 1] / 4) * 2 + orders[current - 1] % 2;
+            int num_dbls = 2 * split[orders[current - 1] / 2] + orders[current - 1] % 2;
             orders[current] = orders[current-1] - num_dbls;
             while (num_dbls--) {
                 ec_double_1x2x2x2(strat + current*N4x2, strat + current*N4x2, res_A24);

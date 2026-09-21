@@ -2839,72 +2839,86 @@ static void ec_double_iter_PQ_pair_2x2x2(__m512i* P1, __m512i* Q1, __m512i* P2, 
     fp2_4x2x1_to_2x2x2(P2, Q2, t1);
 }
 
-// Doubling of the two points held as P_Q = (P.x, P.z, Q.x, Q.z), with the normalized
-// A24 broadcast over the four slots. All four slots are live in the first multiplication.
-static void ec_double_pair_1x4x2x1(__m512i* res, __m512i* P_Q, __m512i* A24)
+// Doubling of two points on one curve, each in 2x2x2, with the normalized A24
+// in both slots of a24. Every multiplication runs with both slots live: the two
+// points share the final one, which is what a 4-slot format cannot do for a pair.
+static void ec_double_pair_1x2x2x2(__m512i* P, __m512i* Q, __m512i* a24)
 {
-    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], t2[NUM_LIMBS], t3[NUM_LIMBS], t4[NUM_LIMBS];
+    __m512i sP[N4x2], sQ[N4x2], cP[N4x2], cQ[N4x2], rP[N4x2], rQ[N4x2], t0[N4x2], t1[N4x2];
 
-    const __m512i idx_xx = VSET(0, 1, 0, 1, 4, 5, 4, 5);
-    const __m512i idx_zz = VSET(2, 3, 2, 3, 6, 7, 6, 7);
-    const __m512i idx_AA = VSET(0, 1, 4, 5, 0, 1, 4, 5);
-    const __m512i idx_BB = VSET(2, 3, 6, 7, 2, 3, 6, 7);
-    const __m512i idx_pair = VSET(0, 1, 2, 3, 12, 13, 14, 15);
-    const __m512i idx_swap = VSET(4, 5, 6, 7, 0, 1, 2, 3);
-    const __m512i idx_out = VSET(0, 1, 8, 9, 2, 3, 10, 11);
+    const __m512i dup_lo = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    const __m512i dup_hi = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    const __m512i lo_hi = VSET(0, 1, 2, 3, 12, 13, 14, 15);
+    const __m512i hi_hi = VSET(4, 5, 6, 7, 12, 13, 14, 15);
+    const __m512i lo_lo = VSET(0, 1, 2, 3, 8, 9, 10, 11);
 
-    // t0 = (A, B) per point, with A = (x + z)^2 and B = (x - z)^2
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t0[i] = VPERM512(idx_xx, P_Q[i]);
-        t1[i] = VPERM512(idx_zz, P_Q[i]);
+    // s = ((x + z)^2, (x - z)^2) = (A, B) per point
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(dup_lo, P[i]);
+        t1[i] = VPERM512(dup_hi, P[i]);
     }
-    fp2_mixaddsub_4x2x1(t0, t0, t1, 0x33);
-    fp2_sqr_4x2x1(t0, t0);
-
-    // t1 = (A, A), t2 = (B, B), t3 = (C, C) with C = A - B
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t1[i] = VPERM512(idx_AA, t0[i]);
-        t2[i] = VPERM512(idx_BB, t0[i]);
+    fp2_mixaddsub_2x2x2(t0, t0, t1, 0xf);
+    fp2_sqr_2x2x2(sP, t0);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(dup_lo, Q[i]);
+        t1[i] = VPERM512(dup_hi, Q[i]);
     }
-    fp2_sub_4x2x1(t3, t1, t2);
+    fp2_mixaddsub_2x2x2(t0, t0, t1, 0xf);
+    fp2_sqr_2x2x2(sQ, t0);
+
+    // c = (C, C) with C = A - B
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(dup_lo, sP[i]);
+        t1[i] = VPERM512(dup_hi, sP[i]);
+    }
+    fp2_sub_2x2x2(cP, t0, t1);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VPERM512(dup_lo, sQ[i]);
+        t1[i] = VPERM512(dup_hi, sQ[i]);
+    }
+    fp2_sub_2x2x2(cQ, t0, t1);
 
     // (A, C) * (B, A24) = (X', C*A24)
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t0[i] = VBLENDPERM(idx_pair, t1[i], t3[i]);
-        t4[i] = VBLENDPERM(idx_pair, t2[i], A24[i]);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VBLENDPERM(lo_hi, sP[i], cP[i]);
+        t1[i] = VBLENDPERM(hi_hi, sP[i], a24[i]);
     }
-    fp2_mul_4x2x1(t0, t0, t4);
-
-    // Z' = C * (C*A24 + B), the upper half of the addition
-    fp2_add_4x2x1(t4, t0, t2);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t4[i] = VPERM512(idx_swap, t4[i]);
+    fp2_mul_2x2x2(rP, t0, t1);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VBLENDPERM(lo_hi, sQ[i], cQ[i]);
+        t1[i] = VBLENDPERM(hi_hi, sQ[i], a24[i]);
     }
-    fp2_mul_4x2x1(t4, t4, t3);
+    fp2_mul_2x2x2(rQ, t0, t1);
 
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        res[i] = VBLENDPERM(idx_out, t0[i], t4[i]);
+    // Z' = C * (C*A24 + B), both points in the one multiplication
+    fp2_add_2x2x2(sP, rP, sP);
+    fp2_add_2x2x2(sQ, rQ, sQ);
+    for (int i = 0; i < N4x2; i++) {
+        t0[i] = VBLENDPERM(hi_hi, sP[i], sQ[i]);
+        t1[i] = VBLENDPERM(lo_hi, cP[i], cQ[i]);
+    }
+    fp2_mul_2x2x2(t0, t0, t1);
+
+    for (int i = 0; i < N4x2; i++) {
+        P[i] = VBLENDPERM(lo_lo, rP[i], t0[i]);
+        Q[i] = VBLENDPERM(lo_hi, rQ[i], t0[i]);
     }
 }
 
 // n doublings of P and Q on a single curve, points in 2x2x2 and the curve as (A, 1).
 static void ec_double_iter_PQ_2x2x2(__m512i* P, __m512i* Q, __m512i* normA, const int n)
 {
-    __m512i P_Q[NUM_LIMBS], A24[NUM_LIMBS], normA24[N4x2];
-    const __m512i idx_bcast = VSET(0, 1, 0, 1, 0, 1, 0, 1);
+    __m512i a24[N4x2];
+    const __m512i dup_lo = VSET(0, 1, 2, 3, 0, 1, 2, 3);
 
-    ec_normA_to_normA24_1x2x2x2(normA24, normA);
-    fp2_2x2x2_to_4x2x1(A24, normA24, normA24);
-    fp2_2x2x2_to_4x2x1(P_Q, P, Q);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        A24[i] = VPERM512(idx_bcast, A24[i]);
+    ec_normA_to_normA24_1x2x2x2(a24, normA);
+    for (int i = 0; i < N4x2; i++) {
+        a24[i] = VPERM512(dup_lo, a24[i]);
     }
 
     for (int i = 0; i < n; i++) {
-        ec_double_pair_1x4x2x1(P_Q, P_Q, A24);
+        ec_double_pair_1x2x2x2(P, Q, a24);
     }
-
-    fp2_4x2x1_to_2x2x2(P, Q, P_Q);
 }
 
 // Basis of E[2^e] from a hint. The difference point is only deterministic at the
