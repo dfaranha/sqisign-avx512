@@ -2801,29 +2801,123 @@ void ec_curve_to_basis_from_hint_1x2x2x2(__m512i* res_basis, __m512i* normA, con
     ec_proj_diff_1x2x2x2(res_basis+N4x2, res_basis, res_basis+2*N4x2, normA);
 }
 
-// (p + 1) / 2^e, returning its bit length.
-static unsigned int ec_cofactor_for_twoe(digit_t* m, const int e)
+// n doublings of (P1, Q1) on E1 and (P2, Q2) on E2, points in 2x2x2 and curves as (A, 1).
+static void ec_double_iter_PQ_pair_2x2x2(__m512i* P1, __m512i* Q1, __m512i* P2, __m512i* Q2,
+                                         __m512i* normA1, __m512i* normA2, const int n)
 {
-    const int shift = TORSION_EVEN_POWER - e;
+    __m512i x[NUM_LIMBS], z[NUM_LIMBS], A24[NUM_LIMBS], t0[NUM_LIMBS], t1[NUM_LIMBS];
+    __m512i A24_1[N4x2], A24_2[N4x2];
 
-    assert(shift >= 0);
-    memset(m, 0, NWORDS_ORDER * sizeof(digit_t));
-    memcpy(m, COFACTOR, COFACTOR_NWORDS64 * sizeof(digit_t));
-    multiple_mp_shiftl(m, shift, NWORDS_ORDER);
+    const __m512i idx_x = VSET(0, 1, 4, 5, 8, 9, 12, 13);
+    const __m512i idx_z = VSET(2, 3, 6, 7, 10, 11, 14, 15);
+    const __m512i idx_A24 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    const __m512i idx_B1 = VSET(0, 1, 8, 9, 2, 3, 10, 11);
+    const __m512i idx_B2 = VSET(4, 5, 12, 13, 6, 7, 14, 15);
 
-    return COFACTOR_NBITS + shift;
+    ec_normA_to_normA24_1x2x2x2(A24_1, normA1);
+    ec_normA_to_normA24_1x2x2x2(A24_2, normA2);
+
+    // x = (P1.x, Q1.x, P2.x, Q2.x), z likewise, A24 = (A24_1, A24_1, A24_2, A24_2)
+    fp2_2x2x2_to_4x2x1(t0, P1, Q1);
+    fp2_2x2x2_to_4x2x1(t1, P2, Q2);
+    fp2_2x2x2_to_4x2x1(A24, A24_1, A24_2);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        x[i] = VBLENDPERM(idx_x, t0[i], t1[i]);
+        z[i] = VBLENDPERM(idx_z, t0[i], t1[i]);
+        A24[i] = VPERM512(idx_A24, A24[i]);
+    }
+
+    for (int i = 0; i < n; i++) {
+        ec_double_4x4x2x1(x, z, A24, x, z);
+    }
+
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VBLENDPERM(idx_B1, x[i], z[i]);
+        t1[i] = VBLENDPERM(idx_B2, x[i], z[i]);
+    }
+    fp2_4x2x1_to_2x2x2(P1, Q1, t0);
+    fp2_4x2x1_to_2x2x2(P2, Q2, t1);
+}
+
+// Doubling of the two points held as P_Q = (P.x, P.z, Q.x, Q.z), with the normalized
+// A24 broadcast over the four slots. All four slots are live in the first multiplication.
+static void ec_double_pair_1x4x2x1(__m512i* res, __m512i* P_Q, __m512i* A24)
+{
+    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], t2[NUM_LIMBS], t3[NUM_LIMBS], t4[NUM_LIMBS];
+
+    const __m512i idx_xx = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    const __m512i idx_zz = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    const __m512i idx_AA = VSET(0, 1, 4, 5, 0, 1, 4, 5);
+    const __m512i idx_BB = VSET(2, 3, 6, 7, 2, 3, 6, 7);
+    const __m512i idx_pair = VSET(0, 1, 2, 3, 12, 13, 14, 15);
+    const __m512i idx_swap = VSET(4, 5, 6, 7, 0, 1, 2, 3);
+    const __m512i idx_out = VSET(0, 1, 8, 9, 2, 3, 10, 11);
+
+    // t0 = (A, B) per point, with A = (x + z)^2 and B = (x - z)^2
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VPERM512(idx_xx, P_Q[i]);
+        t1[i] = VPERM512(idx_zz, P_Q[i]);
+    }
+    fp2_mixaddsub_4x2x1(t0, t0, t1, 0x33);
+    fp2_sqr_4x2x1(t0, t0);
+
+    // t1 = (A, A), t2 = (B, B), t3 = (C, C) with C = A - B
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VPERM512(idx_AA, t0[i]);
+        t2[i] = VPERM512(idx_BB, t0[i]);
+    }
+    fp2_sub_4x2x1(t3, t1, t2);
+
+    // (A, C) * (B, A24) = (X', C*A24)
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VBLENDPERM(idx_pair, t1[i], t3[i]);
+        t4[i] = VBLENDPERM(idx_pair, t2[i], A24[i]);
+    }
+    fp2_mul_4x2x1(t0, t0, t4);
+
+    // Z' = C * (C*A24 + B), the upper half of the addition
+    fp2_add_4x2x1(t4, t0, t2);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t4[i] = VPERM512(idx_swap, t4[i]);
+    }
+    fp2_mul_4x2x1(t4, t4, t3);
+
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        res[i] = VBLENDPERM(idx_out, t0[i], t4[i]);
+    }
+}
+
+// n doublings of P and Q on a single curve, points in 2x2x2 and the curve as (A, 1).
+static void ec_double_iter_PQ_2x2x2(__m512i* P, __m512i* Q, __m512i* normA, const int n)
+{
+    __m512i P_Q[NUM_LIMBS], A24[NUM_LIMBS], normA24[N4x2];
+    const __m512i idx_bcast = VSET(0, 1, 0, 1, 0, 1, 0, 1);
+
+    ec_normA_to_normA24_1x2x2x2(normA24, normA);
+    fp2_2x2x2_to_4x2x1(A24, normA24, normA24);
+    fp2_2x2x2_to_4x2x1(P_Q, P, Q);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        A24[i] = VPERM512(idx_bcast, A24[i]);
+    }
+
+    for (int i = 0; i < n; i++) {
+        ec_double_pair_1x4x2x1(P_Q, P_Q, A24);
+    }
+
+    fp2_4x2x1_to_2x2x2(P, Q, P_Q);
 }
 
 // Basis of E[2^e] from a hint. The difference point is only deterministic at the
 // order it is computed at, so clear the cofactor to 2^e before computing it.
 void ec_curve_to_basis_from_hint_SQI_1x2x2x2(__m512i* res_basis, __m512i* normA, const uint8_t hint, const int e)
 {
-    digit_t m[NWORDS_ORDER];
-    unsigned int mbits = ec_cofactor_for_twoe(m, e);
+    assert(e <= TORSION_EVEN_POWER);
 
     ec_curve_to_basis_from_hint_1x2x2x2_inner_set_P_Q(res_basis, res_basis+2*N4x2, normA, hint);
 
-    ec_scalar_mul_pair_normA_2x2x2(res_basis, res_basis + 2*N4x2, res_basis, res_basis + 2*N4x2, normA, normA, m, mbits);
+    // Clear the 2-power with plain doublings, then the odd part with the ladder.
+    ec_double_iter_PQ_2x2x2(res_basis, res_basis + 2*N4x2, normA, TORSION_EVEN_POWER - e);
+    ec_scalar_mul_pair_normA_2x2x2(res_basis, res_basis + 2*N4x2, res_basis, res_basis + 2*N4x2, normA, normA, COFACTOR, COFACTOR_NBITS);
 
     // compute PmQ, set PmQ to Q to ensure Q above (0,0)
     ec_proj_diff_SQI_1x2x2x2(res_basis+N4x2, res_basis, res_basis+2*N4x2, normA);
@@ -2832,15 +2926,17 @@ void ec_curve_to_basis_from_hint_SQI_1x2x2x2(__m512i* res_basis, __m512i* normA,
 void ec_curve_to_basis_from_hint_2x2x2x2(__m512i* res_basis1, __m512i* res_basis2, __m512i* normA1, __m512i* normA2, const uint8_t hint1, const uint8_t hint2, const int e)
 {
     __m512i P[NUM_LIMBS], Q[NUM_LIMBS], A[NUM_LIMBS];
-    digit_t m[NWORDS_ORDER];
-    unsigned int mbits = ec_cofactor_for_twoe(m, e);
+
+    assert(e <= TORSION_EVEN_POWER);
 
     // Faster to do separately
     ec_curve_to_basis_from_hint_1x2x2x2_inner_set_P_Q(res_basis1, res_basis1+2*N4x2, normA1, hint1);
     ec_curve_to_basis_from_hint_1x2x2x2_inner_set_P_Q(res_basis2, res_basis2+2*N4x2, normA2, hint2);
 
-    ec_scalar_mul_pair_normA_2x2x2(res_basis1, res_basis1 + 2*N4x2, res_basis1, res_basis1 + 2*N4x2, normA1, normA1, m, mbits);
-    ec_scalar_mul_pair_normA_2x2x2(res_basis2, res_basis2 + 2*N4x2, res_basis2, res_basis2 + 2*N4x2, normA2, normA2, m, mbits);
+    // Clear the 2-power with plain doublings, then the odd part with the ladder.
+    ec_double_iter_PQ_pair_2x2x2(res_basis1, res_basis1 + 2*N4x2, res_basis2, res_basis2 + 2*N4x2, normA1, normA2, TORSION_EVEN_POWER - e);
+    ec_scalar_mul_pair_normA_2x2x2(res_basis1, res_basis1 + 2*N4x2, res_basis1, res_basis1 + 2*N4x2, normA1, normA1, COFACTOR, COFACTOR_NBITS);
+    ec_scalar_mul_pair_normA_2x2x2(res_basis2, res_basis2 + 2*N4x2, res_basis2, res_basis2 + 2*N4x2, normA2, normA2, COFACTOR, COFACTOR_NBITS);
 
     // compute PmQ, set PmQ to Q to ensure Q above (0,0)
     fp2_2x2x2_to_4x2x1(P, res_basis1, res_basis2);
