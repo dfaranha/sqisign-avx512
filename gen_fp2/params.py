@@ -116,11 +116,11 @@ def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
             karat_add = KaratsubaAddMode.lazy
             reduce_everything = False
         else:
-            mod_2p = True
+            mod_2p = False
             R_ext = True
             mul_nonneg = MulNonnegMode.add_p_shifted
-            karat_add = KaratsubaAddMode.reduce
-            reduce_everything = True
+            karat_add = KaratsubaAddMode.lazy
+            reduce_everything = False
     else: # limb_len = 51
         if last_limb_len <= 49:
             mod_2p = True
@@ -129,11 +129,11 @@ def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
             karat_add = KaratsubaAddMode.carry_prop
             reduce_everything = False
         elif last_limb_len == 50:
-            mod_2p = True
+            mod_2p = False
             R_ext = True
             mul_nonneg = MulNonnegMode.add_p_shifted
-            karat_add = KaratsubaAddMode.reduce
-            reduce_everything = True
+            karat_add = KaratsubaAddMode.carry_prop
+            reduce_everything = False
         else: #last_limb_len = 51
             mod_2p = False
             R_ext = True
