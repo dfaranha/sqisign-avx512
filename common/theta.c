@@ -12,10 +12,31 @@
 #include "theta_splitting.h"
 #include "utils.h"
 #include "sqi_test_extras.h"
+#include "strategy.h"
+#include "sqi_ec_params.h"
 
 // ====================================================================
 //                 Helper functions for isogeny chains    
 // ====================================================================
+
+// Cost of theta_double_pair and theta_eval_pair, in mp_mul_8x1 units.
+#define THETA_DBL_COST 10
+#define THETA_EVAL_COST 5
+
+// Splits for the (2,2)-chain, built once. A chain is never longer than the
+// available even torsion.
+static const uint16_t *
+theta_strategy(void)
+{
+    static uint16_t split[TORSION_EVEN_POWER + 1];
+    static bool ready = false;
+
+    if (!ready) {
+        strategy_splits(split, TORSION_EVEN_POWER, THETA_DBL_COST, THETA_EVAL_COST);
+        ready = true;
+    }
+    return split;
+}
 
 // TODO: Merge with vectorized verif impl, or remove and make interface assume normalized?
 void theta_normalize_chain_input_unvec(
@@ -198,9 +219,8 @@ bool theta_isogeny_chain_vec(
     fp2_2x2x2_to_4x2x1(A24_12, t0, t1);
 
     // Setting up the strategy
-    int space = 1;
-    for (unsigned i = 1; i < n; i *= 2) // n.bit_length + 1
-        ++space;
+    const uint16_t *split = theta_strategy();
+    int space = strategy_space(split, n);
 
     uint16_t orders[space];
     __m512i strat_points_x[space*NUM_LIMBS], strat_points_y[space*NUM_LIMBS], strat_points_z[space*NUM_LIMBS];
@@ -264,7 +284,7 @@ bool theta_isogeny_chain_vec(
             current++;
             assert(current < space);
 
-            int num_dbls = orders[current-1] / 2;
+            int num_dbls = split[orders[current-1]];
             theta_double_iter_pair(
                 strat_theta_pair + current * 2*NUM_LIMBS, 
                 strat_theta_pair + (current-1) * 2*NUM_LIMBS, 
@@ -354,9 +374,8 @@ bool theta_isogeny_chain_vec_verif(
     fp2_2x2x2_to_4x2x1(A24_12, t0, t1);
 
     // Setting up the strategy
-    int space = 1;
-    for (unsigned i = 1; i < n; i *= 2) // n.bit_length + 1
-        ++space;
+    const uint16_t *split = theta_strategy();
+    int space = strategy_space(split, n);
 
     uint16_t orders[space];
     __m512i strat_points_x[space*NUM_LIMBS], strat_points_y[space*NUM_LIMBS], strat_points_z[space*NUM_LIMBS];
@@ -415,7 +434,7 @@ bool theta_isogeny_chain_vec_verif(
             current++;
             assert(current < space);
 
-            int num_dbls = orders[current-1] / 2;
+            int num_dbls = split[orders[current-1]];
             theta_double_iter_pair(
                 strat_theta_pair + current * 2*NUM_LIMBS, 
                 strat_theta_pair + (current-1) * 2*NUM_LIMBS, 
@@ -577,9 +596,8 @@ bool theta_isogeny_chain_no_torsion_vec(
     fp2_2x2x2_to_4x2x1(A24_12, t0, t1);
 
     // Setting up the strategy
-    int space = 1;
-    for (unsigned i = 1; i < n; i *= 2) // n.bit_length + 1
-        ++space;
+    const uint16_t *split = theta_strategy();
+    int space = strategy_space(split, n);
 
     uint16_t orders[space];
     __m512i strat_points_x[space*NUM_LIMBS], strat_points_y[space*NUM_LIMBS], strat_points_z[space*NUM_LIMBS];
@@ -643,7 +661,7 @@ bool theta_isogeny_chain_no_torsion_vec(
             current++;
             assert(current < space);
 
-            int num_dbls = orders[current-1] / 2;
+            int num_dbls = split[orders[current-1]];
             theta_double_iter_pair(
                 strat_theta_pair + current*(2*NUM_LIMBS), 
                 strat_theta_pair + (current-1)*(2*NUM_LIMBS), 
