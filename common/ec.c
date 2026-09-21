@@ -2843,47 +2843,42 @@ static void ec_double_iter_PQ_pair_2x2x2(__m512i* P1, __m512i* Q1, __m512i* P2, 
 // A24 broadcast over the four slots. All four slots are live in the first multiplication.
 static void ec_double_pair_1x4x2x1(__m512i* res, __m512i* P_Q, __m512i* A24)
 {
-    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], t2[NUM_LIMBS], t3[NUM_LIMBS], t4[NUM_LIMBS];
+    __m512i s[NUM_LIMBS], a[NUM_LIMBS], b[NUM_LIMBS], m[NUM_LIMBS], r[NUM_LIMBS];
 
-    const __m512i idx_xx = VSET(0, 1, 0, 1, 4, 5, 4, 5);
-    const __m512i idx_zz = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    // (x, z) -> (z, x) within each point; the sign of x - z is lost in the squaring
+    const __m512i idx_sw = VSET(2, 3, 0, 1, 6, 7, 4, 5);
     const __m512i idx_AA = VSET(0, 1, 4, 5, 0, 1, 4, 5);
-    const __m512i idx_BB = VSET(2, 3, 6, 7, 2, 3, 6, 7);
-    const __m512i idx_pair = VSET(0, 1, 2, 3, 12, 13, 14, 15);
-    const __m512i idx_swap = VSET(4, 5, 6, 7, 0, 1, 2, 3);
-    const __m512i idx_out = VSET(0, 1, 8, 9, 2, 3, 10, 11);
+    const __m512i idx_B0 = VSET(2, 3, 6, 7, 0, 0, 0, 0);
+    const __m512i idx_m = VSET(0, 1, 0, 1, 10, 11, 14, 15);
+    const __m512i idx_out = VSET(4, 5, 8, 9, 6, 7, 10, 11);
 
-    // t0 = (A, B) per point, with A = (x + z)^2 and B = (x - z)^2
+    // s = (A, B) per point, with A = (x + z)^2 and B = (x - z)^2
     for (int i = 0; i < NUM_LIMBS; i++) {
-        t0[i] = VPERM512(idx_xx, P_Q[i]);
-        t1[i] = VPERM512(idx_zz, P_Q[i]);
+        s[i] = VPERM512(idx_sw, P_Q[i]);
     }
-    fp2_mixaddsub_4x2x1(t0, t0, t1, 0x33);
-    fp2_sqr_4x2x1(t0, t0);
+    fp2_mixaddsub_4x2x1(s, P_Q, s, 0x33);
+    fp2_sqr_4x2x1(s, s);
 
-    // t1 = (A, A), t2 = (B, B), t3 = (C, C) with C = A - B
+    // a = (A, A, A, A) by point, b = (B, B, 0, 0), so a - b lands C beside A
     for (int i = 0; i < NUM_LIMBS; i++) {
-        t1[i] = VPERM512(idx_AA, t0[i]);
-        t2[i] = VPERM512(idx_BB, t0[i]);
+        a[i] = VPERM512(idx_AA, s[i]);
+        b[i] = VPERM512MASKZ(0xf, s[i], idx_B0);
     }
-    fp2_sub_4x2x1(t3, t1, t2);
+    fp2_sub_4x2x1(m, a, b);
 
-    // (A, C) * (B, A24) = (X', C*A24)
+    // (C, C, A, A) * (A24, A24, B, B) = (C*A24, C*A24, X', X')
     for (int i = 0; i < NUM_LIMBS; i++) {
-        t0[i] = VBLENDPERM(idx_pair, t1[i], t3[i]);
-        t4[i] = VBLENDPERM(idx_pair, t2[i], A24[i]);
+        a[i] = VBLENDPERM(idx_m, A24[i], s[i]);
     }
-    fp2_mul_4x2x1(t0, t0, t4);
+    fp2_mul_4x2x1(r, m, a);
 
-    // Z' = C * (C*A24 + B), the upper half of the addition
-    fp2_add_4x2x1(t4, t0, t2);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t4[i] = VPERM512(idx_swap, t4[i]);
-    }
-    fp2_mul_4x2x1(t4, t4, t3);
+    // The zeroed half of b leaves X' untouched while C*A24 + B forms beside it,
+    // and m already holds C in those slots, so Z' needs no further shuffling.
+    fp2_add_4x2x1(a, r, b);
+    fp2_mul_4x2x1(a, a, m);
 
     for (int i = 0; i < NUM_LIMBS; i++) {
-        res[i] = VBLENDPERM(idx_out, t0[i], t4[i]);
+        res[i] = VBLENDPERM(idx_out, r[i], a[i]);
     }
 }
 
