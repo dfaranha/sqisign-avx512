@@ -254,9 +254,11 @@ bool theta_isogeny_chain_vec(
     int step = 0;
     bool codom_verify = verify;
     while (current >= 0 && orders[current] != 0) {
-        // Precompute constants for doubling
-        theta_precomp_pair(c1, c2, OA);
-        
+        // Precompute constants for doubling, unused when this step has none
+        if (orders[current] != 1) {
+            theta_precomp_pair(c1, c2, OA);
+        }
+
         while (orders[current] != 1) {
             current++;
 
@@ -402,9 +404,11 @@ bool theta_isogeny_chain_vec_verif(
     int step = 0;
     bool codom_verify = verify;
     while (current >= 0 && orders[current] != 0) {
-        // Precompute constants for doubling
-        theta_precomp_pair(c1, c2, OA);
-        
+        // Precompute constants for doubling, unused when this step has none
+        if (orders[current] != 1) {
+            theta_precomp_pair(c1, c2, OA);
+        }
+
         while (orders[current] != 1) {
             current++;
 
@@ -627,9 +631,11 @@ bool theta_isogeny_chain_no_torsion_vec(
     int step = 0;
     h1 = false; h2 = true;
     while (current >= 0 && orders[current] != 0) {
-        // Precompute constants for doubling
-        theta_precomp_pair(c1, c2, OA);
-        
+        // Precompute constants for doubling, unused when this step has none
+        if (orders[current] != 1) {
+            theta_precomp_pair(c1, c2, OA);
+        }
+
         while (orders[current] != 1) {
             current++;
 
