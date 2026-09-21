@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdio.h> //TODO: Remove
 
 #include "ec.h"
@@ -218,12 +219,10 @@ bool theta_isogeny_chain_vec(
     fp2_2x2x2_to_4x2x1(A24_12, t0, t1);
 
     // Setting up the strategy
-    int space = 1;
-    for (unsigned i = 1; i < n; i *= 2) // n.bit_length + 1
-        ++space;
+    const uint16_t *split = theta_strategy();
+    int space = strategy_space(split, n);
 
     uint16_t orders[space];
-    const uint16_t *split = theta_strategy();
     __m512i strat_points_x[space*NUM_LIMBS], strat_points_y[space*NUM_LIMBS], strat_points_z[space*NUM_LIMBS];
     // TODO: ker_x, ker_y, ker_z never used again, remove copies.
     orders[0] = n;
@@ -283,6 +282,7 @@ bool theta_isogeny_chain_vec(
 
         while (orders[current] != 1) {
             current++;
+            assert(current < space);
 
             int num_dbls = split[orders[current-1]];
             theta_double_iter_pair(
@@ -374,12 +374,10 @@ bool theta_isogeny_chain_vec_verif(
     fp2_2x2x2_to_4x2x1(A24_12, t0, t1);
 
     // Setting up the strategy
-    int space = 1;
-    for (unsigned i = 1; i < n; i *= 2) // n.bit_length + 1
-        ++space;
+    const uint16_t *split = theta_strategy();
+    int space = strategy_space(split, n);
 
     uint16_t orders[space];
-    const uint16_t *split = theta_strategy();
     __m512i strat_points_x[space*NUM_LIMBS], strat_points_y[space*NUM_LIMBS], strat_points_z[space*NUM_LIMBS];
     // TODO: ker_x, ker_y, ker_z never used again, remove copies.
     orders[0] = n;
@@ -434,6 +432,7 @@ bool theta_isogeny_chain_vec_verif(
 
         while (orders[current] != 1) {
             current++;
+            assert(current < space);
 
             int num_dbls = split[orders[current-1]];
             theta_double_iter_pair(
@@ -597,12 +596,10 @@ bool theta_isogeny_chain_no_torsion_vec(
     fp2_2x2x2_to_4x2x1(A24_12, t0, t1);
 
     // Setting up the strategy
-    int space = 1;
-    for (unsigned i = 1; i < n; i *= 2) // n.bit_length + 1
-        ++space;
+    const uint16_t *split = theta_strategy();
+    int space = strategy_space(split, n);
 
     uint16_t orders[space];
-    const uint16_t *split = theta_strategy();
     __m512i strat_points_x[space*NUM_LIMBS], strat_points_y[space*NUM_LIMBS], strat_points_z[space*NUM_LIMBS];
     // TODO: ker_x, ker_y, ker_z never used again, remove copies.
     orders[0] = n-2;
@@ -662,6 +659,7 @@ bool theta_isogeny_chain_no_torsion_vec(
 
         while (orders[current] != 1) {
             current++;
+            assert(current < space);
 
             int num_dbls = split[orders[current-1]];
             theta_double_iter_pair(

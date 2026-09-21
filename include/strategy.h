@@ -33,4 +33,21 @@ strategy_splits(uint16_t *split, const int n, const uint32_t p, const uint32_t q
     }
 }
 
+/*
+ * Stack the chain traversal needs for these splits: the longest run of "descend
+ * and keep" steps, m -> m - split[m] -> ... -> 1, plus a slot of margin. The
+ * 1 + ceil(log2 m) used for a balanced strategy does not cover a skewed one.
+ */
+static inline int
+strategy_space(const uint16_t *split, int m)
+{
+    int space = 2;
+
+    while (m > 1) {
+        m -= split[m];
+        space++;
+    }
+    return space;
+}
+
 #endif

@@ -186,14 +186,11 @@ bool isog_chain_1d_1x2x4x1(
     const bool verify
 )
 {
-    int space = 1;
-    for (int i = 1; i < isog_len; i *= 2) {
-        space++;
-    }
+    const uint16_t *split = isog1d_strategy();
+    int space = strategy_space(split, (isog_len + 1) / 2);
 
     __m512i strat[space * NUM_LIMBS], eval_data[2 * NUM_LIMBS], test[NUM_LIMBS];
     uint16_t orders[space];
-    const uint16_t *split = isog1d_strategy();
     orders[0] = isog_len;
     int current = 0;
     fp2_copy_2x4x1(strat, ker);
@@ -208,6 +205,7 @@ bool isog_chain_1d_1x2x4x1(
             assert(orders[current] >= 3);
             // A new split will be added
             current++;
+            assert(current < space);
             fp2_copy_2x4x1(strat + current*NUM_LIMBS, strat + (current-1)*NUM_LIMBS);
             // if we copied from the very first element, then we perform one additional doubling
             int num_dbls = 2 * split[orders[current - 1] / 2] + orders[current - 1] % 2;
@@ -618,14 +616,12 @@ bool isog_chain_1d_1x2x2x2(
     const unsigned int extra = res_four_torsion ? HD_extra_torsion : 0;
     assert(!extra || isog_len % 2 == 0);
 
-    int space = 1;
-    for (int i = 1; i < isog_len + extra; i *= 2) {
-        space++;
-    }
+    const uint16_t *split = isog1d_strategy();
+    int space = strategy_space(split, (isog_len + extra + 1) / 2);
+
     __m512i strat[space * N4x2], test[N4x2];
     __m512i eval_data[2 * N4x2], eval_data_pair[2*NUM_LIMBS], eval_data_quad[4*NUM_LIMBS];
     uint16_t orders[space];
-    const uint16_t *split = isog1d_strategy();
     orders[0] = isog_len + extra;
     int current = 0;
     fp2_copy_2x2x2(strat, ker);
@@ -641,7 +637,8 @@ bool isog_chain_1d_1x2x2x2(
     } else if (num_pts_rem == 1) {
         num_vec_coupled += N4x2;
     }
-    __m512i pts_coupled[num_vec_coupled], t[2*NUM_LIMBS];
+    // Guard the zero-length array when no points are pushed through the chain.
+    __m512i pts_coupled[num_vec_coupled ? num_vec_coupled : 1], t[2*NUM_LIMBS];
     for (int i = 0; i < num_pts_quad; i++) {
         fp2_2x2x2_to_4x2x1(t, pts + (4*i)*N4x2, pts + (4*i+1)*N4x2);
         fp2_2x2x2_to_4x2x1(t + NUM_LIMBS, pts + (4*i+2)*N4x2, pts + (4*i+3)*N4x2);
@@ -665,6 +662,7 @@ bool isog_chain_1d_1x2x2x2(
         while (orders[current] != 2) {
             assert(orders[current] >= 3);
             current++;
+            assert(current < space);
             fp2_copy_2x2x2(strat + current*N4x2, strat + (current-1)*N4x2);
             int num_dbls = 2 * split[orders[current - 1] / 2] + orders[current - 1] % 2;
             orders[current] = orders[current-1] - num_dbls;
