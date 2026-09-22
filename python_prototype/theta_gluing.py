@@ -264,7 +264,7 @@ def gluing_codomain(
     """
     Algorithm 8.39 of the SQIsign spec.
 
-    28S + 180M + 136a
+    24S + 116M + 132a
     """
     # 4S
     X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)
@@ -274,7 +274,7 @@ def gluing_codomain(
     X_4, Z_4 = x_double_4x4x2x1(A24_12, X_8, Z_8)
 
     # Compute the change of basis for our theta structure
-    # 120M + 8S + 60a
+    # 56M + 4S + 56a
     N = theta_change_of_basis(X_4, Z_4)
 
     # Lift both 8-torsion points above the generator of our basis in the theta model.
