@@ -24,7 +24,11 @@ from theta_structure import (
 )
 from utilities import apply_isomorphism, apply_isomorphism_pair
 
-from elliptic_arithmetic import x_double_4x4x2x1, four_add_components
+from elliptic_arithmetic import (
+    x_double_4x4x2x1,
+    four_add_components,
+    four_bary_components,
+)
 
 
 def gluing_kernel_to_x_only(X: AVX_4x2x1, Z: AVX_4x2x1) -> tuple[AVX_4x2x1, AVX_4x2x1]:
@@ -262,13 +266,28 @@ def gluing_codomain(
     A24_12: AVX_4x2x1, X_8: AVX_4x2x1, Z_8: AVX_4x2x1, verify: bool = False
 ) -> tuple[AVX_4x2x1, AVX_4x2x1, AVX_8x1x1, tuple[AVX_8x1x1, AVX_8x1x1]]:
     """
-    Algorithm 8.39 of the SQIsign spec.
+    Algorithm 8.39 of the SQIsign spec, for a kernel in Jacobian coordinates.
 
     24S + 116M + 132a
     """
     # 4S
     X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)
+    OA, OA_dual_inv, J_prime, _, N = gluing_codomain_x_only(A24_12, X_8, Z_8, verify)
 
+    return OA, OA_dual_inv, J_prime, N
+
+
+def gluing_codomain_x_only(
+    A24_12: AVX_4x2x1, X_8: AVX_4x2x1, Z_8: AVX_4x2x1, verify: bool = False
+) -> tuple[AVX_4x2x1, AVX_4x2x1, AVX_8x1x1, AVX_8x1x1, tuple[AVX_8x1x1, AVX_8x1x1]]:
+    """
+    Algorithm 8.39 of the SQIsign spec, for an x-only kernel.
+
+    J_pair holds the inverse dual images of both kernel points, which is what
+    the barycentric evaluation scales by.
+
+    20S + 116M + 132a
+    """
     # Double points to recover 4-torsion for change of basis
     # 8S + 8M + 16a
     X_4, Z_4 = x_double_4x4x2x1(A24_12, X_8, Z_8)
@@ -286,7 +305,7 @@ def gluing_codomain(
     P12 = avx_811_sqr(P12)
     P12 = hadamard_pair(P12)
 
-    X1, Y1, Z1, W1, X2, _, Z2, W2 = P12
+    X1, Y1, Z1, W1, X2, Y2, Z2, W2 = P12
 
     if verify:
         # 8a
@@ -321,9 +340,9 @@ def gluing_codomain(
     # ============================================================
 
     # 4M
-    t1 = AVX_4x2x1(X1, Y1, X1, 1)
-    t2 = AVX_4x2x1(X2, X2, Z2, 1)
-    A, B, C, _ = avx_421_mul(t1, t2)
+    t1 = AVX_4x2x1(X1, Y1, X1, X1)
+    t2 = AVX_4x2x1(X2, X2, Z2, Y2)
+    A, B, C, D = avx_421_mul(t1, t2)
 
     # 4M
     t1 = AVX_4x2x1(Y1, C, B, 1)
@@ -349,7 +368,11 @@ def gluing_codomain(
     OA_dual_inv = AVX_4x2x1(A_inv, B_inv, C_inv, 0)
     J_prime = AVX_8x1x1(y, y, x, x, y, y, x, x)
 
-    return OA, OA_dual_inv, J_prime, N
+    # The image of the second kernel point is (D : B : D : B) up to the factor
+    # Z2 shared by both coordinates.
+    J_pair = AVX_8x1x1(y, y, x, x, D, B, D, B)
+
+    return OA, OA_dual_inv, J_prime, J_pair, N
 
 
 def gluing_eval_pair(
@@ -374,6 +397,23 @@ def gluing_eval_pair(
     # 16S + 48M + 28a
     U, V, W = four_add_components(A_12, P, T8)
 
+    return gluing_eval_components_pair(U, V, W, J_prime, N)
+
+
+def gluing_eval_components_pair(
+    U: AVX_4x2x1,
+    V: AVX_4x2x1,
+    W: AVX_4x2x1,
+    J_prime: AVX_8x1x1,
+    N: tuple[AVX_8x1x1, AVX_8x1x1],
+    last_hadamard: bool = True,
+) -> AVX_8x1x1:
+    """
+    Evaluation of a pair of points from their addition components, whatever
+    representation these were computed from.
+
+    16S + 90M + 96a
+    """
     # ===============================================================
     # We want to compute four additions and 9 multiplications as best
     # as we can...
@@ -425,15 +465,59 @@ def gluing_eval_pair(
     im_PQ = avx_811_sub(U12, V12)
     im_PQ = hadamard_pair(im_PQ)
 
-    # Scaling by (y : y : x : x) | (y : y : x : x)
+    # Scaling by the inverse dual image of the translation point
     # 8M
     im_PQ = avx_811_mul(im_PQ, J_prime)
 
     # Final Hadamard
     # 16a
-    im_PQ = hadamard_pair(im_PQ)
+    if last_hadamard:
+        im_PQ = hadamard_pair(im_PQ)
 
     return im_PQ
+
+
+def gluing_eval_pair_bary(
+    P: tuple[AVX_4x2x1],
+    G: tuple[AVX_4x2x1],
+    J_prime: AVX_8x1x1,
+    N: tuple[AVX_8x1x1, AVX_8x1x1],
+    last_hadamard: bool = True,
+) -> AVX_8x1x1:
+    """
+    Evaluation of a pair of points translated by the kernel generators, from
+    the x-only ladder state P = ([m]G, [m-1]G) and the sum and difference G of
+    the coordinates of the generators.
+
+    24S + 114M + 124a
+    """
+    Xe, Ze, Xo, Zo = P
+    Dp, Dm = G
+
+    # 24M + 8S + 28a
+    U, V, W = four_bary_components(Xe, Ze, Xo, Zo, Dp, Dm)
+
+    return gluing_eval_components_pair(U, V, W, J_prime, N, last_hadamard)
+
+
+def theta_invert_pair(PQ: AVX_8x1x1) -> AVX_8x1x1:
+    """
+    Projective inverse (yzw : xzw : xyw : xyz) of a pair of theta points.
+
+    16M
+    """
+    x1, y1, z1, w1, x2, y2, z2, w2 = PQ
+
+    # 8M, half the lanes are wasted
+    t0 = AVX_8x1x1(x1, z1, x2, z2, x1, z1, x2, z2)
+    t1 = AVX_8x1x1(y1, w1, y2, w2, y1, w1, y2, w2)
+    a1, d1, a2, d2 = avx_811_mul(t0, t1)[:4]
+
+    # 8M
+    t0 = AVX_8x1x1(y1, x1, w1, z1, y2, x2, w2, z2)
+    t1 = AVX_8x1x1(d1, d1, a1, a1, d2, d2, a2, a2)
+
+    return avx_811_mul(t0, t1)
 
 
 def eval_product_to_theta(P1: PointX, P2: PointX, N: tuple[AVX_8x1x1]):

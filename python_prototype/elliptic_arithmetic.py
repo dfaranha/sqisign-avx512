@@ -1363,6 +1363,99 @@ def four_add_components(A: AVX_4x2x1, P: tuple[AVX_4x2x1], Q: tuple[AVX_4x2x1]):
     return (u, v, w)
 
 
+def four_gluing_dbladd(
+    A24: AVX_4x2x1, Xe: AVX_4x2x1, Ze: AVX_4x2x1, Xo: AVX_4x2x1, Zo: AVX_4x2x1, xD: AVX_4x2x1
+):
+    """
+    One step of the gluing ladder on four points: given ([m]G : -) and
+    ([m-1]G : -) with G = (xD : 1) the normalised difference, return
+    ([2m]G : -) and ([2m-1]G : -).
+
+    24M + 16S + 32a
+    """
+    t0 = avx_421_add(Xe, Ze)
+    t1 = avx_421_sub(Xe, Ze)
+    t2 = avx_421_sub(Xo, Zo)
+    t3 = avx_421_add(Xo, Zo)
+
+    # 4S
+    Xe, Ze = avx_421_pair_sqr(t0, t1)
+
+    # 4M
+    t0, t1 = avx_421_pair_mul(t0, t2, t1, t3)
+    t2 = avx_421_sub(Xe, Ze)
+
+    # 4M
+    Xe, t3 = avx_421_pair_mul(Xe, Ze, A24, t2)
+    Ze = avx_421_add(Ze, t3)
+    Xo = avx_421_add(t0, t1)
+    Zo = avx_421_sub(t0, t1)
+
+    # 4S
+    Zo, Xo = avx_421_pair_sqr(Zo, Xo)
+
+    # 4M
+    Ze, Zo = avx_421_pair_mul(Ze, t2, Zo, xD)
+
+    return Xe, Ze, Xo, Zo
+
+
+def four_gluing_ladder(
+    A24: AVX_4x2x1,
+    Xe: AVX_4x2x1,
+    Ze: AVX_4x2x1,
+    Xo: AVX_4x2x1,
+    Zo: AVX_4x2x1,
+    xD: AVX_4x2x1,
+    n: int,
+):
+    for _ in range(n):
+        Xe, Ze, Xo, Zo = four_gluing_dbladd(A24, Xe, Ze, Xo, Zo, xD)
+    return Xe, Ze, Xo, Zo
+
+
+def four_bary_components(
+    Xe: AVX_4x2x1,
+    Ze: AVX_4x2x1,
+    Xo: AVX_4x2x1,
+    Zo: AVX_4x2x1,
+    Dp: AVX_4x2x1,
+    Dm: AVX_4x2x1,
+):
+    """
+    Given P = ([m]G : -), its difference P - G = ([m-1]G : -) and the sum and
+    difference Dp, Dm of the coordinates of G, compute u, v, w such that
+    x(P + G) = (u - v : w) and x(P - G) = (u + v : w).
+
+    Replaces four_add_components, which needs P in Jacobian coordinates.
+
+    24M + 8S + 28a
+    """
+    t0 = avx_421_add(Xe, Ze)
+    t1 = avx_421_sub(Xe, Ze)
+
+    # 4M
+    t0, t1 = avx_421_pair_mul(t0, Dm, t1, Dp)
+    lam = avx_421_add(t1, t0)
+    mu = avx_421_sub(t1, t0)
+
+    # 4M
+    t0, t1 = avx_421_pair_mul(Zo, lam, mu, Xo)
+
+    # 4S
+    t0, t3 = avx_421_pair_sqr(t0, t1)
+
+    # 4M
+    t2 = avx_421_mul(mu, Zo)
+    u = avx_421_add(t3, t0)
+    v = avx_421_sub(t3, t0)
+
+    # 4M
+    w = avx_421_dbl(avx_421_mul(t1, t2))
+
+    return (u, v, w)
+
+
 def lift_basis_to_jacobian_2x4x1(
     A: AVX_4x2x1, basis: tuple[AVX_2x4x1]
 ) -> tuple[AVX_2x4x1]:
