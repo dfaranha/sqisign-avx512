@@ -3,9 +3,9 @@
 
 #define RADIX 64
 #define LOG2RADIX 6
-#define NWORDS_FIELD 6
-#define NWORDS_ORDER 6
-#define BITS 384
+#define NWORDS_FIELD 8
+#define NWORDS_ORDER 8
+#define BITS 512
 #define LOG2P 9
 
 #endif
