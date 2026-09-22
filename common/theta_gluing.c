@@ -390,12 +390,29 @@ bool gluing_codomain(
     __m512i* A24_12, __m512i* x_8, __m512i* z_8, const bool verify
 )
 {
-    __m512i x_8_[NUM_LIMBS], z_8_[NUM_LIMBS], x_4[NUM_LIMBS], z_4[NUM_LIMBS], P12[2*NUM_LIMBS];
-    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], t2[NUM_LIMBS], t3[NUM_LIMBS], idx0, idx1, idx2;
-    __mmask8 mask;
+    __m512i x_8_[NUM_LIMBS], z_8_[NUM_LIMBS];
 
     // X_8, Z_8 = gluing_kernel_to_x_only(X_8, Z_8)
     ec_jac_to_xz_4x4x2x1(x_8_, z_8_, x_8, z_8);
+
+    return gluing_codomain_x_only(
+        res_OA, res_OA_dual_inv, res_J_prime, NULL, res_matrix01, res_matrix23,
+        A24_12, x_8_, z_8_, verify
+    );
+}
+
+// As the above, for a kernel that is already x-only. res_J_pair may be NULL,
+// otherwise it receives the inverse dual images of both kernel points in
+// 8x1x1, which is what the barycentric evaluation scales by.
+bool gluing_codomain_x_only(
+    __m512i* res_OA, __m512i* res_OA_dual_inv, __m512i* res_J_prime, __m512i* res_J_pair,
+    __m512i* res_matrix01, __m512i* res_matrix23,
+    __m512i* A24_12, __m512i* x_8_, __m512i* z_8_, const bool verify
+)
+{
+    __m512i x_4[NUM_LIMBS], z_4[NUM_LIMBS], P12[2*NUM_LIMBS];
+    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], t2[NUM_LIMBS], t3[NUM_LIMBS], idx0, idx1, idx2;
+    __mmask8 mask;
 
     // Double points to recover 4-torsion for change of basis
     ec_double_4x4x2x1(x_4, z_4, A24_12, x_8_, z_8_);
@@ -507,6 +524,19 @@ bool gluing_codomain(
     }
     theta_had_single(res_OA, res_OA);
 
+    if (res_J_pair != NULL) {
+        // The image of the second kernel point is (D : B : D : B) up to the
+        // factor Z2 shared by both, one multiplication as B is recomputed.
+        idx0 = VSET(0, 8, 2, 10, 0, 8, 2, 10); // (X1, Y1, X1, Y1)
+        idx1 = VSET(3, 11, 1, 9, 3, 11, 1, 9); // (Y2, X2, Y2, X2)
+        for (int i = 0; i < NUM_LIMBS; i++) {
+            t1[i] = VBLENDPERM(idx0, P12[i], P12[i + NUM_LIMBS]);
+            t3[i] = VBLENDPERM(idx1, P12[i], P12[i + NUM_LIMBS]);
+        }
+        fp2_mul_4x2x1(t1, t1, t3);
+        fp2_4x2x1_to_8x1x1(res_J_pair, res_J_prime, t1);
+    }
+
     return true;
 }
 
@@ -518,9 +548,7 @@ void gluing_eval_pair(
     __m512i* J_prime, __m512i* matrix01, __m512i* matrix23
 )
 {
-    __m512i u[NUM_LIMBS], v[NUM_LIMBS], w[NUM_LIMBS], t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
-    __m512i idx0_re, idx0_im, idx1_re, idx1_im;
-    __mmask8 mask;
+    __m512i u[NUM_LIMBS], v[NUM_LIMBS], w[NUM_LIMBS], t0[2*NUM_LIMBS];
 
     // Add components
     // u1, v1, w1 = add_components(E1, P1, T1_8)
@@ -528,6 +556,38 @@ void gluing_eval_pair(
     // u2, v2, w2 = add_components(E2, P2, T2_8)
     // u4, v4, w4 = add_components(E2, Q2, T2_8)
     ec_add_components_4x4x2x1(u, v, w, A_12, xP, yP, zP, xT_8, yT_8, zT_8);
+
+    // Both points are translated by the same eight torsion point
+    fp2_4x2x1_to_8x1x1(t0, J_prime, J_prime);
+
+    gluing_eval_components_pair(res, u, v, w, t0, matrix01, matrix23, true);
+}
+
+// Same, from the ladder state P = ([m]G, [m-1]G) and the sum Dp and difference
+// Dm of the coordinates of the generators, which are the translation points.
+void gluing_eval_pair_bary(
+    __m512i* res,
+    __m512i* xe, __m512i* ze, __m512i* xo, __m512i* zo, __m512i* Dp, __m512i* Dm,
+    __m512i* J_pair, __m512i* matrix01, __m512i* matrix23, const bool last_hadamard
+)
+{
+    __m512i u[NUM_LIMBS], v[NUM_LIMBS], w[NUM_LIMBS];
+
+    ec_bary_components_4x4x2x1(u, v, w, xe, ze, xo, zo, Dp, Dm);
+
+    gluing_eval_components_pair(res, u, v, w, J_pair, matrix01, matrix23, last_hadamard);
+}
+
+// Evaluation of a pair of points from their addition components, whatever
+// representation these were computed from.
+void gluing_eval_components_pair(
+    __m512i* res, __m512i* u, __m512i* v, __m512i* w,
+    __m512i* J_pair, __m512i* matrix01, __m512i* matrix23, const bool last_hadamard
+)
+{
+    __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
+    __m512i idx0_re, idx0_im, idx1_re, idx1_im;
+    __mmask8 mask;
 
     // ===============================================================
     // Given:
@@ -624,11 +684,36 @@ void gluing_eval_pair(
 
     theta_had_pair(res, res);
 
-    // Scaling by (y : y : x : x)
-    theta_mul_pair(res, res, J_prime);
+    // Scaling by the inverse dual image of the translation point
+    fp2_mul_8x1x1(res, res, J_pair);
 
     // Final Hadamard
-    theta_had_pair(res, res);
+    if (last_hadamard) {
+        theta_had_pair(res, res);
+    }
+}
+
+// Projective inverse (yzw : xzw : xyw : xyz) of a pair of theta points.
+void theta_invert_pair(__m512i* res, __m512i* P)
+{
+    __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], idx0, idx1;
+
+    // t0 = (xy, zw) per point, half the lanes are wasted
+    idx0 = VSET(0, 1, 4, 5, 0, 1, 4, 5); // (x, z) per point
+    idx1 = VSET(2, 3, 6, 7, 2, 3, 6, 7); // (y, w) per point
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t0[i] = VPERM512(idx0, P[i]);
+        t1[i] = VPERM512(idx1, P[i]);
+    }
+    fp2_mul_8x1x1(t0, t0, t1);
+
+    idx0 = VSET(2, 3, 0, 1, 6, 7, 4, 5); // (y, x, w, z) per point
+    idx1 = VSET(2, 3, 2, 3, 0, 1, 0, 1); // (zw, zw, xy, xy) per point
+    for (int i = 0; i < 2*NUM_LIMBS; i++) {
+        t1[i] = VPERM512(idx0, P[i]);
+        t0[i] = VPERM512(idx1, t0[i]);
+    }
+    fp2_mul_8x1x1(res, t0, t1);
 }
 
 // P1_P2 is (X1, Z1, X2, Z2) in 4x2x1

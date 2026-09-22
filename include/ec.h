@@ -89,6 +89,33 @@ void ec_add_components_4x4x2x1(
     __m512i* xQ, __m512i* yQ, __m512i* zQ
 );
 
+/**
+ * One step of the gluing ladder on four points: given ([m]G : -) and
+ * ([m-1]G : -) with G = (xD : 1) the normalized difference, compute
+ * ([2m]G : -) and ([2m-1]G : -). Assumes A24 is normalized.
+ */
+void ec_gluing_dbladd_4x4x2x1(
+    __m512i* res_xe, __m512i* res_ze, __m512i* res_xo, __m512i* res_zo,
+    __m512i* A24, __m512i* xe, __m512i* ze, __m512i* xo, __m512i* zo, __m512i* xD
+);
+
+void ec_gluing_ladder_4x4x2x1(
+    __m512i* res_xe, __m512i* res_ze, __m512i* res_xo, __m512i* res_zo,
+    __m512i* A24, __m512i* xe, __m512i* ze, __m512i* xo, __m512i* zo, __m512i* xD,
+    const int n
+);
+
+/**
+ * Given P = ([m]G : -), its difference P - G = ([m-1]G : -) and the sum Dp and
+ * difference Dm of the coordinates of G, compute u, v, w such that
+ * x(P + G) = (u - v : w) and x(P - G) = (u + v : w).
+ * The x-only replacement for ec_add_components_4x4x2x1.
+ */
+void ec_bary_components_4x4x2x1(
+    __m512i* res_u, __m512i* res_v, __m512i* res_w,
+    __m512i* xe, __m512i* ze, __m512i* xo, __m512i* zo, __m512i* Dp, __m512i* Dm
+);
+
 
 // ========================= 1x2x4x1  ==================================================
 

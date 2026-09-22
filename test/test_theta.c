@@ -349,6 +349,33 @@ bool test_theta_KAT(int iterations)
         return false;
     }
 
+    // The same chain with the x-only barycentric gluing
+    for (int pidx = 0; pidx < NUM_INPUT_LISTS && passed; pidx++) {
+        theta_couple_point_t* input_pts = input_points_vals[pidx];
+        int num_pts = num_pts_vals[pidx];
+
+        passed = theta_isogeny_chain_bary(&E34_actual, res_pts,
+            &E12, &ker_extra, input_pts, length, num_pts, false, verify);
+
+        if (!passed) { break; }
+
+        ec_normalize_curve(&E34_actual.E1);
+        ec_normalize_curve(&E34_actual.E2);
+        passed = fp2_is_equal(&E34_expected.E1.A, &E34_actual.E1.A)
+               & fp2_is_equal(&E34_expected.E2.A, &E34_actual.E2.A);
+
+        if (!passed) { break; }
+
+        for (int i = 0; i < num_pts; i++) {
+            passed &= ec_test_is_on_curve(&E34_actual.E1, &(res_pts+i)->P1);
+            passed &= ec_test_is_on_curve(&E34_actual.E2, &(res_pts+i)->P2);
+        }
+    }
+    print_test_res("chain with torsion, barycentric gluing", passed);
+    if(passed == 0) {
+        return false;
+    }
+
     // 4x2x1 verification, packing the inputs as common/verif.c does.
     // theta_normalize_chain_input_unvec above gives the lift what it assumes.
     __m512i ker_basis1[3*N4x2], ker_basis2[3*N4x2], A_34[NUM_LIMBS];
@@ -373,11 +400,9 @@ bool test_theta_KAT(int iterations)
     ec_point_unvec_to_1x2x2x2(normA24_1, &E12.E1.A24);
     ec_point_unvec_to_1x2x2x2(normA24_2, &E12.E2.A24);
 
-    success = lift_basis_pair_normalized_2x2x2(
-        ker_x, ker_y, ker_z, ker_basis1, ker_basis2, normA_1, normA_2, true
-    );
-    success &= theta_isogeny_chain_vec_verif(
-        A_34, ker_x, ker_y, ker_z, normA_1, normA_2, normA24_1, normA24_2, length
+    // Verification asks the chain for the codomain only, from an x-only kernel
+    success = theta_isogeny_chain_bary_vec(
+        A_34, NULL, ker_basis1, ker_basis2, normA24_1, normA24_2, NULL, length, 0, false, true
     );
 
     fp2_4x2x1_to_unvectorized(A_34_unvec, A_34);

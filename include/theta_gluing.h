@@ -83,6 +83,17 @@ bool gluing_codomain(
 );
 
 /**
+ * As the above, for a kernel that is already x-only. res_J_pair may be NULL,
+ * otherwise it receives the inverse dual images of both kernel points in
+ * 8x1x1, which is what the barycentric evaluation scales by.
+ */
+bool gluing_codomain_x_only(
+    __m512i* res_OA, __m512i* res_OA_dual_inv, __m512i* res_J_prime, __m512i* res_J_pair,
+    __m512i* res_matrix01, __m512i* res_matrix23,
+    __m512i* A24_12, __m512i* x_8, __m512i* z_8, const bool verify
+);
+
+/**
  * Accepts a pair of points (P1, P2) and (Q1, Q2) on E1 x E2
  * xP = (xP1, xQ1, xP2, xQ2)
  */
@@ -92,6 +103,31 @@ void gluing_eval_pair(
     __m512i* xT_8, __m512i* yT_8, __m512i* zT_8,
     __m512i* J_prime, __m512i* matrix01, __m512i* matrix23
 );
+
+/**
+ * Same, from the ladder state P = ([m]G, [m-1]G) and the sum Dp and difference
+ * Dm of the coordinates of the generators, which are the translation points.
+ */
+void gluing_eval_pair_bary(
+    __m512i* res, //8x1x1
+    __m512i* xe, __m512i* ze, __m512i* xo, __m512i* zo, __m512i* Dp, __m512i* Dm,
+    __m512i* J_pair, __m512i* matrix01, __m512i* matrix23, const bool last_hadamard
+);
+
+/**
+ * Evaluation of a pair of points from their addition components, whatever
+ * representation these were computed from.
+ */
+void gluing_eval_components_pair(
+    __m512i* res, //8x1x1
+    __m512i* u, __m512i* v, __m512i* w,
+    __m512i* J_pair, __m512i* matrix01, __m512i* matrix23, const bool last_hadamard
+);
+
+/**
+ * Projective inverse (yzw : xzw : xyw : xyz) of a pair of theta points.
+ */
+void theta_invert_pair(__m512i* res, __m512i* P);
 
 // P1_P2 is (X1, Z1, X2, Z2) in 4x2x1
 void gluing_eval_product_to_theta(

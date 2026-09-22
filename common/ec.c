@@ -209,6 +209,72 @@ void ec_add_components_4x4x2x1(
     fp2_sub_4x2x1(res_u, t4_t5, t1_t0);
 }
 
+void ec_gluing_dbladd_4x4x2x1(
+    __m512i* res_xe, __m512i* res_ze, __m512i* res_xo, __m512i* res_zo,
+    __m512i* A24, __m512i* xe, __m512i* ze, __m512i* xo, __m512i* zo, __m512i* xD
+)
+{
+    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], t2[NUM_LIMBS], t3[NUM_LIMBS], u1[NUM_LIMBS];
+
+    fp2_add_4x2x1(t0, xe, ze);
+    fp2_sub_4x2x1(t1, xe, ze);
+    fp2_sub_4x2x1(t2, xo, zo);
+    fp2_add_4x2x1(t3, xo, zo);
+
+    // The doubling, on (xe : ze)
+    fp2_sqrx2_4x2x1(res_xe, u1, t0, t1);
+    fp2_mulx2_4x2x1(t0, t1, t0, t2, t1, t3);
+    fp2_sub_4x2x1(t2, res_xe, u1);
+    fp2_mulx2_4x2x1(res_xe, t3, res_xe, u1, A24, t2);
+    fp2_add_4x2x1(u1, u1, t3);
+
+    // The addition, whose difference is the normalized (xD : 1)
+    fp2_add_4x2x1(t3, t0, t1);
+    fp2_sub_4x2x1(t0, t0, t1);
+    fp2_sqrx2_4x2x1(t0, res_xo, t0, t3);
+
+    fp2_mulx2_4x2x1(res_ze, res_zo, u1, t2, t0, xD);
+}
+
+void ec_gluing_ladder_4x4x2x1(
+    __m512i* res_xe, __m512i* res_ze, __m512i* res_xo, __m512i* res_zo,
+    __m512i* A24, __m512i* xe, __m512i* ze, __m512i* xo, __m512i* zo, __m512i* xD,
+    const int n
+)
+{
+    ec_gluing_dbladd_4x4x2x1(res_xe, res_ze, res_xo, res_zo, A24, xe, ze, xo, zo, xD);
+    for (int i = 1; i < n; i++) {
+        ec_gluing_dbladd_4x4x2x1(
+            res_xe, res_ze, res_xo, res_zo, A24, res_xe, res_ze, res_xo, res_zo, xD
+        );
+    }
+}
+
+void ec_bary_components_4x4x2x1(
+    __m512i* res_u, __m512i* res_v, __m512i* res_w,
+    __m512i* xe, __m512i* ze, __m512i* xo, __m512i* zo, __m512i* Dp, __m512i* Dm
+)
+{
+    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], t2[NUM_LIMBS], t3[NUM_LIMBS];
+
+    fp2_add_4x2x1(t0, xe, ze);
+    fp2_sub_4x2x1(t1, xe, ze);
+    fp2_mulx2_4x2x1(t0, t1, t0, Dm, t1, Dp);
+
+    // t2 = lambda, t3 = mu
+    fp2_add_4x2x1(t2, t1, t0);
+    fp2_sub_4x2x1(t3, t1, t0);
+
+    fp2_mulx2_4x2x1(t2, t0, zo, t2, t3, zo);
+    fp2_mul_4x2x1(t1, t3, xo);
+    fp2_sqrx2_4x2x1(t2, t3, t2, t1);
+
+    fp2_mul_4x2x1(res_w, t1, t0);
+    fp2_add_4x2x1(res_w, res_w, res_w);
+    fp2_add_4x2x1(res_u, t3, t2);
+    fp2_sub_4x2x1(res_v, t3, t2);
+}
+
 // ============================== 2x4x1 ======================================0
 
 void ec_point_unvec_to_1x2x4x1(__m512i* res, ec_point_t* P)

@@ -163,64 +163,12 @@ static bool compute_challenge_verify(__m512i* res_A24_chall, __m512i* res_A_chal
     return true;
 }
 
-static bool matrix_scalar_application_even_basis_jac(__m512i* jac_x, __m512i* jac_y, __m512i* jac_z, __m512i* A_chall, scalar_mtx_2x2_t* mat)
-{
-    __m512i P[NUM_LIMBS], Q[NUM_LIMBS], a00P_a01P[2*NUM_LIMBS], a10Q_a11Q[2*NUM_LIMBS];
-    __m512i idx0, idx1;
-
-    // P = (P1.x, P1.y, P1.z, -)
-    idx0 = VSET(0, 1, 8, 9, 0, 0, 0, 0);
-    idx1 = VSET(0, 1, 2, 3, 8, 9, 0, 0);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        P[i] = VBLENDPERM(idx0, jac_x[i], jac_y[i]);
-        P[i] = VBLENDPERM(idx1, P[i], jac_z[i]);
-    }
-    // Q = (Q1.x, Q1.y, Q1.z, -)
-    idx0 = VSET(2, 3, 10, 11, 0, 0, 0, 0);
-    idx1 = VSET(0, 1, 2, 3, 10, 11, 0, 0);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        Q[i] = VBLENDPERM(idx0, jac_x[i], jac_y[i]);
-        Q[i] = VBLENDPERM(idx1, Q[i], jac_z[i]);
-    }
-
-    // [a00] * P, [a01] * P
-    // [a10] * Q, [a11] * Q
-    jac_mul_pair(a00P_a01P, P, A_chall, (*mat)[0][0], (*mat)[0][1]);
-    jac_mul_pair(a10Q_a11Q, Q, A_chall, (*mat)[1][0], (*mat)[1][1]);
-
-    // R = [a00] * P + [a10] * Q
-    // S = [a01] * P + [a11] * Q
-    jac_add_pair(a00P_a01P, a00P_a01P, a10Q_a11Q, A_chall);
-
-    // Update jac_x, jac_y, jac_z
-    idx0 = VSET(8, 0, 9, 0, 4, 5, 6, 7);
-    idx1 = VSET(0, 8, 2, 9, 4, 5, 6, 7);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        jac_x[i] = VBLENDPERM(idx0, jac_x[i], a00P_a01P[i]);
-        jac_x[i] = VBLENDPERM(idx1, jac_x[i], a00P_a01P[i+NUM_LIMBS]);
-    }
-    idx0 = VSET(10, 0, 11, 0, 4, 5, 6, 7);
-    idx1 = VSET(0, 10, 2, 11, 4, 5, 6, 7);
-    for (int i = 0; i< NUM_LIMBS; i++) {
-        jac_y[i] = VBLENDPERM(idx0, jac_y[i], a00P_a01P[i]);
-        jac_y[i] = VBLENDPERM(idx1, jac_y[i], a00P_a01P[i+NUM_LIMBS]);
-    }
-    idx0 = VSET(12, 0, 13, 0, 4, 5, 6, 7);
-    idx1 = VSET(0, 12, 2, 13, 4, 5, 6, 7);
-    for (int i = 0; i< NUM_LIMBS; i++) {
-        jac_z[i] = VBLENDPERM(idx0, jac_z[i], a00P_a01P[i]);
-        jac_z[i] = VBLENDPERM(idx1, jac_z[i], a00P_a01P[i+NUM_LIMBS]);
-    }
-
-    return true;
-}
-
 // SQIsign verification
 bool protocols_verify(signature_2x2x2_t* sig, public_key_2x2x2_t* pk, const unsigned char* m, size_t l)
 {
     __m512i A24_chall[N4x2], A_chall[N4x2], B_chall_can[3*N4x2], B_aux_can[3*N4x2], A_com[N4x2], A_tmp[N4x2];
     __m512i A_34[NUM_LIMBS];
-    __m512i jac_x[NUM_LIMBS], jac_y[NUM_LIMBS], jac_z[NUM_LIMBS];
+    __m512i ker_chall[2*N4x2];
 
     if (!check_canonical_basis_change_matrix(sig))
         return false;
@@ -248,19 +196,16 @@ bool protocols_verify(signature_2x2x2_t* sig, public_key_2x2x2_t* pk, const unsi
     theta_normalize_chain_input(A24_chall, sig->A24_aux, B_chall_can, B_aux_can);
     ec_normA24_to_normA_1x2x2x2(A_chall, A24_chall);
 
-    // Lift each basis x(P), x(Q), x(P-Q) to P, Q in Jacobian coordinates.
-    // We pack the coordinates into three blobs
-    // ker_X = AVX_4x2x1(P1.X, Q1.X, P2.X, Q2.X), etc.
-    if (!lift_basis_pair_normalized_2x2x2(jac_x, jac_y, jac_z, B_chall_can, B_aux_can, A_chall, sig->A_aux, true))
-    {
+    // Apply the change of basis on the challenge curve. The gluing is x-only,
+    // so this is a biscalar ladder and no basis is ever lifted.
+    if (!ec_biscalar_mul_pair_normA_1x2x2x2(ker_chall, ker_chall + N4x2,
+                                            &sig->mat_Bchall_can_to_B_chall,
+                                            A_chall, A24_chall, B_chall_can))
         return false;
-    }
-
-    matrix_scalar_application_even_basis_jac(jac_x, jac_y, jac_z, A_chall, &sig->mat_Bchall_can_to_B_chall);
 
     // Reject if the signature did not give an isogeny between elliptic products.
-    if (!theta_isogeny_chain_vec_verif(A_34, jac_x, jac_y, jac_z, A_chall, sig->A_aux, A24_chall, sig->A24_aux,
-                                       SQIsign_response_length))
+    if (!theta_isogeny_chain_bary_vec(A_34, NULL, ker_chall, B_aux_can, A24_chall, sig->A24_aux,
+                                      NULL, SQIsign_response_length, 0, false, true))
         return false;
 
     // Always the first split curve, by our (2^n, 2^n)-isogeny formulae.
