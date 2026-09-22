@@ -51,6 +51,16 @@ if len(sys.argv) > 1:
     elif arg == "lvl5":
         e = 500
         c = 27
+
+    if arg == "v3lvl1":
+        e = 324
+        c = 3
+    elif arg == "v3lvl3":
+        e = 500
+        c = 27
+    elif arg == "v5lvl5":
+        e = 664
+        c = 17
 else:
     # limb_len = 51, last_limb_len = 51: 
     # c = 1125899906842695

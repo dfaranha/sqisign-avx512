@@ -69,7 +69,6 @@ class Strat:
     mod_2p: bool
     mul_nonneg: MulNonnegMode
     karat_add: KaratsubaAddMode
-    reduce_everything: bool
     sqr_use_add_p_sub: bool
     sqr8_faster_add_p_sub: bool
     sqr4_faster_add_p_sub: bool
@@ -102,44 +101,37 @@ def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
             R_ext = True
             mul_nonneg = MulNonnegMode.add_p_shifted
             karat_add = KaratsubaAddMode.lazy
-            reduce_everything = False
         elif last_limb_len == limb_len-1:
             mod_2p = True
             R_ext = True
             mul_nonneg = MulNonnegMode.add_2p_shifted
             karat_add = KaratsubaAddMode.lazy
-            reduce_everything = False
         elif limb_len < 50:
             mod_2p = True
             R_ext = True
             mul_nonneg = MulNonnegMode.add_4p_shifted
             karat_add = KaratsubaAddMode.lazy
-            reduce_everything = False
         else:
-            mod_2p = False
+            mod_2p = True
             R_ext = True
             mul_nonneg = MulNonnegMode.add_p_shifted
-            karat_add = KaratsubaAddMode.lazy
-            reduce_everything = False
+            karat_add = KaratsubaAddMode.reduce
     else: # limb_len = 51
         if last_limb_len <= 49:
             mod_2p = True
             R_ext = True
             mul_nonneg = MulNonnegMode.add_p_shifted
             karat_add = KaratsubaAddMode.carry_prop
-            reduce_everything = False
         elif last_limb_len == 50:
             mod_2p = False
             R_ext = True
             mul_nonneg = MulNonnegMode.add_p_shifted
             karat_add = KaratsubaAddMode.carry_prop
-            reduce_everything = False
         else: #last_limb_len = 51
             mod_2p = False
             R_ext = True
             mul_nonneg = MulNonnegMode.add_p_shifted
             karat_add = KaratsubaAddMode.reduce
-            reduce_everything = True
 
     # Notes on what I'm doing:
     # Realizes that we can do mod_2p and most of lazy red for the "worst" cases
@@ -185,7 +177,6 @@ def get_strat(num_limbs, limb_len, last_limb_len, gen_addchain):
         gen_addchain = gen_addchain,
         R_ext = R_ext,
         mod_2p = mod_2p,
-        reduce_everything = reduce_everything,
         mul_nonneg = mul_nonneg,
         karat_add = karat_add,
         sqr_use_add_p_sub = sqr_use_add_p_sub,

@@ -694,7 +694,7 @@ def fp2_mul_4x2x1_lazy(f, pp, v):
 def fp2_sqr_4x2x1(f, pp, v, strat, inline=False):
     f.start("void fp2_sqr_4x2x1(__m512i* res, __m512i* a)", inline=inline)
 
-    if strat.reduce_everything:
+    if strat.karat_add == KaratsubaAddMode.reduce:
         fp2_sqr_4x2x1_standard(f, pp, v)
     else:
         fp2_sqr_4x2x1_lazy(f, pp, v, strat)
