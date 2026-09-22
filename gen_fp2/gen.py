@@ -43,14 +43,14 @@ gen_addchain = True # Requires addchain to be installed
 if len(sys.argv) > 1:
     arg = sys.argv[1]
     if arg == "lvl1":
-        e = 248
-        c = 5
+        e = 324
+        c = 3
     elif arg == "lvl3":
-        e = 376
-        c = 65
-    elif arg == "lvl5":
         e = 500
         c = 27
+    elif arg == "lvl5":
+        e = 664
+        c = 17
 else:
     e = 376
     c = 65
