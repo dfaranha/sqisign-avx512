@@ -47,6 +47,7 @@ void bench_verif(int iterations) {
         return;
     }
 
+    sm_rsp = NULL;
     done = 0;
     do {
 
@@ -64,26 +65,30 @@ void bench_verif(int iterations) {
             ret_val = fscanf(fp_rsp, "%lld", &mlen);
         } else {
             printf("ERROR: unable to read 'mlen' from <%s>\n", fn_rsp);
-            return;
+            goto fail;
         }
 
         sm_rsp = (unsigned char *)calloc(mlen + SIGNATURE_BYTES, sizeof(unsigned char));
+        if ( sm_rsp == NULL ) {
+            printf("ERROR: out of memory\n");
+            goto fail;
+        }
 
         if ( !ReadHex(fp_rsp, pk_rsp, PUBLICKEY_BYTES, "pk = ") ) {
             printf("ERROR: unable to read 'pk' from <%s>\n", fn_rsp);
-            return;
+            goto fail;
         }
 
         if ( FindMarker(fp_rsp, "smlen = ") ) {
             ret_val = fscanf(fp_rsp, "%llu", &smlen);
         } else {
             printf("ERROR: unable to read 'smlen' from <%s>\n", fn_rsp);
-            return;
+            goto fail;
         }
 
         if ( !ReadHex(fp_rsp, sm_rsp, smlen, "sm = ") ) {
             printf("ERROR: unable to read 'sm' from <%s>\n", fn_rsp);
-            return;
+            goto fail;
         }
 
         // Extract m and sig from sm: sm = [sig (SIGNATURE_BYTES) | m (mlen)]
@@ -99,6 +104,7 @@ void bench_verif(int iterations) {
         i += 1;
 
         free(sm_rsp);
+        sm_rsp = NULL;
 
         if (i == N_RUNS) 
             break;
@@ -111,6 +117,11 @@ void bench_verif(int iterations) {
 
     qsort(cycles, N_RUNS, sizeof(uint64_t), cmp_uint64);
     print_bench_res("sqisign verif", cycles[(N_RUNS/2) -1], tmp);
+    return;
+
+fail:
+    free(sm_rsp);
+    fclose(fp_rsp);
 }
 
 //

@@ -44,6 +44,7 @@ static int test_verification_kat_single(int cnt) {
 
     char                fn_rsp[64];
     FILE                *fp_rsp;
+    int                 rc = KAT_SUCCESS;
 
     sprintf(fn_rsp, "assets/PQCsignKAT_%d_%s.rsp", SECRETKEY_BYTES, CRYPTO_ALGNAME);
     if ( (fp_rsp = fopen(fn_rsp, "r")) == NULL ) {
@@ -51,6 +52,7 @@ static int test_verification_kat_single(int cnt) {
         return KAT_FILE_OPEN_ERROR;
     }
 
+    sm_rsp = NULL;
     done = 0;
     do {
 
@@ -70,26 +72,35 @@ static int test_verification_kat_single(int cnt) {
             ret_val = fscanf(fp_rsp, "%lld", &mlen);
         } else {
             printf("ERROR: unable to read 'mlen' from <%s>\n", fn_rsp);
-            return KAT_DATA_ERROR;
+            rc = KAT_DATA_ERROR;
+            goto cleanup;
         }
 
         sm_rsp = (unsigned char *)calloc(mlen + SIGNATURE_BYTES, sizeof(unsigned char));
+        if ( sm_rsp == NULL ) {
+            printf("ERROR: out of memory\n");
+            rc = KAT_DATA_ERROR;
+            goto cleanup;
+        }
 
         if ( !ReadHex(fp_rsp, pk_rsp, PUBLICKEY_BYTES, "pk = ") ) {
             printf("ERROR: unable to read 'pk' from <%s>\n", fn_rsp);
-            return KAT_DATA_ERROR;
+            rc = KAT_DATA_ERROR;
+            goto cleanup;
         }
 
         if ( FindMarker(fp_rsp, "smlen = ") ) {
             ret_val = fscanf(fp_rsp, "%llu", &smlen);
         } else {
             printf("ERROR: unable to read 'smlen' from <%s>\n", fn_rsp);
-            return KAT_DATA_ERROR;
+            rc = KAT_DATA_ERROR;
+            goto cleanup;
         }
 
         if ( !ReadHex(fp_rsp, sm_rsp, smlen, "sm = ") ) {
             printf("ERROR: unable to read 'sm' from <%s>\n", fn_rsp);
-            return KAT_DATA_ERROR;
+            rc = KAT_DATA_ERROR;
+            goto cleanup;
         }
 
         // Extract m and sig from sm: sm = [sig (SIGNATURE_BYTES) | m (mlen)]
@@ -98,18 +109,22 @@ static int test_verification_kat_single(int cnt) {
 
         if (!verify(m, mlen, sm_rsp, SIGNATURE_BYTES, pk_rsp)) {
             printf("crypto_sign_open failed\n");
-            return KAT_CRYPTO_FAILURE;
+            rc = KAT_CRYPTO_FAILURE;
+            goto cleanup;
         }
 
         free(sm_rsp);
+        sm_rsp = NULL;
 
     } while ( !done );
 
     printf("\n");
 
+cleanup:
+    free(sm_rsp);
     fclose(fp_rsp);
 
-    return KAT_SUCCESS;
+    return rc;
 }
 
 
