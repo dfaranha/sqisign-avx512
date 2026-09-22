@@ -9,6 +9,10 @@ from avx_arithmetic import (
     avx_811_mul,
     avx_811_sub,
     avx_421_pair_mul,
+    avx_421_add_sub,
+    avx_421_sub_add,
+    avx_421_dbl,
+    avx_421_had,
     avx_811_sqr,
     avx_421_all_zero,
     avx_421_any_zero,
@@ -33,228 +37,204 @@ def gluing_kernel_to_x_only(X: AVX_4x2x1, Z: AVX_4x2x1) -> tuple[AVX_4x2x1, AVX_
     return X, avx_421_sqr(Z)
 
 
-def _compute_matrix(
-    X: AVX_4x2x1,
-    Z: AVX_4x2x1,
-    U: AVX_4x2x1,
-    W: AVX_4x2x1,
-    det: AVX_4x2x1,
-) -> tuple[AVX_4x2x1]:
+def compute_symmetric_elements(X_4: AVX_4x2x1, Z_4: AVX_4x2x1):
     """
-    Helper function:
+    Compute the three symmetric elements above the 4-torsion basis of each curve
+    of the elliptic product.
 
-    Subroutine to compute the matrix given data from action_by_translation
-    Uses an alternative projective representation to avoid all inversions.
+    Each element is packed as (g_1.s00, g_1.s01, g_2.s00, g_2.s01), where the
+    subscript is the curve; the remaining entry s10 is +/- s01 and is recovered
+    by the caller. The other outputs are (delta_1, r1_1, delta_2, r1_2),
+    (r2_1, r2_2, delta_1 * delta_2, -) and the two conditional swap flags.
 
-    With inverses precomputed we need five calls to "pairwise_mul" so there
-    is an extra cost of a single avx_sqr call
-
-    24M + 12a
+    8M + 4S + 32a
     """
-    # ============================================================================
-    # For the ith coordinate of X, Z, U, W we compute ai, bi, ci, di as:
-    # d = U * Z * inv_det
-    # b = -W * Z * inv_det
-    # c = U * X * inv_det - X * inv_Z
-    # a = -d
-    #
-    # We want to work projectively here to remove the inversion.
-    #
-    # So let's write this with a (1 / det * Z) outside the front.
-    # (1 / det * Z)  [- U * Z^2              -W * Z^2]
-    #                [  U * X * Z - X * det   U * Z^2]
-    # We can then return the matrix along with the projective factor.
-    # ============================================================================
+    F = X_4[0].parent()
+    zero = F.zero()
+    zeta = F.gen()
 
-    C, pi = avx_421_pair_mul(U, Z, det, Z)
-    C = avx_421_sub(C, det)
-    C, Z_sqr = avx_421_pair_mul(X, C, Z, Z)  # This is 1M 1S
-    D, B = avx_421_pair_mul(U, Z_sqr, W, Z_sqr)
-    B = avx_421_neg(B)
-    A = avx_421_neg(D)
+    # ============================================================
+    # Locate, for each curve, which of T1, T2, T1 + T2 lies above
+    # the two-torsion point (0 : 1). The six possible answers are
+    # encoded as pos in 0..5.
+    # ============================================================
 
-    # TODO:
-    # Memory management from the ai, bi, ci, di to the
-    # matrix gi, hi, can be totally avoided as theta_change_of_basis
-    # unpacks these anyway.
-    a1, a2, a3, a4 = A
-    b1, b2, b3, b4 = B
-    c1, c2, c3, c4 = C
-    d1, d2, d3, d4 = D
+    # 8a
+    R = avx_421_add(X_4, Z_4)  # (r1_1, r2_1, r1_2, r2_2)
+    S = avx_421_sub(X_4, Z_4)  # (s1_1, s2_1, s1_2, s2_2)
 
-    g1 = AVX_4x2x1(a1, b1, c1, d1)
-    h1 = AVX_4x2x1(a2, b2, c2, d2)
-    g2 = AVX_4x2x1(a3, b3, c3, d3)
-    h2 = AVX_4x2x1(a4, b4, c4, d4)
-
-    return g1, g2, h1, h2, pi
-
-
-def action_by_translation(
-    A24: AVX_4x2x1, X_4: AVX_4x2x1, Z_4: AVX_4x2x1
-) -> tuple[AVX_4x2x1]:
-    """
-    Algorithm 8.36 of the SQISign spec.
-
-    Compute the translation matrix induced by the generator of our order 4
-    isotropic basis <(P1,P2)x(Q1,Q2)> in E_1 x E_2.
-
-    40M + 8S + 32a
-    """
-    # 8S + 8M + 16a
-    U, W = x_double_4x4x2x1(A24, X_4, Z_4)
-
-    # 8M
-    t1, t2 = avx_421_pair_mul(W, X_4, U, Z_4)
+    # 4M
+    T0 = AVX_4x2x1(R[0], S[0], R[2], S[2])
+    T1 = AVX_4x2x1(S[1], R[1], S[3], R[3])
+    T2 = avx_421_mul(T0, T1)  # (P_1, Q_1, P_2, Q_2)
 
     # 4a
-    D = avx_421_sub(t1, t2)
+    T3 = AVX_4x2x1(zeta * T2[0], zeta * T2[0], zeta * T2[2], zeta * T2[2])
+    T4 = AVX_4x2x1(T2[1], T2[1], T2[3], T2[3])
+    U = avx_421_had(T3, T4)
 
-    # Compute matrices from points
-    # 24M + 12a
-    g1, g2, h1, h2, proj = _compute_matrix(X_4, Z_4, U, W, D)
+    pos = []
+    for c in range(2):
+        p = 255
+        if S[2 * c] == 0:
+            p = 0
+        if R[2 * c] == 0:
+            p = 1
+        if S[2 * c + 1] == 0:
+            p = 2
+        if R[2 * c + 1] == 0:
+            p = 3
+        if U[2 * c] == 0:
+            p = 4
+        if U[2 * c + 1] == 0:
+            p = 5
+        pos.append(p)
 
-    return g1, g2, h1, h2, proj
+    swap12 = [(p >> 1) == 0 for p in pos]
+    swap23 = [(p >> 1) == 2 for p in pos]
+
+    # ============================================================
+    # Every symmetric element is built from r1 = x^2 + z^2,
+    # r2 = 2xz and delta = x^2 - z^2 of the torsion point which is
+    # not the one above (0 : 1).
+    # ============================================================
+
+    # 4S
+    e0 = 1 if swap12[0] else 0
+    e1 = 3 if swap12[1] else 2
+    XZ = AVX_4x2x1(X_4[e0], Z_4[e0], X_4[e1], Z_4[e1])
+    SQ = avx_421_sqr(XZ)
+
+    # 4a
+    T5 = AVX_4x2x1(SQ[0], SQ[0], SQ[2], SQ[2])
+    T6 = AVX_4x2x1(SQ[1], SQ[1], SQ[3], SQ[3])
+    DR = avx_421_sub_add(T5, T6)  # (delta_1, r1_1, delta_2, r1_2)
+
+    # 4M + 4a
+    XZ2 = avx_421_dbl(XZ)
+    T7 = AVX_4x2x1(XZ2[0], XZ2[2], DR[0], DR[0])
+    T8 = AVX_4x2x1(XZ[1], XZ[3], DR[2], DR[2])
+    T9 = avx_421_mul(T7, T8)  # (r2_1, r2_2, delta_1 * delta_2, -)
+
+    RD = AVX_4x2x1(DR[1], T9[0], DR[3], T9[1])  # (r1_1, r2_1, r1_2, r2_2)
+
+    # ============================================================
+    # The three elements before the conditional swaps, in the order
+    # (-r1, r2), (0, +/- delta) and (+/- i r2, -/+ i r1).
+    # ============================================================
+    nRD = avx_421_neg(RD)
+    nDR = avx_421_neg(DR)
+    iRD = AVX_4x2x1(*[zeta * a for a in RD])
+    niRD = avx_421_neg(iRD)
+
+    def sel(b, a0, a1):
+        return a1 if b else a0
+
+    odd = [p & 1 for p in pos]
+    flg1 = [p in (0, 3, 4) for p in pos]
+    flg2 = [p in (1, 2, 5) for p in pos]
+
+    Ea = AVX_4x2x1(nRD[0], RD[1], nRD[2], RD[3])
+    Eb = AVX_4x2x1(
+        zero, sel(odd[0], nDR[0], DR[0]), zero, sel(odd[1], nDR[2], DR[2])
+    )
+    Ec = AVX_4x2x1(
+        sel(flg1[0], niRD[1], iRD[1]),
+        sel(flg2[0], niRD[0], iRD[0]),
+        sel(flg1[1], niRD[3], iRD[3]),
+        sel(flg2[1], niRD[2], iRD[2]),
+    )
+
+    def blend(A, B, flags):
+        return AVX_4x2x1(
+            sel(flags[0], A[0], B[0]),
+            sel(flags[0], A[1], B[1]),
+            sel(flags[1], A[2], B[2]),
+            sel(flags[1], A[3], B[3]),
+        )
+
+    g1 = blend(Ea, Eb, swap12)
+    g2 = blend(blend(Eb, Ec, swap23), Ea, swap12)
+    g3 = blend(Ec, Eb, swap23)
+
+    return g1, g2, g3, DR, T9, swap12, swap23
 
 
-def theta_change_of_basis(
-    A24: AVX_4x2x1, X_4: AVX_4x2x1, Z_4: AVX_4x2x1
-) -> tuple[AVX_8x1x1, AVX_8x1x1]:
+def theta_change_of_basis(X_4: AVX_4x2x1, Z_4: AVX_4x2x1) -> tuple[AVX_8x1x1, AVX_8x1x1]:
     """
-    Algorithm 8.37 of the SQIsign spec.
-
-    Compute the change of matrix that transform the standard product
-    theta structure into the theta structure induced by the 4-symplectic
-    basis <(0,Q2_4),(P1_4,0)> + <(P1_4,P2_4),(Q1_4,Q2_4)>.
+    Compute the change of basis matrix that transforms the standard product
+    theta structure into the theta structure induced by the 4-torsion basis
+    <(P1_4, P2_4), (Q1_4, Q2_4)> of E1 x E2, from the symmetric elements
+    above that basis.
 
     Input:
-        Pi, Qi are four torsion points on (E1 x E2)
+        X_4, Z_4 are the 4-torsion points (P1_4, Q1_4, P2_4, Q2_4).
 
     Returns:
-        Matrix: the 4x4 change of basis matrix
+        Matrix: the 4x4 change of basis matrix as two 8x1x1 blobs.
 
-    Giac Notes:
-
-    Computes N projectively which removes 21M + 1I from a batched inversion
-    but costs 4S and 34 multiplications (so swaps one inversion for 13M + 1S)
-
-    For AXV, 34 is not a multiple of four, so this adds 9 calls to avx_pairwise_mul
-    and one call to avx_sqr.
-
-    An interesting thing to explore is `avx_pairwise_mul` where one of the AVX blobs
-    is four copies of the same element. This happens for 6 of the 9 total calls for
-    avx_pairwise_mul.
-
-    # 40M + 8S + 32a for action_by_translation
-    # 80M + 28a
-    # 120M + 8S + 60a
+    8M + 4S + 32a for the symmetric elements
+    48M + 24a for the matrix itself
+    56M + 4S + 56a
     """
-    # NOTE
-    #
-    # This function is long and complicated and parallelising computations has only
-    # made it harder to follow. All inline comments trying to explain what is happening
-    # mathematically have been abandoned and instead an attempt has been made to
-    # simplify the discussion where AVX4x2x1 blobs are constructed and then used for
-    # arithmetic.
-    #
-    # The implementation follows the logic of the following code:
-    # https://github.com/GiacomoPope/isogeny_rs/blob/main/src/theta/theta_gluing.rs#L54
-    # which is a decent overview of projective computation of the change of basis matrix.
-    #
-    # On notation:
-    #
-    # For the following I use T0, T1, etc to represent temp AVX4x2x1 values
-    # which are essentially immediately discarded and replaced.
-    #
-    # Values named S0, S1, etc are instead values which we might need throughout
-    # this function and in particular we select various fp2 values from these
-    # AVX4x2x1 blobs to make additional Ti and Si values.
-    #
-    # As a result, this function will not be optimal with avoid stack allocation as
-    # there will be points where Si values could no longer be user potentially, but
-    # the choice has been made to absorb this loss to make it easier to follow.
+    F = X_4[0].parent()
+    zero = F.zero()
 
-    # Compute the action by translation on all four elements of E[4] simultaneously
-    # 40M + 8S + 32a
-    G1, G2, H1, H2, PI = action_by_translation(A24, X_4, Z_4)
+    g1, g2, g3, DR, T9, swap12, swap23 = compute_symmetric_elements(X_4, Z_4)
+    delta12 = T9[2]
 
-    # Computation of S0
-    T0 = AVX_4x2x1(PI[0], PI[2], PI[0], PI[1])
-    T1 = AVX_4x2x1(PI[1], PI[3], PI[2], PI[3])
-    S0 = avx_421_mul(T0, T1)
+    # The third entry of a symmetric element is s01 up to sign; the sign is
+    # positive exactly for the element built from delta.
+    g1a_s10 = g1[1] if swap12[0] else -g1[1]
+    g2b_s10 = -g2[3] if (swap12[1] or swap23[1]) else g2[3]
 
-    # Computation of S1
-    T0 = AVX_4x2x1(G1[0], G1[2], G2[0], G2[2])
-    T1 = AVX_4x2x1(H1[0], H1[0], H2[0], H2[0])
-    T2 = AVX_4x2x1(G1[1], G1[3], G2[1], G2[3])
-    T3 = AVX_4x2x1(H1[2], H1[2], H2[2], H2[2])
-    S1, T2 = avx_421_pair_mul(T0, T1, T2, T3)
-    S1 = avx_421_add(S1, T2)
+    # First row: the product of the symmetric elements of the two curves.
+    # 12M + 12a
+    L1 = AVX_4x2x1(g1[0], g1[0], g1[1], g1[1])
+    R1 = AVX_4x2x1(g1[2], g1[3], g1[2], g1[3])
+    L2 = AVX_4x2x1(g2[0], g2[0], g2[1], g2[1])
+    R2 = AVX_4x2x1(g2[2], g2[3], g2[2], g2[3])
+    L3 = AVX_4x2x1(g3[0], g3[0], g3[1], g3[1])
+    R3 = AVX_4x2x1(g3[2], g3[3], g3[2], g3[3])
 
-    # Computation of S2 (continued), S2, S3
-    T0 = AVX_4x2x1(S0[1], S0[1], S0[0], S0[0])
-    S2 = AVX_4x2x1(G1[0], G1[0], G1[2], G1[2])
-    T1 = AVX_4x2x1(G2[0], G2[2], G2[0], G2[2])
-    S1, S3 = avx_421_pair_mul(S1, T0, S2, T1)
+    P1, P2 = avx_421_pair_mul(L1, R1, L2, R2)
+    P3 = avx_421_mul(L3, R3)
+    row0 = avx_421_sub(avx_421_add(P1, P2), P3)
+    row0 = avx_421_add(row0, AVX_4x2x1(delta12, zero, zero, zero))
 
-    # Computation of S3 (continued), S4
-    T0 = AVX_4x2x1(H1[0], H1[0], H1[2], H1[2])
-    S4 = AVX_4x2x1(H2[0], H2[2], H2[0], H2[2])
-    # TODO: every element of T2 is the same, can we use this?
-    T1 = AVX_4x2x1(S0[3], S0[3], S0[3], S0[3])
-    S3, T1 = avx_421_pair_mul(S3, T1, T0, S4)
+    # Second and third rows: act on the first row by g2 of the second curve
+    # and by g1 of the first curve respectively.
+    # 16M + 8a
+    A1 = AVX_4x2x1(g2[2], g2[3], g2[2], g2[3])
+    B1 = AVX_4x2x1(row0[0], row0[0], row0[2], row0[2])
+    A2 = AVX_4x2x1(g2b_s10, g2[2], g2b_s10, g2[2])
+    B2 = AVX_4x2x1(row0[1], row0[1], row0[3], row0[3])
+    A3 = AVX_4x2x1(g1[0], g1[0], g1[1], g1[1])
+    B3 = AVX_4x2x1(row0[0], row0[1], row0[0], row0[1])
+    A4 = AVX_4x2x1(g1a_s10, g1a_s10, g1[0], g1[0])
+    B4 = AVX_4x2x1(row0[2], row0[3], row0[2], row0[3])
 
-    # Computation of S3 (continued), S5
-    # TODO: every element of T0 is the same, can we use this?
-    T0 = AVX_4x2x1(S0[2], S0[2], S0[2], S0[2])
-    T2 = AVX_4x2x1(PI[0], S0[0], 1, 1)
-    T3 = AVX_4x2x1(PI[3], S0[1], 1, 1)
-    T1, S5 = avx_421_pair_mul(T1, T0, T2, T3)
-    S3 = avx_421_add(S3, T1)
+    X1, X3 = avx_421_pair_mul(A1, B1, A3, B3)
+    X2, X4 = avx_421_pair_mul(A2, B2, A4, B4)
+    row1 = avx_421_had(X1, X2)
+    row2 = avx_421_add_sub(X3, X4)
 
-    # TODO: this could be optimised as we need only one Fp2 add?
-    T0 = AVX_4x2x1(S5[1], 0, 0, 0)
-    S3 = avx_421_add(S3, T0)
+    # Fourth row: act on the second row by g1 of the first curve.
+    # 8M + 4a
+    B5 = AVX_4x2x1(row1[0], row1[1], row1[0], row1[1])
+    B6 = AVX_4x2x1(row1[2], row1[3], row1[2], row1[3])
+    X5, X6 = avx_421_pair_mul(A3, B5, A4, B6)
+    row3 = avx_421_add_sub(X5, X6)
 
-    # TODO: every element of T1 is the same, can we use this?
-    T0 = AVX_4x2x1(S5[1], S5[1], S5[1], S5[1])
-    T1 = AVX_4x2x1(S1[0], S1[0], S1[1], S1[1])
-    T2 = AVX_4x2x1(S1[2], S1[3], S1[2], S1[3])
-    S3, T4 = avx_421_pair_mul(S3, T0, T1, T2)
-    S3 = avx_421_add(S3, T4)
+    # Realign the projective factors of the four rows.
+    # 12M
+    D12 = AVX_4x2x1(delta12, delta12, delta12, delta12)
+    D1 = AVX_4x2x1(DR[0], DR[0], DR[0], DR[0])
+    D2 = AVX_4x2x1(DR[2], DR[2], DR[2], DR[2])
+    row0, row1 = avx_421_pair_mul(row0, D12, row1, D1)
+    row2 = avx_421_mul(row2, D2)
 
-    # Computation of S6
-    S6 = AVX_4x2x1(S3[0], S3[0], S3[2], S3[2])
-    T0 = AVX_4x2x1(S3[1], S3[1], S3[3], S3[3])
-    T1 = AVX_4x2x1(H2[1], H2[3], H2[1], H2[3])
-    S6, T2 = avx_421_pair_mul(S6, S4, T0, T1)
-    S6 = avx_421_add(S6, T2)
-
-    # Computation of S7, S8
-    S7 = AVX_4x2x1(S3[0], S3[1], S3[0], S3[1])
-    S8 = AVX_4x2x1(G1[1], G1[1], G1[3], G1[3])
-    T0 = AVX_4x2x1(S3[2], S3[3], S3[2], S3[3])
-    S7, T1 = avx_421_pair_mul(S7, S2, S8, T0)
-    S7 = avx_421_add(S7, T1)
-
-    # Computation of S9
-    S9 = AVX_4x2x1(S6[0], S6[1], S6[0], S6[1])
-    T0 = AVX_4x2x1(S6[2], S6[3], S6[2], S6[3])
-    S9, T1 = avx_421_pair_mul(S9, S2, S8, T0)
-    S9 = avx_421_add(S9, T1)
-
-    # TODO: every element of T0 is the same, can we use this?
-    T0 = AVX_4x2x1(S5[0], S5[0], S5[0], S5[0])
-    S3 = avx_421_mul(S3, T0)
-
-    T0 = AVX_4x2x1(PI[0], PI[0], PI[0], PI[0])
-    T1 = AVX_4x2x1(PI[3], PI[3], PI[3], PI[3])
-    S6, S7 = avx_421_pair_mul(S6, T0, S7, T1)
-
-    return (
-        AVX_8x1x1(S3[0], S3[1], S3[2], S3[3], S6[0], S6[1], S6[2], S6[3]),
-        AVX_8x1x1(S7[0], S7[1], S7[2], S7[3], S9[0], S9[1], S9[2], S9[3]),
-    )
+    return AVX_8x1x1(*row0, *row1), AVX_8x1x1(*row2, *row3)
 
 
 def product_to_theta_pair(
@@ -295,7 +275,7 @@ def gluing_codomain(
 
     # Compute the change of basis for our theta structure
     # 120M + 8S + 60a
-    N = theta_change_of_basis(A24_12, X_4, Z_4)
+    N = theta_change_of_basis(X_4, Z_4)
 
     # Lift both 8-torsion points above the generator of our basis in the theta model.
     # 40M + 24a

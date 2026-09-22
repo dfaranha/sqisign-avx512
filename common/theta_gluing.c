@@ -9,281 +9,255 @@
 #include "utils.h"
 #include "sqi_test_extras.h"
 
-// Done (TODO delete this comment) from 11654 to 1904 cycles.
-// TODO: With the faster field arithmetic, the simpler pure 4x2x1 version might be just as efficient.
-void gluing_compute_matrix_4x2x1(
-    __m512i* g1, __m512i* h1, __m512i* g2, __m512i* h2, __m512i* pi,
-    __m512i* x_4, __m512i* z_4, __m512i* u, __m512i* w, __m512i* det
+// Branchless equality mask, all ones iff a == b. The positions below are
+// derived from secret torsion points, so they are never branched on.
+static inline uint32_t ct_eq_mask(uint32_t a, uint32_t b)
+{
+    uint32_t d = a ^ b;
+    return ((d | (0u - d)) >> 31) - 1u;
+}
+
+// All ones iff bit k of m is set.
+static inline uint32_t ct_bit_mask(__mmask8 m, int k)
+{
+    return 0u - (uint32_t)((m >> k) & 1);
+}
+
+/**
+ * Compute the three symmetric elements above the 4-torsion basis of each curve
+ * of the elliptic product.
+ *
+ * g1, g2, g3 are packed as (s00, s01) of the first curve followed by (s00, s01)
+ * of the second one. The entry s10 equals +/- s01, and gs holds the only two
+ * the caller needs: g1.s10 of the first curve and g2.s10 of the second.
+ * deltas is (delta_1 * delta_2, delta_1, delta_2, -).
+ */
+void gluing_symmetric_elements_4x2x1(
+    __m512i* g1, __m512i* g2, __m512i* g3, __m512i* gs, __m512i* deltas,
+    __m512i* x_4, __m512i* z_4
 )
 {
-    __m512i z_sqr[NUM_LIMBS], a[NUM_LIMBS], b[NUM_LIMBS], c[NUM_LIMBS], d[NUM_LIMBS];
-    
-    // TODO: Worth it to use fp2_4x2x1_duplicate_to_8x1x1?
-    fp2_mulx2_4x2x1(c, pi, u, z_4, det, z_4);
+    __m512i r[NUM_LIMBS], s[NUM_LIMBS], xz[NUM_LIMBS], dr[NUM_LIMBS], rd[NUM_LIMBS];
+    __m512i ea[NUM_LIMBS], eb[NUM_LIMBS], ec[NUM_LIMBS];
+    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], t2[NUM_LIMBS], t3[NUM_LIMBS], idx0, idx1;
+    __mmask8 zr, zs, zc, swap12, swap23, s10_sign;
+    uint32_t pos[2], m12[2], m23[2];
 
-    fp2_sub_4x2x1(c, c, det);
-    fp2_mul_4x2x1(c, c, x_4);
-    fp2_sqr_4x2x1(z_sqr, z_4);
+    fp2_add_4x2x1(r, x_4, z_4); // (x1 + z1, x2 + z2) per curve
+    fp2_sub_4x2x1(s, x_4, z_4); // (x1 - z1, x2 - z2) per curve
 
-    fp2_mulx2_4x2x1(d, b, u, z_sqr, w, z_sqr);
-    fp2_neg_4x2x1(a, d);
-    fp2_neg_4x2x1(b, b);
-
-    // Compute transpose:
-    __m512i idx_lo = VSET(0, 1, 8, 9, 4, 5, 12, 13);    
-    __m512i idx_hi = VSET(2, 3, 10, 11, 6, 7, 14, 15);
-    __m512i ab_lo, ab_hi, cd_lo, cd_hi;
-
+    // t0 = ((x1 + z1)(x2 - z2), (x1 - z1)(x2 + z2)) per curve
+    idx0 = VSET(0, 1, 8, 9, 4, 5, 12, 13);
+    idx1 = VSET(10, 11, 2, 3, 14, 15, 6, 7);
     for (int i = 0; i < NUM_LIMBS; i++) {
-        // Step 1: 
-        // lo: (a0, b0, a2, b2)
-        // hi: (a1, b1, a3, b3)
-        ab_lo = VBLENDPERM(idx_lo, a[i], b[i]);
-        ab_hi = VBLENDPERM(idx_hi, a[i], b[i]);
-        cd_lo = VBLENDPERM(idx_lo, c[i], d[i]);
-        cd_hi = VBLENDPERM(idx_hi, c[i], d[i]);
-
-        // Step 2:
-        // (a0, b0, c0, d0)
-        g1[i] = VPERM256HALF(ab_lo, cd_lo, 0x44);
-        // (a1, b1, c1, d1)
-        h1[i] = VPERM256HALF(ab_hi, cd_hi, 0x44);
-        // (a2, b2, c2, d2)
-        g2[i] = VPERM256HALF(ab_lo, cd_lo, 0xee);
-        // (a3, b3, c3, d3)
-        h2[i] = VPERM256HALF(ab_hi, cd_hi, 0xee);
+        t0[i] = VBLENDPERM(idx0, r[i], s[i]);
+        t1[i] = VBLENDPERM(idx1, r[i], s[i]);
     }
+    fp2_mul_4x2x1(t0, t0, t1);
+
+    // t3 = (iP + Q, iP - Q) per curve, which vanishes when it is the sum of the
+    // two torsion points that lies above (0 : 1)
+    fp2_muli_4x2x1(t1, t0);
+    idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t2[i] = VPERM512(idx0, t1[i]);
+        t3[i] = VPERM512(idx1, t0[i]);
+    }
+    fp2_mixaddsub_4x2x1(t3, t2, t3, 0x33);
+
+    zr = fp2_is_zero_4x2x1(r);
+    zs = fp2_is_zero_4x2x1(s);
+    zc = fp2_is_zero_4x2x1(t3);
+
+    // pos in 0..5 records which of T1, T2, T1 + T2 lies above (0 : 1)
+    for (int c = 0; c < 2; c++) {
+        uint32_t p = 255u;
+        p ^= (p ^ 0u) & ct_bit_mask(zs, 2*c);
+        p ^= (p ^ 1u) & ct_bit_mask(zr, 2*c);
+        p ^= (p ^ 2u) & ct_bit_mask(zs, 2*c + 1);
+        p ^= (p ^ 3u) & ct_bit_mask(zr, 2*c + 1);
+        p ^= (p ^ 4u) & ct_bit_mask(zc, 2*c);
+        p ^= (p ^ 5u) & ct_bit_mask(zc, 2*c + 1);
+        pos[c] = p;
+        m12[c] = ct_eq_mask(p >> 1, 0u);
+        m23[c] = ct_eq_mask(p >> 1, 2u);
+    }
+
+    // Everything below is built from the torsion point that is not the one
+    // above (0 : 1), so pick it out of the basis of each curve.
+    uint32_t e0 = m12[0] & 1u;
+    uint32_t e1 = 2u + (m12[1] & 1u);
+    idx0 = VSET(2*e0, 2*e0 + 1, 8 + 2*e0, 9 + 2*e0, 2*e1, 2*e1 + 1, 8 + 2*e1, 9 + 2*e1);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        xz[i] = VBLENDPERM(idx0, x_4[i], z_4[i]);
+    }
+
+    // dr = (x^2 - z^2, x^2 + z^2) = (delta, r1) per curve
+    fp2_sqr_4x2x1(t0, xz);
+    idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VPERM512(idx0, t0[i]);
+        t2[i] = VPERM512(idx1, t0[i]);
+    }
+    fp2_mixaddsub_4x2x1(dr, t1, t2, 0xcc);
+
+    // t2 = (r2_1, r2_2, delta_1 * delta_2, -) with r2 = 2xz
+    fp2_add_4x2x1(t0, xz, xz);
+    idx0 = VSET(0, 1, 4, 5, 8, 9, 8, 9);
+    idx1 = VSET(2, 3, 6, 7, 12, 13, 12, 13);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t1[i] = VBLENDPERM(idx0, t0[i], dr[i]);
+        t2[i] = VBLENDPERM(idx1, xz[i], dr[i]);
+    }
+    fp2_mul_4x2x1(t2, t1, t2);
+
+    idx0 = VSET(4, 5, 8, 9, 12, 13, 12, 13);
+    idx1 = VSET(2, 3, 8, 9, 6, 7, 10, 11);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        deltas[i] = VBLENDPERM(idx0, t2[i], dr[i]);
+        rd[i] = VBLENDPERM(idx1, dr[i], t2[i]); // (r1, r2) per curve
+    }
+
+    // The three elements before the conditional swaps:
+    // ea = (-r1, r2), eb = (0, +/- delta), ec = (+/- i r2, -/+ i r1)
+    fp2_neg_4x2x1(t0, rd);
+    idx0 = VSET(0, 1, 10, 11, 4, 5, 14, 15);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        ea[i] = VBLENDPERM(idx0, t0[i], rd[i]);
+    }
+
+    fp2_neg_4x2x1(t0, dr);
+    uint32_t a0 = 8u - 8u*(pos[0] & 1u);
+    uint32_t a1 = 12u - 8u*(pos[1] & 1u);
+    idx0 = VSET(0, 0, a0, a0 + 1, 0, 0, a1, a1 + 1);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        eb[i] = VBLENDPERMMASKZ(0xcc, dr[i], t0[i], idx0);
+    }
+
+    fp2_muli_4x2x1(t0, rd);
+    fp2_neg_4x2x1(t1, t0);
+    uint32_t f0 = (ct_eq_mask(pos[0], 0u) | ct_eq_mask(pos[0], 3u) | ct_eq_mask(pos[0], 4u)) & 1u;
+    uint32_t f1 = (ct_eq_mask(pos[0], 1u) | ct_eq_mask(pos[0], 2u) | ct_eq_mask(pos[0], 5u)) & 1u;
+    uint32_t f2 = (ct_eq_mask(pos[1], 0u) | ct_eq_mask(pos[1], 3u) | ct_eq_mask(pos[1], 4u)) & 1u;
+    uint32_t f3 = (ct_eq_mask(pos[1], 1u) | ct_eq_mask(pos[1], 2u) | ct_eq_mask(pos[1], 5u)) & 1u;
+    uint32_t b0 = 10u - 8u*f0, b1 = 8u - 8u*f1, b2 = 14u - 8u*f2, b3 = 12u - 8u*f3;
+    idx0 = VSET(b0, b0 + 1, b1, b1 + 1, b2, b2 + 1, b3, b3 + 1);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        ec[i] = VBLENDPERM(idx0, t0[i], t1[i]);
+    }
+
+    // Order the three elements according to the positions
+    swap12 = (__mmask8)((m12[0] & 0x3u) | (m12[1] & 0xcu));
+    swap23 = (__mmask8)((m23[0] & 0x3u) | (m23[1] & 0xcu));
+    fp2_select_4x2x1(g1, ea, eb, swap12);
+    fp2_select_4x2x1(t0, eb, ec, swap23);
+    fp2_select_4x2x1(g2, t0, ea, swap12);
+    fp2_select_4x2x1(g3, ec, eb, swap23);
+
+    // s10 is +s01 for the element built from delta and -s01 for the other two
+    idx0 = VSET(2, 3, 14, 15, 2, 3, 14, 15);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VBLENDPERM(idx0, g1[i], g2[i]);
+    }
+    fp2_neg_4x2x1(t1, t0);
+    s10_sign = (__mmask8)((m12[0] & 0x1u) | (~(m12[1] | m23[1]) & 0x2u));
+    fp2_select_4x2x1(gs, t1, t0, s10_sign);
 }
 
-// Done (TODO delete this comment) 4052 -> 4002 cycles.
-void gluing_action_by_translation_4x2x1(
-    __m512i* g1, __m512i* g2, __m512i* h1, __m512i* h2, __m512i* pi,
-    __m512i* A24, __m512i* x_4, __m512i* z_4
-)
-{
-    __m512i u[NUM_LIMBS], w[NUM_LIMBS], t0[NUM_LIMBS], t1[NUM_LIMBS];
-
-    ec_double_4x4x2x1(u, w, A24, x_4, z_4);
-    fp2_mulx2_4x2x1(t0, t1, w, x_4, u, z_4);
-    fp2_sub_4x2x1(t0, t0, t1); // det
-    gluing_compute_matrix_4x2x1(g1, h1, g2, h2, pi, x_4, z_4, u, w, t0);
-}
-
-/** TODO: Micro-optimizations possible:
- * We can merge the shuffling and the 4x2x1_to_8x1x1 comps.
- * Might be able to keep some values in 8x1x1 longer. 
+/**
+ * Compute the change of basis matrix that transforms the standard product
+ * theta structure into the theta structure induced by the 4-symplectic basis
+ * <(P1_4, P2_4), (Q1_4, Q2_4)>, from the symmetric elements above that basis.
+ *
+ * Input: the 4-torsion basis (P1_4, Q1_4, P2_4, Q2_4) in 4x2x1.
+ * Returns: the 4x4 change of basis matrix as two 8x1x1 vectors.
  */
 void gluing_change_of_basis_4x2x1(
-    __m512i* res_matrix01, __m512i* res_matrix23, 
-    __m512i* A24, __m512i* x_4, __m512i* z_4
+    __m512i* res_matrix01, __m512i* res_matrix23, __m512i* x_4, __m512i* z_4
 )
 {
-    /**
-    Giac Notes:
+    __m512i g1[NUM_LIMBS], g2[NUM_LIMBS], g3[NUM_LIMBS], gs[NUM_LIMBS], deltas[NUM_LIMBS];
+    __m512i l1[NUM_LIMBS], l2[NUM_LIMBS], a1[NUM_LIMBS], a2[NUM_LIMBS], a4[NUM_LIMBS];
+    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], t2[NUM_LIMBS], t3[NUM_LIMBS];
+    __m512i row0[NUM_LIMBS], row1[NUM_LIMBS], row2[NUM_LIMBS], row3[NUM_LIMBS];
+    __m512i idxl, idxr, idx0, idx1, idx2, idx3;
 
-    Computes N projectively which removes 21M + 1I from a batched inversion
-    but costs 4S and 34 multiplications (so swaps one inversion for 13M + 1S)
+    gluing_symmetric_elements_4x2x1(g1, g2, g3, gs, deltas, x_4, z_4);
 
-    For AXV, 34 is not a multiple of four, so this adds 9 calls to avx_pairwise_mul
-    and one call to avx_sqr.
-
-    An interesting thing to explore is `avx_pairwise_mul` where one of the AVX blobs
-    is four copies of the same element. This happens for 6 of the 9 total calls for
-    avx_pairwise_mul.
-    */
-    __m512i g1[NUM_LIMBS], h1[NUM_LIMBS], g2[NUM_LIMBS], h2[NUM_LIMBS], pi[NUM_LIMBS];
-    __m512i s0[NUM_LIMBS], s1[NUM_LIMBS], s2[NUM_LIMBS], s3[NUM_LIMBS], s4[NUM_LIMBS];
-    __m512i s5[NUM_LIMBS], s6[NUM_LIMBS], s7[NUM_LIMBS], s8[NUM_LIMBS], s9[NUM_LIMBS];
-    __m512i t0[NUM_LIMBS], t1[NUM_LIMBS], t2[NUM_LIMBS], idx0, idx1, idx2, idx3;
-    __mmask8 mask;
-
-    gluing_action_by_translation_4x2x1(g1, g2, h1, h2, pi, A24, x_4, z_4);
-
-    // Computation of S0
-    // T0 = AVX_4x2x1(PI[0], PI[2], PI[0], PI[1])
-    // T1 = AVX_4x2x1(PI[1], PI[3], PI[2], PI[3])
-    // S0 = avx_421_mul(T0, T1)
-    idx0 = VSET(0, 1, 4, 5, 0, 1, 2, 3);
-    idx1 = VSET(2, 3, 6, 7, 4, 5, 6, 7);
+    // First row: the pairwise products of the symmetric elements of both curves
+    idxl = VSET(0, 1, 0, 1, 2, 3, 2, 3);
+    idxr = VSET(4, 5, 6, 7, 4, 5, 6, 7);
     for (int i = 0; i < NUM_LIMBS; i++) {
-        s0[i] = VPERM512(idx0, pi[i]);
-        t0[i] = VPERM512(idx1, pi[i]);
+        l1[i] = VPERM512(idxl, g1[i]);
+        l2[i] = VPERM512(idxl, g2[i]);
+        a1[i] = VPERM512(idxr, g2[i]);
+        t0[i] = VPERM512(idxr, g1[i]);
     }
-    fp2_mul_4x2x1(s0, s0, t0);
+    fp2_mulx2_4x2x1(t0, t1, l1, t0, l2, a1);
+    fp2_add_4x2x1(row0, t0, t1);
 
-    // Computation of S1 in 2x4x1
-    // T0 = AVX_4x2x1(PI[0], S0[0], 1, 1)
-    // T1 = AVX_4x2x1(PI[3], S0[1], 1, 1)
-    // S1 = avx_421_mul(T0, T1)
-    idx0 = VSET(0, 0, 1, 1, 8, 8, 9, 9);
-    idx1 = VSET(6, 6, 7, 7, 10, 10, 11, 11);
-    mask = 0x55;
     for (int i = 0; i < NUM_LIMBS; i++) {
-        s1[i] = VBLENDPERMMASKZ(mask, pi[i], s0[i], idx0);
-        t0[i] = VBLENDPERMMASKZ(mask, pi[i], s0[i], idx1);
+        t0[i] = VPERM512(idxl, g3[i]);
+        t1[i] = VPERM512(idxr, g3[i]);
     }
-    fp2_mul_2x4x1(s1, s1, t0);
+    fp2_mul_4x2x1(t0, t0, t1);
+    fp2_sub_4x2x1(row0, row0, t0);
 
-    // Computation of S2
-    // T0 = AVX_4x2x1(G1[0], G1[2], G2[0], G2[2])
-    // T1 = AVX_4x2x1(H1[0], H1[0], H2[0], H2[0])
-    // T2 = AVX_4x2x1(G1[1], G1[3], G2[1], G2[3])
-    // T3 = AVX_4x2x1(H1[2], H1[2], H2[2], H2[2])
-    // S2, T2 = avx_421_pair_mul(T0, T1, T2, T3)
-    // S2 = avx_421_add(S2, T2)
-    idx0 = VSET(0, 1, 4, 5, 8, 9, 12, 13);
-    idx1 = VSET(0, 1, 0, 1, 8, 9, 8, 9);
-    idx2 = VSET(2, 3, 6, 7, 10, 11, 14, 15);
-    idx3 = VSET(4, 5, 4, 5, 12, 13, 12, 13);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        s2[i] = VBLENDPERM(idx0, g1[i], g2[i]);
-        t0[i] = VBLENDPERM(idx1, h1[i], h2[i]);
-        t1[i] = VBLENDPERM(idx2, g1[i], g2[i]);
-        t2[i] = VBLENDPERM(idx3, h1[i], h2[i]);
-    }
-    fp2_mulx2_4x2x1(s2, t2, s2, t0, t1, t2);
-    fp2_add_4x2x1(s2, s2, t2);
-
-    // Computation of S2 (continued), S3, S4
-    // T0 = AVX_4x2x1(S0[1], S0[1], S0[0], S0[0])
-    // S3 = AVX_4x2x1(G1[0], G1[0], G1[2], G1[2])
-    // T1 = AVX_4x2x1(G2[0], G2[2], G2[0], G2[2])
-    // S2, S4 = avx_421_pair_mul(S2, T0, S3, T1)
-    idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
-    idx1 = VSET(2, 3, 2, 3, 0, 1, 0, 1);
-    idx2 = VSET(0, 1, 4, 5, 0, 1, 4, 5);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        s3[i] = VPERM512(idx0, g1[i]);
-        t0[i] = VPERM512(idx1, s0[i]);
-        t1[i] = VPERM512(idx2, g2[i]);
-    }
-    fp2_mulx2_4x2x1(s2, s4, s2, t0, s3, t1);
-
-    // Computation of S4 (continued), S5
-    // T0 = AVX_4x2x1(H1[0], H1[0], H1[2], H1[2])
-    // S5 = AVX_4x2x1(H2[0], H2[2], H2[0], H2[2])
-    // # TODO: every element of T2 is the same, can we use this?
-    // T1 = AVX_4x2x1(S0[3], S0[3], S0[3], S0[3])
-    // S4, T1 = avx_421_pair_mul(S4, T1, T0, S5)
-    idx0 = VSET(0, 1, 4, 5, 0, 1, 4, 5);
-    idx1 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
-    idx2 = VSET(6, 7, 6, 7, 6, 7, 6, 7);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        s5[i] = VPERM512(idx0, h2[i]);
-        t0[i] = VPERM512(idx1, h1[i]);
-        t1[i] = VPERM512(idx2, s0[i]);
-    }
-    fp2_mulx2_4x2x1(s4, t1, s4, t1, t0, s5);
-
-    // TODO: every element of T2 is the same, can we use this?
-    // T0 = AVX_4x2x1(S0[2], S0[2], S0[2], S0[2])
-    // T1 = avx_421_mul(T1, T0)
-    // S4 = avx_421_add(S4, T1)
-    idx0 = VSET(4, 5, 4, 5, 4, 5, 4, 5);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t0[i] = VPERM512(idx0, s0[i]);
-    }
-    fp2_mul_4x2x1(t1, t1, t0);
-    fp2_add_4x2x1(s4, s4, t1);
-
-    // TODO: this could be optimised as we need only one Fp2 add?
-    // T0 = AVX_4x2x1(S1[1], 0, 0, 0)
-    // S4 = avx_421_add(S4, T0)
-    idx0 = VSET(4, 6, 4, 6, 4, 6, 4, 6); // Since s1 is in 2x4x1.
-    mask = 0x3;
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t0[i] = VPERM512MASKZ(mask, s1[i], idx0);
-    }
-    fp2_add_4x2x1(s4, s4, t0);
-
-    // TODO: every element of T1 is the same, can we use this?
-    // T0 = AVX_4x2x1(S1[1], S1[1], S1[1], S1[1])
-    // T1 = AVX_4x2x1(S2[0], S2[0], S2[1], S2[1])
-    // T2 = AVX_4x2x1(S2[2], S2[3], S2[2], S2[3])
-    // S4, T4 = avx_421_pair_mul(S4, T0, T1, T2)
-    // S4 = avx_421_add(S4, T4)
-    idx1 = VSET(0, 1, 0, 1, 2, 3, 2, 3);
-    idx2 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t0[i] = VPERM512(idx0, s1[i]);
-        t1[i] = VPERM512(idx1, s2[i]);
-        t2[i] = VPERM512(idx2, s2[i]);
-    }
-    fp2_mulx2_4x2x1(s4, t1, s4, t0, t1, t2);
-    fp2_add_4x2x1(s4, s4, t1);
-
-    // Computation of S6
-    // S6 = AVX_4x2x1(S4[0], S4[0], S4[2], S4[2])
-    // T0 = AVX_4x2x1(S4[1], S4[1], S4[3], S4[3])
-    // T1 = AVX_4x2x1(H2[1], H2[3], H2[1], H2[3])
-    // S6, T2 = avx_421_pair_mul(S6, S5, T0, T1)
-    // S6 = avx_421_add(S6, T2)
-    idx0 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
-    idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
-    idx2 = VSET(2, 3, 6, 7, 2, 3, 6, 7);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        s6[i] = VPERM512(idx0, s4[i]);
-        t0[i] = VPERM512(idx1, s4[i]);
-        t1[i] = VPERM512(idx2, h2[i]);
-    }
-    fp2_mulx2_4x2x1(s6, t0, s6, s5, t0, t1);
-    fp2_add_4x2x1(s6, s6, t0);
-
-    // Computation of S7, S8
-    // S7 = AVX_4x2x1(S4[0], S4[1], S4[0], S4[1])
-    // S8 = AVX_4x2x1(G1[1], G1[1], G1[3], G1[3])
-    // T0 = AVX_4x2x1(S4[2], S4[3], S4[2], S4[3])
-    // S7, T1 = avx_421_pair_mul(S7, S3, S8, T0)
-    // S7 = avx_421_add(S7, T1)
-    idx0 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
-    idx1 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
-    idx2 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        s7[i] = VPERM512(idx0, s4[i]);
-        s8[i] = VPERM512(idx1, g1[i]);
-        t0[i] = VPERM512(idx2, s4[i]);
-    }
-    fp2_mulx2_4x2x1(s7, t0, s7, s3, s8, t0);
-    fp2_add_4x2x1(s7, s7, t0);
-
-    // Computation of S9
-    // S9 = AVX_4x2x1(S6[0], S6[1], S6[0], S6[1])
-    // T0 = AVX_4x2x1(S6[2], S6[3], S6[2], S6[3])
-    // S9, T1 = avx_421_pair_mul(S9, S3, S8, T0)
-    // S9 = avx_421_add(S9, T1)
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        s9[i] = VPERM512(idx0, s6[i]);
-        t0[i] = VPERM512(idx2, s6[i]);
-    }
-    fp2_mulx2_4x2x1(s9, t0, s9, s3, s8, t0);
-    fp2_add_4x2x1(s9, s9, t0);
-
-    // TODO: every element of T0 is the same, can we use this?
-    // T0 = AVX_4x2x1(S1[0], S1[0], S1[0], S1[0])
-    // S4 = avx_421_mul(S4, T0)
-    idx0 = VSET(0, 2, 0, 2, 0, 2, 0, 2); //s1 is in 2x4x1
-    for (int i = 0; i < NUM_LIMBS; i++) {
-        t0[i] = VPERM512(idx0, s1[i]);
-    }
-    fp2_mul_4x2x1(s4, s4, t0);
-
-    // T0 = AVX_4x2x1(PI[0], PI[0], PI[0], PI[0])
-    // T1 = AVX_4x2x1(PI[3], PI[3], PI[3], PI[3])
-    // S6, S7 = avx_421_pair_mul(S6, T0, S7, T1)
+    // The first entry also picks up delta_1 * delta_2
     idx0 = VSET(0, 1, 0, 1, 0, 1, 0, 1);
-    idx1 = VSET(6, 7, 6, 7, 6, 7, 6, 7);
     for (int i = 0; i < NUM_LIMBS; i++) {
-        t0[i] = VPERM512(idx0, pi[i]);
-        t1[i] = VPERM512(idx1, pi[i]);
+        t0[i] = VPERM512MASKZ(0x3, deltas[i], idx0);
     }
-    fp2_mulx2_4x2x1(s6, s7, s6, t0, s7, t1);
+    fp2_add_4x2x1(row0, row0, t0);
 
-    // return (
-    // AVX_8x1x1(S4[0], S4[1], S4[2], S4[3], S6[0], S6[1], S6[2], S6[3]),
-    // AVX_8x1x1(S7[0], S7[1], S7[2], S7[3], S9[0], S9[1], S9[2], S9[3]),
-    // )
-    fp2_4x2x1_to_8x1x1(res_matrix01, s4, s6);
-    fp2_4x2x1_to_8x1x1(res_matrix23, s7, s9);
+    // Second and third rows: act on the first one by g2 of the second curve
+    // and by g1 of the first curve respectively
+    idx0 = VSET(2, 3, 12, 13, 2, 3, 12, 13);
+    idx1 = VSET(0, 1, 0, 1, 8, 9, 8, 9);
+    idx2 = VSET(0, 1, 0, 1, 4, 5, 4, 5);
+    idx3 = VSET(0, 1, 2, 3, 0, 1, 2, 3);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        a2[i] = VBLENDPERM(idx0, gs[i], g2[i]);
+        a4[i] = VBLENDPERM(idx1, gs[i], g1[i]);
+        t0[i] = VPERM512(idx2, row0[i]);
+        t1[i] = VPERM512(idx3, row0[i]);
+    }
+    fp2_mulx2_4x2x1(t0, t1, a1, t0, l1, t1);
+
+    idx0 = VSET(2, 3, 2, 3, 6, 7, 6, 7);
+    idx1 = VSET(4, 5, 6, 7, 4, 5, 6, 7);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t2[i] = VPERM512(idx0, row0[i]);
+        t3[i] = VPERM512(idx1, row0[i]);
+    }
+    fp2_mulx2_4x2x1(t2, t3, a2, t2, a4, t3);
+    fp2_mixaddsub_4x2x1(row1, t0, t2, 0x33);
+    fp2_mixaddsub_4x2x1(row2, t1, t3, 0x0f);
+
+    // Fourth row: act on the second one by g1 of the first curve
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VPERM512(idx3, row1[i]);
+        t1[i] = VPERM512(idx1, row1[i]);
+    }
+    fp2_mulx2_4x2x1(t0, t1, l1, t0, a4, t1);
+    fp2_mixaddsub_4x2x1(row3, t0, t1, 0x0f);
+
+    // Realign the projective factors of the first three rows
+    idx0 = VSET(0, 1, 0, 1, 0, 1, 0, 1);
+    idx1 = VSET(2, 3, 2, 3, 2, 3, 2, 3);
+    idx2 = VSET(4, 5, 4, 5, 4, 5, 4, 5);
+    for (int i = 0; i < NUM_LIMBS; i++) {
+        t0[i] = VPERM512(idx0, deltas[i]);
+        t1[i] = VPERM512(idx1, deltas[i]);
+        t2[i] = VPERM512(idx2, deltas[i]);
+    }
+    fp2_mulx2_4x2x1(row0, row1, row0, t0, row1, t1);
+    fp2_mul_4x2x1(row2, row2, t2);
+
+    fp2_4x2x1_to_8x1x1(res_matrix01, row0, row1);
+    fp2_4x2x1_to_8x1x1(res_matrix23, row2, row3);
 }
 
 // Done (TODO delete this comment) from 9122 to 108 cycles.
@@ -427,7 +401,7 @@ bool gluing_codomain(
     ec_double_4x4x2x1(x_4, z_4, A24_12, x_8_, z_8_);
 
     // Compute the change of basis for our theta structure
-    gluing_change_of_basis_4x2x1(res_matrix01, res_matrix23, A24_12, x_4, z_4);
+    gluing_change_of_basis_4x2x1(res_matrix01, res_matrix23, x_4, z_4);
 
     // Lift both 8-torsion points above the generator of our basis in the theta model.
     gluing_product_to_theta_pair(P12, x_8_, z_8_, res_matrix01, res_matrix23);
