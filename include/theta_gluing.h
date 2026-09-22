@@ -6,44 +6,28 @@
 #include "sqi_hd.h"
 
 /**
- * Helper function:
+ * Compute the three symmetric elements above the 4-torsion basis of each curve
+ * of the elliptic product.
  *
- * Subroutine to compute the matrix in action_by_translation
- * Uses an alternative projective representation to avoid all inversions.
-
- * With inverses precomputed we need five calls to "pairwise_mul" so there
- * is an extra cost of a single avx_sqr call
- * 
- * Called _compute_matrix in the python script
- * TODO: Explain what inputs and outputs are.
+ * g1, g2, g3 are packed as (s00, s01) of the first curve followed by (s00, s01)
+ * of the second one, gs holds g1.s10 of the first curve and g2.s10 of the
+ * second, and deltas is (delta_1 * delta_2, delta_1, delta_2, -).
  */
-void gluing_compute_matrix_4x2x1(
-    __m512i* g1, __m512i* g2, __m512i* h1, __m512i* h2, __m512i* pi, //outputs, name as in change of basis
-    __m512i* x_4, __m512i* z_4, __m512i* u, __m512i* w, __m512i* det //inputs
+void gluing_symmetric_elements_4x2x1(
+    __m512i* g1, __m512i* g2, __m512i* g3, __m512i* gs, __m512i* deltas,
+    __m512i* x_4, __m512i* z_4
 );
 
 /**
- * Algorithm 8.36 of the SQISign spec.
- * Compute the translation matrix induced by the generator of our order 4
- * isotropic basis <(P1,P2)x(Q1,Q2)> in E_1 x E_2.
- */
-void gluing_action_by_translation_4x2x1(
-    __m512i* g1, __m512i* g2, __m512i* h1, __m512i* h2, __m512i* pi,
-    __m512i* A24, __m512i* x_4, __m512i* z_4
-);
-
-/**
- * Algorithm 8.37 of the SQIsign spec.
- * Compute the change of matrix that transform the standard product
+ * Compute the change of basis matrix that transforms the standard product
  * theta structure into the theta structure induced by the 4-symplectic
- * basis <(0,Q2_4),(P1_4,0)> + <(P1_4,P2_4),(Q1_4,Q2_4)>.
+ * basis <(P1_4, P2_4), (Q1_4, Q2_4)>, from the symmetric elements above it.
  *
- * Input: Pi, Qi are four torsion points on (E1 x E2)
- * Returns: Matrix: the 4x4 change of basis matrix as two 8x1x1 vectors
+ * Input: the 4-torsion basis (P1_4, Q1_4, P2_4, Q2_4) in 4x2x1.
+ * Returns: the 4x4 change of basis matrix as two 8x1x1 vectors.
  */
 void gluing_change_of_basis_4x2x1(
-    __m512i* res_matrix01, __m512i* res_matrix23, 
-    __m512i* A24, __m512i* x_4, __m512i* z_4
+    __m512i* res_matrix01, __m512i* res_matrix23, __m512i* x_4, __m512i* z_4
 );
 
 /**
