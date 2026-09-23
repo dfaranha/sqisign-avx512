@@ -265,14 +265,15 @@ void ec_bary_components_4x4x2x1(
     fp2_add_4x2x1(t2, t1, t0);
     fp2_sub_4x2x1(t3, t1, t0);
 
-    fp2_mulx2_4x2x1(t2, t0, zo, t2, t3, zo);
-    fp2_mul_4x2x1(t1, t3, xo);
-    fp2_sqrx2_4x2x1(t2, t3, t2, t1);
+    fp2_mulx2_4x2x1(t0, t1, zo, t2, t3, xo);
+    fp2_sqrx2_4x2x1(t0, t2, t0, t1);
+    // Off the critical path, so it comes after the pair of squarings
+    fp2_mul_4x2x1(t3, t3, zo);
 
-    fp2_mul_4x2x1(res_w, t1, t0);
+    fp2_add_4x2x1(res_u, t2, t0);
+    fp2_sub_4x2x1(res_v, t2, t0);
+    fp2_mul_4x2x1(res_w, t1, t3);
     fp2_add_4x2x1(res_w, res_w, res_w);
-    fp2_add_4x2x1(res_u, t3, t2);
-    fp2_sub_4x2x1(res_v, t3, t2);
 }
 
 // ============================== 2x4x1 ======================================0
