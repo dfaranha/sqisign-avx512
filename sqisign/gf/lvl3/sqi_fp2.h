@@ -1,6 +1,9 @@
 #ifndef SQI_FP2_H
 #define SQI_FP2_H
 
+#define NO_FP2X_MUL
+#define NO_FP2X_SQR
+
 #include "sqi_fp.h"
 #include "sqi_fp2x.h"
 
@@ -23,6 +26,8 @@ fp2_mul(fp2_t *x, const fp2_t *y, const fp2_t *z)
     x->re.arr[3] = t.arr[3];
     x->re.arr[4] = t.arr[4];
     x->re.arr[5] = t.arr[5];
+    x->re.arr[6] = t.arr[6];
+    x->re.arr[7] = t.arr[7];
 }
 
 static inline void
@@ -38,6 +43,8 @@ fp2_sqr(fp2_t *x, const fp2_t *y)
     x->re.arr[3] = t.re.arr[3];
     x->re.arr[4] = t.re.arr[4];
     x->re.arr[5] = t.re.arr[5];
+    x->re.arr[6] = t.re.arr[6];
+    x->re.arr[7] = t.re.arr[7];
 }
 
 #endif
