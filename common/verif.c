@@ -19,9 +19,6 @@
 #include "mp.h"
 #include "tutil.h"
 
-#define NBYTES_FP2 8*2*NWORDS64
-#define NBYTES_PK NBYTES_FP2 + 1
-
 // Torsion the challenge and response chains run on; each is fed a kernel with
 // HD_extra_torsion more than its length.
 #define CHALL_TORSION (SECURITY_BITS + HD_extra_torsion)
@@ -34,14 +31,29 @@ static void decode_digits(digit_t *x, const byte_t *enc, size_t nbytes, size_t n
     memset((byte_t *)x + nbytes, 0, ndigits * sizeof(digit_t) - nbytes);
 }
 
+// An encoded Fp2 element is re || im with FP_ENCODED_BYTES each, which can be
+// shorter than the NWORDS64 words each coefficient takes when unvectorized.
+static void fp2_from_bytes(uint64_t *unvec, const byte_t *enc)
+{
+    memset(unvec, 0, 2 * NWORDS64 * sizeof(uint64_t));
+    memcpy((byte_t *) unvec, enc, FP_ENCODED_BYTES);
+    memcpy((byte_t *) (unvec + NWORDS64), enc + FP_ENCODED_BYTES, FP_ENCODED_BYTES);
+}
+
+static void fp2_to_bytes(byte_t *enc, const uint64_t *unvec)
+{
+    memcpy(enc, (const byte_t *) unvec, FP_ENCODED_BYTES);
+    memcpy(enc + FP_ENCODED_BYTES, (const byte_t *) (unvec + NWORDS64), FP_ENCODED_BYTES);
+}
+
 static void public_key_from_bytes_2x2x2(public_key_2x2x2_t* pk, const byte_t* enc)
 {
     uint64_t A_unvec[4*NWORDS64];
 
-    memcpy((byte_t *) A_unvec, enc, NBYTES_FP2);
-    enc += NBYTES_FP2;
+    fp2_from_bytes(A_unvec, enc);
+    enc += FP2_ENCODED_BYTES;
 
-    memset((byte_t *) (A_unvec + 2*NWORDS64), 0, NBYTES_FP2);
+    memset((byte_t *) (A_unvec + 2*NWORDS64), 0, 2 * NWORDS64 * sizeof(uint64_t));
     A_unvec[2*NWORDS64] = 1; // C = 1
     fp_64_to_limbs_4x2(pk->A, A_unvec);
     fp_tomont_4x2(pk->A, pk->A);
@@ -58,8 +70,8 @@ static void public_key_to_bytes_2x2x2(byte_t *enc, public_key_2x2x2_t *pk)
 
     fp2_frommont_2x2x2(A, pk->A);
     fp_limbs_to_64_4x2(A_unvec, A);
-    memcpy(enc, (byte_t *) A_unvec, NBYTES_FP2);
-    enc += NBYTES_FP2;
+    fp2_to_bytes(enc, A_unvec);
+    enc += FP2_ENCODED_BYTES;
 
     *enc = pk->hint;
 }
@@ -69,10 +81,10 @@ static void signature_from_bytes_2x2x2(signature_2x2x2_t* sig, const byte_t* enc
 {
     uint64_t A_unvec[4*NWORDS64];
 
-    memcpy((byte_t *) A_unvec, enc, NBYTES_FP2);
-    enc += NBYTES_FP2;
+    fp2_from_bytes(A_unvec, enc);
+    enc += FP2_ENCODED_BYTES;
 
-    memset((byte_t *) (A_unvec + 2*NWORDS64), 0, NBYTES_FP2);
+    memset((byte_t *) (A_unvec + 2*NWORDS64), 0, 2 * NWORDS64 * sizeof(uint64_t));
     A_unvec[2*NWORDS64] = 1; // C = 1
     fp_64_to_limbs_4x2(sig->A_aux, A_unvec);
     fp_tomont_4x2(sig->A_aux, sig->A_aux);
@@ -102,13 +114,13 @@ static void A_com_to_bytes_2x2x2(byte_t *enc, __m512i* A_com)
 
     fp2_frommont_2x2x2(A, A_com);
     fp_limbs_to_64_4x2(unvec, A);
-    memcpy(enc, (byte_t *) unvec, NBYTES_FP2);
+    fp2_to_bytes(enc, unvec);
 }
 
 static void get_hash_bytes(byte_t *enc, public_key_2x2x2_t* pk, __m512i* A_com)
 {
     public_key_to_bytes_2x2x2(enc, pk);
-    A_com_to_bytes_2x2x2(enc + NBYTES_PK, A_com);
+    A_com_to_bytes_2x2x2(enc + PUBLICKEY_BYTES, A_com);
 }
 
 // Check that the basis change matrix elements are canonical
@@ -213,7 +225,7 @@ bool protocols_verify(signature_2x2x2_t* sig, public_key_2x2x2_t* pk, const unsi
 
     // recomputing the challenge vector
     scalar_t chk_chall;
-    byte_t hash_bytes[NBYTES_PK + NBYTES_FP2];
+    byte_t hash_bytes[PUBLICKEY_BYTES + FP2_ENCODED_BYTES];
     get_hash_bytes(hash_bytes, pk, A_com);
     hash_to_challenge(&chk_chall, hash_bytes, m, l);
 

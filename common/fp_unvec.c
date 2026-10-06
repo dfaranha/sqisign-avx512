@@ -22,7 +22,7 @@ void fp_8x1_to_unvectorized(fp_t* res, __m512i* src)
 
 void fp_unvectorized_to_8x1(__m512i* res, fp_t* src)
 {
-    uint64_t src_arr[8*NWORDS64];
+    uint64_t src_arr[8*NWORDS64] = { 0 };
 
     // Convert from Montgomery representation
     for (int i = 0; i < 8; i++) {
@@ -50,7 +50,7 @@ void fp_4x2_to_unvectorized(fp_t* res, __m512i* src)
 void fp_unvectorized_to_4x2(__m512i* res, fp_t* src)
 {
     fp_t coeffs[4];
-    uint64_t src_arr[4*NWORDS64];
+    uint64_t src_arr[4*NWORDS64] = { 0 };
 
     // Convert from Montgomery representation
     for (int i = 0; i < 4; i++) {
@@ -78,7 +78,7 @@ void fp_2x4_to_unvectorized(fp_t* res, __m512i* src)
 void fp_unvectorized_to_2x4(__m512i* res, fp_t* src)
 {
     fp_t coeffs[2];
-    uint64_t src_arr[2*NWORDS64];
+    uint64_t src_arr[2*NWORDS64] = { 0 };
 
     // Convert from Montgomery representation
     for (int i = 0; i < 2; i++) {
@@ -91,7 +91,7 @@ void fp_unvectorized_to_2x4(__m512i* res, fp_t* src)
 
 void fp2_unvectorized_to_8x1x1(__m512i* res, fp2_t* src)
 {
-    uint64_t re[8*NWORDS64], im[8*NWORDS64];
+    uint64_t re[8*NWORDS64] = { 0 }, im[8*NWORDS64] = { 0 };
     for (int i = 0; i < 8; i++) {
         fp_encode(re + i*NWORDS64, &(src+i)->re);
         fp_encode(im + i*NWORDS64, &(src+i)->im);
@@ -120,7 +120,7 @@ void fp2_8x1x1_to_unvectorized(fp2_t* res, __m512i* src)
 
 void fp2_unvectorized_to_4x2x1(__m512i* res, fp2_t* src)
 {
-    uint64_t coeffs[8*NWORDS64];
+    uint64_t coeffs[8*NWORDS64] = { 0 };
     for (int i = 0; i < 4; i++) {
         fp_encode(coeffs + (2*i)*NWORDS64, &(src+i)->re);
         fp_encode(coeffs + (2*i+1)*NWORDS64, &(src+i)->im);
@@ -146,7 +146,7 @@ void fp2_4x2x1_to_unvectorized(fp2_t* res, __m512i* src)
 
 void fp2_unvectorized_to_2x2x2(__m512i* res, fp2_t* src)
 {
-    uint64_t coeffs[4*NWORDS64];
+    uint64_t coeffs[4*NWORDS64] = { 0 };
     for (int i = 0; i < 2; i++) {
         fp_encode(coeffs + (2*i)*NWORDS64, &(src+i)->re);
         fp_encode(coeffs + (2*i+1)*NWORDS64, &(src+i)->im);
@@ -172,7 +172,7 @@ void fp2_2x2x2_to_unvectorized(fp2_t* res, __m512i* src)
 
 void fp2_unvectorized_to_2x4x1(__m512i* res, fp2_t* src)
 {
-    uint64_t coeffs[4*NWORDS64];
+    uint64_t coeffs[4*NWORDS64] = { 0 };
     for (int i = 0; i < 2; i++) {
         fp_encode(coeffs + (2*i)*NWORDS64, &(src+i)->re);
         fp_encode(coeffs + (2*i+1)*NWORDS64, &(src+i)->im);

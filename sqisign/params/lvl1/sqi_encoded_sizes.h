@@ -1,22 +1,22 @@
 #ifndef SQI_ENCODED_SIZES_H
 #define SQI_ENCODED_SIZES_H
 
-// NOT YET PORTED TO SQIsign v3: these are the v2 parameters. v3 moves this
-// level to a different prime, for which no field arithmetic exists here yet.
-#define SQIsign_PRIME_NAME "p248_5"
+// SQIsign v3, NIST level 1: p = 3 * 2^324 - 1
+#define SQIsign_PRIME_NAME "p324_3"
 
 #define SECURITY_BITS 128
-#define SQIsign_response_length 126
-#define HASH_ITERATIONS 64
-#define FP_ENCODED_BYTES 32
-#define FP2_ENCODED_BYTES 64
-#define EC_CURVE_ENCODED_BYTES 64
-#define EC_POINT_ENCODED_BYTES 64
-#define EC_BASIS_ENCODED_BYTES 192
-#define PUBLICKEY_BYTES 65
-#define SECRETKEY_BYTES 353
-#define SIGNATURE_BYTES 148
+#define SQIsign_response_length 196
+#define FP_ENCODED_BYTES 41
+#define FP2_ENCODED_BYTES 82
+#define EC_CURVE_ENCODED_BYTES 82
+#define EC_POINT_ENCODED_BYTES 82
+#define EC_BASIS_ENCODED_BYTES 246
+#define PUBLICKEY_BYTES 83
+#define SECRETKEY_BYTES 270
+#define SIGNATURE_BYTES 200
 
+// Encoded length of the challenge scalar and of each of the four
+// basis-change coefficients carried by a signature.
 #define CHALLENGE_BYTES (SECURITY_BITS / 8)
 #define RESPONSE_BYTES ((SQIsign_response_length + 9) / 8)
 

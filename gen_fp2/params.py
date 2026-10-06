@@ -217,7 +217,6 @@ def find_best_limb_len_in_range(pbits, num_limbs, min_limb_len, max_limb_len):
         lambda strat: strat.sqr8_faster_add_p_sub,
         lambda strat: strat.sqr4_faster_add_p_sub,
         lambda strat: strat.R_ext if num_limbs > 4 else not strat.R_ext,
-        lambda strat: not strat.reduce_everything
     ]
     
     for pred in predicates:

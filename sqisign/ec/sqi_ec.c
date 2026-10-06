@@ -368,7 +368,6 @@ xDBLMUL(ec_point_t *S,
 
     // Initialize DIFF2a <- P+Q, DIFF2b <- P-Q
     xADD(&R[2], &R[1], &R[2], PQ);
-    __m512i P_Q[8], PmQ_A24[8];
 
     if (ec_has_zero_coordinate(&R[2]))
         return 0; // non valid formulas
