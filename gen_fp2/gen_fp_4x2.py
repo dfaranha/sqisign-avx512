@@ -1,5 +1,5 @@
 from gen_addchain import (write_dbl_and_add, write_fp_exp3_div4_naive, write_exp_function)
-from params import Fp2Mode
+from params import MulNonnegMode
 
 # 4x2 format stores an Fp element in n42 vectors.
 # The i-th vector stores (a[i], a[i+n42], b[i], b[i+n42], c[i], c[i+n42], d[i], d[i+n42])
@@ -393,7 +393,7 @@ def mp_add_p_sub_4x2(f, pp, v, strat):
     f.line(f"__m512i t[{pp.n42}];")
     top_idx = pp.n42-1 - pp.rem42
 
-    if strat.sqr_4x2 == Fp2Mode.lazy:
+    if strat.sqr4_faster_add_p_sub:
         b = f"2*{v.limb_mask}" if strat.mod_2p else v.limb_mask
         t = f"2*{v.p_plus_1_top}-2" if strat.mod_2p else f"{v.p_plus_1_top}-1"
         f.line(f"const __m512i p_bod = VSETALL({b});")
@@ -434,8 +434,13 @@ def mp_mixaddsubx2_4x2(f, pp, v, strat):
     f.start("void mp_mixaddsubx2_4x2(__m512i* res, __m512i* a, __m512i* b, const __mmask8 add_mask)")
     n_prod = pp.n42 + pp.num_limbs
     f.line(f"__m512i t[{n_prod}];")
-    if strat.R_ext:
-        f.comment("We can get subtraction result in [0, p*R) by always adding p * 2^(num_limbs * limb_len)")
+    if strat.mul_nonneg == MulNonnegMode.add_2p_shifted:
+        f.line(f"const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
+        f.line(f"const __m512i p_top = VSET(0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top});")
+    elif strat.mul_nonneg == MulNonnegMode.add_4p_shifted:
+        f.line(f"const __m512i p_bot = VSET(4, 0, 4, 0, 4, 0, 4, 0);")
+        f.line(f"const __m512i p_top = VSET(0, 4*{v.p_plus_1_top}, 0, 4*{v.p_plus_1_top}, 0, 4*{v.p_plus_1_top}, 0, 4*{v.p_plus_1_top});")
+    else:
         f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
         f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
@@ -446,9 +451,8 @@ def mp_mixaddsubx2_4x2(f, pp, v, strat):
         f.line(f"t[{i}] = VSUBMASK(a[{i}], sub_mask, a[{i}], b[{i}]);")
     f.line()
 
-    if strat.R_ext:
-        f.line(f"t[{pp.num_limbs}] = VSUBMASK(t[{pp.num_limbs}], sub_mask, t[{pp.num_limbs}], p_bot);")
-        f.line(f"t[{n_prod-1-pp.rem42}] = VADDMASK(t[{pp.num_limbs}], sub_mask, t[{n_prod-1-pp.rem42}], p_top);")
+    f.line(f"t[{pp.num_limbs}] = VSUBMASK(t[{pp.num_limbs}], sub_mask, t[{pp.num_limbs}], p_bot);")
+    f.line(f"t[{n_prod-1-pp.rem42}] = VADDMASK(t[{pp.num_limbs}], sub_mask, t[{n_prod-1-pp.rem42}], p_top);")
 
     for i in range(n_prod):
         f.line(f"t[{i}] = VADDMASK(t[{i}], add_mask, a[{i}], b[{i}]);")
@@ -488,8 +492,13 @@ def mp_subx2_4x2(f, pp, v, strat):
     n_prod = pp.n42 + pp.num_limbs
     f.line(f"__m512i t[{n_prod}];")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
-    if strat.R_ext:
-        f.comment("We can get result in [0, p*R) by always adding p * 2^(num_limbs * limb_len)")
+    if strat.mul_nonneg == MulNonnegMode.add_2p_shifted:
+        f.line(f"const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
+        f.line(f"const __m512i p_top = VSET(0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top});")
+    elif strat.mul_nonneg == MulNonnegMode.add_4p_shifted:
+        f.line(f"const __m512i p_bot = VSET(4, 0, 4, 0, 4, 0, 4, 0);")
+        f.line(f"const __m512i p_top = VSET(0, 4*{v.p_plus_1_top}, 0, 4*{v.p_plus_1_top}, 0, 4*{v.p_plus_1_top}, 0, 4*{v.p_plus_1_top});")
+    else:
         f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
         f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
     f.line()
@@ -498,9 +507,16 @@ def mp_subx2_4x2(f, pp, v, strat):
         f.line(f"t[{i}] = VSUB(res[{i}], a[{i}]);")
     f.line()
 
-    if strat.R_ext:
-        f.line(f"t[{pp.num_limbs}] = VSUB(t[{pp.num_limbs}], p_bot);")
-        f.line(f"t[{n_prod-1-pp.rem42}] = VADD(t[{n_prod-1-pp.rem42}], p_top);")
+    match strat.mul_nonneg:
+        case MulNonnegMode.add_p_shifted:
+            f.comment("We can get result in [0, p*R) by always adding p * 2^(num_limbs * limb_len)")
+        case MulNonnegMode.add_2p_shifted:
+            f.comment("We can get result in [0, p*R) by always adding 2p * 2^(num_limbs * limb_len)")
+        case MulNonnegMode.add_4p_shifted:
+            f.comment("We can get result in [0, p*R) by always adding 4p * 2^(num_limbs * limb_len)")
+
+    f.line(f"t[{pp.num_limbs}] = VSUB(t[{pp.num_limbs}], p_bot);")
+    f.line(f"t[{n_prod-1-pp.rem42}] = VADD(t[{n_prod-1-pp.rem42}], p_top);")
 
     for i in range(n_prod):
         f.line(f"res[{i}] = t[{i}];")

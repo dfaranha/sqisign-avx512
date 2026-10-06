@@ -509,7 +509,7 @@ bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool 
         // zA, wB, zC, wD = ker_Q
         // assert all but yC and yD are nonzero
         int nz_mask = ~fp2_is_zero_8x1x1(PQ);
-        if (nz_mask & 0xaf != 0xaf) {
+        if ((nz_mask & 0xaf) != 0xaf) {
             return false;
         }
     }

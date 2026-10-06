@@ -1,5 +1,5 @@
 from file_writer import FileWriter
-from params import Fp2Mode
+from params import KaratsubaAddMode
 
 def write_fp2_include(f, pp, v):
     f.line("#include \"fp.h\"")
@@ -93,43 +93,16 @@ def fp2_mixaddsub_8x1x1(f, pp, v, inline=False):
 def fp2_mul_8x1x1(f, pp, v, strat, inline=False):
     f.start("void fp2_mul_8x1x1(__m512i* res, __m512i* a, __m512i* b)", inline=inline)
 
-    if strat.mul_8x1 == Fp2Mode.reduce_everything:
-        fp2_mul_8x1x1_standard(f, pp, v)
-    else:
-        fp2_mul_8x1x1_lazy(f, pp, v)
-
-    f.end()
-
-def fp2_mul_8x1x1_standard(f, pp, v):
-    
-    f.line(f"__m512i s1[{pp.num_limbs}], s2[{pp.num_limbs}], s3[{pp.num_limbs}];")
-    f.line()
-
-    # f.line(f"__m512i zero[{pp.num_limbs}];")
-    # f.line(f"fp_setzero_8x1(zero);")
-    # f.line()
-
-    f.line(f"fp_add_8x1(s1, a, a + {pp.num_limbs});")
-    f.line(f"fp_add_8x1(s2, b, b + {pp.num_limbs});")
-    f.line(f"fp_mul_8x1(s3, s1, s2);")
-    f.line(f"fp_mul_8x1(s1, a, b);")
-    f.line(f"fp_mul_8x1(s2, a + {pp.num_limbs}, b + {pp.num_limbs});")
-
-    # f.comment("Normalize to [0, p) — rdc output can be in [0, 2p)")
-    # f.line(f"fp_add_8x1(s1, s1, zero);")
-    # f.line(f"fp_add_8x1(s2, s2, zero);")
-    # f.line(f"fp_add_8x1(s3, s3, zero);")
-
-    f.line(f"fp_sub_8x1(s3, s3, s1);")
-    f.line(f"fp_sub_8x1(res + {pp.num_limbs}, s3, s2);")
-    f.line(f"fp_sub_8x1(res, s1, s2);")
-
-def fp2_mul_8x1x1_lazy(f, pp, v):
     f.line(f"__m512i tt1[{2*pp.num_limbs}], tt2[{2*pp.num_limbs}], tt3[{2*pp.num_limbs}];")
     f.line()
 
-    f.line(f"mp_add_8x1(tt3, a, a + {pp.num_limbs});")
-    f.line(f"mp_add_8x1(tt3 + {pp.num_limbs}, b, b + {pp.num_limbs});")
+    if strat.karat_add == KaratsubaAddMode.reduce:
+        f.line(f"fp_add_8x1(tt3, a, a + {pp.num_limbs});")
+        f.line(f"fp_add_8x1(tt3 + {pp.num_limbs}, b, b + {pp.num_limbs});")
+    else:
+        f.line(f"mp_add_8x1(tt3, a, a + {pp.num_limbs});")
+        f.line(f"mp_add_8x1(tt3 + {pp.num_limbs}, b, b + {pp.num_limbs});")
+
     f.line(f"mp_mul_8x1(tt1, a, b);")
     f.line(f"mp_mul_8x1(tt2, a + {pp.num_limbs}, b + {pp.num_limbs});")
     f.line(f"mp_mul_8x1(tt3, tt3, tt3 + {pp.num_limbs});")
@@ -138,10 +111,12 @@ def fp2_mul_8x1x1_lazy(f, pp, v):
     f.line(f"rdc_8x1(res + {pp.num_limbs}, tt3);")
     f.line(f"rdc_8x1(res, tt1);")
 
+    f.end()
+
 def fp2_sqr_8x1x1(f, pp, v, strat, inline=False):
     f.start("void fp2_sqr_8x1x1(__m512i* res, __m512i* a)", inline=inline)
 
-    if strat.sqr_8x1 == Fp2Mode.reduce_everything:
+    if strat.karat_add == KaratsubaAddMode.reduce:
         fp2_sqr_8x1x1_standard(f, pp, v)
     else:
         fp2_sqr_8x1x1_lazy(f, pp, v, strat)
@@ -163,10 +138,7 @@ def fp2_sqr_8x1x1_lazy(f, pp, v, strat):
     f.line()
 
     f.line(f"mp_add_8x1(s1, a, a + {pp.num_limbs});")
-    if strat.sqr_8x1 == Fp2Mode.reduce:
-        f.line(f"fp_sub_8x1(s2, a, a + {pp.num_limbs});")
-    else:
-        f.line(f"mp_add_p_sub_8x1(s2, a, a + {pp.num_limbs});")
+    f.line(f"mp_add_p_sub_8x1(s2, a, a + {pp.num_limbs});")
     f.line(f"mp_add_8x1(s3, a, a);")
     f.line(f"fp_mul_8x1(res, s1, s2);")
     f.line(f"fp_mul_8x1(res + {pp.num_limbs}, s3, a + {pp.num_limbs});")
@@ -722,7 +694,7 @@ def fp2_mul_4x2x1_lazy(f, pp, v):
 def fp2_sqr_4x2x1(f, pp, v, strat, inline=False):
     f.start("void fp2_sqr_4x2x1(__m512i* res, __m512i* a)", inline=inline)
 
-    if strat.sqr_8x1 == Fp2Mode.reduce_everything:
+    if strat.karat_add == KaratsubaAddMode.reduce:
         fp2_sqr_4x2x1_standard(f, pp, v)
     else:
         fp2_sqr_4x2x1_lazy(f, pp, v, strat)
@@ -760,10 +732,10 @@ def fp2_sqr_4x2x1_lazy(f, pp, v, strat):
     f.line("}")
 
     f.line("mp_add_8x1(s1, s1, s3);")
-    if strat.sqr_8x1 == Fp2Mode.reduce:
-        f.line(f"fp_sub_8x1(s2, a, s2);")
-    else:
+    if strat.sqr_use_add_p_sub:
         f.line(f"mp_add_p_sub_8x1(s2, a, s2);")
+    else:
+        f.line(f"fp_sub_8x1(s2, a, s2);")
     f.line("fp_mul_8x1(res, s1, s2);")
 
 def fp2_mulx2_4x2x1(f, pp, v, inline=False):
@@ -1117,10 +1089,10 @@ def fp2_sqr_2x2x2_lazy(f, pp, v, strat):
 
     f.unindent()
     f.line("}")
-    if strat.sqr_4x2 == Fp2Mode.reduce:
-        f.line("fp_sub_4x2(s2, a, s2); // a0 - a1, a1")
-    else:
+    if strat.sqr_use_add_p_sub:
         f.line("mp_add_p_sub_4x2(s2, a, s2); // a0 - a1, a1")
+    else:
+        f.line("fp_sub_4x2(s2, a, s2); // a0 - a1, a1")
     f.line("fp_mul_4x2(res, s1, s2);")
 
 def fp2_muli_2x2x2(f, pp, v):

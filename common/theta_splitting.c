@@ -414,8 +414,8 @@ bool splitting_theta_point_to_mont_pair(
     // check that points are not zero and that xi * wi == yi * zi
     __mmask8 zmask = fp2_is_zero_8x1x1(theta_pair);
     if (verify) {
-        bool P_zero = zmask & 0x55 == 0x55;
-        bool Q_zero = zmask & 0xaa == 0xaa;
+        bool P_zero = (zmask & 0x55) == 0x55;
+        bool Q_zero = (zmask & 0xaa) == 0xaa;
         if (P_zero || Q_zero) {
             return false;
         }

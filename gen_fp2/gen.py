@@ -52,44 +52,45 @@ if len(sys.argv) > 1:
         e = 664
         c = 17
 else:
-    e = 376
-    c = 65
+    # limb_len = 51, last_limb_len = 51: 
+    # c = 1125899906842695
+    # e = 153
 
-    # no shift
-    # e = 2601
-    # c = 609
+    # limb_len = 51, last_limb_len = 50: 
+    # c = 562949953421387
+    # e = 204
 
-    # mersenne
-    # e = 521
+    # limb_len = 51, last_limb_len = 49: 
+    # c = 281474976710875
+    # e = 153
+
+    # limb_len = 50, last_limb_len = 50: 
+    c = 562949953421499 
+    e = 200
+
+    # limb_len = 50, last_limb_len = 49: 
+    # c = 281474976710717
+    # e = 150
+
+    # limb_len = 50, last_limb_len = 48: 
+    # c = 140737488355547
+    # e = 200
+
+    # limb_len = 49, last_limb_len = 49: 
+    # c = 281474976710841
+    # e = 147
+
+    # limb_len = 49, last_limb_len = 48: 
+    # c = 140737488355515
+    # e = 196
+
+    # limb_len = 49, last_limb_len = 47: 
+    # c = 70368744178131
+    # e = 147
+
+    # mersenne prime: 
     # c = 1
-
-    # limb_len = last_limb_len = 51: FAILS 2x4 mul a * (b * c) != (a * b) * c and KAT
-    # e = 398
-    # c = 893
-
-    # limb_len = 51, last_limb_len = 50
-    # e = 397
-    # c = 729
-
-    # limb_len: 50 last_limb_len: 50
-    # e = 395
-    # c = 19
-
-    # limb_len: 50 last_limb_len: 49
-    # e = 392
-    # c = 123
-
-    # limb_len: 50 last_limb_len: 48
-    # e = 338
-    # c = 683
-
-    # limb_len: 50 last_limb_len 47 
-    # e = 343
-    # c = 9
-
-    # limb_len: 50 last_limb_len 45
-    # e = 336
-    # c = 297
+    # e = 607
 
 
 #############

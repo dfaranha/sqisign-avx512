@@ -1,6 +1,6 @@
-CC = gcc
-CFLAGS = -O3 -march=native -flto=auto #-Wall -Wextra
-TEST_CFLAGS = $(CFLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer -g
+CC = clang # experiments indicate it is faster than gcc
+CFLAGS = -O3 -march=native -flto=auto -MMD -MP #-Wall -Wextra
+TEST_CFLAGS = $(CFLAGS) -fno-omit-frame-pointer -g -fsanitize=address,undefined
 BENCH_CFLAGS = $(CFLAGS) -DNDEBUG
 
 # ---------------------------------------------------------
@@ -193,3 +193,15 @@ build/bench/lvl5/%.o: %.c | build/.state_lvl5
 build/bench/lvl5/%.o: %.S | build/.state_lvl5
 	@mkdir -p $(@D)
 	$(CC) $(BENCH_CFLAGS) $(CORE_I) $(LVL5_I) $(SHARED_I) -c $< -o $@
+
+# ---------------------------------------------------------
+# Dependency Tracking
+# ---------------------------------------------------------
+ALL_OBJS = $(TEST_CORE_OBJS_LVL1) $(TEST_LVL1_C_OBJS) $(TEST_LVL1_S_OBJS) $(TEST_OBJS_LVL1) \
+           $(TEST_CORE_OBJS_LVL3) $(TEST_LVL3_C_OBJS) $(TEST_LVL3_S_OBJS) $(TEST_OBJS_LVL3) \
+           $(TEST_CORE_OBJS_LVL5) $(TEST_LVL5_C_OBJS) $(TEST_LVL5_S_OBJS) $(TEST_OBJS_LVL5) \
+           $(BENCH_CORE_OBJS_LVL1) $(BENCH_LVL1_C_OBJS) $(BENCH_LVL1_S_OBJS) $(BENCH_OBJS_LVL1) \
+           $(BENCH_CORE_OBJS_LVL3) $(BENCH_LVL3_C_OBJS) $(BENCH_LVL3_S_OBJS) $(BENCH_OBJS_LVL3) \
+           $(BENCH_CORE_OBJS_LVL5) $(BENCH_LVL5_C_OBJS) $(BENCH_LVL5_S_OBJS) $(BENCH_OBJS_LVL5)
+
+-include $(ALL_OBJS:.o=.d)
