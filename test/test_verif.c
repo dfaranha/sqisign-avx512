@@ -6,6 +6,7 @@
 
 #include "verif.h"
 #include "test.h"
+#include "fp_consts.h"
 #include "sqi_encoded_sizes.h"
 
 #define CRYPTO_ALGNAME "SQIsign_" SQIsign_PRIME_NAME
@@ -21,6 +22,35 @@
 static int      FindMarker(FILE *infile, const char *marker);
 static int      ReadHex(FILE *infile, unsigned char *A, int Length, char *str);
 static int      test_verification_kat_single(int cnt);
+
+// Re-encodes the field element at enc as its value plus p, a non-canonical
+// encoding that still fits in FP_ENCODED_BYTES.
+static void add_p(unsigned char *enc)
+{
+    unsigned int carry = 0;
+    for (int i = 0; i < FP_ENCODED_BYTES; i++) {
+        unsigned int s = enc[i] + (unsigned int)((P_64[i / 8] >> (8 * (i % 8))) & 0xff) + carry;
+        enc[i] = (unsigned char)s;
+        carry = s >> 8;
+    }
+}
+
+// The reference decodes non-canonical field elements as zero and requires the
+// exact signature length, so these variants of a valid signature must fail.
+static int rejects_malformed(const unsigned char *m, unsigned long long mlen,
+                             const unsigned char *sig, const unsigned char *pk)
+{
+    unsigned char pk_bad[PUBLICKEY_BYTES], sig_bad[SIGNATURE_BYTES];
+
+    memcpy(pk_bad, pk, PUBLICKEY_BYTES);
+    add_p(pk_bad); // real part of the public curve
+    memcpy(sig_bad, sig, SIGNATURE_BYTES);
+    add_p(sig_bad); // real part of the auxiliary curve
+
+    return !verify(m, mlen, sig, SIGNATURE_BYTES, pk_bad) &&
+           !verify(m, mlen, sig_bad, SIGNATURE_BYTES, pk) &&
+           !verify(m, mlen, sig, SIGNATURE_BYTES - 1, pk);
+}
 
 int test_verification_kat() {
     int rc;
@@ -102,6 +132,13 @@ static int test_verification_kat_single(int cnt) {
         if (!verify(m, mlen, sm_rsp, SIGNATURE_BYTES, pk_rsp)) {
             printf("crypto_sign_open failed\n");
             rc = KAT_CRYPTO_FAILURE;
+            goto cleanup;
+        }
+
+        // Once is enough: each check costs a full verification.
+        if (count == 0 && !rejects_malformed(m, mlen, sm_rsp, pk_rsp)) {
+            printf("non-canonical encoding or wrong signature length accepted\n");
+            rc = KAT_VERIFICATION_ERROR;
             goto cleanup;
         }
 

@@ -31,6 +31,19 @@ static void decode_digits(digit_t *x, const byte_t *enc, size_t nbytes, size_t n
     memset((byte_t *)x + nbytes, 0, ndigits * sizeof(digit_t) - nbytes);
 }
 
+// Like fp_decode in the reference: a value that is not below p decodes to zero.
+static void fp_canonical_or_zero(uint64_t *x)
+{
+    unsigned char borrow = 0;
+    for (int i = 0; i < NWORDS64; i++) {
+        unsigned __int128 d = (unsigned __int128)x[i] - P_64[i] - borrow;
+        borrow = (d >> 64) & 1;
+    }
+    uint64_t keep = 0 - (uint64_t)borrow; // borrow means x < p
+    for (int i = 0; i < NWORDS64; i++)
+        x[i] &= keep;
+}
+
 // An encoded Fp2 element is re || im with FP_ENCODED_BYTES each, which can be
 // shorter than the NWORDS64 words each coefficient takes when unvectorized.
 static void fp2_from_bytes(uint64_t *unvec, const byte_t *enc)
@@ -38,6 +51,8 @@ static void fp2_from_bytes(uint64_t *unvec, const byte_t *enc)
     memset(unvec, 0, 2 * NWORDS64 * sizeof(uint64_t));
     memcpy((byte_t *) unvec, enc, FP_ENCODED_BYTES);
     memcpy((byte_t *) (unvec + NWORDS64), enc + FP_ENCODED_BYTES, FP_ENCODED_BYTES);
+    fp_canonical_or_zero(unvec);
+    fp_canonical_or_zero(unvec + NWORDS64);
 }
 
 static void fp2_to_bytes(byte_t *enc, const uint64_t *unvec)
@@ -243,7 +258,9 @@ bool verify(const unsigned char *m,
     public_key_2x2x2_t pkt;
     signature_2x2x2_t sigt;
 
-    (void)siglen; // not checked: SIGNATURE_BYTES are always read from sig
+    if (siglen != SIGNATURE_BYTES)
+        return false;
+
     public_key_from_bytes_2x2x2(&pkt, pk);
     signature_from_bytes_2x2x2(&sigt, sig);
 
