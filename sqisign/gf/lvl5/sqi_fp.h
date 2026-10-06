@@ -10,22 +10,22 @@
 #include "tutil.h"
 #include "sqi_fp_constants.h"
 
-#include "gf27500.h"
+#include "gf17664.h"
 
 // Type for elements of GF(p)
 // Type for elements of GF(p)
-#define fp_t gf27500
+#define fp_t gf17664
 
 // Constants (Assumed to be in Montgomery form)
 // Constants (Assumed to be in Montgomery form)
-#define ZERO gf27500_ZERO
-#define ONE gf27500_ONE
+#define ZERO gf17664_ZERO
+#define ONE gf17664_ONE
 
 // Operations in fp
 static inline void
 fp_neg(fp_t *d, const fp_t *a)
 {
-    gf27500_neg(d, a);
+    gf17664_neg(d, a);
 }
 
 void fp_add(fp_t *out, const fp_t *a, const fp_t *b); // implemented in fp_asm.S
@@ -36,80 +36,80 @@ void fp_mul(fp_t *out, const fp_t *a, const fp_t *b); // implemented in fp_asm.S
 static inline void
 fp_mul_small(fp_t *d, const fp_t *a, uint32_t n)
 {
-    gf27500_mul_small(d, a, n);
+    gf17664_mul_small(d, a, n);
 }
 
 static inline void
 fp_half(fp_t *d, const fp_t *a)
 {
-    gf27500_half(d, a);
+    gf17664_half(d, a);
 }
-// #define fp_half gf27500_half
+// #define fp_half gf17664_half
 
 static inline void
 fp_div3(fp_t *d, const fp_t *a)
 {
-    gf27500_div3(d, a);
+    gf17664_div3(d, a);
 }
-// #define fp_div3 gf27500_div3
+// #define fp_div3 gf17664_div3
 
 // Constant time selection and swapping
 static inline void
 fp_select(fp_t *d, const fp_t *a0, const fp_t *a1, uint32_t ctl)
 {
-    gf27500_select(d, a0, a1, ctl);
+    gf17664_select(d, a0, a1, ctl);
 }
-// #define fp_select gf27500_select
+// #define fp_select gf17664_select
 
 static inline void
 fp_cswap(fp_t *a, fp_t *b, uint32_t ctl)
 {
-    gf27500_cswap(a, b, ctl);
+    gf17664_cswap(a, b, ctl);
 }
-// #define fp_cswap gf27500_cswap
+// #define fp_cswap gf17664_cswap
 
 // Comparisons for fp elements
 static inline uint32_t
 fp_is_zero(const fp_t *a)
 {
-    return gf27500_iszero(a);
+    return gf17664_iszero(a);
 }
-// #define fp_is_zero gf27500_iszero
+// #define fp_is_zero gf17664_iszero
 
 static inline uint32_t
 fp_is_equal(const fp_t *a, const fp_t *b)
 {
-    return gf27500_equals(a, b);
+    return gf17664_equals(a, b);
 }
-// #define fp_is_equal gf27500_equals
+// #define fp_is_equal gf17664_equals
 
 // Set a uint32 to an Fp value
 static inline void
 fp_set_small(fp_t *d, uint32_t x)
 {
-    gf27500_set_small(d, x);
+    gf17664_set_small(d, x);
 }
-// #define fp_set_small gf27500_set_small
+// #define fp_set_small gf17664_set_small
 
 // Encoding and decoding of bytes
 static inline void
 fp_encode(void *dst, const fp_t *a)
 {
-    gf27500_encode(dst, a);
+    gf17664_encode(dst, a);
 }
-// #define fp_encode gf27500_encode
+// #define fp_encode gf17664_encode
 static inline uint32_t
 fp_decode(fp_t *d, const void *src)
 {
-    return gf27500_decode(d, src);
+    return gf17664_decode(d, src);
 }
-// #define fp_decode gf27500_decode
+// #define fp_decode gf17664_decode
 static inline void
 fp_decode_reduce(fp_t *d, const void *src, size_t len)
 {
-    gf27500_decode_reduce(d, src, len);
+    gf17664_decode_reduce(d, src, len);
 }
-// #define fp_decode_reduce gf27500_decode_reduce
+// #define fp_decode_reduce gf17664_decode_reduce
 //  These functions are essentially useless because we can just
 //  use = for the shallow copies we need, but they're here for
 //  now until we do a larger refactoring
