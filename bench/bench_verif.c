@@ -28,18 +28,17 @@ static int      ReadHex(FILE *infile, unsigned char *A, int Length, char *str);
 void bench_verif(int iterations) {
 
     unsigned char       pk_rsp[PUBLICKEY_BYTES];
-    unsigned char       *m, *m1, *sm_rsp;
-    unsigned long long  mlen, smlen, mlen1;
+    unsigned char       *m, *sm_rsp;
+    unsigned long long  mlen, smlen;
     int                 count;
     int                 done;
-    int                 ret_val;
     int                 cnt = -1;
 
     char                fn_rsp[64];
     FILE                *fp_rsp;
     
     uint64_t            cycles[N_RUNS];
-    uint64_t            start, end, tmp, i=0;
+    uint64_t            start, end, tmp = 0, i=0;
 
     sprintf(fn_rsp, "assets/PQCsignKAT_%d_%s.rsp", SECRETKEY_BYTES, CRYPTO_ALGNAME);
     if ( (fp_rsp = fopen(fn_rsp, "r")) == NULL ) {
@@ -51,9 +50,7 @@ void bench_verif(int iterations) {
     done = 0;
     do {
 
-        if ( FindMarker(fp_rsp, "count = ") ) {
-            ret_val = fscanf(fp_rsp, "%d", &count);
-        } else {
+        if ( !FindMarker(fp_rsp, "count = ") || fscanf(fp_rsp, "%d", &count) != 1 ) {
             done = 1;
             break;
         }
@@ -61,9 +58,7 @@ void bench_verif(int iterations) {
         if (cnt != -1 && cnt != count)
             continue;
 
-        if ( FindMarker(fp_rsp, "mlen = ") ) {
-            ret_val = fscanf(fp_rsp, "%lld", &mlen);
-        } else {
+        if ( !FindMarker(fp_rsp, "mlen = ") || fscanf(fp_rsp, "%llu", &mlen) != 1 ) {
             printf("ERROR: unable to read 'mlen' from <%s>\n", fn_rsp);
             goto fail;
         }
@@ -79,9 +74,7 @@ void bench_verif(int iterations) {
             goto fail;
         }
 
-        if ( FindMarker(fp_rsp, "smlen = ") ) {
-            ret_val = fscanf(fp_rsp, "%llu", &smlen);
-        } else {
+        if ( !FindMarker(fp_rsp, "smlen = ") || fscanf(fp_rsp, "%llu", &smlen) != 1 ) {
             printf("ERROR: unable to read 'smlen' from <%s>\n", fn_rsp);
             goto fail;
         }
@@ -92,7 +85,6 @@ void bench_verif(int iterations) {
         }
 
         // Extract m and sig from sm: sm = [sig (SIGNATURE_BYTES) | m (mlen)]
-        unsigned char *sig = sm_rsp;
         m = sm_rsp + SIGNATURE_BYTES;
 
         start = cpucycles();

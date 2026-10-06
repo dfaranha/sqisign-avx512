@@ -36,11 +36,10 @@ int test_verification_kat() {
 static int test_verification_kat_single(int cnt) {
 
     unsigned char       pk_rsp[PUBLICKEY_BYTES];
-    unsigned char       *m, *m1, *sm_rsp;
-    unsigned long long  mlen, smlen, mlen1;
+    unsigned char       *m, *sm_rsp;
+    unsigned long long  mlen, smlen;
     int                 count;
     int                 done;
-    int                 ret_val;
 
     char                fn_rsp[64];
     FILE                *fp_rsp;
@@ -56,9 +55,7 @@ static int test_verification_kat_single(int cnt) {
     done = 0;
     do {
 
-        if ( FindMarker(fp_rsp, "count = ") ) {
-            ret_val = fscanf(fp_rsp, "%d", &count);
-        } else {
+        if ( !FindMarker(fp_rsp, "count = ") || fscanf(fp_rsp, "%d", &count) != 1 ) {
             done = 1;
             break;
         }
@@ -68,9 +65,7 @@ static int test_verification_kat_single(int cnt) {
 
         printf(".");
 
-        if ( FindMarker(fp_rsp, "mlen = ") ) {
-            ret_val = fscanf(fp_rsp, "%lld", &mlen);
-        } else {
+        if ( !FindMarker(fp_rsp, "mlen = ") || fscanf(fp_rsp, "%llu", &mlen) != 1 ) {
             printf("ERROR: unable to read 'mlen' from <%s>\n", fn_rsp);
             rc = KAT_DATA_ERROR;
             goto cleanup;
@@ -89,9 +84,7 @@ static int test_verification_kat_single(int cnt) {
             goto cleanup;
         }
 
-        if ( FindMarker(fp_rsp, "smlen = ") ) {
-            ret_val = fscanf(fp_rsp, "%llu", &smlen);
-        } else {
+        if ( !FindMarker(fp_rsp, "smlen = ") || fscanf(fp_rsp, "%llu", &smlen) != 1 ) {
             printf("ERROR: unable to read 'smlen' from <%s>\n", fn_rsp);
             rc = KAT_DATA_ERROR;
             goto cleanup;
@@ -104,7 +97,6 @@ static int test_verification_kat_single(int cnt) {
         }
 
         // Extract m and sig from sm: sm = [sig (SIGNATURE_BYTES) | m (mlen)]
-        unsigned char *sig = sm_rsp;
         m = sm_rsp + SIGNATURE_BYTES;
 
         if (!verify(m, mlen, sm_rsp, SIGNATURE_BYTES, pk_rsp)) {

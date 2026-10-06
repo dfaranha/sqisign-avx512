@@ -8,7 +8,7 @@
 bool test_fp(int iterations)
 {
     __m512i a[NUM_LIMBS], b[NUM_LIMBS], c[NUM_LIMBS], d[NUM_LIMBS], e[NUM_LIMBS], f[NUM_LIMBS];
-    __m512i g[NUM_LIMBS], h[NUM_LIMBS], zero[NUM_LIMBS], one[NUM_LIMBS], t;
+    __m512i g[NUM_LIMBS], zero[NUM_LIMBS], one[NUM_LIMBS];
     __m512i vR[NUM_LIMBS], vR2[NUM_LIMBS];
     uint64_t a_64[8*NWORDS64];
     fp_setzero_8x1(zero);

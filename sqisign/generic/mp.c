@@ -182,9 +182,9 @@ mp_print(const digit_t *a, size_t nwords)
 {
     printf("0x");
     for (size_t i = 0; i < nwords; i++) {
-#ifdef RADIX_32
+#if RADIX == 32
         printf("%08" PRIx32, a[nwords - i - 1]); // Print each word with 8 hex digits
-#elif defined(RADIX_64)
+#else
         printf("%016" PRIx64, a[nwords - i - 1]); // Print each word with 16 hex digits
 #endif
     }

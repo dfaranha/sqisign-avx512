@@ -590,7 +590,7 @@ def rdc_2x4_split(f, pp, v, strat):
     if not strat.mod_2p:
         f.line("__m512i sign_mask;")
         f.line(f"const __m512i idx_sign = VSET({limb_top}, {limb_top}, {limb_top}, {limb_top}, {limb_top+4}, {limb_top+4}, {limb_top+4}, {limb_top+4});")
-    write_p(f, v, strat.mod_2p, limb_top)
+        write_p(f, v, strat.mod_2p, limb_top)
     f.line()
 
     fold_mask = get_fold_mask(pp)

@@ -56,8 +56,8 @@ void ec_double_4x4x2x1(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x,
 void ec_double_8x1x1x1(__m512i* res_x, __m512i* res_z, __m512i* A24, __m512i* x, __m512i* z)
 {
     __m512i t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS];
-    fp2_add_8x1x1(t0, res_x, res_z);
-    fp2_sub_8x1x1(t1, res_x, res_z);
+    fp2_add_8x1x1(t0, x, z);
+    fp2_sub_8x1x1(t1, x, z);
     fp2_sqr_8x1x1(t0, t0);
     fp2_sqr_8x1x1(t1, t1);
 
@@ -1678,10 +1678,10 @@ bool test_point_order_twof_1x2x4x1(__m512i* P, __m512i* A24, unsigned int f)
 
 bool test_basis_order_twof_1x2x4x1(__m512i* B, __m512i* A24, unsigned int f)
 {
-    return 
-        test_point_order_twof_1x2x4x1(B, A24, f) &
-        test_point_order_twof_1x2x4x1(B + NUM_LIMBS, A24, f) &
-        test_point_order_twof_1x2x4x1(B + 2*NUM_LIMBS, A24, f);
+    bool P = test_point_order_twof_1x2x4x1(B, A24, f);
+    bool Q = test_point_order_twof_1x2x4x1(B + NUM_LIMBS, A24, f);
+    bool PmQ = test_point_order_twof_1x2x4x1(B + 2*NUM_LIMBS, A24, f);
+    return P && Q && PmQ;
 }
 
 // ==================== 2x2x2 ===================================================
@@ -1784,7 +1784,7 @@ void ec_double_basis_pair_1x2x2x2(
 )
 {
     __m512i x[2*NUM_LIMBS], z[2*NUM_LIMBS], t0[2*NUM_LIMBS], t1[2*NUM_LIMBS], A24x8[2*NUM_LIMBS];
-    __m512i idx0, idx1, idx2, idx3;
+    __m512i idx0, idx1, idx2;
 
     assert(n1 >= n2);
 
@@ -3369,10 +3369,10 @@ bool test_point_order_twof_1x2x2x2(__m512i* P, __m512i* A24, unsigned int f)
 
 bool test_basis_order_twof_1x2x2x2(__m512i* B, __m512i* A24, unsigned int f)
 {
-    return 
-        test_point_order_twof_1x2x2x2(B, A24, f) &
-        test_point_order_twof_1x2x2x2(B + N4x2, A24, f) &
-        test_point_order_twof_1x2x2x2(B + 2*N4x2, A24, f);
+    bool P = test_point_order_twof_1x2x2x2(B, A24, f);
+    bool Q = test_point_order_twof_1x2x2x2(B + N4x2, A24, f);
+    bool PmQ = test_point_order_twof_1x2x2x2(B + 2*N4x2, A24, f);
+    return P && Q && PmQ;
 }
 
 // =============================== Jacobian arithmetic ====================================================

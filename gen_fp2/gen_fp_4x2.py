@@ -443,7 +443,6 @@ def mp_mixaddsubx2_4x2(f, pp, v, strat):
     else:
         f.line(f"const __m512i p_bot = VSET(1, 0, 1, 0, 1, 0, 1, 0);")
         f.line(f"const __m512i p_top = VSET(0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top}, 0, {v.p_plus_1_top});")
-    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line("const __mmask8 sub_mask = ~add_mask;")
     f.line()
 
@@ -469,7 +468,6 @@ def mp_dblsubx2_4x2(f, pp, v):
 
     n_prod = pp.n42+pp.num_limbs
     f.line(f"__m512i t[{n_prod}];")
-    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line()
 
     for i in range(n_prod):
@@ -491,7 +489,6 @@ def mp_subx2_4x2(f, pp, v, strat):
 
     n_prod = pp.n42 + pp.num_limbs
     f.line(f"__m512i t[{n_prod}];")
-    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     if strat.mul_nonneg == MulNonnegMode.add_2p_shifted:
         f.line(f"const __m512i p_bot = VSET(2, 0, 2, 0, 2, 0, 2, 0);")
         f.line(f"const __m512i p_top = VSET(0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top}, 0, 2*{v.p_plus_1_top});")
@@ -531,7 +528,6 @@ def mp_mul_4x2(f, pp, v, strat):
     #TODO: Might be suboptimal for odd number of limbs
     n_prod = pp.n42 + pp.num_limbs
     f.line(f"__m512i t[{n_prod}], sl[{pp.n42}], sh[{pp.n42-pp.rem42}];")
-    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i zero = VZERO();")
     f.line()
 

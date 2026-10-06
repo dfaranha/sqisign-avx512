@@ -17,7 +17,7 @@ void bench_theta(int iterations)
     uint64_t cycles[N_RUNS];
     uint64_t start, end, tmp;
     __m512i a[2*NUM_LIMBS], b[2*NUM_LIMBS], c[2*NUM_LIMBS];
-    __m512i d[2*NUM_LIMBS], e[2*NUM_LIMBS], f[2*NUM_LIMBS];
+    __m512i d[2*NUM_LIMBS];
     rand_fp2_8x1x1(a);
     rand_fp2_8x1x1(b);
     rand_fp2_8x1x1(c);

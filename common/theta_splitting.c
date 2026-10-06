@@ -118,6 +118,7 @@ int splitting_get_index(__m512i* null)
 
 bool splitting_isom_matrix(splitting_matrix_t* matrix, __m512i* null, bool verify)
 {
+    (void)verify; // the index is always validated
     int index = splitting_get_index(null);
     if (index == -1) {
         return false;
@@ -168,8 +169,7 @@ void splitting_mul_matrix_column_single(__m512i* res, __m512i* dup, const splitt
 // then do coordinate-wise mult with vec(a_1).
 void splitting_apply_isomorphism_single(__m512i* res, __m512i* point, const splitting_matrix_t* matrix)
 {
-    __m512i vec[NUM_LIMBS], point_copy[NUM_LIMBS], indices;
-    __mmask8 negate_mask;
+    __m512i vec[NUM_LIMBS], point_copy[NUM_LIMBS];
     fp2_copy_4x2x1(point_copy, point); // in case res = point
 
     splitting_duplicate_pair_in_array(res, point_copy, 0, NUM_LIMBS);
@@ -228,8 +228,7 @@ void splitting_mul_matrix_column_pair(__m512i* res, __m512i* dup, const splittin
 // To multply x and x' by the first column of A, we create a vector (x, x', x, x', x, x', x, x')
 void splitting_apply_isomorphism_pair(__m512i* res, __m512i* points, const splitting_matrix_t* matrix)
 {
-    __m512i vec[2*NUM_LIMBS], points_copy[2*NUM_LIMBS], indices;
-    __mmask8 negate_mask;
+    __m512i vec[2*NUM_LIMBS], points_copy[2*NUM_LIMBS];
     fp2_copy_8x1x1(points_copy, points); // in case res = point
 
     splitting_duplicate_pair_in_array(res, points_copy, 0, 2*NUM_LIMBS);

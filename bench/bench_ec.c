@@ -14,9 +14,9 @@ void bench_ec(int iterations)
 {
     uint64_t cycles[N_RUNS];
     uint64_t start, end, tmp;
-    __m512i A24_x4[NUM_LIMBS], a[NUM_LIMBS], b[NUM_LIMBS], c[NUM_LIMBS], d[NUM_LIMBS], Px_x4[NUM_LIMBS], Pz_x4[NUM_LIMBS];
+    __m512i A24_x4[NUM_LIMBS], a[NUM_LIMBS], b[NUM_LIMBS], c[NUM_LIMBS], Px_x4[NUM_LIMBS], Pz_x4[NUM_LIMBS];
     fp2_t A24_unvec[4];
-    ec_point_t P[4], Q[4], R[4];
+    ec_point_t P[4];
 
     // Working with fixed curve of j-invariant 1728
     ec_curve_t curve;

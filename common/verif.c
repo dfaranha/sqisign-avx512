@@ -243,6 +243,7 @@ bool verify(const unsigned char *m,
     public_key_2x2x2_t pkt;
     signature_2x2x2_t sigt;
 
+    (void)siglen; // not checked: SIGNATURE_BYTES are always read from sig
     public_key_from_bytes_2x2x2(&pkt, pk);
     signature_from_bytes_2x2x2(&sigt, sig);
 

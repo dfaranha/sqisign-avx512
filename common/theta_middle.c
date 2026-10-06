@@ -493,7 +493,7 @@ bool check_isotropic_pair(__m512i* PQ, __m512i* inv)
 
 bool theta_codomain_pair(__m512i* res, __m512i* res_inv, __m512i* k, const bool h1, const bool h2, const bool verify)
 {
-    __m512i PQ[2*NUM_LIMBS], k_split[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS], idx1, idx2, idx3;
+    __m512i PQ[2*NUM_LIMBS], t1[2*NUM_LIMBS], t2[2*NUM_LIMBS], idx1, idx2, idx3;
 
     fp2_copy_8x1x1(PQ, k);
 

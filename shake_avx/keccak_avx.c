@@ -55,6 +55,7 @@ void print_512(__m512i x){
 
 
 void keccakF(__m512i* x, int rnd){
+	(void)rnd; // always the full 24 rounds
 	const uint64_t RC[24] = {
 	    0x0000000000000001, 0x0000000000008082, 0x800000000000808a,
 	    0x8000000080008000, 0x000000000000808b, 0x0000000080000001,

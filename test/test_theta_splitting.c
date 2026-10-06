@@ -42,7 +42,7 @@ bool test_theta_splitting(int iterations)
         int correct_mul_i = fp2_is_equal_4x2x1(b, c) == 0x4;
         fp2_neg_4x2x1(c, c);
         int correct_mul_minusi = fp2_is_equal_4x2x1(b, c) == 0x8;
-        passed = correct_mul_1 & correct_mul_minus1 & correct_mul_i & correct_mul_minus1;
+        passed = correct_mul_1 & correct_mul_minus1 & correct_mul_i & correct_mul_minusi;
         if (passed == 0) {
             break;
         }

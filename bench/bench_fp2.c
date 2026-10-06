@@ -16,10 +16,6 @@ void bench_fp2(int iterations)
     rand_fp2_8x1x1(a);
     rand_fp2_8x1x1(b);
     rand_fp2_8x1x1(c);
-    uint64_t arr[8*12];
-    for(int j = 0; j < 8*12; j++) {
-        arr[j] = rand_uint64();
-    }
 
     printf("Fp2 8x1x1 benchmarks:\n");
 

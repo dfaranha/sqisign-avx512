@@ -12,9 +12,9 @@
 bool test_ec(int iterations)
 {   
     // ======== Setup =========================
-    __m512i xP[NUM_LIMBS], zP[NUM_LIMBS], xQ[NUM_LIMBS], zQ[NUM_LIMBS], xR[NUM_LIMBS], zR[NUM_LIMBS], A24[NUM_LIMBS]; 
+    __m512i xP[NUM_LIMBS], zP[NUM_LIMBS], xQ[NUM_LIMBS], zQ[NUM_LIMBS], A24[NUM_LIMBS];
     __m512i xz0[NUM_LIMBS], xz1[NUM_LIMBS], xz2[NUM_LIMBS];
-    fp2_t A24_unvec[4], x_unvec[4], z_unvec[4], scalar;
+    fp2_t A24_unvec[4], scalar;
     ec_point_t P[4], Q[4], R[4], A24_point;
     for (int i = 0; i < 4; i++) {
         ec_point_init(P+i);

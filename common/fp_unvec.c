@@ -49,7 +49,6 @@ void fp_4x2_to_unvectorized(fp_t* res, __m512i* src)
 
 void fp_unvectorized_to_4x2(__m512i* res, fp_t* src)
 {
-    fp_t coeffs[4];
     uint64_t src_arr[4*NWORDS64] = { 0 };
 
     // Convert from Montgomery representation
@@ -77,7 +76,6 @@ void fp_2x4_to_unvectorized(fp_t* res, __m512i* src)
 
 void fp_unvectorized_to_2x4(__m512i* res, fp_t* src)
 {
-    fp_t coeffs[2];
     uint64_t src_arr[2*NWORDS64] = { 0 };
 
     // Convert from Montgomery representation

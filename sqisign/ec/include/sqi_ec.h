@@ -540,7 +540,7 @@ static int test_point_order_twof(const ec_point_t *P, const ec_curve_t *E, int t
  *
  * @return 0xFFFFFFFF if the order is correct, 0 otherwise
  */
-static int test_point_torsion_twof(const ec_point_t *P, const ec_curve_t *E, int t)
+static inline int test_point_torsion_twof(const ec_point_t *P, const ec_curve_t *E, int t)
 {
     ec_point_t test;
     ec_curve_t curve;
@@ -562,7 +562,7 @@ static int test_point_torsion_twof(const ec_point_t *P, const ec_curve_t *E, int
  *
  * @return 0xFFFFFFFF if the order is correct, 0 otherwise
  */
-static int test_jac_order_twof(const jac_point_t *P, const ec_curve_t *E, int t)
+static inline int test_jac_order_twof(const jac_point_t *P, const ec_curve_t *E, int t)
 {
     jac_point_t test;
     test = *P;
@@ -577,7 +577,7 @@ static int test_jac_order_twof(const jac_point_t *P, const ec_curve_t *E, int t)
     return (fp2_is_zero(&test.z));
 }
 
-static void ec_montA_to_curve(ec_curve_t *E, const fp2_t *A)
+static inline void ec_montA_to_curve(ec_curve_t *E, const fp2_t *A)
 {
     fp2_copy(&E->A, A);
     fp2_set_one(&E->C);
@@ -585,7 +585,7 @@ static void ec_montA_to_curve(ec_curve_t *E, const fp2_t *A)
     ec_curve_normalize_A24(E);
 }
 
-static void ec_montAC_to_curve(ec_curve_t *E, const fp2_t *A, const fp2_t *C)
+static inline void ec_montAC_to_curve(ec_curve_t *E, const fp2_t *A, const fp2_t *C)
 {
     fp2_copy(&E->A, A);
     fp2_copy(&E->C, C);
@@ -594,7 +594,7 @@ static void ec_montAC_to_curve(ec_curve_t *E, const fp2_t *A, const fp2_t *C)
     ec_normalize_curve(E);
 }
 
-static int ec_test_is_on_curve(const ec_curve_t *E, const ec_point_t *P) 
+static inline int ec_test_is_on_curve(const ec_curve_t *E, const ec_point_t *P) 
 {
     fp2_t x, one, C_inv, tmp;
 
@@ -617,7 +617,7 @@ static int ec_test_is_on_curve(const ec_curve_t *E, const ec_point_t *P)
     return fp2_is_square(&tmp) | fp2_is_zero(&P->z); // point at inf
 }
 
-static void
+static inline void
 ec_j_inv(fp2_t *j_inv, const ec_curve_t *curve)
 { // j-invariant computation for Montgommery coefficient A2=(A+2C:4C)
     fp2_t t0, t1;
@@ -655,7 +655,7 @@ ec_j_inv(fp2_t *j_inv, const ec_curve_t *curve)
  *
  * @return 0xFFFFFFFF if the order is correct, 0 otherwise
  */
-static int
+static inline int
 test_basis_order_twof(const ec_basis_t *B, const ec_curve_t *E, int t)
 {
     int check_P = test_point_order_twof(&B->P, E, t);

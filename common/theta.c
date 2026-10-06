@@ -193,10 +193,10 @@ bool theta_isogeny_chain_vec(
 )
 {
     __m512i A_12[NUM_LIMBS], A24_12[NUM_LIMBS], ker_x[NUM_LIMBS], ker_y[NUM_LIMBS], ker_z[NUM_LIMBS], OA[NUM_LIMBS], OA_dual_inv[2*NUM_LIMBS];
-    __m512i J[NUM_LIMBS], matrix01[2*NUM_LIMBS], matrix23[2*NUM_LIMBS], T8_x[NUM_LIMBS], T8_y[NUM_LIMBS], T8_z[NUM_LIMBS], gluing_eval_res[2*NUM_LIMBS];
+    __m512i J[NUM_LIMBS], matrix01[2*NUM_LIMBS], matrix23[2*NUM_LIMBS], T8_x[NUM_LIMBS], T8_y[NUM_LIMBS], T8_z[NUM_LIMBS];
     __m512i eval_pts_theta[num_pts * NUM_LIMBS];
     __m512i t0[N4x2], t1[N4x2], idx;
-    __m512i c1[2*NUM_LIMBS], c2[2*NUM_LIMBS], p1[NUM_LIMBS], p2[NUM_LIMBS], k1[NUM_LIMBS], k2[NUM_LIMBS];
+    __m512i c1[2*NUM_LIMBS], c2[2*NUM_LIMBS];
     splitting_matrix_t isom_matrix, rand_matrix;
     bool h1, h2, success = true;
 
@@ -367,7 +367,7 @@ bool theta_isogeny_chain_bary_vec(
     __m512i eval_pts_theta[(num_pts + 1) * NUM_LIMBS]; // + 1 as verification asks for none
     __m512i xD[NUM_LIMBS], zD[NUM_LIMBS], Dp[NUM_LIMBS], Dm[NUM_LIMBS], one[NUM_LIMBS];
     __m512i t0[N4x2], t1[N4x2], u0[NUM_LIMBS], u1[NUM_LIMBS], idx;
-    __m512i c1[2*NUM_LIMBS], c2[2*NUM_LIMBS], p1[NUM_LIMBS], p2[NUM_LIMBS], k1[NUM_LIMBS], k2[NUM_LIMBS];
+    __m512i c1[2*NUM_LIMBS], c2[2*NUM_LIMBS];
     splitting_matrix_t isom_matrix, rand_matrix;
     bool h1, h2, success = true;
 
@@ -682,10 +682,10 @@ bool theta_isogeny_chain_no_torsion_vec(
 )
 {
     __m512i A_12[NUM_LIMBS], A24_12[NUM_LIMBS], ker_x[NUM_LIMBS], ker_y[NUM_LIMBS], ker_z[NUM_LIMBS], OA[NUM_LIMBS], OA_dual_inv[2*NUM_LIMBS];
-    __m512i J[NUM_LIMBS], matrix01[2*NUM_LIMBS], matrix23[2*NUM_LIMBS], T8_x[NUM_LIMBS], T8_y[NUM_LIMBS], T8_z[NUM_LIMBS], gluing_eval_res[2*NUM_LIMBS];
+    __m512i J[NUM_LIMBS], matrix01[2*NUM_LIMBS], matrix23[2*NUM_LIMBS], T8_x[NUM_LIMBS], T8_y[NUM_LIMBS], T8_z[NUM_LIMBS];
     __m512i eval_pts_theta[num_pts * NUM_LIMBS];
     __m512i t0[N4x2], t1[N4x2], idx;
-    __m512i c1[2*NUM_LIMBS], c2[2*NUM_LIMBS], p1[NUM_LIMBS], p2[NUM_LIMBS], k1[NUM_LIMBS], k2[NUM_LIMBS];
+    __m512i c1[2*NUM_LIMBS], c2[2*NUM_LIMBS];
     splitting_matrix_t isom_matrix, rand_matrix;
     bool h1, h2, success = true;
 
@@ -763,7 +763,6 @@ bool theta_isogeny_chain_no_torsion_vec(
     );
 
     // Step Two: Compute the rest of the chain
-    int step = 0;
     h1 = false; h2 = true;
     while (current >= 0 && orders[current] != 0) {
         // Precompute constants for doubling, unused when this step has none
@@ -800,7 +799,6 @@ bool theta_isogeny_chain_no_torsion_vec(
 
         // Eval points
         theta_eval_list_pair(eval_pts_theta, OA_dual_inv, h1, h2, num_pts);
-        step++;
     }
 
     // Step Three:

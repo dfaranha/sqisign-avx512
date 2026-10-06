@@ -11,7 +11,7 @@
 
 bool test_fp_unvec(int iterations)
 {
-    __m512i a[2*NUM_LIMBS], b[2*NUM_LIMBS], c[2*NUM_LIMBS], d[2*NUM_LIMBS], e[2*NUM_LIMBS], f[2*NUM_LIMBS], t;
+    __m512i a[2*NUM_LIMBS], b[2*NUM_LIMBS], c[2*NUM_LIMBS], d[2*NUM_LIMBS], e[2*NUM_LIMBS], f[2*NUM_LIMBS];
     fp_t unvec1[8], unvec2[8];
     fp2_t unvec1_fp2[8], unvec2_fp2[8];
     int passed = 1;

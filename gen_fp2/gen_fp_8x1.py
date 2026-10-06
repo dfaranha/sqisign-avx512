@@ -536,7 +536,6 @@ def mp_mul_8x1(f, pp, v):
     f.declare_single_vars(var_name="tb", count=low_limbs)
     f.declare_single_vars(var_name="m", count=low_limbs_prod)
     f.line(f"const __m512i zero = VZERO();")
-    f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line()
 
     f.comment(f"a_low * b_low")
@@ -640,7 +639,6 @@ def rdc_8x1_word_by_word(f, pp, v, strat):
     f.array_to_single_vars(var_name="a", arr_name="a", count=2*pp.num_limbs, const=False)
     if strat.R_ext:
         f.line(f"__m512i a{2*pp.num_limbs} = VZERO();")
-    f.line("__mmask8 msb_mask;")
     f.line(f"__m512i hi;")
     if not strat.mod_2p:
         f.line("__m512i sign_mask;")
@@ -648,7 +646,6 @@ def rdc_8x1_word_by_word(f, pp, v, strat):
     f.line(f"const __m512i top = VSETALL({v.p_plus_1_top});")
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line(f"const __m512i zero = VZERO();")
-    f.line(f"const __m512i one = VSETALL(1);")
     f.line()
 
     for i in range(pp.num_limbs-1):
@@ -814,7 +811,8 @@ def fp_mul_8x1(f, pp, v):
 
     limbs_prod = get_num_limbs_prod(pp)
     f.line(f"__m512i t[{limbs_prod}];")
-    f.declare_single_vars(var_name="t", count=limbs_prod-1, start_idx=1)
+    # carry_prop_8x1_swap keeps the top limb in the array
+    f.declare_single_vars(var_name="t", count=limbs_prod-2, start_idx=1)
     f.line(f"const __m512i limb_mask = VSETALL({v.limb_mask});")
     f.line()
 

@@ -196,7 +196,7 @@ bool isog_chain_1d_1x2x4x1(
     fp2_copy_2x4x1(strat, ker);
     fp2_copy_2x4x1(res_A24, A24);
     
-    for (int j = 0; j < isog_len/2; j++) {
+    for (unsigned int j = 0; j < isog_len/2; j++) {
         assert(current >= 0);
         assert(orders[current] >= 1);
 
@@ -241,7 +241,7 @@ bool isog_chain_1d_1x2x4x1(
             four_isog_eval_1x2x4x1(strat + i*NUM_LIMBS, eval_data, strat + i*NUM_LIMBS);
             orders[i] -= 2;
         }
-        for (int i = 0; i < num_pts; i++) {
+        for (unsigned int i = 0; i < num_pts; i++) {
             four_isog_eval_1x2x4x1(pts + i*NUM_LIMBS, eval_data, pts + i*NUM_LIMBS);
         }
         current--;
@@ -261,7 +261,7 @@ bool isog_chain_1d_1x2x4x1(
         }
 
         two_isog_codom_1x2x4x1(res_A24, eval_data, strat);
-        for (int i = 0; i < num_pts; i++) {
+        for (unsigned int i = 0; i < num_pts; i++) {
             two_isog_eval_1x2x4x1(pts + i*NUM_LIMBS, eval_data, pts + i*NUM_LIMBS);
         }
     }
@@ -283,14 +283,14 @@ bool isog_chain_1d_using_2x4x1(
     __m512i A24[NUM_LIMBS], ker_vec[NUM_LIMBS], pts_vec[num_pts*NUM_LIMBS];
     ec_point_unvec_to_1x2x4x1(A24, &E1->A24);
     ec_point_unvec_to_1x2x4x1(ker_vec, ker);
-    for (int i = 0; i < num_pts; i++) {
+    for (unsigned int i = 0; i < num_pts; i++) {
         ec_point_unvec_to_1x2x4x1(pts_vec + i*NUM_LIMBS, pts+i);
     }
 
     bool success = isog_chain_1d_1x2x4x1(A24, A24, ker_vec, isog_len, pts_vec, num_pts, verify);
 
     ec_point_1x2x4x1_to_unvec(&res_E2->A24, A24);
-    for (int i = 0; i < num_pts; i++) {
+    for (unsigned int i = 0; i < num_pts; i++) {
         ec_point_1x2x4x1_to_unvec(pts+i, pts_vec + i*NUM_LIMBS);
     }
 
@@ -610,9 +610,6 @@ bool isog_chain_1d_1x2x2x2(
     __m512i *res_four_torsion
 )
 {
-    uint64_t total = 0;
-    uint64_t total2 = 0;
-
     const unsigned int extra = res_four_torsion ? HD_extra_torsion : 0;
     assert(!extra || isog_len % 2 == 0);
 
@@ -654,7 +651,7 @@ bool isog_chain_1d_1x2x2x2(
         fp2_copy_2x2x2(pts_coupled + num_pts_quad*2*NUM_LIMBS, pts + (4*num_pts_quad)*N4x2);
     }
     
-    for (int j = 0; j < isog_len/2; j++) {
+    for (unsigned int j = 0; j < isog_len/2; j++) {
         assert(current >= 0);
         assert(orders[current] >= 1);
 
@@ -806,14 +803,14 @@ bool isog_chain_1d(
     __m512i A24[N4x2], ker_vec[N4x2], pts_vec[num_pts*N4x2];
     ec_point_unvec_to_1x2x2x2(A24, &E1->A24);
     ec_point_unvec_to_1x2x2x2(ker_vec, ker);
-    for (int i = 0; i < num_pts; i++) {
+    for (unsigned int i = 0; i < num_pts; i++) {
         ec_point_unvec_to_1x2x2x2(pts_vec + i*N4x2, pts+i);
     }
 
     bool success = isog_chain_1d_1x2x2x2(A24, A24, ker_vec, isog_len, pts_vec, num_pts, verify, NULL);
 
     ec_point_1x2x2x2_to_unvec(&res_E2->A24, A24);
-    for (int i = 0; i < num_pts; i++) {
+    for (unsigned int i = 0; i < num_pts; i++) {
         ec_point_1x2x2x2_to_unvec(pts+i, pts_vec+i*N4x2);
     }
 
