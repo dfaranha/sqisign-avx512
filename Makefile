@@ -89,10 +89,10 @@ lvl5: build/test_lvl5 build/bench_lvl5
 # and creates the lvl3 file, ensuring the Python script only runs when the level changes.
 build/.state_lvl1:
 	@echo ">>> Generating lvl1 code..."
-#	@mkdir -p $(@D)
-#	python3 gen_fp2/gen.py lvl1
-#	@rm -f build/.state_lvl*
-#	@touch $@
+	@mkdir -p $(@D)
+	python3 gen_fp2/gen.py lvl1
+	@rm -f build/.state_lvl*
+	@touch $@
 
 build/.state_lvl3:
 	@echo ">>> Generating lvl3 code..."
