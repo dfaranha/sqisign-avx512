@@ -1,0 +1,21 @@
+theta-simd
+Copyright 2025-2026 Marius A. Aardal, Diego F. Aranha, Patrick Longa and Giacomo Pope.
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This project includes third-party code:
+
+* sqisign/ and the known-answer test files in assets/ are derived from the
+  SQIsign reference implementation (https://github.com/SQISign/the-sqisign).
+  Copyright 2023-2025 the SQIsign team. Licensed under the Apache License,
+  Version 2.0.
+
+* shake_avx/fips202.c and shake_avx/fips202.h are based on the FIPS 202
+  implementation from PQClean, derived from public-domain code by Ronny Van
+  Keer and the TweetFips202 implementation by Gilles Van Assche, Daniel J.
+  Bernstein and Peter Schwabe (public domain and Apache-2.0).
+
+* shake_avx/keccak_avx.c is the AVX-512 Keccak implementation by Roberto
+  Cabral (https://github.com/rbCabral/SHA-3), Copyright (C) 2015 Roberto Cabral.
+
+* sqisign-sagemath/ is derived from SQISign-SageMath by Giacomo Pope et al.
