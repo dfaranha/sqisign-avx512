@@ -10,8 +10,8 @@ This is the code accompanying the paper:
 
 It contains:
 
-- a code generator for AVX-512 (IFMA) arithmetic over $\mathbb{F}_p$ and
-  $\mathbb{F}_{p^2}$ for Montgomery-friendly primes $p = c \cdot 2^e - 1$,
+- a code generator for AVX-512 (IFMA) arithmetic over GF($p$) and
+  GF($p^2$) for Montgomery-friendly primes $p = c \cdot 2^e - 1$,
   with 2-, 4- and 8-way vectorization;
 - vectorized elliptic-curve arithmetic, 2-isogeny chains, and the
   $(2,2)$-isogeny chain in the theta model (gluing, generic steps and
