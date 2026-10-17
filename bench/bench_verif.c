@@ -48,7 +48,7 @@ void bench_verif(int iterations) {
     FILE                *fp_rsp;
     
     uint64_t            cycles[N_RUNS];
-    uint64_t            start, end, tmp, i=0;
+    uint64_t            start, end, tmp = 0, i = 0;
 
     sprintf(fn_rsp, "assets/PQCsignKAT_%d_%s.rsp", SECRETKEY_BYTES, CRYPTO_ALGNAME);
     if ( (fp_rsp = fopen(fn_rsp, "r")) == NULL ) {
@@ -57,8 +57,8 @@ void bench_verif(int iterations) {
     }
 
 #ifdef MICROB
-	num_codomain = num_eval = num_chain = 0;
-	total_codomain = total_eval = total_chain = 0;
+	num_codomain = num_eval = num_dbls = num_split = num_chain = 0;
+	total_codomain = total_eval = total_dbls = total_split = total_chain = 0;
 #endif
 
     done = 0;
