@@ -51,6 +51,32 @@ when switching levels, so build the levels one after another rather than in
 parallel. Binaries must be run from the repository root, as they read the
 known-answer tests from `assets/`.
 
+## Microbenchmarks
+
+On this branch the Makefile defines `-DMICROB` by default, together with
+`-DSUPERGLUE`. With `MICROB`, the verification benchmark in `bench_lvlN` times
+the steps of the $(2,2)$-isogeny chain inside every verification and prints
+their averages after the `sqisign verif` line:
+
+| Line              | What is timed | Averaged per |
+|-------------------|---------------|--------------|
+| `gluing codomain` | Codomain of the gluing isogeny | chain |
+| `gluing eval`     | One evaluation of a pair of points through the gluing isogeny | evaluation |
+| `doublings`       | Every generic step after the gluing (doublings, codomains and evaluations) | chain |
+| `splitting`       | Splitting the codomain back into elliptic curves | chain |
+| `theta chain`     | The whole chain, including the doublings of the kernel before the gluing | chain |
+
+The gluing lines time whichever gluing is built: Superglue with `-DSUPERGLUE`,
+the original gluing without it. The timers read the time-stamp counter, so
+disable frequency scaling (turbo) for meaningful cycle counts.
+
+The timers add a few instructions to every verification. To benchmark
+verification without them, override `CFLAGS` without `-DMICROB`, for example:
+
+```sh
+make lvl1 CFLAGS="-O3 -march=native -flto=auto -DSUPERGLUE"
+```
+
 ## Layout
 
 | Path                | Contents |
