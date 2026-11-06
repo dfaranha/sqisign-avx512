@@ -4,6 +4,23 @@ TEST_CFLAGS = $(CFLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer -g
 BENCH_CFLAGS = $(CFLAGS) -DNDEBUG
 
 # ---------------------------------------------------------
+# addchain (used by the code generator)
+# ---------------------------------------------------------
+# Use addchain from PATH if available, otherwise download a release binary.
+ADDCHAIN_VERSION = 0.4.0
+ADDCHAIN_DIR     = tools
+ADDCHAIN_OS     := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+ADDCHAIN_ARCH   := $(shell uname -m | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
+ADDCHAIN_TGZ     = addchain_$(ADDCHAIN_VERSION)_$(ADDCHAIN_OS)_$(ADDCHAIN_ARCH).tar.gz
+ADDCHAIN_URL     = https://github.com/mmcloughlin/addchain/releases/download/v$(ADDCHAIN_VERSION)
+
+ADDCHAIN := $(shell command -v addchain 2>/dev/null)
+ifeq ($(ADDCHAIN),)
+ADDCHAIN = $(ADDCHAIN_DIR)/addchain
+endif
+GEN_ENV  = PATH="$(abspath $(dir $(ADDCHAIN))):$$PATH"
+
+# ---------------------------------------------------------
 # Source files
 # ---------------------------------------------------------
 
@@ -70,7 +87,7 @@ BENCH_OBJS_LVL5      = $(patsubst %.c, build/bench/lvl5/%.o, $(BENCH_SRCS))
 # ---------------------------------------------------------
 # commands
 # ---------------------------------------------------------
-.PHONY: all clean lvl1 lvl3 lvl5
+.PHONY: all clean distclean lvl1 lvl3 lvl5
 
 # RECURSIVE MAKE: Forces sequential building to prevent Python code generation race conditions
 all:
@@ -87,25 +104,34 @@ lvl5: build/test_lvl5 build/bench_lvl5
 # ---------------------------------------------------------
 # These hidden files act as switches. If you run `make lvl3`, it deletes the lvl1 file
 # and creates the lvl3 file, ensuring the Python script only runs when the level changes.
-build/.state_lvl1:
+build/.state_lvl1: | $(ADDCHAIN)
 	@echo ">>> Generating lvl1 code..."
 	@mkdir -p $(@D)
-	python3 gen_fp2/gen.py lvl1
+	$(GEN_ENV) python3 gen_fp2/gen.py lvl1
 	@rm -f build/.state_lvl*
 	@touch $@
 
-build/.state_lvl3:
+build/.state_lvl3: | $(ADDCHAIN)
 	@echo ">>> Generating lvl3 code..."
 	@mkdir -p $(@D)
-	python3 gen_fp2/gen.py lvl3
+	$(GEN_ENV) python3 gen_fp2/gen.py lvl3
 	@rm -f build/.state_lvl*
 	@touch $@
 
-build/.state_lvl5:
+build/.state_lvl5: | $(ADDCHAIN)
 	@echo ">>> Generating lvl5 code..."
 	@mkdir -p $(@D)
-	python3 gen_fp2/gen.py lvl5
+	$(GEN_ENV) python3 gen_fp2/gen.py lvl5
 	@rm -f build/.state_lvl*
+	@touch $@
+
+$(ADDCHAIN_DIR)/addchain:
+	@echo ">>> addchain not found, downloading v$(ADDCHAIN_VERSION)..."
+	@mkdir -p $(@D)
+	cd $(@D) && curl -fsSLO $(ADDCHAIN_URL)/$(ADDCHAIN_TGZ) \
+		&& curl -fsSL $(ADDCHAIN_URL)/addchain_$(ADDCHAIN_VERSION)_checksums.txt | grep ' $(ADDCHAIN_TGZ)$$' | sha256sum -c - \
+		&& tar -xzf $(ADDCHAIN_TGZ) addchain \
+		&& rm -f $(ADDCHAIN_TGZ)
 	@touch $@
 
 # ---------------------------------------------------------
@@ -137,6 +163,9 @@ build/bench_lvl5: $(BENCH_CORE_OBJS_LVL5) $(BENCH_LVL5_C_OBJS) $(BENCH_LVL5_S_OB
 
 clean:
 	rm -rf build
+
+distclean: clean
+	rm -rf $(ADDCHAIN_DIR)
 
 # ---------------------------------------------------------
 # pattern rules (TEST)
