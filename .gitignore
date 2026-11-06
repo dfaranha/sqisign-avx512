@@ -318,3 +318,6 @@ TSWLatexianTemp*
 
 #pdf
 *.pdf
+
+# Downloaded tools
+tools/
